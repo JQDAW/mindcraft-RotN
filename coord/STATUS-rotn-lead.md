@@ -24,11 +24,11 @@ Development is paused at the human's request. Nothing is running: no Hetzner tes
 **Open work, in order, on resume**
 
 1. **#435 (open, parked, changes requested):** the stairs-up morning exit. Its harvest check and pickaxe equip do not work on modded rock; the findings are in a comment on the PR. It also carries the #431 follow-ups (dig allowance per position, clearing `rotnLastInterrupt`), which land only with it.
-2. **Bulls (skills-rotn + rotn-data):** soak 2's 22:48 death was "gored to death", Animania's bull message; rotn-data lists `animania:bull_*` as `ignore`, so the bot does not react to one.
+2. **Bulls (skills-rotn + rotn-data):** soak 2's 22:48 death was "gored to death", Animania's bull message; rotn-data has no bull entry, so all 8 `animania:bull_*` variants default to `none/ignore` (`hostile: false`) and the bot does not react to one; the fix adds an override.
 3. **Small nits:** #432: the eating mode's description still mentions cloudsbluff, and the food prompt is wider than the emergency list; the hungry-walk caps do not cover `!goToCoordinates`, `!goToPlayer` or `!collectBlocks`. #434: a ranged mob near a big slime is not steered by. #438: `packages/` and `src/` tests still leak temp dirs; a SIGTERM leaves the private temp dir.
 4. **Unexplained:** plain dirt digs hung for about 20 s in soak 2. #431 logs the state at a dig timeout, so the next soak should show why.
 5. **net-forge (no terminal running; start it for these):** `agent_process.js` restarts a deterministic startup crash forever; there is no SIGTERM handler, so a ctl stop drops the connection instead of quitting; one `windowOpen` timeout was seen.
-6. Then tag `rotn-v0.1.5`, have the human deploy it, and run soak 3 (needs the human's GO). If it passes #5 and #7, plan the step 7 acceptance runs.
+6. Then tag `rotn-v0.1.5`, have the human deploy it, and run soak 3 (needs the human's GO). If it passes #5 and #7, run G4 steps 1-6 once each on the CX23 (`test/scenarios/g4/PLAN.md`; only the death rehearsal and the two soaks have run so far: not reconnect, restart persistence, control commands or the second bot), build the step 7 runner (not started; the rules are in harness-ops' notes and the lead's message of 2026-11-08: `ROTN_G4_ACCEPT`), then the acceptance runs.
 
 **The human's open items are in `coord/NEEDS-HUMAN.md`.**
 
