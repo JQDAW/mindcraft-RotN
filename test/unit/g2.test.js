@@ -3,6 +3,7 @@
 // world, entities, inventory) runs on a virtual clock; a fake mineflayer bot runs the real driver code.
 // Gate data (rotn-data's flattening table and module, common-mobs.json) comes from fixtures under a
 // temp dataRoot, so these tests do not depend on rotn-data's PRs.
+import './isolate-tmp.mjs';
 import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';

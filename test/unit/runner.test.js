@@ -1,6 +1,7 @@
 // Offline unit tests for the scenario runner (test/runner/) and the G1 scenario. A simulated
 // server, bot and clock stand in for Hetzner, Minecraft and wall time: a 10-minute scenario runs
 // in milliseconds. No network, no Minecraft, no LLM.
+import './isolate-tmp.mjs';
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
