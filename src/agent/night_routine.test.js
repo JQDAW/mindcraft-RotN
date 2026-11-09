@@ -8,7 +8,7 @@ import { Vec3 } from 'vec3';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { nightTick, nightState, resetNight, isFullDay, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS } from './night_routine.js';
+import { nightTick, nightState, resetNight, isFullDay, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS, FREE_INTERRUPTS, THREAT_INTERRUPTS, EXPOSED_RETRY_MS, EXPOSED_RETRIES } from './night_routine.js';
 import settings from './settings.js';
 import { autonomyTick } from './priority.js';
 import { shelterQuiet, SHELTER_QUIET_MODES } from './modes.js';
@@ -950,6 +950,106 @@ test('#337 review 6: an interrupted hole is tried again next, in the same hole (
     assert.equal(seen.length, 1);
     assert.equal(seen[0], nightState(agent).pitProgress, 'the same progress object');
     assert.equal(nightState(agent).state, 'inside');
+});
+
+test('soak 2 (night 2): a hole interrupted again and again (the unstuck loop) counts after FREE_INTERRUPTS; the night ends, never loops', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    agent.bot.modes = { anyActive: () => false, isOn: () => true, setOn: () => true };
+    agent.bot.inventory = { items: () => [], slots: [] };
+    const o = deathOps();
+    // Every run is stopped by a reflex before it finishes (as unstuck did every ~22 s).
+    agent.actions.runAction = (label) => { o.calls.push(`stopped ${label}`); return Promise.resolve({ message: '', interrupted: true }); };
+    let now = 0;
+    for (let i = 0; i < 40 && nightState(agent).state !== 'exposed'; i++) { now += RETRY_MS + 1; nightTick(agent, { now, ops: o }); await settle(agent); }
+    assert.equal(nightState(agent).state, 'exposed', `the night ends (runs: ${o.calls.length})`);
+    assert.ok(o.calls.length <= FREE_INTERRUPTS + BUILD_ATTEMPTS + 1, `bounded: ${o.calls.join(', ')}`);
+    assert.equal(nightState(agent).attempts, BUILD_ATTEMPTS);
+    assert.match(agent.chat.at(-1), /no shelter after 3 tries and a hole shelter \(interrupted again \(more than 2 times\)\)/);
+});
+
+test('soak 2: the first FREE_INTERRUPTS interruptions of a build phase (not by a threat reflex) are still free', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    for (let k = 1; k <= FREE_INTERRUPTS; k++) {
+        agent.actions.interruptNext = true;
+        nightTick(agent, { now: k, ops: o });
+        await settle(agent);
+        assert.equal(nightState(agent).attempts, 0, `interruption ${k}: not counted`);
+    }
+    nightTick(agent, { now: 10, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'inside');
+});
+
+test('#431 review 4: a hole given up after a dig timed out says so as the night\'s reason (not "no place")', async (t) => {
+    quiet(t);
+    const warns = [];
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
+    const agent = fakeAgent({ t: NIGHT });
+    const o = deathOps();
+    o.digPit = (bot, { progress }) => { o.calls.push('pit'); progress.why = 'dirt:0 at 0, 63, 0 was not dug within 4.0 s; the next hole is dug elsewhere'; return Promise.resolve(null); };
+    let now = 0;
+    for (let i = 0; i < 3; i++) { now += RETRY_MS + 1; nightTick(agent, { now, ops: o }); await settle(agent); }
+    assert.ok(o.calls.includes('pit'));
+    assert.ok(warns.some(w => w.includes('(dirt:0 at 0, 63, 0 was not dug within 4.0 s; the next hole is dug elsewhere)')), warns.join('\n'));
+    assert.ok(!warns.some(w => w.includes('found no place to dig a hole shelter')));
+});
+
+test('#431 review 2: a night of repeated fights (self_defense stops the build again and again) still ends in a completed shelter once it is quiet', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    agent.bot.modes = { anyActive: () => false, isOn: () => true, setOn: () => true };
+    agent.bot.inventory = { items: () => [], slots: [] };
+    const o = ops();
+    let fights = 9, runs = 0; // 6 free threat interruptions, then the 3 tries
+    o.hostileNear = () => fights > 0; // a zombie near while the fights go on
+    agent.actions.runAction = async (label, fn) => {
+        runs++;
+        if (fights > 0) {
+            fights--;
+            agent.rotnLastInterrupt = { by: 'self_defense', of: label, at: 0 };
+            return { message: '', interrupted: true };
+        }
+        await fn();
+        return { message: '', interrupted: false };
+    };
+    let now = 0;
+    const counts = [];
+    for (let i = 0; i < 60 && nightState(agent).state !== 'inside'; i++) {
+        now += RETRY_MS + 1;
+        agent.bot.time.timeOfDay = NIGHT + i; // the night goes on (a frozen time switches the clock to the wall clock)
+        nightTick(agent, { now, ops: o });
+        await settle(agent);
+        counts.push(nightState(agent).threatInterrupts ?? 0);
+    }
+    assert.equal(nightState(agent).state, 'inside', `a shelter in the end (${runs} runs)`);
+    assert.ok(Math.max(...counts) <= THREAT_INTERRUPTS, 'threat interruptions bounded by THREAT_INTERRUPTS');
+    assert.ok(agent.chat.some(l => /\[night\] no shelter after 3 tries \(interrupted again \(more than 6 times by a threat reflex\)\)/.test(l)), agent.chat.join('\n'));
+    assert.ok(agent.chat.some(l => l === `[night] quiet for ${EXPOSED_RETRY_MS / 1000} s: trying a shelter again (1 of ${EXPOSED_RETRIES})`), 'the retry once quiet');
+    assert.equal(agent.chat.at(-1), '[night] in the shelter at 0, 64, 0 until morning');
+});
+
+test('#431 review 2: an exposed night does not retry while a hostile mob is near, nor more than EXPOSED_RETRIES times', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    agent.bot.modes = { anyActive: () => false, isOn: () => true, setOn: () => true };
+    agent.bot.inventory = { items: () => [], slots: [] };
+    const o = ops({ closed: false });
+    let near = true;
+    o.hostileNear = () => near;
+    let now = 0, k = 0;
+    const tick = async (ms) => { now += ms; agent.bot.time.timeOfDay = NIGHT + (k++ % 50); nightTick(agent, { now, ops: o }); await settle(agent); };
+    for (let i = 0; i < 20 && nightState(agent).state !== 'exposed'; i++) await tick(RETRY_MS + 1);
+    assert.equal(nightState(agent).state, 'exposed');
+    const builds = o.builds.length;
+    for (let i = 0; i < 5; i++) await tick(EXPOSED_RETRY_MS + 1);
+    assert.equal(o.builds.length, builds, 'a mob near: no retry');
+    near = false;
+    for (let i = 0; i < 200; i++) await tick(RETRY_MS + 1);
+    assert.equal(nightState(agent).exposedRetries, EXPOSED_RETRIES, 'bounded');
+    assert.equal(nightState(agent).state, 'exposed');
 });
 
 test('#337 review 7 and 8: the tries are the 3 builds, the hole is one more; the exposed line matches what the bot does', async (t) => {
