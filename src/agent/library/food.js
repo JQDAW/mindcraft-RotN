@@ -13,6 +13,15 @@ import { logAte } from './survival_log.js';
 export const EAT_AT = 12;
 /** At this food level or lower the bot eats even during an action or a fight. */
 export const EAT_NOW_AT = 6;
+/**
+ * Soak 2 (rotn-v0.1.4): on this pack food 0 is instant death (Hunger Overhaul damageOnStarve=200,
+ * config/hungeroverhaul/HungerOverhaul.cfg), and at 4 or lower weakness, slowness and mining
+ * slowdown set in. At this level or lower anything edible is eaten, avoided food too (its poison or
+ * hunger effect does not kill), before the bot starves.
+ */
+export const EMERGENCY_FOOD = 5;
+/** Never eaten, not even in an emergency: it teleports the bot at random. */
+const NEVER_EAT = ['minecraft:chorus_fruit'];
 /** 1.12: health regenerates only at this food level or higher (CX23 soak: eat between fights). */
 export const REGEN_FOOD = 18;
 /** An eat that throws (mineflayer's 2500 ms consume timeout) is judged this long after. */
@@ -87,17 +96,21 @@ export function autoEatBannedFood() {
 
 /**
  * The stack to eat now, or null: any safe food, the most hunger first (then saturation), and the
- * last-resort foods only when nothing else is left. `skip`: food keys given up on.
+ * last-resort foods only when nothing else is left. `skip`: food keys given up on. `emergency`
+ * (food at EMERGENCY_FOOD or lower): when no safe food is held, the avoided foods too (rotten flesh,
+ * raw chicken, hawthorn berries, a golden apple), the most hunger first; never NEVER_EAT.
  */
-export function chooseFood(bot, { skip = new Set(), valueFn = foodValue } = {}) {
-    const safe = bot.inventory.items()
-        .filter(item => !skip.has(foodKey(item)) && !isAvoided(item))
+export function chooseFood(bot, { skip = new Set(), valueFn = foodValue, emergency = false } = {}) {
+    const edible = bot.inventory.items()
+        .filter(item => !skip.has(foodKey(item)) && !NEVER_EAT.includes(fullName(item)))
         .map(item => ({ item, food: valueFn(item) }))
         .filter(({ food }) => food);
+    const safe = edible.filter(({ item }) => !isAvoided(item));
     const rank = (a, b) => b.food.hunger - a.food.hunger || b.food.saturation - a.food.saturation;
     const normal = safe.filter(({ item }) => !LAST_RESORT_FOODS.includes(fullName(item))).sort(rank);
     if (normal.length > 0) return normal[0].item;
-    return safe.sort(rank)[0]?.item ?? null;
+    if (safe.length > 0) return safe.sort(rank)[0].item;
+    return emergency ? (edible.sort(rank)[0]?.item ?? null) : null;
 }
 
 /**

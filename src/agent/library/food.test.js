@@ -213,3 +213,34 @@ test('G4 #5: heldFoodHunger counts the safe food held by pack values; avoided fo
     assert.equal(heldFoodHunger(invBot([], 10)), 0);
 });
 
+
+// Soak 2 (rotn-v0.1.4): food 0 is instant death on this pack (Hunger Overhaul damageOnStarve=200);
+// the bot reached food 1 with nothing it would eat, and starved at full health.
+test('soak 2: at EMERGENCY_FOOD or lower, avoided food is eaten when no safe food is held (safe food still first; never chorus fruit)', async () => {
+    const { EMERGENCY_FOOD } = await import('./food.js');
+    assert.equal(EMERGENCY_FOOD, 5);
+    const bot = (items) => ({ inventory: { items: () => items } });
+    const flesh = stack('rotten_flesh', 0, 2), chicken = stack('chicken', 0, 1), chorus = stack('chorus_fruit', 0, 4), berries = stack('rustic:wildberries', 0, 1);
+    assert.ok(isAvoided(flesh) && isAvoided(chicken));
+    assert.equal(chooseFood(bot([flesh, chicken])), null, 'not in an emergency: never');
+    assert.ok(['rotten_flesh', 'chicken'].includes(chooseFood(bot([flesh, chicken]), { emergency: true })?.name), 'an emergency: the avoided food');
+    assert.equal(chooseFood(bot([flesh, berries]), { emergency: true }).name, 'rustic:wildberries', 'safe food first');
+    assert.equal(chooseFood(bot([chorus]), { emergency: true }), null, 'never chorus fruit');
+});
+
+test('soak 2: the eating reflex eats rotten flesh at food 5 with nothing else, and says why; at food 6 it does not', async (t) => {
+    const warns = [];
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
+    const run = async (food) => {
+        const mode = freshMode();
+        const { bot, eaten } = eatBot([stack('rotten_flesh', 0, 2)], food);
+        await mode.update(modeAgent(bot));
+        await settled(20);
+        Object.assign(mode, { wait_until: -Infinity, fails: {}, given_up: new Set() });
+        return eaten;
+    };
+    assert.deepEqual(await run(5), ['rotten_flesh']);
+    assert.ok(warns.some(w => /eating: food 5 \(food 0 kills on this pack\): eating minecraft:rotten_flesh:0 although it is avoided/.test(w)), warns.join('\n'));
+    assert.deepEqual(await run(6), [], 'food 6: not yet');
+});

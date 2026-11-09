@@ -650,6 +650,20 @@ test('G4 #5 forage: the food reserve names the ripe wild food near (full block n
     assert.match(FOOD_RESERVE_STEP.goal, /Gather ripe wild food first with !forage/);
 });
 
+test('soak 2: the food reserve says food 0 kills at once; at food 4 or lower it asks for no hunt (weakness) but eating anything and !forage', (t) => {
+    assert.match(FOOD_RESERVE_STEP.goal, /food 0 kills you at once, at any health/);
+    const cow = { id: 1, type: 'mob', name: 'animania:cow_holstein', metadata: { 7: 10 }, position: new Vec3(6.5, 64, 0.5) };
+    const weak = foodAgent(t, [], { food: 4, entities: { 1: cow } });
+    assert.equal(agendaTick(weak, { now: 0 }), 'food');
+    const p = weak.self_prompter.prompt;
+    assert.match(p, /Food 0 kills you at once on this pack, at any health, and long walks cost hunger: stay near\./);
+    assert.match(p, /At food 4 you are too weak to hunt \(weakness\): eat anything you hold, even raw meat or rotten flesh, and !forage nearby; do not walk far\./);
+    assert.doesNotMatch(p, /!attack\(/, 'no hunt offered');
+    const fed = foodAgent(t, [], { food: 10, entities: { 1: cow } });
+    agendaTick(fed, { now: 0 });
+    assert.match(fed.self_prompter.prompt, /!attack\("animania:cow_holstein"\)/, 'at food 10 the hunt is offered');
+});
+
 test('#422 nit: the day\'s last food run is not stopped as it starts: it runs until it ends, and only then is no new one started', (t) => {
     const agent = foodAgent(t, []);
     agent.bot.time.day = 4;

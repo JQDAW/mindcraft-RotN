@@ -6,6 +6,12 @@
 //   [survival] fight end <mob> <outcome> after <secs> s  outcome: killed | gone | stopped | capped | interrupted | died
 //   [survival] flee <mob> (<why>)
 //   [survival] food <food> health <health> (<reason>)    reason: check (at most once a minute) | low (fell to food.EAT_AT, 12, or below; at most once a minute)
+//   [survival] hurt <amount> health <before>-><after> (by <source>)   soak 2: health fell by HURT.minDrop or more within HURT.windowMs
+//
+// Soak 2 (rotn-v0.1.4): the server sends no death messages, and two deaths had no cause in the
+// journal. The hurt line names the likely source: 'starving' (food 0: Hunger Overhaul's
+// damageOnStarve=200 kills at once), the nearest mob within HURT.mobRange (its entity type), 'fall'
+// when the bot was falling, else 'unknown'.
 //
 // Tokens never hold spaces: <item> is food.foodKey, "<registry name>:<meta>" ("minecraft:bread:0",
 // "rustic:wildberries:0"), from the eating reflex and the consume skill alike; <mob> the
@@ -33,6 +39,39 @@ export const fightEndLine = (mob, outcome, ms) => {
     return `${SURVIVAL_TAG} fight end ${token(mob)} ${outcome} after ${Math.max(0, Math.round(ms / 1000))} s`;
 };
 export const fleeLine = (mob, why) => `${SURVIVAL_TAG} flee ${token(mob)} (${String(why ?? 'unknown').replace(/[()\n\r]/g, ' ').trim() || 'unknown'})`;
+export const hurtLine = (amount, before, after, source) => `${SURVIVAL_TAG} hurt ${num(amount)} health ${num(before)}->${num(after)} (by ${token(source)})`;
+export const HURT = { minDrop: 4, windowMs: 2000, mobRange: 5 };
+
+/** The likely source of the damage just taken (see the header): 'starving', a mob type, 'fall' or 'unknown'. */
+export function hurtSource(bot) {
+    if (Number.isFinite(bot?.food) && bot.food <= 0) return 'starving';
+    const here = bot?.entity?.position;
+    if (here) {
+        const near = Object.values(bot.entities ?? {})
+            .filter(e => e && e !== bot.entity && e.position && e.type !== 'object' && e.name !== 'item' && e.position.distanceTo(here) <= HURT.mobRange)
+            .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here))[0];
+        if (near) return mobName(near);
+    }
+    if ((bot?.entity?.velocity?.y ?? 0) < -0.5) return 'fall';
+    return 'unknown';
+}
+
+/**
+ * The hurt line when health has fallen by HURT.minDrop or more since the start of a HURT.windowMs
+ * window (a heal or a quiet window starts a new one); null otherwise. `state` keeps the window.
+ */
+export function hurtCheck(state, bot, now = Date.now()) {
+    const h = bot?.health;
+    if (!Number.isFinite(h)) return null;
+    const w = state.hurt;
+    if (!w || h > w.from || now - w.at > HURT.windowMs) { state.hurt = { from: h, at: now }; return null; }
+    if (w.from - h < HURT.minDrop) return null;
+    const text = hurtLine(w.from - h, w.from, h, hurtSource(bot));
+    state.hurt = { from: h, at: now };
+    console.log(text);
+    return text;
+}
+
 export const foodLine = (food, health, reason) => `${SURVIVAL_TAG} food ${num(food)} health ${num(health)} (${reason === 'low' ? 'low' : 'check'})`;
 
 /** Log the eat line once the food level has changed (at most FOOD_UPDATE_MS later). */
@@ -90,6 +129,7 @@ export function foodCheck(state, bot, now = Date.now(), eatAt = 12) {
 export function bindSurvivalLog(bot, { eatAt }) {
     const state = {};
     const check = () => { try { foodCheck(state, bot, Date.now(), eatAt); } catch { /* never breaks the bot */ } };
+    bot.on('health', () => { try { hurtCheck(state, bot, Date.now()); } catch { /* never breaks the bot */ } });
     bot.on('health', check);
     bot.on('physicsTick', check);
     return state;

@@ -559,3 +559,26 @@ test('#415 review 2: off the middle of its cell the bot sneaks to the middle fir
     assert.match(held.output, /Not digging down further: you did not fall \(you stand at 67\.00, not 66\)/);
 });
 
+
+// Soak 2 (rotn-v0.1.4): a 3-min !moveAway sprinted food from 16 to 8; food 0 kills on this pack.
+test('soak 2: no walk sprints, except while a survival mode flees or fights (bot.rotnSprint)', async () => {
+    const { execute, SPRINT_MODES } = await import('../modes.js');
+    const bot = fakeBot();
+    const set = [];
+    bot.pathfinder = { setMovements: (m) => set.push(m), movements: new pf.Movements(bot) };
+    installWalkSafety(bot);
+    assert.equal(bot.pathfinder.movements.allowSprinting, false, 'the current movements too');
+    bot.pathfinder.setMovements(new pf.Movements(bot)); // a collect, a hunt, a !moveAway
+    assert.equal(set.at(-1).allowSprinting, false);
+    // A survival mode's action may sprint; any other mode's may not.
+    assert.deepEqual(SPRINT_MODES, ['self_preservation', 'cowardice', 'self_defense']);
+    const agent = { bot, actions: { currentActionLabel: '', runAction: async (label, fn) => { await fn(); return { message: '', interrupted: false }; } } };
+    const walk = () => { bot.pathfinder.setMovements(new pf.Movements(bot)); return Promise.resolve(); };
+    for (const name of ['cowardice', 'self_preservation', 'self_defense']) {
+        await execute({ name, active: false }, agent, walk);
+        assert.equal(set.at(-1).allowSprinting, true, `${name}: a flee or a fight sprints`);
+        assert.equal(bot.rotnSprint, false, `${name}: and only during its action`);
+    }
+    await execute({ name: 'hunting', active: false }, agent, walk);
+    assert.equal(set.at(-1).allowSprinting, false, 'a hunt walks');
+});

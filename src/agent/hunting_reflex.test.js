@@ -143,6 +143,48 @@ test('G4 #5: !attack refuses an animal that may belong to a player, and takes a 
     assert.match(only.bot.output, /Not attacking animania:cow_holstein: it may belong to a player \(it is on a leash\)\. Find a wild one away from fences, farms and houses\./);
 });
 
+// Soak 2 (rotn-v0.1.4): at food 4 or lower (Normal) Hunger Overhaul's weakness leaves a bare hand doing
+// nothing; the bot chased a sow it could not hurt until food 0 killed it.
+test('soak 2: at food 4 or lower no hunt, by the reflex or by !attack on an animal; foraging still runs; a hostile mob is still fought', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    assert.deepEqual(await hunt(huntAgent({ food: 4, animals: [cow(1, 3)] })), [], 'the reflex: no hunt at food 4');
+    assert.deepEqual(await hunt(huntAgent({ food: 5, animals: [cow(1, 3)] })), ['mode:hunting'], 'food 5: it hunts');
+    const crop = withCrops(huntAgent({ food: 4, animals: [cow(1, 3)] }), { '6,64,0': ['rustic:wildberry_bush', 1] });
+    assert.deepEqual(await hunt(crop), ['mode:hunting'], 'foraging still runs at food 4');
+    const weak = huntAgent({ food: 4, animals: [cow(1, 3)] });
+    weak.bot.pvp = { attack: () => assert.fail('never attacked'), stop() {} };
+    weak.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: weak.bot.output, interrupted: false }));
+    await executeCommand(weak, '!attack("animania:cow_holstein")');
+    assert.match(weak.bot.output, /Not hunting animania:cow_holstein: your food is 4, and at 4 or lower you are too weak to hurt it \(weakness\)\. Eat anything you hold, or !forage nearby; food 0 kills you at once on this pack\./);
+    // A zombie is not an animal: !attack still fights it.
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(3.5, 64, 0.5), height: 1.9, metadata: { 7: 20 } };
+    const fight = huntAgent({ food: 4, animals: [zombie] });
+    const hit = [];
+    fight.bot.pvp = { attack: (e) => { hit.push(e.name); delete fight.bot.entities[e.id]; }, stop() {} };
+    fight.bot.equip = () => Promise.resolve();
+    fight.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: fight.bot.output, interrupted: false }));
+    await executeCommand(fight, '!attack("zombie")');
+    assert.doesNotMatch(fight.bot.output, /Not hunting/);
+});
+
+// Soak 2: food 8 -> 1 in 9 min from two !moveAway(64) and searches out to 256 blocks.
+test('soak 2: below food 8 the model\'s !moveAway and searches go 32 blocks at most, and say why; at food 8 as asked', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const far = cow(1, 40);
+    const run = async (food, cmd) => {
+        const agent = huntAgent({ food, animals: [far] });
+        agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }), () => ({ message: agent.bot.output, interrupted: false }));
+        await executeCommand(agent, cmd);
+        return agent.bot.output;
+    };
+    assert.match(await run(7, '!searchForEntity("animania:cow_holstein", 128)'), /Searching 32 blocks at most at food 7, not 128: walking costs hunger, and food 0 kills you at once on this pack\. Eat or !forage first\.[\s\S]*Could not find any animania:cow_holstein in 32 blocks/);
+    const fed = await run(8, '!searchForEntity("animania:cow_holstein", 128)');
+    assert.doesNotMatch(fed, /at most at food/);
+    assert.match(fed, /Found animania:cow_holstein/);
+    assert.match(await run(7, '!moveAway(64)'), /Moving away 32 blocks at most at food 7, not 64/);
+    assert.doesNotMatch(await run(7, '!moveAway(20)'), /at most at food/, 'a short walk is not capped');
+});
+
 test('#422 review 1: a hunt running when dusk falls ends (the night routine is not held up), and pvp stops', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
