@@ -470,7 +470,7 @@ A short session of the real agent with the **production** task-giver list. `Serv
 ## G4 rehearsals on a test server (`test/scenarios/g4/`)
 
 **G4 accepts no test-server evidence** (lead, #316 review; `test/scenarios/g4/PLAN.md`). A G4 scenario on a CPX42 with the driver on the CX33 is a **rehearsal**: it builds and debugs the scenario before its run on the CX23 service (set-up S).
-- `g3Policy` marks every G4 run not-gate: `weakenedParams` names `G4_TEST_SERVER_NOT_GATE`. So the best verdict is `SMOKE-PASS (not a gate pass)`, and run.mjs exits 4.
+- `g3Policy` marks every G4 run not-gate: `weakenedParams` names `G4_TEST_SERVER_NOT_GATE` for a spawned driver (T), and `G4_SERVICE_NOT_GATE` for a `--service` run on the CX23 (S: "not an acceptance run", #433 review). So the best verdict is `SMOKE-PASS (not a gate pass)`, and run.mjs exits 4.
 - `batch.mjs --gate` refuses a batch with a G4 scenario (`gateBatchProblems`). A rehearsal batch is always smoke.
 - **The G3 tooling applies otherwise:**
   - the batch marker is stamped;
@@ -532,7 +532,7 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **Every count of restart lines** is taken after a forced journal read (`bot.refresh()`), because `output()` is a 15 s cache.
 - **On a spawned driver (set-up T):** a rehearsal, not-gate. `no_systemd_restart` and `clean_stop` are "not reached".
   - **`llm: false`, so a T rehearsal records no LLM spend** (#374 review). On S, the bot's calls go to the CX23's own key, which the runner cannot read. A T rehearsal's spend shows only in the key's own usage.
-- **Not yet decided:** every G4 run is not-gate on a test server (`G4_TEST_SERVER_NOT_GATE`). How an S run becomes G4 evidence is the lead's to set.
+- **Not-gate on both set-ups:** a T run gets `G4_TEST_SERVER_NOT_GATE`, an S run `G4_SERVICE_NOT_GATE` (not an acceptance run). Only the step-7 acceptance runs are G4 evidence, under the lead's rule (test/scenarios/g4/PLAN.md); the step-7 runner has its own PR.
 - **Tests:** `test/unit/g4-service-reconnect.test.js` (a simulated server and service, including a log roll-over).
 
 ### G4 #3: `g4-control-commands` (offline-built, not yet run)
