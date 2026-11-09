@@ -224,6 +224,8 @@ test('soak 2 (night 2): a column with Dynamic Trees rooty dirt (hardness 20, 30 
 
 test('soak 2: the bot is still on purpose while it digs (the unstuck reflex leaves it alone); a dig past its limit gives up the spot, which is not chosen again', async (t) => {
     t.mock.method(console, 'log', () => {});
+    const warns = [];
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
     const saved = PIT.digSlackMs;
     PIT.digSlackMs = 200;
     t.after(() => { PIT.digSlackMs = saved; });
@@ -233,19 +235,39 @@ test('soak 2: the bot is still on purpose while it digs (the unstuck reflex leav
     bot.digTime = () => 10;
     let hang = true;
     let stopped = 0;
-    bot.stopDigging = () => { stopped++; };
-    bot.dig = (b) => { stationary.push(bot.rotnStationary); return hang ? new Promise(() => {}) : dig(b); };
+    bot.stopDigging = () => { stopped++; bot.targetDigBlock = null; };
+    bot.entity.effects = { 4: { amplifier: 1 } }; // mining fatigue II
+    bot.registry = { ...reg, effects: { 4: { id: 4, name: 'MiningFatigue' } } };
+    bot.dig = (b) => { stationary.push(bot.rotnStationary); if (!hang) return dig(b); bot.targetDigBlock = b; return new Promise(() => {}); };
     const progress = {};
     assert.equal(await digPit(bot, { progress }), null);
     assert.deepEqual(stationary, [true], 'still on purpose while digging');
     assert.equal(bot.rotnStationary, false, 'and not after');
     assert.equal(stopped, 1, 'the hanging dig is stopped');
     assert.match(bot.output, /Digging dirt at 0, 63, 0 \(about 0\.0 s by hand\)\./);
-    assert.match(bot.output, /Digging dirt at 0, 63, 0 took over 0\.2 s; leaving this spot for another\./);
+    assert.match(bot.output, /Gave up the hole shelter at 0, 64, 0: dirt:0 at 0, 63, 0 was not dug within 0\.2 s\. The next hole is dug elsewhere\./);
+    // #431 review 3: why it hung, for the next soak.
+    assert.ok(warns.some(w => w === '[night] hole shelter: dirt:0 at 0, 63, 0 was not dug within 0.2 s (onGround true, isInWater undefined, effects MiningFatigue:1, held nothing)'), warns.join('\n'));
+    assert.equal(progress.why, 'dirt:0 at 0, 63, 0 was not dug within 0.2 s; the next hole is dug elsewhere', 'the night routine\'s reason');
     assert.ok(progress.bad.has('0, 64, 0'));
     hang = false;
     const feet = await digPit(bot, { progress });
     assert.ok(feet, 'a hole elsewhere');
     assert.notEqual(`${feet.x},${feet.z}`, '0,0', 'not the spot it gave up');
     assert.equal(calls.digs.length, 3);
+});
+
+test('#431 review 6: no dig starts once the time is up (an equip still running when digPit gives up)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const saved = PIT.digSlackMs;
+    PIT.digSlackMs = 100;
+    t.after(() => { PIT.digSlackMs = saved; });
+    const { bot, calls } = fakeBot();
+    bot.digTime = () => 10;
+    bot.stopDigging = () => {};
+    bot.tool = { equipForBlock: () => new Promise(resolve => setTimeout(resolve, 250)) }; // slower than the limit
+    assert.equal(await digPit(bot, { progress: {} }), null);
+    await new Promise(resolve => setTimeout(resolve, 350)); // the equip ends after digPit returned
+    assert.deepEqual(calls.digs, [], 'no dig started afterwards');
 });

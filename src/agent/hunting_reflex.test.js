@@ -121,6 +121,25 @@ test('soak 2: a hunt that got stuck (the sow uphill) is not started again on the
     assert.deepEqual(attacked, [1, 2], 'the next tick hunts the other one, not the same');
 });
 
+test('#431 review 7: a hunt stopped by the unstuck reflex leaves the animal alone a while; one stopped by a fight does not', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...HUNT };
+    Object.assign(HUNT, { checkMs: 10, stuckMs: 60_000 });
+    t.after(() => Object.assign(HUNT, saved));
+    const run = async (by) => {
+        const agent = huntAgent({ animals: [cow(1, 3)] });
+        agent.bot.pvp = { attack: () => {
+            setTimeout(() => { agent.rotnLastInterrupt = { by, of: 'mode:hunting', at: Date.now() }; agent.bot.interrupt_code = true; }, 30);
+        }, stop() {} };
+        agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: true }; };
+        await hunt(agent);
+        await new Promise(r => setTimeout(r, 150));
+        return agent.bot.rotnHuntSkip?.get(1) > Date.now();
+    };
+    assert.equal(await run('unstuck'), true, 'stopped by unstuck: skipped');
+    assert.equal(await run('self_defense'), false, 'stopped by a fight: hunted again later');
+});
+
 test('G4 #5: the hunting reflex does nothing when food is not due, at dusk or night, with a threat near, when busy, or sheltered', async (t) => {
     t.mock.method(console, 'log', () => {});
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16 })), [], 'food 16: not due');

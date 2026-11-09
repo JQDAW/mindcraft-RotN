@@ -545,9 +545,12 @@ const modes_list = [
                 say(agent, `Hunting ${target.name} for food!`);
                 // #422 review 1: bounded (HUNT.maxMs), and over once the day is (dusk) or a threat comes.
                 const end = await huntAnimal(bot, target, { keepGoing, equip: (b) => skills.equipHighestAttack(b) });
-                // Soak 2: an animal the hunt could not get (stuck, time, interrupted) is left alone a while.
-                if (['stuck', 'time', 'interrupted'].includes(end)) skipAnimal(bot, target.id);
-                console.log(`[reflex] hunting ${target.name}: ${end}${end === 'killed' || end === 'gone' || end === 'stopped' ? '' : ` (left alone for ${HUNT.skipMs / 60_000} min)`}`);
+                // Soak 2: an animal the hunt could not get (stuck, time, or stopped by the unstuck
+                // reflex: #431 review 7, not by a fight) is left alone a while.
+                const byUnstuck = end === 'interrupted' && agent.rotnLastInterrupt?.by === 'unstuck' && agent.rotnLastInterrupt?.of === `mode:${this.name}`;
+                const skip = end === 'stuck' || end === 'time' || byUnstuck;
+                if (skip) skipAnimal(bot, target.id);
+                console.log(`[reflex] hunting ${target.name}: ${end}${skip ? ` (left alone for ${HUNT.skipMs / 60_000} min)` : ''}`);
             });
         }
     },
@@ -710,6 +713,9 @@ export async function execute(mode, agent, func, timeout=-1) {
     mode.active = true;
     try {
         interrupted_action = agent.actions.currentActionLabel;
+        // #431 review 2 and 7: who stopped which action (the night routine counts a threat reflex's
+        // interruptions apart; the hunting reflex skips an animal only after an unstuck one).
+        if (interrupted_action) agent.rotnLastInterrupt = { by: mode.name, of: interrupted_action, at: Date.now() };
         let code_return = await agent.actions.runAction(`mode:${mode.name}`, async () => {
             await func();
         }, { timeout });

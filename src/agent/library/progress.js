@@ -45,9 +45,10 @@ function targetDistance(bot) {
 /**
  * Why the running action is making progress now, or null. `memo` keeps what was seen between calls
  * (the unstuck mode object): the last stamp, the dig and when it started, the best distance to the
- * target. Progress: a block broken or placed since the last call; a dig started, or still within 2 x
- * bot.digTime (at least PROGRESS.digMinMs); a new target, or the target PROGRESS.closer nearer than
- * the nearest yet.
+ * target. Progress: a block broken or placed since the last call; a dig still within 2 x
+ * bot.digTime (at least PROGRESS.digMinMs) after it was first seen; the target PROGRESS.closer
+ * nearer than the nearest yet. #431 review 1: a new dig or a new target is not progress by itself
+ * (its start is only recorded), so a retry loop that starts over in place is still freed.
  */
 export function actionProgress(bot, memo, now = Date.now()) {
     const stamp = bot?.rotnProgressAt ?? 0;
@@ -59,13 +60,11 @@ export function actionProgress(bot, memo, now = Date.now()) {
             let est = null;
             try { est = bot.digTime?.(dig); } catch { est = null; }
             Object.assign(memo, { digKey: key, digSince: now, digAllowMs: Math.max(PROGRESS.digMinMs, 2 * (Number.isFinite(est) ? est : 0)) });
-            return 'a dig started';
-        }
-        if (now - memo.digSince <= memo.digAllowMs) return 'a dig underway';
+        } else if (now - memo.digSince <= memo.digAllowMs) return 'a dig underway';
     } else memo.digKey = null;
     const d = targetDistance(bot);
     if (!d) { memo.targetKey = null; return null; }
-    if (memo.targetKey !== d.key) { memo.targetKey = d.key; memo.targetBest = d.dist; return 'a new target'; }
+    if (memo.targetKey !== d.key) { memo.targetKey = d.key; memo.targetBest = d.dist; return null; } // only its start
     if (d.dist < memo.targetBest - PROGRESS.closer) { memo.targetBest = d.dist; return 'the target is closer'; }
     return null;
 }

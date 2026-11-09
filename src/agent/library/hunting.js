@@ -174,7 +174,10 @@ export async function huntAnimal(bot, entity, { keepGoing = () => true, maxMs = 
     const start = Date.now();
     bot.pvp?.attack?.(entity);
     const health = () => (Number.isFinite(entity.metadata?.[7]) ? entity.metadata[7] : null); // 1.12 EntityLivingBase health
-    const dist = () => (bot.entity?.position && entity.position ? entity.position.distanceTo(bot.entity.position) : Infinity);
+    // #431 review 5: horizontal distances only (an animal up a slope, or the bot bobbing up and
+    // down in place, must not look like getting closer or moving).
+    const flat = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+    const dist = () => (bot.entity?.position && entity.position ? flat(entity.position, bot.entity.position) : Infinity);
     let mark = { at: start, pos: bot.entity?.position?.clone?.() ?? null, dist: dist(), health: health() };
     try {
         for (;;) {
@@ -187,7 +190,7 @@ export async function huntAnimal(bot, entity, { keepGoing = () => true, maxMs = 
             const d = dist();
             if (d > 24) return 'gone';
             const h = health();
-            const moved = mark.pos && bot.entity?.position ? bot.entity.position.distanceTo(mark.pos) >= 1 : true;
+            const moved = mark.pos && bot.entity?.position ? flat(bot.entity.position, mark.pos) >= 1 : true;
             if (moved || d < mark.dist - 0.5 || (h !== null && mark.health !== null && h < mark.health))
                 mark = { at: now, pos: bot.entity?.position?.clone?.() ?? null, dist: Math.min(d, mark.dist), health: h };
             else if (now - mark.at >= stuckMs) return 'stuck';

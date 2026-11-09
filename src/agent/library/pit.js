@@ -189,11 +189,15 @@ export async function digPit(bot, { radius = PIT.radius, progress = {} } = {}) {
             try { estMs = bot.digTime?.(block) ?? null; } catch { estMs = null; }
             const limitMs = Math.max(PIT.digSlackMs, 2 * (Number.isFinite(estMs) ? estMs : 0));
             log(bot, `Digging ${block?.name ?? 'the block'} at ${at(q)}${Number.isFinite(estMs) ? ` (about ${(estMs / 1000).toFixed(1)} s by hand)` : ''}.`);
-            const dug = await digWithin(bot, q, limitMs);
+            const dug = await digWithin(bot, block, limitMs);
             if (dug === 'timeout') {
                 progress.bad.add(at(P));
                 progress.P = null;
-                log(bot, `Digging ${block?.name ?? 'the block'} at ${at(q)} took over ${(limitMs / 1000).toFixed(1)} s; leaving this spot for another.`);
+                // #431 review 3: why a dig hung (plain dirt did in the soak): the state of the bot.
+                const why = `${block?.name ?? 'the block'}:${block?.metadata ?? '?'} at ${at(q)} was not dug within ${(limitMs / 1000).toFixed(1)} s`;
+                progress.why = `${why}; the next hole is dug elsewhere`;
+                console.warn(`[night] hole shelter: ${why} (${digState(bot)})`);
+                log(bot, `Gave up the hole shelter at ${at(P)}: ${why}. The next hole is dug elsewhere.`);
                 return null;
             }
             if (!dug) {
@@ -211,15 +215,35 @@ export async function digPit(bot, { radius = PIT.radius, progress = {} } = {}) {
     return P.offset(0, -PIT.depth, 0);
 }
 
-/** breakBlockAt bounded by ms: true, false, or 'timeout' (the dig is stopped). */
-async function digWithin(bot, q, ms) {
-    let timer;
-    const dig = breakBlockAt(bot, q.x, q.y, q.z);
+/** What the bot's state was at a hung dig (#431 review 3): onGround, isInWater, effects, the held item. */
+function digState(bot) {
+    const e = bot.entity ?? {};
+    const effects = Object.entries(e.effects ?? {}).map(([id, ef]) => `${bot.registry?.effects?.[id]?.name ?? id}:${ef?.amplifier ?? '?'}`);
+    return `onGround ${e.onGround}, isInWater ${e.isInWater}, effects ${effects.length ? effects.join(' ') : 'none'}, held ${bot.heldItem?.name ?? 'nothing'}`;
+}
+
+/**
+ * Dig one block by hand within ms: true, false (it cannot be dug), or 'timeout' (the dig is
+ * stopped). #431 review 6: the equip and the dig are this function's own, and no dig starts once
+ * the time is up (a breakBlockAt still equipping could start one after digPit returned).
+ */
+async function digWithin(bot, block, ms) {
+    let timer, cancelled = false;
+    const dig = (async () => {
+        if (bot.game?.gameMode !== 'creative') {
+            try { await bot.tool?.equipForBlock?.(block); } catch { /* digs with what is in hand */ }
+            if (block.canHarvest && !block.canHarvest(bot.heldItem ? bot.heldItem.type : null)) return false;
+        }
+        if (cancelled) return false;
+        await bot.dig(block, true);
+        return true;
+    })();
     try {
         const r = await Promise.race([dig, new Promise(resolve => { timer = setTimeout(() => resolve('timeout'), ms); })]);
         if (r === 'timeout') {
-            try { bot.stopDigging?.(); } catch { /* best effort */ }
-            Promise.resolve(dig).catch(() => {}); // it ends as an aborted dig
+            cancelled = true;
+            try { if (bot.targetDigBlock) bot.stopDigging?.(); } catch { /* best effort */ }
+            dig.catch(() => {}); // it ends as an aborted dig
         }
         return r;
     } finally { clearTimeout(timer); }

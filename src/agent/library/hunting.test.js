@@ -151,6 +151,8 @@ test('soak 2: a hunt that gets nowhere (no move, no closer, no hit) ends stuck a
         assert.deepEqual(stuck.calls, ['attack', 'stop']);
         // The bot walks a block every few ticks: not stuck (it runs to maxMs).
         assert.equal((await run((bot, e, n) => { if (n % 5 === 0) bot.entity.position = bot.entity.position.offset(1, 0, 0); })).end, 'time');
+        // #431 review 5: going up and down in place (a jump, a slope) is no move and no closing in.
+        assert.equal((await run((bot, e, n) => { bot.entity.position = bot.entity.position.offset(0, n % 2 ? 1.5 : -1.5, 0); })).end, 'stuck');
         // Its hits land (the animal's health falls): not stuck.
         assert.equal((await run((bot, e, n) => { if (n % 5 === 0) e.metadata[7] = 10 - n / 100; })).end, 'time');
     } finally { Object.assign(HUNT, saved); }
