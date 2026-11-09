@@ -11,7 +11,20 @@
 
 import * as mc from '../../utils/mcdata.js';
 
-export const HUNT = { radius: 16, ownedRadius: 8, baseRadius: 32, placedMax: 512, maxMs: 90_000, checkMs: 500 };
+export const HUNT = { radius: 16, ownedRadius: 8, baseRadius: 32, placedMax: 512, maxMs: 90_000, checkMs: 500, stuckMs: 8000, skipMs: 5 * 60_000 };
+
+/**
+ * Soak 2 (rotn-v0.1.4): the reflex hunted the same sow, uphill and out of reach, 6 times in 4 min;
+ * each hunt stood still until the unstuck reflex stopped it. An animal whose hunt ended without a
+ * kill (stuck, time, interrupted) is left alone for HUNT.skipMs (bot.rotnHuntSkip, by entity id).
+ */
+export function skipAnimal(bot, id, now = Date.now()) {
+    if (!bot || id == null) return;
+    const skip = bot.rotnHuntSkip ??= new Map();
+    skip.set(id, now + HUNT.skipMs);
+    if (skip.size > 64) skip.delete(skip.keys().next().value);
+}
+const skippedNow = (bot, e, now = Date.now()) => (bot?.rotnHuntSkip?.get(e.id) ?? 0) > now;
 
 /**
  * Animals the bot may hunt for food: vanilla's adult cow, mooshroom, pig, rabbit and sheep, and
@@ -124,7 +137,7 @@ export function huntTarget(bot, { bases = [], radius = HUNT.radius, skipped = []
     const here = bot?.entity?.position;
     if (!here) return null;
     const animals = Object.values(bot.entities ?? {})
-        .filter(e => e && e !== bot.entity && e.position && isHuntableAnimal(e) && e.position.distanceTo(here) <= radius)
+        .filter(e => e && e !== bot.entity && e.position && isHuntableAnimal(e) && e.position.distanceTo(here) <= radius && !skippedNow(bot, e))
         .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here));
     for (const e of animals) {
         const why = mayBelongToPlayer(bot, e, { bases });
@@ -139,7 +152,7 @@ export function nearbyHuntable(bot, { bases = [], radius = 32 } = {}) {
     const here = bot?.entity?.position;
     if (!here) return [];
     return Object.values(bot.entities ?? {})
-        .filter(e => e && e !== bot.entity && e.position && isHuntableAnimal(e) && e.position.distanceTo(here) <= radius)
+        .filter(e => e && e !== bot.entity && e.position && isHuntableAnimal(e) && e.position.distanceTo(here) <= radius && !skippedNow(bot, e))
         .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here))
         .filter(e => !mayBelongToPlayer(bot, e, { bases }))
         .map(e => e.name);
@@ -152,20 +165,35 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  * HUNT.checkMs the hunt ends when the animal is dead or gone, the bot is stopped, keepGoing() says
  * no (the phase is no longer day, a threat came), or after maxMs. pvp stops however it ends.
  * `equip`: the weapon equip (skills.equipHighestAttack; passed in, as skills imports this module's
- * users). Returns 'killed' | 'gone' | 'interrupted' | 'stopped' | 'time'.
+ * users). Soak 2: it also ends 'stuck' when for HUNT.stuckMs the bot has not moved a block, got no
+ * closer and hurt the animal no more (an animal out of reach: the unstuck reflex used to end it).
+ * Returns 'killed' | 'gone' | 'interrupted' | 'stopped' | 'time' | 'stuck'.
  */
-export async function huntAnimal(bot, entity, { keepGoing = () => true, maxMs = HUNT.maxMs, equip = null } = {}) {
+export async function huntAnimal(bot, entity, { keepGoing = () => true, maxMs = HUNT.maxMs, equip = null, stuckMs = HUNT.stuckMs } = {}) {
     try { await equip?.(bot); } catch { /* fights with what is in hand */ }
     const start = Date.now();
     bot.pvp?.attack?.(entity);
+    const health = () => (Number.isFinite(entity.metadata?.[7]) ? entity.metadata[7] : null); // 1.12 EntityLivingBase health
+    // #431 review 5: horizontal distances only (an animal up a slope, or the bot bobbing up and
+    // down in place, must not look like getting closer or moving).
+    const flat = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+    const dist = () => (bot.entity?.position && entity.position ? flat(entity.position, bot.entity.position) : Infinity);
+    let mark = { at: start, pos: bot.entity?.position?.clone?.() ?? null, dist: dist(), health: health() };
     try {
         for (;;) {
             await sleep(HUNT.checkMs);
             if (!bot.entities?.[entity.id] || entity.isValid === false) return 'killed';
             if (bot.interrupt_code) return 'interrupted';
             if (!keepGoing()) return 'stopped';
-            if (Date.now() - start >= maxMs) return 'time';
-            if (bot.entity?.position && entity.position && entity.position.distanceTo(bot.entity.position) > 24) return 'gone';
+            const now = Date.now();
+            if (now - start >= maxMs) return 'time';
+            const d = dist();
+            if (d > 24) return 'gone';
+            const h = health();
+            const moved = mark.pos && bot.entity?.position ? flat(bot.entity.position, mark.pos) >= 1 : true;
+            if (moved || d < mark.dist - 0.5 || (h !== null && mark.health !== null && h < mark.health))
+                mark = { at: now, pos: bot.entity?.position?.clone?.() ?? null, dist: Math.min(d, mark.dist), health: h };
+            else if (now - mark.at >= stuckMs) return 'stuck';
         }
     } finally {
         try { bot.pvp?.stop?.(); } catch { /* best effort */ }

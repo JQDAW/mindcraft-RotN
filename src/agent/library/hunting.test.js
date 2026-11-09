@@ -130,3 +130,43 @@ test('#422 review 1: a hunt is bounded: it ends when keepGoing says no (dusk), a
     } finally { Object.assign(HUNT, saved); }
 });
 
+
+test('soak 2: a hunt that gets nowhere (no move, no closer, no hit) ends stuck after stuckMs; any progress keeps it going', async () => {
+    const saved = { ...HUNT };
+    Object.assign(HUNT, { checkMs: 10 });
+    try {
+        const run = async (onTick) => {
+            const bot = world({ animals: [cow(5)] });
+            const e = bot.entities[1];
+            const calls = [];
+            bot.pvp = { attack: () => calls.push('attack'), stop: () => calls.push('stop') };
+            let ticks = 0;
+            const t0 = Date.now();
+            const end = await huntAnimal(bot, e, { keepGoing: () => { onTick?.(bot, e, ++ticks); return true; }, maxMs: 400, stuckMs: 100 });
+            return { end, calls, ms: Date.now() - t0 };
+        };
+        const stuck = await run();
+        assert.equal(stuck.end, 'stuck', 'the sow uphill, out of reach');
+        assert.ok(stuck.ms < 300, `before maxMs: ${stuck.ms} ms`);
+        assert.deepEqual(stuck.calls, ['attack', 'stop']);
+        // The bot walks a block every few ticks: not stuck (it runs to maxMs).
+        assert.equal((await run((bot, e, n) => { if (n % 5 === 0) bot.entity.position = bot.entity.position.offset(1, 0, 0); })).end, 'time');
+        // #431 review 5: going up and down in place (a jump, a slope) is no move and no closing in.
+        assert.equal((await run((bot, e, n) => { bot.entity.position = bot.entity.position.offset(0, n % 2 ? 1.5 : -1.5, 0); })).end, 'stuck');
+        // Its hits land (the animal's health falls): not stuck.
+        assert.equal((await run((bot, e, n) => { if (n % 5 === 0) e.metadata[7] = 10 - n / 100; })).end, 'time');
+    } finally { Object.assign(HUNT, saved); }
+});
+
+test('soak 2: an animal the hunt could not get is left alone for HUNT.skipMs (the target and the prompt\'s list)', async () => {
+    const { skipAnimal } = await import('./hunting.js');
+    const bot = world({ animals: [cow(4), cow(9)] });
+    assert.equal(huntTarget(bot).id, 1);
+    skipAnimal(bot, 1);
+    assert.equal(huntTarget(bot).id, 2, 'the next one');
+    assert.equal(nearbyHuntable(bot).length, 1);
+    skipAnimal(bot, 2);
+    assert.equal(huntTarget(bot), null, 'both left alone now');
+    bot.rotnHuntSkip.set(1, Date.now() - 1);
+    assert.equal(huntTarget(bot).id, 1, 'after skipMs, again');
+});

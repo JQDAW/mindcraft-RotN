@@ -1,0 +1,12 @@
+[scenario 22:38:29] g4-soak-2h (G4) run 20261108t223829-5a7480; git f6107fc4b3b60da1a491873ea58408c540006117; driver: service frcfld via cx23-ctl; out: <local>/captures/raw/g4-soak-2-20261108
+[scenario 22:38:53] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 00:39:00] PASS naming: [naming]: 22 kinds, unknown 0, all real; no entity near (+240s)
+[scenario 00:39:00] PASS no_crash: 120 min up, 25 samples, NRestarts 0 throughout, no agent exit
+[scenario 00:39:00] PASS peak_memory: peak 622 MiB (target 850 MiB)
+[scenario 00:39:00] PASS usd_per_hour: USD 0.012869/h (target 0.05; USD 0.025763 over 120 min, 205 completions)
+[scenario 00:39:01] FAIL agenda_done: no "agenda done" within the soak
+[scenario 00:39:01] FAIL food_floor: lowest food 1 (floor 6; 126 food lines)
+[scenario 00:39:01] FAIL ate_when_low: 2 of 9 low food line(s) with no eat after them
+[scenario 00:39:01] PASS deaths_reported: each of 5 death(s) reported
+[scenario 00:39:05] server.log: the marker was rolled over; saved from 2026-11-08-1.log.gz, latest.log
+[scenario 00:39:05] g4-soak-2h: FAIL; 6 passed, 3 failed (<local>/captures/raw/g4-soak-2-20261108/result.json)
