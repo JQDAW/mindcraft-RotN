@@ -9,7 +9,7 @@ import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
 import { REPAIR_LABEL, nightPhase, minutesToSunset } from './library/night.js';
 import { RESERVE_LEAD_MIN } from './agenda.js';
-import { huntTarget, knownBases, huntAnimal, skipAnimal, HUNT } from './library/hunting.js';
+import { huntTarget, knownBases, huntAnimal, skipAnimal, HUNT, tooWeakToHunt } from './library/hunting.js';
 import { forageTarget } from './library/foraging.js';
 import { actionProgress } from './library/progress.js';
 import { isFalling } from './library/shelter.js';
@@ -307,7 +307,7 @@ const modes_list = [
         // first; it is off, agent.js). Before cowardice and self_defense in this list, so the bot
         // can eat at food 6 or lower in a fight: the loop stops at the first active mode (#206 review 4).
         name: 'eating',
-        description: 'Eat at food 12 or lower when idle and no threat is near, and at 6 or lower always, in a fight too. Never hawthorn berries or cloudsbluff; bread only when nothing else is left.',
+        description: 'Eat at food 12 or lower when idle and no threat is near, and at 6 or lower always, in a fight too. Never hawthorn berries or cloudsbluff, except at food 5 or lower with nothing else (food 0 kills on this pack); bread only when nothing else is left.',
         interrupts: ['all'],
         on: true,
         active: false,
@@ -324,13 +324,16 @@ const modes_list = [
             let threatened = false;
             try { threatened = !!threats.threatPlan(bot); } catch { threatened = false; }
             if (!food.wantsToEat(bot.food, { idle: agent.isIdle(), threatened })) return;
-            const item = food.chooseFood(bot, { skip: this.given_up });
+            // Soak 2: food 0 kills at once on this pack; at EMERGENCY_FOOD or lower, avoided food too.
+            const emergency = Number.isFinite(bot.food) && bot.food <= food.EMERGENCY_FOOD;
+            const item = food.chooseFood(bot, { skip: this.given_up, emergency });
             if (!item) {
                 this.wait_until = Date.now() + this.miss_ms;
-                console.warn(`[reflex] eating: food ${bot.food}, but no safe food in the inventory`);
+                console.warn(`[reflex] eating: food ${bot.food}, but no safe food in the inventory${emergency ? ', and no other food either' : ''}`);
                 return;
             }
             const key = food.foodKey(item);
+            if (food.isAvoided(item)) console.warn(`[reflex] eating: food ${bot.food} (food 0 kills on this pack): eating ${key} although it is avoided (${food.avoidReason(item)})`);
             // Not awaited, so the update loop is not held up by the eat (execute never rejects).
             execute(this, agent, async () => {
                 const r = await food.eatFood(bot, item, { checkMs: this.check_ms });
@@ -513,6 +516,9 @@ const modes_list = [
             const bases = knownBases(agent);
             // Keep going while it is day and no threat is near (#422 review 1).
             const keepGoing = () => { if (!isDaylight(agent)) return false; try { return !threats.threatPlan(bot); } catch { return false; } };
+            // #432 review 4: a hunt is also over once the bot is too weak to hurt it (food 4 or lower);
+            // foraging goes on.
+            const keepHunting = () => !tooWeakToHunt(bot) && keepGoing();
             // Foraging first (lead, after rotn-data #423): a ripe berry bush, herb or garden that is
             // not maybe a player's (foraging.js). Bounded (skills.FORAGE_RUN); a block it could not
             // take is left alone for a while (markTried), so this never loops on one block.
@@ -535,6 +541,8 @@ const modes_list = [
                 });
                 return;
             }
+            // Soak 2: at food 4 or lower weakness leaves a bare hand doing nothing: no hunt.
+            if (tooWeakToHunt(bot)) return;
             const skipped = [];
             const target = huntTarget(bot, { bases, skipped });
             const said = skipped.join('; ');
@@ -544,7 +552,7 @@ const modes_list = [
             execute(this, agent, async () => {
                 say(agent, `Hunting ${target.name} for food!`);
                 // #422 review 1: bounded (HUNT.maxMs), and over once the day is (dusk) or a threat comes.
-                const end = await huntAnimal(bot, target, { keepGoing, equip: (b) => skills.equipHighestAttack(b) });
+                const end = await huntAnimal(bot, target, { keepGoing: keepHunting, equip: (b) => skills.equipHighestAttack(b) });
                 // Soak 2: an animal the hunt could not get (stuck, time, or stopped by the unstuck
                 // reflex: #431 review 7, not by a fight) is left alone a while.
                 const byUnstuck = end === 'interrupted' && agent.rotnLastInterrupt?.by === 'unstuck' && agent.rotnLastInterrupt?.of === `mode:${this.name}`;
@@ -708,6 +716,12 @@ export async function moveAwayWithin(bot, distance, timeoutMs) {
 // prompts the LLM ("Respond accordingly") after each reflex; it records a
 // re-plan request instead (replan.js), which the LLM hears at its next
 // decision point.
+/**
+ * Soak 2 (rotn-v0.1.4): the only walks that sprint (fall_safety.installWalkSafety reads
+ * bot.rotnSprint): a survival mode fleeing or fighting. Sprinting costs hunger, and food 0 kills.
+ */
+export const SPRINT_MODES = ['self_preservation', 'cowardice', 'self_defense'];
+
 export async function execute(mode, agent, func, timeout=-1) {
     let interrupted_action = '';
     mode.active = true;
@@ -717,7 +731,19 @@ export async function execute(mode, agent, func, timeout=-1) {
         // interruptions apart; the hunting reflex skips an animal only after an unstuck one).
         if (interrupted_action) agent.rotnLastInterrupt = { by: mode.name, of: interrupted_action, at: Date.now() };
         let code_return = await agent.actions.runAction(`mode:${mode.name}`, async () => {
-            await func();
+            const bot = agent.bot;
+            const sprint = SPRINT_MODES.includes(mode.name) && bot;
+            const before = bot?.rotnSprint;
+            if (sprint) bot.rotnSprint = true;
+            try { await func(); }
+            finally {
+                if (sprint) {
+                    bot.rotnSprint = before ?? false;
+                    // #432 review 5: the movements a flee set keep no sprint for the next walk that
+                    // reuses them (useDoor, a bounded goto, a follow's re-goal).
+                    if (bot.pathfinder?.movements && !bot.rotnSprint) bot.pathfinder.movements.allowSprinting = false;
+                }
+            }
         }, { timeout });
         console.log(`Mode ${mode.name} finished executing, code_return: ${code_return.message}`);
 
