@@ -92,6 +92,22 @@ export function shelterEnemy(entity) {
 export const PLAYER_ZOMBIE = 'zombie_players:zombie_player';
 export const isPlayerZombie = (entity) => entity?.name === PLAYER_ZOMBIE;
 
+/**
+ * Soak 2 (rotn-v0.1.4, 22:47): the bot fought a slime with its hands, fell from health 20 to 2 in
+ * about 4 s, and died moments later. A big slime does its size in damage per hit (4 for the largest), splits
+ * when killed, and has +3 health on this pack (config/roughmobsrevamped.cfg). A slime of size
+ * SLIME.bigSize or more is fought only with a weapon and health of SLIME.minHealth or more;
+ * otherwise the bot keeps away from it. Tiny slimes are fought as before. rotn-data's entry for
+ * slime stays 'fight' (vanilla); the size rule is the bot's (a size-aware entry is requested).
+ */
+export const SLIME = { bigSize: 2, minHealth: 14, sizeIndex: 12 };
+const SLIMES = /(^|:)[a-z_]*slime$/;
+/** A slime's size (1.12 EntitySlime metadata index 12), or null when it cannot be read. */
+export const slimeSize = (e) => (Number.isInteger(e?.metadata?.[SLIME.sizeIndex]) ? e.metadata[SLIME.sizeIndex] : null);
+/** A slime (any mod's: slime, specialmobs:lemonslime, primitivemobs:brain_slime) that is big, or of unknown size. */
+export const isBigSlime = (e) => typeof e?.name === 'string' && SLIMES.test(e.name) && !(slimeSize(e) !== null && slimeSize(e) < SLIME.bigSize);
+export const canFightSlime = (bot) => hasWeapon(bot) && bot?.health >= SLIME.minHealth;
+
 /** A sword or an axe (not a pickaxe) in the inventory or the off hand (slot 45; #227 nit). */
 export function hasWeapon(bot) {
     const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]];
@@ -157,6 +173,13 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
     if (zombies.length && !canFightHard(bot)) {
         return { action: 'flee', why: 'a player zombie, and no weapon or health at half or less', from: zombies[0].e,
             away: RANGES.avoid.away, isEnemy: isPlayerZombie };
+    }
+    // Soak 2: a big slime, with no weapon or health under SLIME.minHealth: keep away from it.
+    const slimes = near.filter(x => isBigSlime(x.e) && x.d <= RANGES.fight.near);
+    if (slimes.length && !canFightSlime(bot)) {
+        const size = slimeSize(slimes[0].e);
+        return { action: 'flee', why: `a big slime (size ${size ?? 'unknown'}), and no weapon or health under ${SLIME.minHealth}`, from: slimes[0].e,
+            away: RANGES.fight.away, isEnemy: isBigSlime };
     }
     const within = (reaction) => near.filter(x => x.t.reaction === reaction && x.d <= RANGES[reaction].near);
     const is = (reaction) => (e) => threatFor(e)?.reaction === reaction;

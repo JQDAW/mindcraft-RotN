@@ -253,3 +253,25 @@ test('G3 round 7 B and #296 review 2: an equip the server rejects does not end s
     assert.equal(held, sword);
     assert.match(bot.output, /Successfully defended self\./);
 });
+
+// Soak 2 (rotn-v0.1.4, 22:47): fighting a slime bare-handed took the bot from health 20 to 2 in about 4 s.
+test('soak 2: a big slime is kept away from without a weapon or below health 14; a tiny one is fought; with a weapon and health it is fought', async () => {
+    const { SLIME, isBigSlime, slimeSize } = await import('./threats.js');
+    assert.deepEqual(SLIME, { bigSize: 2, minHealth: 14, sizeIndex: 12 });
+    const slime = (id, size, name = 'slime') => ({ id, name, type: 'mob', position: new Vec3(3, 64, 0), metadata: size === null ? {} : { 12: size } });
+    assert.equal(slimeSize(slime(1, 4)), 4);
+    assert.equal(isBigSlime(slime(1, 4)), true);
+    assert.equal(isBigSlime(slime(1, 1)), false, 'a tiny slime');
+    assert.equal(isBigSlime(slime(1, null)), true, 'size unknown: taken as big');
+    assert.equal(isBigSlime(slime(1, 3, 'specialmobs:lemonslime')), true, 'a modded slime');
+    assert.equal(isBigSlime({ name: 'zombie', metadata: { 12: 4 } }), false);
+    const sword = { name: 'stone_sword', count: 1 };
+    const plan = (e, { health = 20, items = [] } = {}) => threatPlan(fakeBot([e], { health, inventory: { items: () => items, slots: [] } }));
+    const bare = plan(slime(1, 4));
+    assert.equal(bare.action, 'flee');
+    assert.equal(bare.why, 'a big slime (size 4), and no weapon or health under 14');
+    assert.equal(bare.away, RANGES.fight.away);
+    assert.equal(plan(slime(1, 4), { items: [sword], health: 10 }).action, 'flee', 'a weapon but health 10');
+    assert.equal(plan(slime(1, 4), { items: [sword], health: 18 }).action, 'fight', 'a weapon and health 18: fought');
+    assert.equal(plan(slime(1, 1)).action, 'fight', 'a tiny one: fought bare-handed');
+});
