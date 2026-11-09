@@ -1,8 +1,8 @@
 // G4 #1, ready-to-try: "The service logs in with its own account and reconnects after a kick or a server restart."
 // test/scenarios/g4/PLAN.md item 1. Set-up S: the bot is the CX23's mindcraft-rotn@<bot> unit, driven through the ssh
 // gate (run.mjs --service <bot>, lib/service.mjs); the harness reads the test server as in G3. On a spawned driver
-// (set-up T) it is a rehearsal: the service-only checks are "not reached", and every G4 run is not-gate on a test
-// server anyway (g3Policy: G4_TEST_SERVER_NOT_GATE) until the lead sets how an S run becomes G4 evidence.
+// (set-up T) it is a rehearsal: the service-only checks are "not reached". Every G4 run is not-gate anyway (g3Policy:
+// G4_TEST_SERVER_NOT_GATE on T, G4_SERVICE_NOT_GATE on S) until the step-7 acceptance runs.
 //
 // The stimuli (lead, 2026-11-07; the console rules in lib/g3.mjs SCENARIO_CONSOLE_EXTRA, this scenario only): the
 // console's `kick <bot>` (this run's bot by its exact name), then a server restart: `test-server.sh restart` (the

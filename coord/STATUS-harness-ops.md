@@ -1,6 +1,15 @@
 # Status: harness-ops
 
-Updated: 2026-11-08 (12:24 UTC, from `date -u`)
+Updated: 2026-11-09 (00:55 UTC, from `date -u`)
+
+## Now: soak 2 done (GO `G4-SOAK-2-20261108`); evidence PR #433. Idle until the lead's next task.
+
+- **The run:** `g4-soak-2h` on the CX23 service, rotn-v0.1.4 (`f6107fc4`), ADR 0010 targets, one start. The result was FAIL, 6 of 9:
+  - pass: peak 622 MiB (target 850), USD 0.0129/h (target 0.05), no crash, naming, 5 of 5 deaths reported;
+  - fail: `agenda_done` (stalled at `stone_axe`), `food_floor` (lowest 1), `ate_when_low` (2 of 9).
+- **For skills-rotn:** 2 deaths were starvation at food 1 with full health. `mode:unstuck` interrupted the hole-shelter dig 71 times.
+- **Clean-up:** the test server was deleted at 00:39:40, then 0/0/0. The unit is `inactive`. The batch checkout `/home/mindcraft-RotN-batch/f6107fc4` is kept for a rerun.
+- Never G4 acceptance evidence: only step 7 counts.
 
 ## Now: idle until the human finishes G4 step 0 (lead, 2026-11-08). Today's G4 offline work is merged; no paid run, nothing on the CX23.
 

@@ -2,8 +2,8 @@
 // step 3 (the agenda half on S). Set-up S: the CX23 service through the ssh gate (run.mjs --service frcfld,
 // lib/service.mjs); the restart is the ctl's `stop` then `start` (the gate has no restart verb, ADR 0009). On a spawned
 // driver (set-up T) it is a rehearsal: the restart is the driver's stop and a new start with ROTN_DRIVER_KEEP_STATE=1
-// (else the driver moves the state aside at every start), and the run is not-gate. Every G4 run is not-gate on a test
-// server anyway (G4_TEST_SERVER_NOT_GATE) until step 7.
+// (else the driver moves the state aside at every start), and the run is not-gate. Every G4 run is not-gate anyway
+// (G4_TEST_SERVER_NOT_GATE on T, G4_SERVICE_NOT_GATE on S) until step 7.
 //
 // What the bot does (skills-rotn #327): agenda.json and tasks.json are on disk. After a process restart the first step
 // the agenda names says "agenda step <id> started: <text> (resumed after a restart)" (its done steps stay done), and a

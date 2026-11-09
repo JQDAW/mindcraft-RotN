@@ -103,6 +103,43 @@ test('#427 review: a forage run that got nothing (bushes out of reach) does not 
     assert.deepEqual(attacked, ['animania:cow_holstein'], 'the next tick hunts');
 });
 
+test('soak 2: a hunt that got stuck (the sow uphill) is not started again on the same animal; another one is hunted', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...HUNT };
+    Object.assign(HUNT, { checkMs: 10, stuckMs: 60 });
+    t.after(() => Object.assign(HUNT, saved));
+    const agent = huntAgent({ animals: [cow(1, 3), cow(2, 9)] });
+    const attacked = [];
+    agent.bot.pvp = { attack: (e) => attacked.push(e.id), stop() {} };
+    agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: false }; };
+    await hunt(agent);
+    await new Promise(r => setTimeout(r, 250)); // the hunt runs to its stuck end
+    assert.deepEqual(attacked, [1], 'the nearest cow: stuck');
+    assert.ok(agent.bot.rotnHuntSkip?.get(1) > Date.now(), 'left alone a while');
+    await hunt(agent);
+    await new Promise(r => setTimeout(r, 250));
+    assert.deepEqual(attacked, [1, 2], 'the next tick hunts the other one, not the same');
+});
+
+test('#431 review 7: a hunt stopped by the unstuck reflex leaves the animal alone a while; one stopped by a fight does not', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...HUNT };
+    Object.assign(HUNT, { checkMs: 10, stuckMs: 60_000 });
+    t.after(() => Object.assign(HUNT, saved));
+    const run = async (by) => {
+        const agent = huntAgent({ animals: [cow(1, 3)] });
+        agent.bot.pvp = { attack: () => {
+            setTimeout(() => { agent.rotnLastInterrupt = { by, of: 'mode:hunting', at: Date.now() }; agent.bot.interrupt_code = true; }, 30);
+        }, stop() {} };
+        agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: true }; };
+        await hunt(agent);
+        await new Promise(r => setTimeout(r, 150));
+        return agent.bot.rotnHuntSkip?.get(1) > Date.now();
+    };
+    assert.equal(await run('unstuck'), true, 'stopped by unstuck: skipped');
+    assert.equal(await run('self_defense'), false, 'stopped by a fight: hunted again later');
+});
+
 test('G4 #5: the hunting reflex does nothing when food is not due, at dusk or night, with a threat near, when busy, or sheltered', async (t) => {
     t.mock.method(console, 'log', () => {});
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16 })), [], 'food 16: not due');
@@ -141,6 +178,48 @@ test('G4 #5: !attack refuses an animal that may belong to a player, and takes a 
     only.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: only.bot.output, interrupted: false }));
     await executeCommand(only, '!attack("animania:cow_holstein")');
     assert.match(only.bot.output, /Not attacking animania:cow_holstein: it may belong to a player \(it is on a leash\)\. Find a wild one away from fences, farms and houses\./);
+});
+
+// Soak 2 (rotn-v0.1.4): at food 4 or lower (Normal) Hunger Overhaul's weakness leaves a bare hand doing
+// nothing; the bot chased a sow it could not hurt until food 0 killed it.
+test('soak 2: at food 4 or lower no hunt, by the reflex or by !attack on an animal; foraging still runs; a hostile mob is still fought', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    assert.deepEqual(await hunt(huntAgent({ food: 4, animals: [cow(1, 3)] })), [], 'the reflex: no hunt at food 4');
+    assert.deepEqual(await hunt(huntAgent({ food: 5, animals: [cow(1, 3)] })), ['mode:hunting'], 'food 5: it hunts');
+    const crop = withCrops(huntAgent({ food: 4, animals: [cow(1, 3)] }), { '6,64,0': ['rustic:wildberry_bush', 1] });
+    assert.deepEqual(await hunt(crop), ['mode:hunting'], 'foraging still runs at food 4');
+    const weak = huntAgent({ food: 4, animals: [cow(1, 3)] });
+    weak.bot.pvp = { attack: () => assert.fail('never attacked'), stop() {} };
+    weak.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: weak.bot.output, interrupted: false }));
+    await executeCommand(weak, '!attack("animania:cow_holstein")');
+    assert.match(weak.bot.output, /Not hunting animania:cow_holstein: your food is 4, and at 4 or lower you are too weak to hurt it \(weakness\)\. Eat anything you hold, or !forage nearby; food 0 kills you at once on this pack\./);
+    // A zombie is not an animal: !attack still fights it.
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(3.5, 64, 0.5), height: 1.9, metadata: { 7: 20 } };
+    const fight = huntAgent({ food: 4, animals: [zombie] });
+    const hit = [];
+    fight.bot.pvp = { attack: (e) => { hit.push(e.name); delete fight.bot.entities[e.id]; }, stop() {} };
+    fight.bot.equip = () => Promise.resolve();
+    fight.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: fight.bot.output, interrupted: false }));
+    await executeCommand(fight, '!attack("zombie")');
+    assert.doesNotMatch(fight.bot.output, /Not hunting/);
+});
+
+// Soak 2: food 8 -> 1 in 9 min from two !moveAway(64) and searches out to 256 blocks.
+test('soak 2: below food 8 the model\'s !moveAway and searches go 32 blocks at most, and say why; at food 8 as asked', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const far = cow(1, 40);
+    const run = async (food, cmd) => {
+        const agent = huntAgent({ food, animals: [far] });
+        agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }), () => ({ message: agent.bot.output, interrupted: false }));
+        await executeCommand(agent, cmd);
+        return agent.bot.output;
+    };
+    assert.match(await run(7, '!searchForEntity("animania:cow_holstein", 128)'), /Searching 32 blocks at most at food 7, not 128: walking costs hunger, and food 0 kills you at once on this pack\. Eat or !forage first\.[\s\S]*Could not find any animania:cow_holstein in 32 blocks/);
+    const fed = await run(8, '!searchForEntity("animania:cow_holstein", 128)');
+    assert.doesNotMatch(fed, /at most at food/);
+    assert.match(fed, /Found animania:cow_holstein/);
+    assert.match(await run(7, '!moveAway(64)'), /Moving away 32 blocks at most at food 7, not 64/);
+    assert.doesNotMatch(await run(7, '!moveAway(20)'), /at most at food/, 'a short walk is not capped');
 });
 
 test('#422 review 1: a hunt running when dusk falls ends (the night routine is not held up), and pvp stops', async (t) => {
@@ -198,3 +277,19 @@ test('#422 review 2: !attack checks ownership for any target that is not a hosti
     assert.equal(hit, 1);
 });
 
+
+test('#432 review 4: a hunt under way stops once food falls to 4 (too weak to hurt it); pvp stops', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
+    const saved = { ...HUNT };
+    Object.assign(HUNT, { checkMs: 10, stuckMs: 60_000 });
+    t.after(() => Object.assign(HUNT, saved));
+    const agent = huntAgent({ food: 6, animals: [cow(1, 3)] });
+    const calls = [];
+    agent.bot.pvp = { attack: () => { calls.push('attack'); setTimeout(() => { agent.bot.food = 4; }, 40); }, stop: () => calls.push('stop') };
+    agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: false }; };
+    await hunt(agent);
+    await new Promise(r => setTimeout(r, 200));
+    assert.deepEqual(calls, ['attack', 'stop']);
+    assert.ok(lines.includes('[reflex] hunting animania:cow_holstein: stopped'), lines.join('\n'));
+});

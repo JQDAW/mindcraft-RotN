@@ -13,6 +13,7 @@ import { GateRefusal, HOST, SSH_OPTS, STATUS_FAIL_LIMIT, exitReason, exitedText,
 import { startSession } from '../runner/lib/session.mjs';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { parseArgs } from '../runner/run.mjs';
+import { G4_SERVICE_NOT_GATE, G4_TEST_SERVER_NOT_GATE, g3Policy } from '../runner/lib/g3.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SRC = fs.readFileSync(path.join(here, '..', 'runner', 'lib', 'service.mjs'), 'utf8');
@@ -396,6 +397,23 @@ describe('run.mjs --service', () => {
         assert.match(src, /const driverName = o\.service !== null \? `service \$\{o\.service\} via \$\{HOST\}` : o\.driver\.join\(' '\);/);
         assert.match(src, /driver: driverName \},\n\s+bot\.kind === 'service' \? \{ service: \{ goId: bot\.goId \?\? null, startError: bot\.startError \?\? null, incident: bot\.incident \?\? null, stateUnknown: bot\.stateUnknown \?\? null \} \} : \{\},/);
         assert.match(src, /log\(`INCIDENT: \$\{bot\.incident\}`\);\n\s+addNotGate\(result, `an ADR 0009 incident: \$\{bot\.incident\}`\);/);
+    });
+
+    test('#433 review: a G4 service run (S) gets its own not-gate reason, "not an acceptance run"; a spawned driver (T) keeps the rehearsal one', () => {
+        const g4 = { id: 'g4-soak-2h', gate: 'G4', llm: false };
+        const s = g3Policy(g4, {}, undefined, { service: true });
+        assert.equal(s.notGate, G4_SERVICE_NOT_GATE);
+        assert.match(s.notGate, /CX23 service \(set-up S\) is not an acceptance run: G4 evidence comes only from the step-7 acceptance runs/);
+        assert.doesNotMatch(s.notGate, /test server|rehearsal/);
+        assert.equal(g3Policy(g4, {}, undefined, { service: false }).notGate, G4_TEST_SERVER_NOT_GATE);
+        assert.equal(g3Policy(g4, {}, undefined).notGate, G4_TEST_SERVER_NOT_GATE, 'no opts: the rehearsal reason');
+        assert.equal(g3Policy(g4, {}, undefined, { service: 'frcfld' }).notGate, G4_TEST_SERVER_NOT_GATE, 'only a boolean true marks S');
+        // Not G4: the service flag changes nothing.
+        assert.deepEqual(g3Policy({ gate: 'G3', llm: true }, { ROTN_G3_BATCH: 'b-1:2' }, 2, { service: true }), { guard: true, notGate: null, batch: 'b-1:2' });
+        assert.equal(g3Policy({ gate: 'S1', llm: true }, {}, undefined, { service: true }).notGate, null);
+        // run.mjs passes the bot's kind: S only for the service adapter.
+        const src = fs.readFileSync(path.join(here, '..', 'runner', 'run.mjs'), 'utf8');
+        assert.match(src, /g3Policy\(scenario, process\.env, [^\n]*, \{ service: bot\.kind === 'service' \}\);/);
     });
 
 });

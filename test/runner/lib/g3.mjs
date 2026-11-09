@@ -140,17 +140,21 @@ export const SCENARIO_CONSOLE_EXTRA = Object.freeze({
  */
 export const consoleAllowFor = (scenario, params = scenario?.defaults) => [...G3_CONSOLE_ALLOW, ...(SCENARIO_CONSOLE_EXTRA[scenario?.id]?.(params ?? {}) ?? [])];
 
-/** Why a G4 run on a test server is never G4 evidence (lead, #316 review). */
+/** Why a G4 run with a spawned driver (set-up T) is never G4 evidence (lead, #316 review). */
 export const G4_TEST_SERVER_NOT_GATE = 'a G4 scenario on a test server is a rehearsal: G4 evidence comes only from the CX23 service (test/scenarios/g4/PLAN.md)';
+
+/** Why a G4 run on the CX23 service (set-up S) is not G4 evidence either, until the step-7 runner (lead, #433 review). */
+export const G4_SERVICE_NOT_GATE = 'a G4 run on the CX23 service (set-up S) is not an acceptance run: G4 evidence comes only from the step-7 acceptance runs (test/scenarios/g4/PLAN.md)';
 
 /**
  * What run.mjs applies to a scenario (#122 review findings 3 and 4):
  *   guard:   the console allowlist, for every G3 scenario and every scenario that runs the real agent;
  *   notGate: a reason when a G3 run did not come from batch.mjs (no ROTN_G3_BATCH marker "<id>:<limit>"),
  *            or the marker's limit is not the run's maxBatchUsd: such a run had no spend stop over it;
- *            and always for a G4 scenario (G4_TEST_SERVER_NOT_GATE).
+ *            and always for a G4 scenario: G4_SERVICE_NOT_GATE when the bot is the CX23 service (opts.service,
+ *            run.mjs --service), else G4_TEST_SERVER_NOT_GATE (a spawned driver: a rehearsal).
  */
-export function g3Policy(scenario, env, maxBatchUsd) {
+export function g3Policy(scenario, env, maxBatchUsd, { service = false } = {}) {
     const guard = scenario.gate === 'G3' || scenario.gate === 'G4' || scenario.llm === true;
     const marker = env.ROTN_G3_BATCH ?? null;
     let notGate = null;
@@ -159,7 +163,7 @@ export function g3Policy(scenario, env, maxBatchUsd) {
         if (!m) notGate = 'a G3 run outside batch.mjs has no spend stop (no ROTN_G3_BATCH marker)';
         else if (Number(m[1]) !== Number(maxBatchUsd)) notGate = `the batch's spend limit ${m[1]} is not this run's maxBatchUsd ${maxBatchUsd}`;
     }
-    if (scenario.gate === 'G4') notGate = G4_TEST_SERVER_NOT_GATE;
+    if (scenario.gate === 'G4') notGate = service === true ? G4_SERVICE_NOT_GATE : G4_TEST_SERVER_NOT_GATE;
     return { guard, notGate, batch: marker };
 }
 
