@@ -180,7 +180,8 @@ async function main(argv) {
     const resultFile = path.join(outDir, 'result.json');
     // G3 (#116 and #122 reviews): the console allowlist whenever the real agent runs or the gate is G3, and a
     // G3 run is gate-valid only under batch.mjs's spend stop (its ROTN_G3_BATCH marker).
-    const policy = g3Policy(scenario, process.env, o.params.maxBatchUsd ?? scenario.defaults?.maxBatchUsd);
+    // G4: a service run (set-up S) and a spawned-driver rehearsal (T) each get their own not-gate reason (#433 review).
+    const policy = g3Policy(scenario, process.env, o.params.maxBatchUsd ?? scenario.defaults?.maxBatchUsd, { service: bot.kind === 'service' });
     let usageBefore = null;
     // Every record, the progress and killed ones too, carries the LLM calls so far (#122 review nit): a run
     // that never finishes still shows what it used. The after-reading exists only in the final result.
