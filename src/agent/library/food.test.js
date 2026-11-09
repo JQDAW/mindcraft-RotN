@@ -223,7 +223,10 @@ test('soak 2: at EMERGENCY_FOOD or lower, avoided food is eaten when no safe foo
     const flesh = stack('rotten_flesh', 0, 2), chicken = stack('chicken', 0, 1), chorus = stack('chorus_fruit', 0, 4), berries = stack('rustic:wildberries', 0, 1);
     assert.ok(isAvoided(flesh) && isAvoided(chicken));
     assert.equal(chooseFood(bot([flesh, chicken])), null, 'not in an emergency: never');
-    assert.ok(['rotten_flesh', 'chicken'].includes(chooseFood(bot([flesh, chicken]), { emergency: true })?.name), 'an emergency: the avoided food');
+    assert.equal(chooseFood(bot([flesh, chicken]), { emergency: true })?.name, 'chicken', '#432 review 2: raw chicken (hunger 30%) before rotten flesh (80%)');
+    assert.equal(chooseFood(bot([flesh]), { emergency: true })?.name, 'rotten_flesh');
+    for (const [name, meta] of [['rustic:cloudsbluff', 0], ['fish', 3], ['betterwithmods:raw_egg', 0], ['cyclicmagic:inventory_food', 0], ['spider_eye', 0]])
+        assert.equal(chooseFood(bot([stack(name, meta, 1)]), { emergency: true }), null, `${name}:${meta}: never, not even in an emergency`);
     assert.equal(chooseFood(bot([flesh, berries]), { emergency: true }).name, 'rustic:wildberries', 'safe food first');
     assert.equal(chooseFood(bot([chorus]), { emergency: true }), null, 'never chorus fruit');
 });

@@ -22,7 +22,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { SHELTER_LEAD_MIN, dirtPileRecipes } from './library/night.js';
-import { foodShortfall, FOOD_TARGET } from './library/food.js';
+import { foodShortfall, FOOD_TARGET, EMERGENCY_FOOD } from './library/food.js';
 import { HUNT_MIN_FOOD } from './library/hunting.js';
 
 /**
@@ -214,7 +214,7 @@ export const FOOD_RESERVE_STEP = {
     id: 'food', short: 'keep food for the day and the night', reserve: true, when: 'food',
     due: (s, ctx) => foodShort(s, ctx) !== null,
     done: () => false, // done when no longer due (enough held)
-    goal: `Food: on this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: food 0 kills you at once, at any health. Long walks cost hunger. Keep food worth at least ${FOOD_TARGET.night} hunger before night. Gather ripe wild food first with !forage (wildberry bushes, wild herbs, HarvestCraft gardens), else kill a wild cow, pig, sheep or rabbit near you with !attack("<its name>") and pick up the meat (raw meat gives 1 hunger; eat it raw if needed). Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh; keep the bread for last.`,
+    goal: `Food: on this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: food 0 kills you at once, at any health. Long walks cost hunger. Keep food worth at least ${FOOD_TARGET.night} hunger before night. Gather ripe wild food first with !forage (wildberry bushes, wild herbs, HarvestCraft gardens), else kill a wild cow, pig, sheep or rabbit near you with !attack("<its name>") and pick up the meat (raw meat gives 1 hunger; eat it raw if needed). Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh unless your food is ${EMERGENCY_FOOD} or lower (then raw chicken before rotten flesh, never cloudsbluff); keep the bread for last.`,
     goalNow: (s, ctx) => {
         const target = foodShort(s, ctx) ?? FOOD_TARGET.day;
         const held = s.foodHeld?.() ?? 0;
@@ -225,8 +225,11 @@ export const FOOD_RESERVE_STEP = {
         const wild = crops.length
             ? `Ripe wild food near you: ${crops.slice(0, 3).join(', ')}: gather it first with !forage (it picks berry bushes and breaks ripe herbs and gardens, never a player's). `
             : '';
-        // Soak 2: at HUNT_MIN_FOOD or lower weakness leaves the bot unable to hurt an animal.
+        // Soak 2: at HUNT_MIN_FOOD (4) or lower weakness leaves the bot unable to hurt an animal; at
+        // EMERGENCY_FOOD (5) or lower the eating reflex already eats avoided food (#432 review 3:
+        // the two differ by one on purpose: the eating starts a step before the hunting stops).
         const weak = Number.isFinite(food) && food <= HUNT_MIN_FOOD;
+        const emergency = Number.isFinite(food) && food <= EMERGENCY_FOOD;
         const near = weak
             ? `At food ${food} you are too weak to hunt (weakness): eat anything you hold, even raw meat or rotten flesh, and !forage nearby; do not walk far. `
             : animals.length
@@ -234,7 +237,8 @@ export const FOOD_RESERVE_STEP = {
             : crops.length ? 'No wild animal is near. ' : 'No ripe wild food and no wild animal is near: try !forage once you see berry bushes, herbs or HarvestCraft gardens; or look for an animal (cows, pigs, sheep, rabbits; on this pack mostly Animania ones such as animania:cow_holstein or animania:sow_old_spot) with !searchForEntity, away from fences and houses, then !attack it. ';
         return `Food: you hold food worth ${held} hunger${Number.isFinite(food) ? ` and your food is ${food} of 20` : ''}. On this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: get to at least ${target}. Food 0 kills you at once on this pack, at any health, and long walks cost hunger: stay near. `
             + wild + near + 'Raw meat gives 1 hunger each; eat it raw if needed. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player (the bot refuses those). '
-            + 'Do not eat raw chicken or rotten flesh; keep the bread for last.';
+            + (emergency ? `At food ${EMERGENCY_FOOD} or lower anything edible beats starving: raw chicken before rotten flesh; never cloudsbluff.`
+                : 'Do not eat raw chicken or rotten flesh; keep the bread for last.');
     },
 };
 

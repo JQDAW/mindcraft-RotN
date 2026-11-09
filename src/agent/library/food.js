@@ -20,8 +20,14 @@ export const EAT_NOW_AT = 6;
  * hunger effect does not kill), before the bot starves.
  */
 export const EMERGENCY_FOOD = 5;
-/** Never eaten, not even in an emergency: it teleports the bot at random. */
-const NEVER_EAT = ['minecraft:chorus_fruit'];
+/**
+ * #432 review 2: the avoided foods an emergency may eat, least harm first (then the most hunger):
+ * a golden apple (kept, but harmless), raw venison (hunger 5 s, 75%), raw chicken (hunger 30 s, 30%),
+ * rotten flesh (hunger 30 s, 80%), hawthorn berries (poison). Never cloudsbluff (levitation), nor
+ * pufferfish, raw egg, inventory food or the other poisons; never chorus fruit (it teleports).
+ */
+export const EMERGENCY_FOODS = ['minecraft:golden_apple', 'betteranimalsplus:venisonraw', 'harvestcraft:venisonrawitem', 'twilightforest:raw_venison',
+    'harvestcraft:rawtofenisonitem', 'minecraft:chicken', 'minecraft:rotten_flesh', 'biomesoplenty:berries'];
 /** 1.12: health regenerates only at this food level or higher (CX23 soak: eat between fights). */
 export const REGEN_FOOD = 18;
 /** An eat that throws (mineflayer's 2500 ms consume timeout) is judged this long after. */
@@ -97,12 +103,12 @@ export function autoEatBannedFood() {
 /**
  * The stack to eat now, or null: any safe food, the most hunger first (then saturation), and the
  * last-resort foods only when nothing else is left. `skip`: food keys given up on. `emergency`
- * (food at EMERGENCY_FOOD or lower): when no safe food is held, the avoided foods too (rotten flesh,
- * raw chicken, hawthorn berries, a golden apple), the most hunger first; never NEVER_EAT.
+ * (food at EMERGENCY_FOOD or lower): when no safe food is held, the EMERGENCY_FOODS too, least
+ * harm first.
  */
 export function chooseFood(bot, { skip = new Set(), valueFn = foodValue, emergency = false } = {}) {
     const edible = bot.inventory.items()
-        .filter(item => !skip.has(foodKey(item)) && !NEVER_EAT.includes(fullName(item)))
+        .filter(item => !skip.has(foodKey(item)))
         .map(item => ({ item, food: valueFn(item) }))
         .filter(({ food }) => food);
     const safe = edible.filter(({ item }) => !isAvoided(item));
@@ -110,7 +116,9 @@ export function chooseFood(bot, { skip = new Set(), valueFn = foodValue, emergen
     const normal = safe.filter(({ item }) => !LAST_RESORT_FOODS.includes(fullName(item))).sort(rank);
     if (normal.length > 0) return normal[0].item;
     if (safe.length > 0) return safe.sort(rank)[0].item;
-    return emergency ? (edible.sort(rank)[0]?.item ?? null) : null;
+    if (!emergency) return null;
+    const harm = (x) => EMERGENCY_FOODS.indexOf(fullName(x.item));
+    return edible.filter(x => harm(x) >= 0).sort((a, b) => harm(a) - harm(b) || rank(a, b))[0]?.item ?? null;
 }
 
 /**

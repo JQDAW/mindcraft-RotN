@@ -58,13 +58,18 @@ export function hurtSource(bot) {
 
 /**
  * The hurt line when health has fallen by HURT.minDrop or more since the start of a HURT.windowMs
- * window (a heal or a quiet window starts a new one); null otherwise. `state` keeps the window.
+ * window; null otherwise. `state` keeps the window and the last health seen. #432 review 1: a stale
+ * window (quiet for HURT.windowMs) starts again from the last health seen, not from the new value,
+ * so a single hit, a fall or starving after a quiet spell is caught; a heal starts it at the new value.
  */
 export function hurtCheck(state, bot, now = Date.now()) {
     const h = bot?.health;
     if (!Number.isFinite(h)) return null;
-    const w = state.hurt;
-    if (!w || h > w.from || now - w.at > HURT.windowMs) { state.hurt = { from: h, at: now }; return null; }
+    const last = Number.isFinite(state.lastHealth) ? state.lastHealth : h;
+    state.lastHealth = h;
+    let w = state.hurt;
+    if (!w || h > w.from) { state.hurt = { from: h, at: now }; return null; }
+    if (now - w.at > HURT.windowMs) w = state.hurt = { from: last, at: now };
     if (w.from - h < HURT.minDrop) return null;
     const text = hurtLine(w.from - h, w.from, h, hurtSource(bot));
     state.hurt = { from: h, at: now };

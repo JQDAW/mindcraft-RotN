@@ -504,6 +504,9 @@ const modes_list = [
             const bases = knownBases(agent);
             // Keep going while it is day and no threat is near (#422 review 1).
             const keepGoing = () => { if (!isDaylight(agent)) return false; try { return !threats.threatPlan(bot); } catch { return false; } };
+            // #432 review 4: a hunt is also over once the bot is too weak to hurt it (food 4 or lower);
+            // foraging goes on.
+            const keepHunting = () => !tooWeakToHunt(bot) && keepGoing();
             // Foraging first (lead, after rotn-data #423): a ripe berry bush, herb or garden that is
             // not maybe a player's (foraging.js). Bounded (skills.FORAGE_RUN); a block it could not
             // take is left alone for a while (markTried), so this never loops on one block.
@@ -537,7 +540,7 @@ const modes_list = [
             execute(this, agent, async () => {
                 say(agent, `Hunting ${target.name} for food!`);
                 // #422 review 1: bounded (HUNT.maxMs), and over once the day is (dusk) or a threat comes.
-                const end = await huntAnimal(bot, target, { keepGoing, equip: (b) => skills.equipHighestAttack(b) });
+                const end = await huntAnimal(bot, target, { keepGoing: keepHunting, equip: (b) => skills.equipHighestAttack(b) });
                 console.log(`[reflex] hunting ${target.name}: ${end}`);
             });
         }
@@ -713,7 +716,14 @@ export async function execute(mode, agent, func, timeout=-1) {
             const before = bot?.rotnSprint;
             if (sprint) bot.rotnSprint = true;
             try { await func(); }
-            finally { if (sprint) bot.rotnSprint = before ?? false; }
+            finally {
+                if (sprint) {
+                    bot.rotnSprint = before ?? false;
+                    // #432 review 5: the movements a flee set keep no sprint for the next walk that
+                    // reuses them (useDoor, a bounded goto, a follow's re-goal).
+                    if (bot.pathfinder?.movements && !bot.rotnSprint) bot.pathfinder.movements.allowSprinting = false;
+                }
+            }
         }, { timeout });
         console.log(`Mode ${mode.name} finished executing, code_return: ${code_return.message}`);
 

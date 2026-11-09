@@ -228,14 +228,32 @@ test('soak 2: a hurt line when health falls by 4 or more within 2 s, with the li
     bot.health = 18; assert.equal(hurtCheck(state, bot, 500), null, '2 is not enough');
     bot.entities = { 3: { id: 3, type: 'mob', name: 'slime', position: here.offset(2, 0, 0) } };
     bot.health = 15; assert.equal(hurtCheck(state, bot, 900), '[survival] hurt 5 health 20->15 (by slime)', 'two hits within the window add up');
-    bot.health = 13; assert.equal(hurtCheck(state, bot, 5000), null, 'a quiet window starts a new one');
-    bot.health = 13; bot.entities = {};
+    bot.health = 13; assert.equal(hurtCheck(state, bot, 5000), null, 'a quiet window starts again from the last health seen (15): 2 is not enough');
+    bot.entities = {};
     // Starving: food 0 (Hunger Overhaul's 200 damage).
-    bot.food = 0; bot.health = 0; assert.equal(hurtCheck(state, bot, 5100), '[survival] hurt 13 health 13->0 (by starving)');
+    bot.food = 0; bot.health = 0; assert.equal(hurtCheck(state, bot, 5100), '[survival] hurt 15 health 15->0 (by starving)');
     // A fall, with no mob near.
     const fall = { health: 20, food: 10, entity: { position: here, velocity: { y: -1.2 } }, entities: {} };
     const s2 = {};
     hurtCheck(s2, fall, 0);
     fall.health = 12; assert.equal(hurtCheck(s2, fall, 100), '[survival] hurt 8 health 20->12 (by fall)');
     assert.equal(lines.length, 3);
+});
+
+test('#432 review 1: a single hit, a fall or starving after a quiet spell is caught (the window starts from the last health seen)', async (t) => {
+    const { hurtCheck } = await import('./survival_log.js');
+    t.mock.method(console, 'log', () => {});
+    const here = new Vec3(0, 64, 0);
+    // One 4-damage hit after 30 s of quiet.
+    const bot = { health: 20, food: 12, entity: { position: here, velocity: { y: 0 } }, entities: { 2: { id: 2, type: 'mob', name: 'animania:bull_holstein', position: here.offset(1, 0, 0) } } };
+    const state = {};
+    hurtCheck(state, bot, 0);
+    bot.health = 16;
+    assert.equal(hurtCheck(state, bot, 30_000), '[survival] hurt 4 health 20->16 (by animania:bull_holstein)');
+    // Food reaches 0 at 60 s (no health change); the starve damage comes 4 s later, all at once.
+    bot.entities = {};
+    bot.food = 0;
+    assert.equal(hurtCheck(state, bot, 60_000), null, 'no damage yet');
+    bot.health = 0;
+    assert.equal(hurtCheck(state, bot, 64_000), '[survival] hurt 16 health 16->0 (by starving)');
 });
