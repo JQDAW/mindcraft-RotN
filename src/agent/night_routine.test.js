@@ -1156,6 +1156,11 @@ function exitWorld(extra = {}) {
     return { bot, world, dug };
 }
 const ring = (y, name, k = 2) => Object.fromEntries([[k, 0], [-k, 0], [0, k], [0, -k]].map(([x, z]) => [`${x},${y},${z}`, name]));
+/** Soak 2: solid stone from y 66 up to `top` within r of the shelter, so no stairs lead up (the sideways tests keep their meaning). */
+const lid = (top = 72, r = 6) => Object.fromEntries(Array.from({ length: (2 * r + 1) ** 2 * (top - 65) }, (_, i) => {
+    const x = (i % (2 * r + 1)) - r, z = (Math.floor(i / (2 * r + 1)) % (2 * r + 1)) - r, y = 66 + Math.floor(i / (2 * r + 1) ** 2);
+    return [`${x},${y},${z}`, 'stone'];
+}));
 
 test('round 10 B: digOut takes a side whose ground is one block higher, and digs the headroom over the opening', async (t) => {
     quiet(t);
@@ -1181,7 +1186,7 @@ test('round 10 B: digOut tunnels through a hillside on every side, up to EXIT_DE
     assert.deepEqual(dug.sort(), ['1,64,0', '1,65,0', '2,64,0', '2,65,0']);
     assert.equal(EXIT_DEPTH, 3);
     // Deeper than EXIT_DEPTH on every side: nothing is dug.
-    const deep = exitWorld(Object.assign({}, ...[2, 3, 4].flatMap(k => [ring(64, 'stone', k), ring(65, 'stone', k)])));
+    const deep = exitWorld(Object.assign(lid(), ...[2, 3, 4].flatMap(k => [ring(64, 'stone', k), ring(65, 'stone', k)])));
     assert.equal(await digOut(deep.bot, SITE), null);
     assert.deepEqual(deep.dug, []);
 });
@@ -1217,9 +1222,33 @@ test('round 10 B: digOut never digs a step-up or tunnel side with lava next to i
     assert.ok(!dug.some(k => k.startsWith('1,')), `east untouched: ${dug}`);
     assert.ok(logs.some(l => /dig out: not the east side \(liquid or fire (next to|at) /.test(l)), logs.join('\n'));
     // A hill on every side, with lava beside each tunnel's second cell: no side is dug at all.
-    const tunnel = exitWorld({ ...ring(64, 'stone'), ...ring(65, 'stone'), '2,64,1': 'lava', '-2,64,1': 'lava', '1,64,2': 'lava', '-1,64,-2': 'lava' });
+    const tunnel = exitWorld({ ...lid(), ...ring(64, 'stone'), ...ring(65, 'stone'), '2,64,1': 'lava', '-2,64,1': 'lava', '1,64,2': 'lava', '-1,64,-2': 'lava' });
     assert.equal(await digOut(tunnel.bot, SITE), null);
     assert.deepEqual(tunnel.dug, [], 'every side is planned before anything is dug');
+});
+
+// Soak 2 (rotn-v0.1.4, 23:21): the night shelter was a quarry pit, rock on every side for more than
+// EXIT_DEPTH; digOut only went sideways and handed back still enclosed.
+test('soak 2: a shelter at the bottom of a pit (no sideways exit) is left by stairs up, at most UP_STEPS', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const { UP_STEPS } = await import('./night_routine.js');
+    assert.equal(UP_STEPS, 4);
+    // Rock 4 deep on every side at the bot's level (y 64-65) and one higher (y 66) out to 2; the
+    // surface (y 66 beyond 2, y 67 everywhere) is open.
+    const pit = Object.assign({}, ...[2, 3, 4].flatMap(k => [ring(64, 'stone', k), ring(65, 'stone', k)]), ring(66, 'stone', 1), ring(66, 'stone', 2));
+    const { bot, world, dug } = exitWorld(pit);
+    const side = await digOut(bot, SITE);
+    assert.ok(side?.equals(new Vec3(3, 66, 0)), `out at the top: ${side}`);
+    // Step 1: the roof over the bot and the cells at x 1, y 65-66; step 2: the headroom at x 1, y 67 and x 2, y 66-67.
+    assert.deepEqual(dug.sort(), ['0,66,0', '1,65,0', '1,66,0', '2,66,0'].sort(), `the stairs: ${dug}`);
+    assert.equal(world.get('1,64,0'), 'cobblestone', 'the first step stays');
+    assert.equal(world.get('2,65,0'), 'stone', 'the second step stays');
+    assert.ok(logs.some(l => /dig out: the east side \(stairs up, 2 steps, 4 blocks\)/.test(l)), logs.join('\n'));
+    // A lid of stone over everything: no stairs either, nothing dug.
+    const closed = exitWorld({ ...lid(), ...pit });
+    assert.equal(await digOut(closed.bot, SITE), null);
+    assert.deepEqual(closed.dug, []);
 });
 
 test('round 10 B: in the morning a shelter with no way out is tried again RETRY_MS later, EXIT_TRIES times, then the bot hands back saying it is still enclosed', async (t) => {
