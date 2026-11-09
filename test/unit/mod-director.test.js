@@ -1,6 +1,7 @@
 // Offline tests for the pinned Mod Director downloads (ADR 0008): `rotn-test mod-director` on a fake server
 // directory, build.sh's check at Done (sourced, with a fake systemctl), and the committed list itself. No server,
 // no network.
+import './isolate-tmp.mjs';
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
