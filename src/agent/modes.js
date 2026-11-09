@@ -9,8 +9,9 @@ import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
 import { REPAIR_LABEL, nightPhase, minutesToSunset } from './library/night.js';
 import { RESERVE_LEAD_MIN } from './agenda.js';
-import { huntTarget, knownBases, huntAnimal } from './library/hunting.js';
+import { huntTarget, knownBases, huntAnimal, skipAnimal, HUNT } from './library/hunting.js';
 import { forageTarget } from './library/foraging.js';
+import { actionProgress } from './library/progress.js';
 import { isFalling } from './library/shelter.js';
 import { fallingTreeNear } from './library/felling.js';
 
@@ -362,6 +363,7 @@ const modes_list = [
         max_stuck_time: 20,
         free_timeout_ms: 10_000,
         prev_dig_block: null,
+        progress_memo: {}, // what actionProgress saw (library/progress.js)
         update: async function (agent) {
             // A skill that keeps the bot in place on purpose sets bot.rotnStationary while it does
             // (D2b: the shelter build, once at the site; not the walk there, #195 review 6).
@@ -378,6 +380,16 @@ const modes_list = [
                 return;
             }
             const bot = agent.bot;
+            // Soak 2 (rotn-v0.1.4, night 2): it moved the bot off its hole shelter every ~22 s while
+            // it dug, and stopped hunts. Lead's rule: never while the action makes progress (a block
+            // broken or placed, a dig within 2 x its time, the target getting closer).
+            if (actionProgress(bot, this.progress_memo)) {
+                this.prev_location = bot.entity.position.clone();
+                this.stuck_time = 0;
+                this.prev_dig_block = null;
+                this.last_time = Date.now();
+                return;
+            }
             const cur_dig_block = bot.targetDigBlock;
             if (cur_dig_block && !this.prev_dig_block) {
                 this.prev_dig_block = cur_dig_block;
@@ -533,7 +545,9 @@ const modes_list = [
                 say(agent, `Hunting ${target.name} for food!`);
                 // #422 review 1: bounded (HUNT.maxMs), and over once the day is (dusk) or a threat comes.
                 const end = await huntAnimal(bot, target, { keepGoing, equip: (b) => skills.equipHighestAttack(b) });
-                console.log(`[reflex] hunting ${target.name}: ${end}`);
+                // Soak 2: an animal the hunt could not get (stuck, time, interrupted) is left alone a while.
+                if (['stuck', 'time', 'interrupted'].includes(end)) skipAnimal(bot, target.id);
+                console.log(`[reflex] hunting ${target.name}: ${end}${end === 'killed' || end === 'gone' || end === 'stopped' ? '' : ` (left alone for ${HUNT.skipMs / 60_000} min)`}`);
             });
         }
     },

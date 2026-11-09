@@ -19,7 +19,7 @@
 //    (P-4)          G  G  G  G  G
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { isWall, handDiggable } from './night.js';
+import { isWall, handDiggable, dumpState } from './night.js';
 import { isLiquid, isEmpty, isFalling } from './shelter.js';
 import { log, breakBlockAt, goToGoal } from './skills.js';
 import { worldSources } from './rotn_sources.js';
@@ -30,13 +30,20 @@ import { blockMatcher } from './rotn_names.js';
  * awayFrom: how far from the death spot the bot first walks (Epic Siege Mod's awareness radius
  * is 16; the death-spot rule's radius is 24); walkMs and fallMs bound the walks and each drop.
  */
-export const PIT = { depth: 3, radius: 3, awayFrom: 28, walkMs: 60_000, fallMs: 2000 };
+export const PIT = { depth: 3, radius: 3, awayFrom: 28, walkMs: 60_000, fallMs: 2000, maxHardness: 1, digSlackMs: 4000 };
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const at = (p) => `${p.x}, ${p.y}, ${p.z}`;
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const solid = (b) => !!b && b.boundingBox === 'block' && !isLiquid(b);
-const diggable = (b) => solid(b) && handDiggable(b) && !isFalling(b);
+/**
+ * Soak 2 (rotn-v0.1.4, night 2): a hole column the dump calls hand-diggable (toolRequired false) can
+ * still take 30 s by hand: Dynamic Trees' rootydirt has hardness 20. The first block never broke
+ * before the unstuck reflex moved the bot, again and again. Only blocks at most PIT.maxHardness hard
+ * (dirt 0.5, grass, sand, gravel, clay 0.6: about a second by hand) make a hole.
+ */
+export const quickByHand = (b) => handDiggable(b) && (dumpState(b)?.hardness ?? Infinity) <= PIT.maxHardness;
+const diggable = (b) => solid(b) && quickByHand(b) && !isFalling(b);
 
 /**
  * The blocks that give dirt piles by hand (rotn-data's rules for betterwithmods:dirt_pile with no
@@ -112,12 +119,12 @@ export function pitProblem(bot, P) {
 }
 
 /** The nearest surface cell within PIT.radius (and 1 up or down) where a hole can be dug, or null. */
-export function choosePit(bot, radius = PIT.radius) {
+export function choosePit(bot, radius = PIT.radius, bad = new Set()) {
     const base = bot.entity.position.floored();
     let best = null;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) {
         const P = base.offset(dx, dy, dz);
-        if (pitProblem(bot, P)) continue;
+        if (bad.has(at(P)) || pitProblem(bot, P)) continue;
         const d = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
         if (!best || d < best.d) best = { P, d };
     }
@@ -153,7 +160,8 @@ export async function digPit(bot, { radius = PIT.radius, progress = {} } = {}) {
     const here = bot.entity.position.floored();
     const resume = !!progress.P && here.x === progress.P.x && here.z === progress.P.z
         && here.y <= progress.P.y && here.y >= progress.P.y - PIT.depth;
-    const P = resume ? progress.P : choosePit(bot, radius);
+    progress.bad ??= new Set(); // spots whose block took too long to dig (left alone this night)
+    const P = resume ? progress.P : choosePit(bot, radius, progress.bad);
     progress.P = P;
     if (!P) {
         log(bot, `No place for a hole shelter within ${radius} blocks (needs ground you can dig by hand 3 deep, no water or sand around, and a side to dig stairs out of).`);
@@ -167,20 +175,54 @@ export async function digPit(bot, { radius = PIT.radius, progress = {} } = {}) {
         }
     }
     log(bot, `${resume ? 'Going on with' : 'Digging'} a hole shelter at ${at(P)}: 3 blocks down by hand, then a roof of dirt from the piles.`);
-    for (let k = 1; k <= PIT.depth; k++) {
-        const q = P.offset(0, -k, 0);
-        if (bot.entity.position.floored().y <= q.y) continue; // dug before the interruption
-        if (bot.interrupt_code) return null;
-        if (!await breakBlockAt(bot, q.x, q.y, q.z)) {
-            log(bot, `Could not dig ${bot.blockAt(q)?.name ?? 'the block'} at ${at(q)} for the hole shelter.`);
-            return null;
+    // Soak 2: the bot stands still on purpose while it digs (the unstuck reflex leaves it alone, as
+    // for the shelter build); each block has its own time limit instead.
+    const wasStationary = bot.rotnStationary;
+    bot.rotnStationary = true;
+    try {
+        for (let k = 1; k <= PIT.depth; k++) {
+            const q = P.offset(0, -k, 0);
+            if (bot.entity.position.floored().y <= q.y) continue; // dug before the interruption
+            if (bot.interrupt_code) return null;
+            const block = bot.blockAt(q);
+            let estMs = null;
+            try { estMs = bot.digTime?.(block) ?? null; } catch { estMs = null; }
+            const limitMs = Math.max(PIT.digSlackMs, 2 * (Number.isFinite(estMs) ? estMs : 0));
+            log(bot, `Digging ${block?.name ?? 'the block'} at ${at(q)}${Number.isFinite(estMs) ? ` (about ${(estMs / 1000).toFixed(1)} s by hand)` : ''}.`);
+            const dug = await digWithin(bot, q, limitMs);
+            if (dug === 'timeout') {
+                progress.bad.add(at(P));
+                progress.P = null;
+                log(bot, `Digging ${block?.name ?? 'the block'} at ${at(q)} took over ${(limitMs / 1000).toFixed(1)} s; leaving this spot for another.`);
+                return null;
+            }
+            if (!dug) {
+                log(bot, `Could not dig ${bot.blockAt(q)?.name ?? 'the block'} at ${at(q)} for the hole shelter.`);
+                return null;
+            }
+            if (!await landAt(bot, q.y)) {
+                log(bot, `Did not drop into the hole at ${at(q)}.`);
+                return null;
+            }
         }
-        if (!await landAt(bot, q.y)) {
-            log(bot, `Did not drop into the hole at ${at(q)}.`);
-            return null;
-        }
+    } finally {
+        bot.rotnStationary = wasStationary ?? false;
     }
     return P.offset(0, -PIT.depth, 0);
+}
+
+/** breakBlockAt bounded by ms: true, false, or 'timeout' (the dig is stopped). */
+async function digWithin(bot, q, ms) {
+    let timer;
+    const dig = breakBlockAt(bot, q.x, q.y, q.z);
+    try {
+        const r = await Promise.race([dig, new Promise(resolve => { timer = setTimeout(() => resolve('timeout'), ms); })]);
+        if (r === 'timeout') {
+            try { bot.stopDigging?.(); } catch { /* best effort */ }
+            Promise.resolve(dig).catch(() => {}); // it ends as an aborted dig
+        }
+        return r;
+    } finally { clearTimeout(timer); }
 }
 
 /**

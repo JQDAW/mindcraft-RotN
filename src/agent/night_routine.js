@@ -32,6 +32,13 @@ export const CHECK_MS = 10_000;
 /** Wait before another try after a shelter could not be built. */
 export const RETRY_MS = 30_000;
 export const BUILD_ATTEMPTS = 3;
+/**
+ * Soak 2 (rotn-v0.1.4, night 2): the unstuck reflex stopped the hole shelter every ~22 s, and an
+ * interruption was never a try, so the night never got a shelter. This many interruptions per
+ * build phase are free (a reflex that really had to act); after that each one counts as a failed try,
+ * so the tries (BUILD_ATTEMPTS, the hole) run out and the night ends in a shelter or in 'exposed'.
+ */
+export const FREE_INTERRUPTS = 2;
 /** At dusk a running action gets this long to finish; by night it is stopped at once (#204 review 3). */
 export const DUSK_WAIT_MS = 60_000;
 /**
@@ -376,6 +383,7 @@ function startBuilding(n, now) {
     n.state = 'building';
     n.attempts = 0;
     n.unsettled = 0;
+    n.interrupts = 0;
     n.descended = false;
     n.nextAt = now;
 }
@@ -535,11 +543,13 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 line(agent, `[night] in the shelter at ${at(r.feet)} until morning`);
                 return;
             }
-            if (ret?.interrupted) {
+            if (ret?.interrupted && (n.interrupts ?? 0) < FREE_INTERRUPTS) {
                 // A reflex or a command stopped it: not a try; build again once it is done. A hole
                 // stays next (#337 review 6), and its dig goes on in the same hole (pitProgress).
+                // Soak 2: only FREE_INTERRUPTS of them per build phase; later ones count (below).
+                n.interrupts = (n.interrupts ?? 0) + 1;
                 n.nextAt = 0;
-                console.log(`[night] the ${pit ? 'hole shelter' : 'shelter build'} was interrupted; it does not count as a try`);
+                console.log(`[night] the ${pit ? 'hole shelter' : 'shelter build'} was interrupted; it does not count as a try (${n.interrupts} of ${FREE_INTERRUPTS})`);
                 return;
             }
             // #381 review 2: the bot was not at rest on the floor (mid-jump, bobbing): like an
@@ -553,7 +563,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             }
             n.unsettled = 0;
             n.pitNext = false;
-            const why = r?.line ?? 'the build ended without a result';
+            const why = ret?.interrupted ? `interrupted again (more than ${FREE_INTERRUPTS} times)` : (r?.line ?? 'the build ended without a result');
             // #337 review 8: the tries are the shelter builds (BUILD_ATTEMPTS); the hole is one more,
             // once a night, right after the first failed build, and it is not counted.
             if (!pit) n.attempts++;
