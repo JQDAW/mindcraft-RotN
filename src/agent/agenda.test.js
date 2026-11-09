@@ -659,9 +659,14 @@ test('soak 2: the food reserve says food 0 kills at once; at food 4 or lower it 
     assert.match(p, /Food 0 kills you at once on this pack, at any health, and long walks cost hunger: stay near\./);
     assert.match(p, /At food 4 you are too weak to hunt \(weakness\): eat anything you hold, even raw meat or rotten flesh, and !forage nearby; do not walk far\./);
     assert.doesNotMatch(p, /!attack\(/, 'no hunt offered');
+    // #432 review 3: no "never eat" contradicting it.
+    assert.doesNotMatch(p, /Do not eat raw chicken or rotten flesh/);
+    assert.match(p, /At food 5 or lower anything edible beats starving: raw chicken before rotten flesh; never cloudsbluff\./);
+    assert.match(FOOD_RESERVE_STEP.goal, /Do not eat raw chicken or rotten flesh unless your food is 5 or lower \(then raw chicken before rotten flesh, never cloudsbluff\)/);
     const fed = foodAgent(t, [], { food: 10, entities: { 1: cow } });
     agendaTick(fed, { now: 0 });
     assert.match(fed.self_prompter.prompt, /!attack\("animania:cow_holstein"\)/, 'at food 10 the hunt is offered');
+    assert.match(fed.self_prompter.prompt, /Do not eat raw chicken or rotten flesh; keep the bread for last\./);
 });
 
 test('#422 nit: the day\'s last food run is not stopped as it starts: it runs until it ends, and only then is no new one started', (t) => {

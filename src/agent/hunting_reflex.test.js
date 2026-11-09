@@ -277,3 +277,19 @@ test('#422 review 2: !attack checks ownership for any target that is not a hosti
     assert.equal(hit, 1);
 });
 
+
+test('#432 review 4: a hunt under way stops once food falls to 4 (too weak to hurt it); pvp stops', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
+    const saved = { ...HUNT };
+    Object.assign(HUNT, { checkMs: 10, stuckMs: 60_000 });
+    t.after(() => Object.assign(HUNT, saved));
+    const agent = huntAgent({ food: 6, animals: [cow(1, 3)] });
+    const calls = [];
+    agent.bot.pvp = { attack: () => { calls.push('attack'); setTimeout(() => { agent.bot.food = 4; }, 40); }, stop: () => calls.push('stop') };
+    agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: false }; };
+    await hunt(agent);
+    await new Promise(r => setTimeout(r, 200));
+    assert.deepEqual(calls, ['attack', 'stop']);
+    assert.ok(lines.includes('[reflex] hunting animania:cow_holstein: stopped'), lines.join('\n'));
+});
