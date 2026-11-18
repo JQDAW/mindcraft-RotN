@@ -312,6 +312,9 @@ describe('g3-rocks-to-stone-tools on a simulated server', () => {
             [8, { say: 'agenda step logs retried (1 of 3): a fresh budget' }]] }));
         assert.match(retried.notes.end.reason, /^maxMinutes \(25\) reached/);
         assert.ok(retried.notes.agendaChat.some((t) => /^agenda step logs stuck: .*retry 1 of 3/.test(t)), 'the stuck line is kept in the notes');
+        // #468's open goal (nothing runnable, the agenda gathers for the waiting step) neither ends nor stalls the run.
+        const open = await run(sim({ play: [[7, { say: 'agenda open goal: step logs waits; self-prompting on gathering for it' }]] }));
+        assert.match(open.notes.end.reason, /^maxMinutes \(25\) reached/);
         const gaveUp = await run(sim({ play: [[7, { say: 'agenda step logs stuck: 5 min of self-prompting; given up after 3 retries; going on with the steps that do not need it' }]] }));
         assert.match(gaveUp.notes.end.reason, /^the agenda gave up step logs after 3 retries: 5 min of self-prompting/);
         assert.ok(gaveUp.notes.end.minutes < 9);

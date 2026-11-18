@@ -408,7 +408,7 @@ A task from the test-only giver `Server` interrupts the real agent's agenda. The
   - `agenda_active`: the counter rises before the task (read after the minimum warm-up, and again while the runner waits to send the task).
   - **The task is sent only while the agenda is active** (lead, after smoke round 2, where the agenda had paused itself as stuck 13 s before the task, so there was no preemption to see).
     - The agenda's state comes from its own chat (`agendaActive`), and the last relevant line wins.
-    - Active after `agenda step <id> started: ...`, `agenda resumed: <id>` or `agenda started`.
+    - Active after `agenda step <id> started: ...`, `agenda resumed: <id>`, `agenda started` or `agenda open goal: step <id> waits; ...` (skills-rotn #468: nothing runnable, so the agenda self-prompts on gathering for the waiting step; it is neither done nor stuck).
     - Not active after `agenda step <id> stuck: ...; agenda paused` (the form before skills-rotn #468), `agenda paused for task <id>`, `agenda done` or `agenda stopped`. Since #468 a stuck line (`...; retry <n> of 3 ...` or `...; given up after 3 retries; ...`) leaves the agenda active: it goes on with the steps that do not need the stuck one.
     - **The task goes out while the agenda still runs** (lead, after G3 gate C, 2026-11-07):
       - The old design was a fixed 5-min warm-up. There, an agenda that took 4.8 min ended before the task, so no task was sent and the three task checks failed as "not reached".

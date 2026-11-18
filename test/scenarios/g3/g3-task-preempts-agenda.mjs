@@ -89,8 +89,9 @@ export const onMarkerCommand = (bot, [x, y, z]) => `testfor @a[name=${bot},x=${x
 
 /**
  * The agenda's state from its own chat lines (skills-rotn's agenda_driver.js, priority.js, actions.js), the
- * last relevant line wins: active after "agenda step <id> started: ...", "agenda resumed: <id>" or "agenda
- * started"; not active after "agenda step <id> stuck: ...; agenda paused", "agenda paused for task <id>",
+ * last relevant line wins: active after "agenda step <id> started: ...", "agenda resumed: <id>", "agenda
+ * started" or "agenda open goal: step <id> waits; ..." (skills-rotn #468: nothing runnable, every step left waits on
+ * a stuck one, and the agenda self-prompts on gathering for it: still running, neither done nor stuck); not active after "agenda step <id> stuck: ...; agenda paused", "agenda paused for task <id>",
  * "agenda done" or "agenda stopped". "agenda step <id> done" changes nothing. No such line yet: not active.
  * Returns {active, last} (last: the deciding line, or null).
  */
@@ -98,7 +99,7 @@ export function agendaActive(lines) {
     let active = false;
     let last = null;
     for (const t of lines) {
-        if (/^agenda step \S+ started: /.test(t) || /^agenda resumed: \S+$/.test(t) || t === 'agenda started') { active = true; last = t; }
+        if (/^agenda step \S+ started: /.test(t) || /^agenda resumed: \S+$/.test(t) || t === 'agenda started' || /^agenda open goal: step \S+ waits; /.test(t)) { active = true; last = t; }
         else if (/^agenda step \S+ stuck: .*; agenda paused$/.test(t) || /^agenda paused for task \S+$/.test(t) || t === 'agenda done' || t === 'agenda stopped') { active = false; last = t; }
     }
     return { active, last };
