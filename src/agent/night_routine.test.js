@@ -1840,13 +1840,13 @@ test('#463 rework: the model\'s own goal stopped at dusk starts again, once, aft
     };
     const night = async (agent) => {
         const o = ops();
-        nightTick(agent, { now: 1000, ops: o });
+        nightTick(agent, { now: Date.now(), ops: o }); // real times: resumeNightGoal reads the routine's clock now
         await settle(agent);
         assert.equal(nightState(agent).state, 'inside');
         assert.equal(agent.self_prompter.active, false, 'stopped at dusk');
         assert.equal(resumeNightGoal(agent), false, 'not while the routine runs');
         agent.bot.time.timeOfDay = MORNING;
-        nightTick(agent, { now: 2000, ops: o });
+        nightTick(agent, { now: Date.now() + 1, ops: o });
         await settle(agent);
         assert.equal(nightState(agent).state, 'day');
     };
@@ -1872,6 +1872,46 @@ test('#463 rework: the model\'s own goal stopped at dusk starts again, once, aft
     // Through the priority stack: after full day, the goal starts again (no task, no agenda).
     const full = withGoal('Gather 3 rocks');
     await night(full);
-    assert.equal(autonomyTick(full, { now: 3000 }), 'night-goal');
+    assert.equal(autonomyTick(full, { now: Date.now() + 2 }), 'night-goal');
     assert.deepEqual(full.self_prompter.starts, ['Gather 3 rocks']);
+});
+
+test('#463 nits 1 and 2: a giver\'s !endGoal or !stop forgets the goal the night stopped; it waits for full day (a dawn-gap death)', async (t) => {
+    quiet(t);
+    const { getCommand } = await import('./commands/index.js');
+    const make = () => {
+        const agent = fakeAgent({ t: MORNING });
+        const sp = agent.self_prompter;
+        sp.active = false;
+        sp.starts = [];
+        sp.start = function (p) { this.starts.push(p); this.active = true; };
+        agent._night = { state: 'day' };
+        agent._night_goal = 'Gather 3 rocks';
+        return agent;
+    };
+    // Nit 2: the routine is back to day, but the time is the dawn gap (not full day): it waits.
+    const dawn = make();
+    dawn.bot.time.timeOfDay = SUNRISE;
+    assert.equal(resumeNightGoal(dawn), false);
+    assert.equal(dawn._night_goal, 'Gather 3 rocks', 'kept for full day');
+    dawn.bot.time.timeOfDay = MORNING;
+    assert.equal(resumeNightGoal(dawn), true);
+    assert.deepEqual(dawn.self_prompter.starts, ['Gather 3 rocks']);
+    // Nit 1: a giver's !endGoal forgets it; the model's does not.
+    const endGoal = getCommand('!endGoal').perform;
+    const model = make();
+    await endGoal(model, {});
+    assert.equal(model._night_goal, 'Gather 3 rocks', 'the model\'s own !endGoal: kept');
+    const giver = make();
+    await endGoal(giver, { sender: 'JQDAW' });
+    assert.equal(giver._night_goal, null);
+    assert.equal(resumeNightGoal(giver), false);
+    // A giver's !stop (with a sender) forgets it too.
+    const stop = getCommand('!stop').perform;
+    const stopped = make();
+    Object.assign(stopped, { control: { setHold() {} }, clearBotLogs() {} });
+    Object.assign(stopped.actions, { cancelResume() {} });
+    stopped.bot.emit = () => {};
+    await stop(stopped, { sender: 'JQDAW' });
+    assert.equal(stopped._night_goal, null);
 });

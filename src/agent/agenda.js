@@ -8,7 +8,7 @@
 // points; the agenda itself never calls it.
 //
 // Progress (active or not, when each step was first done, each step's LLM budget
-// spent, a stuck step) is kept in
+// spent, the stuck steps and their retries) is kept in
 // ./bots/<name>/agenda.json, written atomically; a corrupt file is moved aside.
 //
 // Chat lines for harness-ops (the runner parses them from the server log):
@@ -16,12 +16,14 @@
 //   agenda step <id> done
 //   agenda steps done: <id>, <id>, ...   (two or more done in the same tick, one line: G3 round 4
 //                                        C+D, 12 lines in one second got the bot kicked for spam)
-//   agenda step <id> stuck: <why>   (its LLM budget is spent; the agenda pauses)
+//   agenda step <id> stuck: <why>; retry <n> of 3 in 20 min or at the next full day; going on with the steps that do not need it
+//   agenda step <id> stuck: <why>; given up after 3 retries; going on with the steps that do not need it
+//   agenda step <id> retried (<n> of 3): a fresh budget      (#463 decision: the agenda never pauses on a stuck step)
 //   agenda done
 // (E3 adds "agenda paused for task <id>" and "agenda resumed: <id>".)
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { SHELTER_LEAD_MIN, dirtPileRecipes } from './library/night.js';
+import { SHELTER_LEAD_MIN, dirtPileRecipes, isFullDay } from './library/night.js';
 import { foodShortfall, FOOD_TARGET, EMERGENCY_FOOD, emergencyFoodText, NEVER_EAT_TEXT } from './library/food.js';
 import { HUNT_MIN_FOOD } from './library/hunting.js';
 
@@ -31,15 +33,19 @@ import { HUNT_MIN_FOOD } from './library/hunting.js';
  * done(s): s.count(name) counts the bot's items (a bare name: every variant; "pyrotech:rock":
  * every rock); s.countOre(ore) counts every member of a rotn-data ore ("logWood", "plankWood":
  * modded RotN trees too, #164 review); s.near(block) finds a placed block within 16.
+ * after: the steps whose items this one uses (#463 decision: while a step is stuck, the steps that
+ * do not need it, directly or through others, go on).
  */
 export const ROTN_EARLY_GAME = [
     {
         id: 'rocks', short: 'collect 6 rocks',
+        after: [],
         goal: 'Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand.',
         done: (s) => s.count('pyrotech:rock') >= 6 || s.count('stone_pickaxe') > 0,
     },
     {
         id: 'sticks', short: 'collect 3 sticks',
+        after: [],
         // G3 round 4 B: a felled tree drops sticks (0-7 with its logs), and a trunk broken by hand
         // fells it too. (rotn-data Request 13 said leaves never drop sticks; rotn-data #312 corrected
         // it: Pyrotech adds a stick half the time when a player breaks leaves. Request 17.) collectBlock fells
@@ -56,21 +62,25 @@ export const ROTN_EARLY_GAME = [
     },
     {
         id: 'crude_axe', short: 'craft a crude axe',
+        after: ['rocks', 'sticks'],
         goal: 'Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks (River Cane or bamboo work too), in your inventory grid. It breaks after about 8 uses: keep 2 uses for your first plank.',
         done: (s) => s.count('pyrotech:crude_axe') > 0 || s.count('stone_axe') > 0 || s.count('stone_pickaxe') > 0,
     },
     {
         id: 'logs', short: 'collect 3 logs',
+        after: ['crude_axe'],
         goal: 'Fell a tree with the crude axe and collect at least 3 logs with !collectBlocks("log", 3). Stand to the side: trees fall the way you chop.',
         done: (s) => s.countOre('logWood') >= 3 || s.count('crafting_table') > 0 || s.near('crafting_table') || s.count('stone_pickaxe') > 0,
     },
     {
         id: 'first_plank', short: 'make the first plank',
+        after: ['logs'],
         goal: 'Make your first plank: place a log, use the crude axe on it to debark it, then use the axe on the debarked log for a plank.',
         done: (s) => s.countOre('plankWood') > 0 || s.count('crafting_table') > 0 || s.near('crafting_table') || s.count('stone_pickaxe') > 0,
     },
     {
         id: 'crafting_tools', short: 'craft Crafting Tools',
+        after: ['first_plank'],
         // The lead's Hit With Axe decision (round 5 A rerun): with no stick left and no table yet,
         // collectBlock makes sticks by using the crude axe on a placed log and plank (sticksByAxe).
         goal: 'Craft Crafting Tools with !craftRecipe("contenttweaker:crafting_tools", 1): the crude axe (it is used up), 1 rock and 1 stick (or River Cane or bamboo). Make your first plank before this. With no stick left, !collectBlocks("stick", 1) chops a placed log and plank with the crude axe for 2 sticks (about 5 uses) and keeps a plank for the table.',
@@ -78,26 +88,31 @@ export const ROTN_EARLY_GAME = [
     },
     {
         id: 'crafting_table', short: 'craft a crafting table',
+        after: ['crafting_tools'],
         goal: 'Craft a crafting table with !craftRecipe("crafting_table", 1): 1 plank and the Crafting Tools.',
         done: (s) => s.count('crafting_table') > 0 || s.near('crafting_table') || s.count('stone_pickaxe') > 0,
     },
     {
         id: 'planks_sticks', short: 'make planks and sticks at the table',
+        after: ['crafting_table'],
         goal: 'At the crafting table, turn logs into planks with !craftRecipe("planks", 2) and planks into sticks with !craftRecipe("stick", 1), until you have at least 4 planks and 4 sticks.',
         done: (s) => (s.countOre('plankWood') >= 4 && s.count('stick') >= 4) || s.count('stone_pickaxe') > 0,
     },
     {
         id: 'stone_pickaxe', short: 'craft a stone pickaxe',
+        after: ['planks_sticks', 'rocks'],
         goal: 'Craft a stone pickaxe at the crafting table with !craftRecipe("stone_pickaxe", 1): 3 rocks and 2 sticks.',
         done: (s) => s.count('stone_pickaxe') > 0,
     },
     {
         id: 'stone_axe', short: 'craft a stone axe',
+        after: ['planks_sticks', 'rocks'],
         goal: 'Craft a stone axe at the crafting table with !craftRecipe("stone_axe", 1): 3 rocks and 2 sticks. Chop with it from now on.',
         done: (s) => s.count('stone_axe') > 0,
     },
     {
         id: 'cobblestone', short: 'make cobblestone from rocks',
+        after: ['stone_pickaxe'],
         goal: 'Mine stone with the stone pickaxe for rocks (!collectBlocks("pyrotech:rock", 8)), then make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1): each rock kind makes its own cobblestone. Aim for 10 cobblestone: at dusk the night routine builds the shelter from them (10 on open ground), so do not use them by day.',
         // G3 round 3 A: name the cobblestone the rocks the bot holds make (rotn-data rock recipes).
         goalNow: (s) => {
@@ -187,6 +202,36 @@ export const SHELTER_RESERVE_STEP = {
     },
 };
 
+/**
+ * #463 decision (soak 3: stone_axe stuck at 20:12 paused the agenda, and the bot idled 67 min, food
+ * 8 -> 2): an autonomous bot must not go idle. A stuck step (its budget spent) gets a fresh budget
+ * after cooldownMs or at the next full day (a later in-game day, in full daylight), whichever comes
+ * first; at most `max` retries, then it is given up. Meanwhile the steps that do not need it go on,
+ * and with none left, a survival goal (the food reserve, then SURVIVAL_STEP).
+ */
+export const STUCK_RETRY = { cooldownMs: 20 * 60_000, max: 3 };
+
+/**
+ * The survival goal when every step left waits on a stuck one: the shelter's blocks by day (the
+ * shelter reserve is due only before night). Its own budget; spent, it waits STUCK_RETRY.cooldownMs.
+ */
+export const SURVIVAL_STEP = {
+    id: 'survival_blocks', short: `keep ${SHELTER_RESERVE} blocks for the night's shelter (the steps left wait)`,
+    reserve: true, when: 'while the steps wait',
+    done: (s) => reserveHave(s) >= SHELTER_RESERVE,
+    goal: `The agenda's next steps wait on a stuck one. Meanwhile keep ${SHELTER_RESERVE} blocks for the night's shelter: with a pickaxe, cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1); without one, dirt, dug by hand with !collectBlocks("betterwithmods:dirt_pile", ${4 * SHELTER_RESERVE}). Keep these blocks for the night: do not place them.`,
+    goalNow: (s) => {
+        const have = reserveHave(s);
+        const head = `The agenda's next steps wait on a stuck one. Meanwhile keep ${SHELTER_RESERVE} blocks for the night's shelter; you have ${have}. `;
+        if (noPickaxe(s)) return head + `You have no pickaxe, so it is built of dirt. ${pileAsk(SHELTER_RESERVE - have)} Keep these blocks for the night: do not place them.`;
+        const c = s.cobble?.()[0];
+        const how = c
+            ? `Your ${c.rock} rocks make ${c.gives}, 4 rocks each: craft it with !craftRecipe("cobblestone", ${Math.max(1, Math.min(Math.floor(c.have / 4), SHELTER_RESERVE - have))}). `
+            : 'Collect rocks with !collectBlocks("pyrotech:rock", 8), then make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1). ';
+        return head + how + 'Keep these blocks for the night: do not place them.';
+    },
+};
+
 /** After the food reserve's budget is spent, it is not asked again for this long (G4 #5). */
 export const FOOD_RETRY_MS = 10 * 60_000;
 /**
@@ -248,12 +293,14 @@ export class Agenda {
      * @param {{dir?: string, steps?: Array, now?: () => number, reserve?: object|null}} [opts]
      *   reserve: the before-night step (SHELTER_RESERVE_STEP; null for none)
      */
-    constructor(botName, { dir = `./bots/${botName}`, steps = ROTN_EARLY_GAME, now = Date.now, reserve = SHELTER_RESERVE_STEP, food = FOOD_RESERVE_STEP } = {}) {
+    constructor(botName, { dir = `./bots/${botName}`, steps = ROTN_EARLY_GAME, now = Date.now, reserve = SHELTER_RESERVE_STEP, food = FOOD_RESERVE_STEP, survival = SURVIVAL_STEP } = {}) {
         this.file = path.join(dir, 'agenda.json');
         this.steps = steps;
         this.now = now;
         this.reserve = reserve;
         this.food = food; // G4 #5: the food reserve (FOOD_RESERVE_STEP; null for none)
+        this.survival = survival; // #463 decision: the goal while every step left waits (SURVIVAL_STEP; null for none)
+        this.survivalOffUntil = 0; // its budget ran out: not asked again before this time
         this.foodOffUntil = 0; // its budget ran out: not asked again before this time
         this.foodDay = { key: null, runs: 0 }; // its runs this in-game day (FOOD_DAY_RUNS)
         this.reserveOff = false; // its budget ran out: not again until the night is past
@@ -261,7 +308,7 @@ export class Agenda {
         this.active = false;
         this.done_at = {}; // step id -> when it was first seen done
         this.spent = {}; // step id -> {attempts, llm_ms}: the self-prompter's runs for it (#164 review)
-        this.stuck = null; // {id, why, at}: a step whose budget ran out; the agenda is paused
+        this.stuck = {}; // step id -> {why, at, day, retries, cooling, givenUp}: budgets that ran out (STUCK_RETRY)
         this.loadProblem = null;
         this.existed = false; // a readable agenda.json was there: autostart leaves it alone
         this.loadedActive = false; // agenda.json said active: the first step it names says "resumed after a restart" (G4 #11 prep)
@@ -278,7 +325,15 @@ export class Agenda {
             this.loadedActive = data.active;
             this.done_at = data.done_at && typeof data.done_at === 'object' ? data.done_at : {};
             this.spent = data.spent && typeof data.spent === 'object' ? data.spent : {};
-            this.stuck = data.stuck && typeof data.stuck.id === 'string' ? data.stuck : null;
+            this.stuck = {};
+            if (data.stuck && typeof data.stuck.id === 'string') {
+                // Before the #463 decision one stuck step paused the agenda (active false): now it
+                // waits for its retry, and the agenda goes on.
+                this.stuck[data.stuck.id] = { why: data.stuck.why ?? null, at: data.stuck.at ?? this.now(), day: null, retries: 0, cooling: true, givenUp: false };
+                if (!data.finished) this.active = this.loadedActive = true;
+            } else if (data.stuck && typeof data.stuck === 'object') {
+                for (const [id, e] of Object.entries(data.stuck)) if (e && typeof e === 'object') this.stuck[id] = e;
+            }
             this.finished = data.finished === true;
             this.existed = true;
             this.loadState = 'present';
@@ -295,7 +350,7 @@ export class Agenda {
         try {
             mkdirSync(path.dirname(this.file), { recursive: true });
             const tmp = `${this.file}.tmp`;
-            writeFileSync(tmp, JSON.stringify({ version: 1, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, updated_at: this.now() }, null, 2));
+            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, updated_at: this.now() }, null, 2));
             renameSync(tmp, this.file);
             this.existed = true; // a later spawn (a respawn) must not autostart it either
         } catch (err) {
@@ -303,13 +358,15 @@ export class Agenda {
         }
     }
 
-    /** Start or resume. A giver's start after a stuck step gives that step a fresh budget. */
+    /** Start or resume. A giver's start gives every stuck step a fresh budget and its retries back. */
     start() {
-        if (this.active && !this.stuck) return;
+        const stuckIds = Object.keys(this.stuck);
+        if (this.active && stuckIds.length === 0) return;
         // A (re)start in this process is a fresh start, not the restart's resume (#327 review 1):
         // e.g. !agendaStop then !agendaStart before the first step line.
         this.loadedActive = false;
-        if (this.stuck) { delete this.spent[this.stuck.id]; this.stuck = null; }
+        for (const id of stuckIds) delete this.spent[id];
+        this.stuck = {};
         this.active = true;
         this.finished = false;
         this.save();
@@ -319,24 +376,38 @@ export class Agenda {
     finish() { this.active = false; this.finished = !!this.reserve || !!this.food; this.save(); }
 
     /** Whether a step id is one of the reserves (the shelter blocks, the food). */
-    isReserveId(id) { return id != null && (id === this.reserve?.id || id === this.food?.id); }
+    isReserveId(id) { return id != null && (id === this.reserve?.id || id === this.food?.id || id === this.survival?.id); }
     /** A reserve, if one is wanted now: the shelter reserve first, then food (G4 #5). */
     anyReserveWanted(state) { return this.reserveWanted(state) ?? this.foodWanted(state); }
     /** A reserve's budget is spent: the shelter reserve until the night is past; food for FOOD_RETRY_MS. */
     reserveStuck(id) {
         if (id === this.food?.id) this.foodOffUntil = this.now() + FOOD_RETRY_MS;
+        else if (id === this.survival?.id) this.survivalOffUntil = this.now() + STUCK_RETRY.cooldownMs;
         else this.reserveOff = true;
+    }
+
+    /** The survival goal (SURVIVAL_STEP) when it is wanted: not done, its budget not spent or the wait over. */
+    survivalWanted(state) {
+        const r = this.survival;
+        if (!r) return null;
+        let done = false;
+        try { done = !!r.done(state); } catch { done = false; }
+        if (done) { delete this.spent[r.id]; this.survivalOffUntil = 0; return null; }
+        if (this.now() < this.survivalOffUntil) return null;
+        if (this.survivalOffUntil) { delete this.spent[r.id]; this.survivalOffUntil = 0; } // a fresh budget after the wait
+        return r;
     }
 
     /**
      * G4 #5: the food reserve when it is wanted now (due by food.foodShortfall, its budget not spent
      * or FOOD_RETRY_MS past, and a run left this day or one running), else null. When it is not due, its budget is fresh for the next time.
      */
-    foodWanted(state) {
+    foodWanted(state, { standing = false } = {}) {
         const r = this.food;
         if (!r) return null;
         let due = false;
-        try { due = !!r.due(state, { finished: this.finished }); } catch { due = false; }
+        // standing: every step left waits on a stuck one, so food is a standing duty, as once the agenda is done.
+        try { due = !!r.due(state, { finished: this.finished || standing }); } catch { due = false; }
         if (!due) {
             delete this.spent[r.id];
             this.foodOffUntil = 0;
@@ -400,11 +471,43 @@ export class Agenda {
         const b = this.spentOn(id);
         this.spent[id] = { ...b, llm_ms: b.llm_ms + ms };
     }
-    /** A step's budget is spent: pause the agenda until a giver starts it again. */
-    markStuck(id, why) {
-        this.stuck = { id, why, at: this.now() };
-        this.active = false;
+    /**
+     * A step's budget is spent (#463 decision): it waits for its retry (retryDue), and the agenda goes
+     * on with the steps that do not need it. After STUCK_RETRY.max retries it is given up. Returns
+     * its record ({retries, givenUp, ...}).
+     */
+    markStuck(id, why, state = null) {
+        const e = this.stuck[id] ?? { retries: 0 };
+        let day = null;
+        try { day = state?.day?.() ?? null; } catch { day = null; }
+        Object.assign(e, { why, at: this.now(), day: Number.isFinite(day) ? day : null, cooling: true, givenUp: e.retries >= STUCK_RETRY.max });
+        this.stuck[id] = e;
         this.save();
+        return e;
+    }
+
+    /** Whether a step waits (stuck, before its retry, or given up). */
+    isWaiting(id) { const e = this.stuck[id]; return !!e && (e.givenUp || e.cooling); }
+
+    /**
+     * The stuck steps whose retry is due now: STUCK_RETRY.cooldownMs after it got stuck, or a later
+     * in-game day in full daylight. Each gets a fresh budget. Returns [{id, retry}].
+     */
+    retryDue(state) {
+        const out = [];
+        let day = null, t = null;
+        try { day = state?.day?.() ?? null; t = state?.timeOfDay?.() ?? null; } catch { day = t = null; }
+        for (const [id, e] of Object.entries(this.stuck)) {
+            if (!e.cooling || e.givenUp) continue;
+            const nextDay = Number.isFinite(day) && Number.isFinite(e.day) && day > e.day && Number.isFinite(t) && isFullDay(((t % 24000) + 24000) % 24000);
+            if (this.now() - e.at < STUCK_RETRY.cooldownMs && !nextDay) continue;
+            e.retries = (e.retries ?? 0) + 1;
+            e.cooling = false;
+            delete this.spent[id];
+            out.push({ id, retry: e.retries });
+        }
+        if (out.length) this.save();
+        return out;
     }
 
     /**
@@ -412,10 +515,11 @@ export class Agenda {
      * @returns {{step: object|null, newlyDone: object[]}} step: the first step not done (null: all done)
      */
     evaluate(state) {
-        const { step, newlyDone } = this.judge(state);
-        for (const s of newlyDone) this.done_at[s.id] = this.now();
+        const retried = this.retryDue(state);
+        const { step, newlyDone, waiting } = this.judge(state);
+        for (const s of newlyDone) { this.done_at[s.id] = this.now(); delete this.stuck[s.id]; }
         if (newlyDone.length) this.save();
-        return { step, newlyDone };
+        return { step, newlyDone, retried, waiting };
     }
 
     /**
@@ -425,6 +529,10 @@ export class Agenda {
     judge(state) {
         const newlyDone = [];
         let step = null;
+        // #463 decision: a step waits while it is stuck, and so does every step that needs it
+        // (after, directly or through others) and is not done.
+        const waits = new Set();
+        let waiting = false;
         for (const s of this.steps) {
             // A step once done stays done: crafting the crude axe uses up sticks, and walking away
             // from the table must not send the agenda back. Steps not yet done are judged from the world.
@@ -434,12 +542,19 @@ export class Agenda {
             }
             if (done) {
                 if (!this.done_at[s.id]) newlyDone.push(s);
+            } else if (this.isWaiting(s.id) || (s.after ?? []).some(a => waits.has(a))) {
+                waits.add(s.id);
+                waiting = true;
             } else if (!step) {
                 step = s;
             }
         }
         // Before night, too few shelter blocks: the reserve comes first (G3 round 6 B); then food (G4 #5).
-        return { step: this.reserveWanted(state) ?? this.foodWanted(state) ?? step, newlyDone };
+        // Every step left waits: food as a standing duty, then the survival goal (#463 decision).
+        const blocked = waiting && !step;
+        const pick = this.reserveWanted(state) ?? this.foodWanted(state, { standing: blocked }) ?? step
+            ?? (blocked ? this.survivalWanted(state) : null);
+        return { step: pick, newlyDone, waiting: blocked };
     }
 }
 
@@ -447,8 +562,10 @@ export class Agenda {
 export function describeAgenda(agenda, current, newlyDone = []) {
     // newlyDone: steps judge() found done that the driver has not recorded yet.
     const done = agenda.steps.filter(s => agenda.done_at[s.id] || newlyDone.includes(s)).map(s => s.id);
-    const state = agenda.stuck ? `paused (step ${agenda.stuck.id} stuck: ${agenda.stuck.why}; a giver's !agendaStart retries it)`
-        : agenda.active ? 'active' : agenda.finished ? 'done (before night it still keeps the shelter blocks)' : 'stopped';
-    const now = current ? `step ${current.id} (${current.short})` : 'all steps done';
-    return `agenda: ${state}, ${now}; done: ${done.length ? done.join(', ') : 'none'}`;
+    const state = agenda.active ? 'active' : agenda.finished ? 'done (before night it still keeps the shelter blocks)' : 'stopped';
+    const stuck = Object.entries(agenda.stuck ?? {}).map(([id, e]) => (e.givenUp ? `${id} given up after ${STUCK_RETRY.max} retries`
+        : e.cooling ? `${id} waits for retry ${(e.retries ?? 0) + 1} of ${STUCK_RETRY.max}` : `${id} on retry ${e.retries} of ${STUCK_RETRY.max}`));
+    const waitingAll = !current && stuck.length > 0 && agenda.steps.some(s => !(agenda.done_at[s.id] || newlyDone.includes(s)));
+    const now = current ? `step ${current.id} (${current.short})` : waitingAll ? 'the steps left wait' : 'all steps done';
+    return `agenda: ${state}, ${now}; done: ${done.length ? done.join(', ') : 'none'}${stuck.length ? `; stuck: ${stuck.join(', ')} (a giver's !agendaStart retries at once)` : ''}`;
 }

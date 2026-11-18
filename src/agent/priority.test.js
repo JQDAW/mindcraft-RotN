@@ -849,9 +849,11 @@ test('G4 #11 (a): after a restart the agenda goes on at the same step: no step d
     // A crash loop ends with the step stuck, not with endless runs.
     const last = restartOf(t, again);
     assert.equal(autonomyTick(last, { now: 0 }), 'stuck', 'its 3 runs are spent: stuck at the first tick');
-    assert.equal(last.said.at(-1), 'agenda step sticks stuck: 3 self-prompter runs; agenda paused');
-    assert.equal(autonomyTick(last, { now: 10 * BACKOFF_MS }), null, 'paused: no more runs');
-    assert.equal(last.self_prompter.isActive(), false);
+    assert.equal(last.said.at(-1), 'agenda step sticks stuck: 3 self-prompter runs; retry 1 of 3 in 20 min or at the next full day; going on with the steps that do not need it');
+    // #463 decision: no pause; the stuck step itself gets no more runs until its retry.
+    assert.notEqual(autonomyTick(last, { now: 10 * BACKOFF_MS }), 'sticks', 'no more runs for sticks before its retry');
+    assert.equal(last.agenda.active, true);
+    assert.equal(last.agenda.stuck.sticks.cooling, true);
 });
 
 test('G4 #11 (b): a giver\'s queued task survives a restart and runs', (t) => {
