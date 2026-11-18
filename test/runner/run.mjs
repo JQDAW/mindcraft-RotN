@@ -32,8 +32,9 @@ import { runScenario, addNotGate } from './lib/runner.mjs';
 import { ctlServer, driverProcess, wallClock } from './lib/adapters.mjs';
 import { HOST, serviceBot } from './lib/service.mjs';
 import { linesAfter } from './lib/server-log.mjs';
-import { consoleAllowFor, guardConsole, g3Policy, LLM_MODEL } from './lib/g3.mjs';
+import { consoleAllowFor, guardConsole, g3Policy, G3_ON_SERVICE_NOT_GATE, LLM_MODEL } from './lib/g3.mjs';
 import { keyFetch, llmRecord, providerSummary, readKeyUsage } from './lib/llm-spend.mjs';
+import { STEP7_SCENARIOS, evaluateAcceptance, notAcceptanceReason, releaseFromJournal, startAcceptance } from './lib/g4-accept.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -95,10 +96,44 @@ export function gitInfo(cwd = path.join(here, '..', '..'), exec = execFileSync) 
 export function serviceRunPolicy(scenario, bot) {
     if (bot?.kind !== 'service') return { notGate: null, llmOn: Boolean(scenario.llm), llmNote: null };
     return {
-        notGate: scenario.gate === 'G3' ? 'a G4 S run (the CX23 service, --service): never G3 gate evidence' : null,
+        notGate: scenario.gate === 'G3' ? G3_ON_SERVICE_NOT_GATE : null,
         llmOn: false,
         llmNote: scenario.llm ? { accounting: 'off', why: 'a service run: the bot\'s calls go to the CX23\'s own key, which the runner does not read; its spend is read separately' } : null,
     };
+}
+
+/** The full commit of a local tag (refs/tags/<tag>), or null: G4 step 7's check of the release the CX23 runs. */
+export function resolveTag(tag, cwd = path.join(here, '..', '..'), exec = execFileSync) {
+    if (!/^rotn-v\d+\.\d+\.\d+$/.test(String(tag))) return null;
+    try {
+        const sha = exec('git', ['rev-parse', '--verify', '--quiet', `refs/tags/${tag}^{commit}`], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        return /^[0-9a-f]{40,64}$/.test(sha) ? sha : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * G4 step 7 (lib/g4-accept.mjs): a step-7 scenario on the CX23 service, or any run with ROTN_G4_ACCEPT set, is judged
+ * against the acceptance rule and carries a g4Acceptance record.
+ */
+export const acceptanceApplies = (scenario, bot, env) => STEP7_SCENARIOS.includes(scenario.id) && (bot?.kind === 'service' || Boolean(env?.ROTN_G4_ACCEPT));
+
+/**
+ * Does g3Policy's not-gate reason still apply at the end of a run? Not for a valid step-7 acceptance run of a G4 scenario
+ * (it is G4 evidence), and not for a G3 scenario on S: G3's spend-stop reason is about the runner's own key, which an S
+ * run never reads (serviceRunPolicy), and the S reason ("never G3 gate evidence") replaces it. Without that, a step-7 D
+ * or C could never count as passed.
+ */
+export const policyReasonApplies = (scenario, bot, acceptance) => !(scenario.gate === 'G4' && acceptance?.valid === true)
+    && !(scenario.gate === 'G3' && bot?.kind === 'service');
+
+/** The g4Acceptance record at the end of a run: the release read from the unit's journal for this run (driver.log). */
+export function acceptanceRecord({ env, scenario, bot, driverName, fresh, journalLines, resolve = resolveTag, release = null }) {
+    return evaluateAcceptance({
+        env, scenarioId: scenario.id, botKind: bot.kind, unit: bot.kind === 'service' ? bot.bot : null, driver: driverName,
+        release: release ?? releaseFromJournal(journalLines), fresh, resolveTag: resolve,
+    });
 }
 
 /**
@@ -186,8 +221,18 @@ async function main(argv) {
     // Every record, the progress and killed ones too, carries the LLM calls so far (#122 review nit): a run
     // that never finishes still shows what it used. The after-reading exists only in the final result.
     const svc = serviceRunPolicy(scenario, bot);
+    // G4 step 7: the freshness check and the ledger entry come before the scenario (lib/g4-accept.mjs).
+    const effective = { ...scenario.defaults, ...o.params };
+    const accept = acceptanceApplies(scenario, bot, process.env)
+        ? startAcceptance({ server, env: process.env, scenarioId: scenario.id, runId, logTail: effective.logTail ?? 20000, fsImpl: fs, pathImpl: path })
+        : null;
+    if (accept) log(`G4 step 7: ${process.env.ROTN_G4_ACCEPT ? 'an acceptance start' : 'no ROTN_G4_ACCEPT marker'}; ${accept.fresh.why}`);
+    // A record that is not final (progress, killed) says why it does not count: the release is read at the end.
+    const unfinished = () => acceptanceRecord({ env: process.env, scenario, bot, driverName, fresh: accept.fresh,
+        release: { tag: null, why: 'the run did not finish (the release is read from the journal at the end)' } });
     const stamp = (r) => Object.assign(r, { git, server: process.env.TEST_SERVER_NAME ?? null, driver: driverName },
         bot.kind === 'service' ? { service: { goId: bot.goId ?? null, startError: bot.startError ?? null, incident: bot.incident ?? null, stateUnknown: bot.stateUnknown ?? null } } : {},
+        accept && !r.g4Acceptance ? { g4Acceptance: unfinished() } : {},
         svc.llmOn && !r.llm ? { llm: llmRecord(usageBefore, { ok: false, error: 'the run did not finish' }, bot.output()) } : {},
         svc.llmNote && !r.llm ? { llm: svc.llmNote } : {},
         scenario.gate === 'G3' || scenario.gate === 'G4' ? { batch: policy.batch } : {});
@@ -246,7 +291,19 @@ async function main(argv) {
         log(`INCIDENT: ${bot.incident}`);
         addNotGate(result, `an ADR 0009 incident: ${bot.incident}`);
     }
-    if (policy.notGate) addNotGate(result, policy.notGate);
+    if (accept) {
+        let journal;
+        try {
+            journal = fs.readFileSync(path.join(outDir, 'driver.log'), 'utf8').split('\n');
+        } catch {
+            journal = bot.output();
+        }
+        result.g4Acceptance = acceptanceRecord({ env: process.env, scenario, bot, driverName, fresh: accept.fresh, journalLines: journal });
+        log(`G4 step 7: ${result.g4Acceptance.valid ? `a valid acceptance run (run ${result.g4Acceptance.marker.run}, GO ${result.g4Acceptance.marker.goId}, ${result.g4Acceptance.release.tag})` : notAcceptanceReason(result.g4Acceptance)}`);
+        if (!result.g4Acceptance.valid) addNotGate(result, notAcceptanceReason(result.g4Acceptance));
+    }
+    // A valid acceptance run of a G4 scenario is G4 evidence: no "not an acceptance run" reason (step 7).
+    if (policy.notGate && policyReasonApplies(scenario, bot, result.g4Acceptance)) addNotGate(result, policy.notGate);
     if (svc.notGate) addNotGate(result, svc.notGate);
     try {
         const ev = evidenceLog(server, result.params.logTail, `scenario-${runId}-begin`);

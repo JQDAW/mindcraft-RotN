@@ -26,7 +26,8 @@ if (cmd === 'log') {
         p[2] += Number(m[1]);
         fs.writeFileSync(posFile, JSON.stringify(p));
         add(`<FRCFLD> walked ${p.join(' ')}`);
-    } else if (line === 'tp FRCFLD ~ ~ ~') add(`Teleported FRCFLD to ${pos().join(', ')}`);
+    } else if (line === 'seed' && process.env.FAKE_CTL_SEED) add(`Seed: [${process.env.FAKE_CTL_SEED}]`);
+    else if (line === 'tp FRCFLD ~ ~ ~') add(`Teleported FRCFLD to ${pos().join(', ')}`);
     else if (line === 'list') {
         add(`There are ${online() ? 1 : 0}/10 players online:`);
         add(online() ? 'FRCFLD' : '');

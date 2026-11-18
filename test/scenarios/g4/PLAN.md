@@ -95,6 +95,10 @@ CPX42 at EUR 0.1381/h, each server billed at least 1 h; the CX23 is already paid
 5. one session with the trusted player: #3, #10 (C) and #11 (agenda and queue across `ctl restart`);
 6. `g4-second-bot`: #12.
 
+**How a step-7 run is started and checked** (`test/runner/lib/g4-accept.mjs`; DRIVER.md, "G4 step 7"). Each run uses its own new test server and the lead's written acceptance GO. That GO names the run (1-6) and the `rotn-v` tag at which the human confirmed the gate and ctl SHA-256:
+`ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed ROTN_G4_ACCEPT=<GO id>:<run>:<tag>:gate-ctl-hashes-confirmed node test/runner/run.mjs --scenario <id> --service <unit> --out ...`
+The result's `g4Acceptance` says whether the run counts and, if not, why. `node test/tools/g4-accept-check.mjs --tree test/evidence --complete <GO id>` is the G4 claim over all six runs.
+
 #8's secret scan runs in CI, and #9 is the document. A failure follows the G3 rule: the remaining runs still run, the failure stays in the evidence, and only the failed scenario reruns after its fix, with the human's approval.
 
 **In all:** about EUR 2.8 plus Primary IPv4-hours, and about USD 0.2 of LLM. Build time for the harness pieces above is about 2-3 agent days, offline, before step 1. **First build (lead's pick, 2026-11-07):** `g4-death-report`, built offline and rehearsed on T.
