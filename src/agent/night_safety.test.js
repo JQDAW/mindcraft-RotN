@@ -9,7 +9,8 @@ import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../utils/mcdata.js';
 import { requestReplan, replanPromptDue, hasReplan, QUIET_MS } from './replan.js';
 import { initModes, __modeForTest } from './modes.js';
-import { nightRoutineActive } from './library/night.js';
+import { nightRoutineActive, replanHold, NIGHT_START, TICKS_PER_MIN } from './library/night.js';
+import { ActionManager } from './action_manager.js';
 import { itemPickupRefusal, pickupNearbyItems, ITEM_PICKUP, COLLECT_LIMITS } from './library/skills.js';
 import { DEATH_SPOT_RADIUS } from './library/death_report.js';
 
@@ -22,12 +23,25 @@ test('soak 3: nightRoutineActive is the routine\'s state: anything but day (the 
     for (const state of ['building', 'inside', 'exposed']) assert.equal(nightRoutineActive({ _night: { state } }), true, state);
 });
 
-test('soak 3: replanPromptDue holds the prompt while the night routine runs', () => {
+test('soak 3: replanPromptDue holds the prompt while held (night.replanHold)', () => {
     const agent = {};
     requestReplan(agent, 'death', null, { now: 100_000, due: true, note: 'You died.', ...quiet });
     const base = { idle: true, reflexActive: false, selfPrompting: false, lastPromptAt: 0, now: 200_000 };
-    assert.equal(replanPromptDue(agent, { ...base, nightRoutine: true }), false);
-    assert.equal(replanPromptDue(agent, base), true, 'once it ends, the prompt goes');
+    assert.equal(replanPromptDue(agent, { ...base, held: 'the night routine is running' }), false);
+    assert.equal(replanPromptDue(agent, base), true, 'once nothing holds it, the prompt goes');
+});
+
+test('#463 review 3: replanHold: the routine running, or not full day yet (the dawn gap, dusk, night); full day: none', () => {
+    const at = (timeOfDay, state = 'day') => ({ _night: { state }, bot: { time: { timeOfDay } } });
+    assert.equal(replanHold(at(1000, 'inside')), 'the night routine is running');
+    assert.equal(replanHold(at(23500)), 'it is not full day yet', 'the dawn gap with the routine done (a death after it ended)');
+    assert.equal(replanHold(at(NIGHT_START + 100)), 'it is not full day yet', 'night, routine not started');
+    assert.equal(replanHold(at(NIGHT_START - 2 * TICKS_PER_MIN)), 'it is not full day yet', 'dusk');
+    assert.equal(replanHold(at(1000)), null, 'full day');
+    assert.equal(replanHold({ bot: {} }), null, 'no time known, no routine: nothing holds it');
+    // The routine's clock first (its wall-clock fallback when the server time is stuck).
+    const clocked = { _night: { state: 'day', clock: { timeOfDay: () => 23700 } }, bot: { time: { timeOfDay: 1000 } } };
+    assert.equal(replanHold(clocked), 'it is not full day yet');
 });
 
 function fakeAgent() {
@@ -122,21 +136,60 @@ test('soak 3: pickupNearbyItems walks to no item its allow refuses', async (t) =
     assert.match(bot.output, /Picked up 0 items\./);
 });
 
-test('soak 3: the item-pickup reflex leaves the items at a recent death spot alone (one log line per item)', async (t) => {
+test('#463 review 2: the item-pickup reflex: 40 items over several ticks; only those within 8 blocks are judged; one line per refused item; the lines\' map is pruned when an item is gone', async (t) => {
     const lines = [];
     t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
     const mode = __modeForTest('item_collecting');
-    const at = item(41, new Vec3(-50, 60, -66));
-    const bot = itemBot({ entities: { 41: at }, deathSpots: [{ pos: new Vec3(-54, 60, -66), at: Date.now() - 60_000, dimension: 'overworld' }] });
+    mode.refusedSaid.clear();
+    mode.noticed_at = -1;
+    const bot = itemBot({ deathSpots: [{ pos: new Vec3(-54, 60, -66), at: Date.now() - 60_000, dimension: 'overworld' }] });
     bot.entity.position = new Vec3(-46, 60, -66);
     bot.inventory = { emptySlotCount: () => 30 };
+    // 20 within 8 blocks of the bot, 20 beyond 8: all within 24 of the death spot.
+    for (let i = 0; i < 40; i++) {
+        const near = i < 20;
+        const j = i % 20;
+        bot.entities[100 + i] = item(100 + i, new Vec3(-46 - (near ? 0 : 9) - (j % 5), 60, -68 + Math.floor(j / 5)));
+    }
+    const judged = new Set();
+    const spots = bot.rotnDeathSpots;
+    let current = null;
+    bot.rotnDeathSpots = (...a) => { judged.add(current); return spots(...a); };
+    const nearest = bot.nearestEntity;
+    bot.nearestEntity = (match) => nearest((e) => { current = e.id; return match(e); });
     let ran = 0;
     const agent = { bot, actions: { runAction: () => { ran++; return Promise.resolve({}); } } };
-    mode.noticed_at = -1;
-    await mode.update(agent);
-    await mode.update(agent);
+    for (let tick = 0; tick < 5; tick++) await mode.update(agent);
+    const said = lines.filter(l => l.startsWith('[reflex] item pickup:'));
+    assert.equal(said.length, 20, 'one line per refused item, over 5 ticks');
+    assert.equal(new Set(said).size, 20);
+    assert.ok(said.every(l => / alone: within 24 blocks of where you died recently/.test(l)));
+    assert.ok([...judged].every(id => id < 120), 'no item beyond 8 blocks was judged');
+    assert.equal(mode.refusedSaid.size, 20);
     assert.equal(mode.noticed_at, -1, 'never noticed');
     assert.equal(ran, 0, 'no pickup started');
-    assert.deepEqual(lines.filter(l => l.startsWith('[reflex] item pickup:')),
-        [`[reflex] item pickup: leaving the item at -50, 60, -66 alone: within ${DEATH_SPOT_RADIUS} blocks of where you died recently (a player zombie rises there and never leaves)`]);
+    // Ten of them are gone (picked up by someone, despawned): their entries go on the next tick.
+    for (let i = 0; i < 10; i++) delete bot.entities[100 + i];
+    await mode.update(agent);
+    assert.equal(mode.refusedSaid.size, 10);
+    assert.equal(lines.filter(l => l.startsWith('[reflex] item pickup:')).length, 20, 'no line said again');
+    // A backstop: an entry older than saidKeptMs goes even if its item is still there.
+    for (const id of mode.refusedSaid.keys()) mode.refusedSaid.set(id, Date.now() - ITEM_PICKUP.saidKeptMs - 1);
+    bot.entities = {};
+    await mode.update(agent);
+    assert.equal(mode.refusedSaid.size, 0);
+});
+
+test('#463 nit: an animal provoked by a hit (threatPlan) keeps the pickup off too', () => {
+    const now = 2_000_000;
+    const at = item(1, here.offset(3, 0, 0));
+    const bull = { id: 5, type: 'mob', name: 'animania:bull_holstein', position: here.offset(1.5, 0, 0) };
+    const calm = itemBot({ entities: { 5: bull } });
+    assert.equal(itemPickupRefusal(calm, at, now), null, 'a calm bull: no refusal (it is not hostile)');
+    const hit = itemBot({ entities: { 5: bull } });
+    Object.assign(hit, { lastDamageTime: now - 1000, lastDamageTaken: 5 });
+    assert.equal(itemPickupRefusal(hit, at, now), 'a animania:bull_holstein near fights back after a hit (provoked)');
+    const later = itemBot({ entities: { 5: bull } });
+    Object.assign(later, { lastDamageTime: now - 10_000, lastDamageTaken: 5 });
+    assert.equal(itemPickupRefusal(later, at, now), null, 'the hit was long ago');
 });

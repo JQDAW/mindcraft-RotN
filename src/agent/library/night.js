@@ -78,15 +78,32 @@ export function nightPhase(timeOfDay) {
     return minutesToSunset(t) <= SHELTER_LEAD_MIN ? 'dusk' : 'day';
 }
 
+/** Full daylight: the day phase, and the sun no longer rising (the rise ends at time 0). */
+export const isFullDay = (t) => t >= 0 && t < NIGHT_START && nightPhase(t) === 'day';
+
 /**
  * Whether the night routine (night_routine.js, state on agent._night) is running: from the build at
  * dusk until full day, so the dawn gap too (soak 3: past NIGHT_END the clock's phase is 'day' while
- * the routine still shelters until full day). The re-plan prompt waits for it, and the model's
- * !buildShelter does not cut into it.
+ * the routine still shelters until full day). The model's !buildShelter does not cut into it.
  */
 export function nightRoutineActive(agent) {
     const s = agent?._night?.state;
     return typeof s === 'string' && s !== 'day';
+}
+
+/**
+ * Why a reflex's re-plan prompt waits now, or null (soak 3: a death's prompt at night woke the
+ * model, whose commands cut into the routine and walked the bot into the open). It waits while the
+ * night routine runs, and until full day (isFullDay, by the routine's clock, else the server's
+ * time), so a death in the dawn gap waits too. Unknown time: only the routine counts.
+ */
+export function replanHold(agent, now = Date.now()) {
+    if (nightRoutineActive(agent)) return 'the night routine is running';
+    let t = null;
+    try { t = agent?._night?.clock?.timeOfDay?.(now) ?? null; } catch { t = null; }
+    if (t === null && Number.isFinite(agent?.bot?.time?.timeOfDay)) t = agent.bot.time.timeOfDay;
+    if (t !== null && !isFullDay(norm(t))) return 'it is not full day yet';
+    return null;
 }
 
 /** A time value stuck longer than this (the measured freeze plus a margin) is not trusted. */

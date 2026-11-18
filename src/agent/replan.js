@@ -60,16 +60,16 @@ export function takeReplanNote(agent) {
 
 /**
  * Whether the coalesced re-plan prompt is due (only when not self-prompting,
- * which carries the note itself, and not while the night routine runs).
+ * which carries the note itself, and not while `held`: night.replanHold).
  */
-export function replanPromptDue(agent, { now = Date.now(), idle, reflexActive, selfPrompting, lastPromptAt = 0, nightRoutine = false } = {}) {
+export function replanPromptDue(agent, { now = Date.now(), idle, reflexActive, selfPrompting, lastPromptAt = 0, held = null } = {}) {
     const r = agent.replan;
     if (!r || !(r.interrupted || r.due)) return false;
     if (!idle || reflexActive || selfPrompting) return false;
     // Soak 3 (rotn-v0.1.5): a death's prompt at night woke the model, whose !collectBlocks,
     // !buildShelter and !moveAway cut into the routine's jobs and walked the bot into the open.
-    // While the night routine runs (dusk to full day) the prompt waits; it goes once it ends.
-    if (nightRoutine) return false;
+    // held (night.replanHold): the night routine runs, or it is not full day yet; it goes after.
+    if (held) return false;
     if (now - r.last_at < QUIET_MS) return false;
     return now - lastPromptAt >= MIN_GAP_MS;
 }

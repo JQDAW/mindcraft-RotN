@@ -12,7 +12,7 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS } from "./death_report.js";
-import { shelterEnemy } from "./threats.js";
+import { shelterEnemy, threatPlan } from "./threats.js";
 import { logAte, fightJournal } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -1721,10 +1721,12 @@ export const AXE_CHOP_OPS = { place: placeNear, pickup: pickUpNear, takeBack: ta
 /**
  * The item-pickup reflex (soak 3, rotn-v0.1.5): no item within DEATH_SPOT_RADIUS (horizontally) of
  * a death spot from the last COLLECT_LIMITS.deathSpotMs (collectBlocks' rule: a player zombie rose
- * there and never leaves), and none while a hostile mob (one the shelter fight would hit) is within
- * hostileRange of the item or of the bot.
+ * there and never leaves), none while a hostile mob (one the shelter fight would hit) is within
+ * hostileRange of the item or of the bot, and none while threatPlan has an animal provoked by a hit
+ * (#463 nit: a bull, a herd). saidKeptMs: the reflex's one line per item is remembered this long at
+ * most (longer than an item lives: Corpse Complex's 600 s, vanilla's 300 s).
  */
-export const ITEM_PICKUP = { hostileRange: 12 };
+export const ITEM_PICKUP = { hostileRange: 12, saidKeptMs: 15 * 60_000 };
 
 /** Why the item-pickup reflex leaves this item alone now, or null. */
 export function itemPickupRefusal(bot, item, now = Date.now()) {
@@ -1740,6 +1742,10 @@ export function itemPickupRefusal(bot, item, now = Date.now()) {
     const mob = Object.values(bot?.entities ?? {}).find(e => e && e !== bot.entity && e.position && shelterEnemy(e)
         && (e.position.distanceTo(p) <= ITEM_PICKUP.hostileRange || (here && e.position.distanceTo(here) <= ITEM_PICKUP.hostileRange)));
     if (mob) return `a ${mob.name} is within ${ITEM_PICKUP.hostileRange} blocks`;
+    const plan = threatPlan(bot, { now });
+    if (plan && (plan.why.startsWith('provoked') || plan.why === 'a herd fights back')) {
+        return `a ${plan.from?.name ?? 'mob'} near fights back after a hit (${plan.why})`;
+    }
     return null;
 }
 
