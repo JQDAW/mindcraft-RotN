@@ -28,6 +28,18 @@ export const EMERGENCY_FOOD = 5;
  */
 export const EMERGENCY_FOODS = ['minecraft:golden_apple', 'betteranimalsplus:venisonraw', 'harvestcraft:venisonrawitem', 'twilightforest:raw_venison',
     'harvestcraft:rawtofenisonitem', 'minecraft:chicken', 'minecraft:rotten_flesh', 'biomesoplenty:berries'];
+const EMERGENCY_NAMES = {
+    'minecraft:golden_apple': 'a golden apple', 'betteranimalsplus:venisonraw': 'raw venison', 'harvestcraft:venisonrawitem': 'raw venison',
+    'twilightforest:raw_venison': 'raw venison', 'harvestcraft:rawtofenisonitem': 'raw tofenison', 'minecraft:chicken': 'raw chicken',
+    'minecraft:rotten_flesh': 'rotten flesh', 'biomesoplenty:berries': 'hawthorn berries',
+};
+/** #432 nit: EMERGENCY_FOODS in words, in their order ("a golden apple, raw venison, ..., then hawthorn berries"), for prompts. */
+export function emergencyFoodText() {
+    const names = [...new Set(EMERGENCY_FOODS.map(id => EMERGENCY_NAMES[id] ?? id))];
+    return `${names.slice(0, -1).join(', ')}, then ${names.at(-1)}`;
+}
+/** #432 nit: what is never eaten, emergency or not, in words. */
+export const NEVER_EAT_TEXT = 'cloudsbluff, chorus fruit, pufferfish, raw eggs or any other food';
 /** 1.12: health regenerates only at this food level or higher (CX23 soak: eat between fights). */
 export const REGEN_FOOD = 18;
 /** An eat that throws (mineflayer's 2500 ms consume timeout) is judged this long after. */

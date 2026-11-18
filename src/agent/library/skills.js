@@ -829,13 +829,14 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
     return swings > 0;
 }
 
-export async function collectBlock(bot, blockType, num=1, exclude=null) {
+export async function collectBlock(bot, blockType, num=1, exclude=null, range=64) {
     /**
      * Collect one of the given block type.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {string} blockType, the type of block to collect.
      * @param {number} num, the number of blocks to collect. Defaults to 1.
      * @param {list} exclude, a list of positions to exclude from the search. Defaults to null.
+     * @param {number} range, how far each search looks (#432 nit: !collectBlocks passes less while hungry). Defaults to 64.
      * @returns {Promise<boolean>} true if the block was collected, false if the block type was not found.
      * @example
      * await skills.collectBlock(bot, "oak_log");
@@ -1053,9 +1054,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             
             return movements.safeToBreak(block) || unsafeBlocks.includes(block.name);
         };
-        const nearestOf = (tier, radius = 64) => world.getNearestBlocksWhere(bot, block => tierOf(block) === tier && wanted(block), radius, 1);
+        const nearestOf = (tier, radius = range) => world.getNearestBlocksWhere(bot, block => tierOf(block) === tier && wanted(block), Math.min(radius, range), 1);
         let blocks = [];
-        if (!tiered) blocks = world.getNearestBlocksWhere(bot, wanted, 64, 1);
+        if (!tiered) blocks = world.getNearestBlocksWhere(bot, wanted, range, 1);
         else {
             blocks = nearestOf(0, CL.handFirstRadius);
             if (blocks.length === 0) blocks = nearestOf(3, CL.handFirstRadius);
