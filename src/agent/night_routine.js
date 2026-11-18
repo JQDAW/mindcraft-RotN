@@ -14,7 +14,7 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, shelterShell, dumpState, isFullDay } from './library/night.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, shelterShell, dumpState, isFullDay, replanHold } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE } from './library/shelter.js';
 import { goToGoal, descendFromTree } from './library/skills.js';
 import { stowCarried, toolAllows, allowedTool } from './library/rotn_sources.js';
@@ -23,6 +23,7 @@ import { hasWeapon, shelterEnemy } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
 import { say, isGiverGoal, ownsPrompt } from './agenda_driver.js';
+import { OPEN_GOAL_PREFIX } from './agenda.js';
 import settings from './settings.js';
 import { heldFoodHunger, FOOD_TARGET } from './library/food.js';
 
@@ -162,7 +163,8 @@ export function leaveShelterFor(agent, why) {
 function holdAutonomy(agent) {
     const sp = agent.self_prompter;
     if (sp.isActive()) {
-        if (!ownsPrompt(agent) && sp.prompt) agent._night_goal = sp.prompt;
+        // #468 review 2: not the open goal: the agenda gives it again (under its window budget).
+        if (!ownsPrompt(agent) && sp.prompt && !sp.prompt.startsWith(OPEN_GOAL_PREFIX)) agent._night_goal = sp.prompt;
         sp.stop(false);
     }
     agent._agenda_paused = true;
@@ -171,19 +173,27 @@ function holdAutonomy(agent) {
 }
 
 /**
- * After the night (the routine back to 'day'): the goal holdAutonomy stopped, other than the
- * agenda's or a task's, starts again, once; not when the self-prompter already runs another goal.
+ * After the night (the routine back to 'day', and full day): the goal holdAutonomy stopped, other
+ * than the agenda's or a task's, starts again, once; not when the self-prompter already runs another
+ * goal. A giver's !endGoal or !stop forgets it (forgetNightGoal).
  * Called by the priority stack after tasks and the walk away after a respawn. Returns whether it did.
  */
 export function resumeNightGoal(agent) {
     const goal = agent._night_goal;
-    if (!goal || (agent._night && agent._night.state !== 'day')) return false;
+    // #463 nit 2: and not before full day (replanHold), so a death in the dawn gap does not start it
+    // while the death's prompt is held.
+    if (!goal || (agent._night && agent._night.state !== 'day') || replanHold(agent)) return false;
     agent._night_goal = null;
     const sp = agent.self_prompter;
     if (sp.isActive() || sp.loop_active) return false;
     console.log('[night] morning: the goal that ran at dusk resumes');
     sp.start(goal);
     return true;
+}
+
+/** #463 nit 1: a task giver's !endGoal or !stop: the goal the night stopped does not come back. */
+export function forgetNightGoal(agent) {
+    agent._night_goal = null;
 }
 
 /**

@@ -17,6 +17,7 @@
 // Sturdiness comes from rotn-data's dump, never from bot.registry: forge-bridge gives
 // a modded block without known properties hardness 1.5 and no material (#181 review).
 import { Vec3 } from 'vec3';
+import settings from '../settings.js';
 import { getBlock, registryName, loadRotnData, howToGet, PACK_VERSION, WILDCARD_META } from '../../../packages/rotn-data/index.js';
 
 /**
@@ -95,9 +96,12 @@ export function nightRoutineActive(agent) {
  * Why a reflex's re-plan prompt waits now, or null (soak 3: a death's prompt at night woke the
  * model, whose commands cut into the routine and walked the bot into the open). It waits while the
  * night routine runs, and until full day (isFullDay, by the routine's clock, else the server's
- * time), so a death in the dawn gap waits too. Unknown time: only the routine counts.
+ * time), so a death in the dawn gap waits too. Unknown time: only the routine counts. With the
+ * routine off (settings.night_shelter false, #463 nit 3) nothing holds it: no shelter keeps the bot
+ * safe at night then, and the model may need to act.
  */
 export function replanHold(agent, now = Date.now()) {
+    if (settings.night_shelter === false) return null;
     if (nightRoutineActive(agent)) return 'the night routine is running';
     let t = null;
     try { t = agent?._night?.clock?.timeOfDay?.(now) ?? null; } catch { t = null; }

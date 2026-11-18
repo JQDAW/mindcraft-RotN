@@ -17,7 +17,7 @@ import { safeError } from './safe_error.js';
 import { heldFoodHunger } from './library/food.js';
 import { nearbyHuntable } from './library/hunting.js';
 import { nearbyForage } from './library/foraging.js';
-import { FOOD_RETRY_MS } from './agenda.js';
+import { FOOD_RETRY_MS, STUCK_RETRY } from './agenda.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
 export const TICK_MS = 2_000;
@@ -67,6 +67,7 @@ export function agendaState(bot, clock = null) {
         shelterBlocks: () => (bot.inventory?.items?.() ?? [])
             .filter(i => isSturdy({ name: i.name, metadata: i.metadata ?? 0 })).reduce((n, i) => n + i.count, 0),
         minutesToSunset: () => (Number.isFinite(bot.time?.timeOfDay) ? minutesToSunset(bot.time.timeOfDay) : Infinity),
+        timeOfDay: () => bot.time?.timeOfDay, // #463 decision: a stuck step's retry at the next full day
         // CX23 soak: the minutes the bot is told, with the morning freeze's part still to run.
         sunsetEstimateMin: () => (Number.isFinite(bot.time?.timeOfDay) ? sunsetEstimateMin(bot.time.timeOfDay, clock?.frozenMin?.(Date.now()) ?? 0) : Infinity),
         // #284 review 2: any pickaxe held; the dirt blocks held or made from the dirt piles held.
@@ -148,20 +149,19 @@ function tickState(agent) {
 /**
  * One agenda tick (throttled). Returns what it did, for tests and logs: null (not due or not
  * active), 'paused' (pause_when_empty and nobody else online), 'yield' (someone else's self-prompting
- * or a paused conversation), 'done', 'stuck', or the current step id.
+ * or a paused conversation), 'done', 'stuck', or the current step id; null too when nothing is
+ * runnable (every step left waits on a stuck one): agent._agenda_open_goal then holds the open goal.
  */
 export function agendaTick(agent, { now = Date.now() } = {}) {
     const agenda = agent.agenda;
-    // #463 rework (soak 3: stone_axe stuck at 20:12, then no food run for 67 min, food 8 -> 2): an
-    // agenda paused on a stuck step still runs its reserves (the shelter blocks, food), as a
-    // finished one does; the stuck step waits for a giver's !agendaStart.
-    if (!agenda?.active && !agenda?.finished && !agenda?.stuck) return null;
+    // A stuck step no longer pauses the agenda (#463 decision, STUCK_RETRY): it stays active.
+    if (!agenda?.active && !agenda?.finished) { agent._agenda_open_goal = agent._agenda_open_key = null; return null; }
     if (now - (agent._agenda_tick_at ?? -Infinity) < TICK_MS) return null;
     const last = agent._agenda_tick_at;
     agent._agenda_tick_at = now;
     const sp = agent.self_prompter;
-    // "agenda done" (or paused on a stuck step): only the reserves run (G3 round 6 B, G4 #5), and
-    // otherwise nothing is touched (the model's own goal, a giver's goal), as before.
+    // "agenda done": only the reserves run (G3 round 6 B, G4 #5), and otherwise nothing is touched
+    // (the model's own goal, a giver's goal), as before.
     if (!agenda.active && !agenda.anyReserveWanted(tickState(agent))) {
         if (agenda.isReserveId(agent._agenda_step)) {
             if (sp.isActive() && ownsPrompt(agent)) sp.stop(false);
@@ -196,12 +196,30 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     }
 
     const state = tickState(agent);
-    const { step, newlyDone } = agenda.evaluate(state);
+    const { step, newlyDone, retried = [], waiting = false } = agenda.evaluate(state);
+    // #463 decision: each retry of a stuck step, with its fresh budget, is said.
+    for (const r of retried) {
+        say(agent, r.capped ? `agenda step ${r.id} retried (${r.retry}, at a new full day): a fresh budget`
+            : `agenda step ${r.id} retried (${r.retry} of ${STUCK_RETRY.max}): a fresh budget`);
+    }
     // One line for the steps done in this tick (G3 round 4 C+D: an inventory left over from an
     // earlier run completed all 11 steps at once, and 12 lines in one second got the bot kicked
     // for spam). One step keeps the "agenda step <id> done" line the harness reads.
     if (newlyDone.length === 1) say(agent, `agenda step ${newlyDone[0].id} done`);
     else if (newlyDone.length > 1) say(agent, `agenda steps done: ${newlyDone.map(s => s.id).join(', ')}`);
+    if (!step && waiting) {
+        // #468 review 1: nothing runnable (every step left waits on a stuck one, no reserve wanted):
+        // null, and the priority stack runs the open goal as the model's own goal (modelGoalTick),
+        // under the model-goal LLM budget, until a retry is due (agenda.retryDue).
+        if (agent._agenda_step && sp.isActive() && ownsPrompt(agent)) sp.stop(false);
+        agent._agenda_step = null;
+        const open = agenda.openGoal(state);
+        if (open && agent._agenda_open_goal == null) say(agent, `agenda open goal: step ${agenda.steps.find(s => agenda.isWaiting(s.id))?.id} waits; self-prompting on gathering for it`);
+        agent._agenda_open_goal = open;
+        agent._agenda_open_key = open ? agenda.openGoalKey() : null;
+        return null;
+    }
+    agent._agenda_open_goal = agent._agenda_open_key = null;
     if (!step) {
         say(agent, 'agenda done');
         agenda.finish();
@@ -259,10 +277,15 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         return 'stuck';
     }
     if (why) {
+        // #463 decision: an autonomous bot never idles here. The step waits for a retry with a fresh
+        // budget (STUCK_RETRY: cooldownMs or the next full day, at most max), and the agenda goes on
+        // with the steps that do not need it, else food and the shelter's blocks.
         if (sp.isActive()) sp.stop(false);
-        agenda.markStuck(step.id, why);
+        const e = agenda.markStuck(step.id, why, state);
         agent._agenda_step = null;
-        say(agent, `agenda step ${step.id} stuck: ${why}; agenda paused`);
+        say(agent, e.capped
+            ? `agenda step ${step.id} stuck: ${why}; its ${STUCK_RETRY.max} retries are spent: one retry at each new full day; going on with the steps that do not need it`
+            : `agenda step ${step.id} stuck: ${why}; retry ${e.retries + 1} of ${STUCK_RETRY.max} in ${Math.round(STUCK_RETRY.cooldownMs / 60_000)} min or at the next full day; going on with the steps that do not need it`);
         return 'stuck';
     }
 
