@@ -1,9 +1,42 @@
 # Status: rotn-lead
 
-Updated: 2026-11-08 22:28 UTC (from `date -u`)
+Updated: 2026-11-09 02:06 UTC (from `date -u`)
 
 
-## Current snapshot (2026-11-08 22:28 UTC): G4 step 0 done; measuring soak M1 done; survival and food fixed; rotn-v0.1.4 ready
+## PAUSED (2026-11-09 02:06 UTC): read this first when development resumes
+
+Development is paused at the human's request. Nothing is running: no Hetzner test server exists, FRCFLD is stopped and disabled on the CX23, and the recurring lead loop is cancelled.
+
+**Where things stand**
+
+- **G3 passed.** **G4 is not passed.** Every G4 scenario is built and tested offline; only the step 7 acceptance runs count as G4 evidence (`test/scenarios/g4/PLAN.md`), and none has run.
+- **On the CX23:** release `rotn-v0.1.4` (f6107fc4) is live. Installed: ctl `518d507d…8879`, check-env.mjs `7a38e3a8…1501`, gate `911ba9f7…05a7`. The env file's host still names a test server that has been deleted, so it must be set again (under a GO) before any start.
+- **develop is ahead of the release.** Merged since `rotn-v0.1.4` and not yet on the CX23: #431 (unstuck and the night loop), #432 (hunger), #434 (big slimes), #436, #438. Next release tag: `rotn-v0.1.5`.
+- **Soak results on the CX23:**
+
+| Run | Release | Crash / restarts | Peak memory (target 850 MiB) | USD/h (target 0.05) | Deaths | Food |
+| --- | --- | --- | --- | --- | --- | --- |
+| M1 (#419) | v0.1.3 | none | 634 MiB | 0.0116 | 17 | fell to 1 |
+| Soak 2 (#433) | v0.1.4 | none | 622 MiB | 0.0129 | 5 | fell to 1, starved twice |
+
+  Soak 2: 6 of 9 checks passed; `agenda_done`, `food_floor` and `ate_when_low` failed. Night 1 was survived; foraging worked live. The fixes for what failed (#431, #432, #434) have **not** been run on a server yet.
+
+**Open work, in order, on resume**
+
+1. **#435 (open, parked, changes requested):** the stairs-up morning exit. Its harvest check and pickaxe equip do not work on modded rock; the findings are in a comment on the PR. It also carries the #431 follow-ups (dig allowance per position, clearing `rotnLastInterrupt`), which land only with it.
+2. **Bulls (skills-rotn + rotn-data):** soak 2's 22:48 death was "gored to death", Animania's bull message; rotn-data has no bull entry, so all 8 `animania:bull_*` variants default to `none/ignore` (`hostile: false`) and the bot does not react to one; the fix adds an override.
+3. **Small nits:** #432: the eating mode's description still mentions cloudsbluff, and the food prompt is wider than the emergency list; the hungry-walk caps do not cover `!goToCoordinates`, `!goToPlayer` or `!collectBlocks`. #434: a ranged mob near a big slime is not steered by. #438: `packages/` and `src/` tests still leak temp dirs; a SIGTERM leaves the private temp dir.
+4. **Unexplained:** plain dirt digs hung for about 20 s in soak 2. #431 logs the state at a dig timeout, so the next soak should show why.
+5. **net-forge (no terminal running; start it for these):** `agent_process.js` restarts a deterministic startup crash forever; there is no SIGTERM handler, so a ctl stop drops the connection instead of quitting; one `windowOpen` timeout was seen.
+6. Then tag `rotn-v0.1.5`, have the human deploy it, and run soak 3 (needs the human's GO). If it passes #5 and #7, run G4 steps 1-6 once each on the CX23 (`test/scenarios/g4/PLAN.md`; only the death rehearsal and the two soaks have run so far: not reconnect, restart persistence, control commands or the second bot), build the step 7 runner (not started; the rules are in harness-ops' notes and the lead's message of 2026-11-08: `ROTN_G4_ACCEPT`), then the acceptance runs.
+
+**The human's open items are in `coord/NEEDS-HUMAN.md`.**
+
+**Environment:** on the CX33 `/tmp` is RAM (3.8 GB). An agent was OOM-killed on 2026-11-09 at 01:25 UTC with 2.8 GB in it. Keep extracts under `/home/rv`.
+
+**Spend, 2026-11-08/09 CX23 runs:** LLM on the production key about USD 0.057 (step 0 0.0076, M1 0.0232, soak 2 0.0258); Hetzner about EUR 1.10 (three CPX42s, billed 2 h + 3 h + 3 h at EUR 0.1381/h), plus the Primary IPv4s.
+
+## Earlier snapshot (2026-11-08 22:28 UTC): G4 step 0 done; measuring soak M1 done; survival and food fixed; rotn-v0.1.4 ready
 
 - **G4 step 0 completed** (2026-11-08, GO G4-S0-20261108; evidence #411). The human deployed `rotn-v0.1.2`, then `rotn-v0.1.3` (#409 X libraries, #410 Coder never crashes on missing templates, #412 check-env refuses a missing PROFILES path, #413 ctl start resets a failed unit). Installed and confirmed on the CX23: ctl `518d507d…8879`, check-env.mjs `7a38e3a8…1501`, gate `911ba9f7…05a7`. First start: FRCFLD online on a test server for 22 min, NRestarts 0.
 - **Measuring soak M1** (GO G4-SOAK-M1-20261108, 16:24-18:24 UTC, `rotn-v0.1.3`; evidence #419): peak 634 MiB flat from minute 55, NRestarts 0, USD 0.0116/h over 178 completions, agenda done in 8.5 min, naming 15 kinds / 0 unknown. **Failed G4 #5:** 17 deaths (a first-night death spiral: the model turned self_defense off; canopy respawns; Zombie Players zombies piling up at spawn; a mob in the shelter opening) and food fell to 1 (nothing provided food after the agenda).

@@ -210,8 +210,12 @@ export function installWalkSafety(bot) {
     const pf = bot?.pathfinder;
     if (!pf || typeof pf.setMovements !== 'function' || pf.rotnWalkSafety) return false;
     const set = pf.setMovements.bind(pf);
-    pf.setMovements = (movements) => set(plantSafe(fallSafe(movements)));
-    if (pf.movements) plantSafe(fallSafe(pf.movements));
+    // Soak 2 (rotn-v0.1.4): walks sprinted (food 16 -> 8 in one 3-min !moveAway; on this pack food 0
+    // is instant death). No sprinting except while a survival mode flees or fights (bot.rotnSprint,
+    // modes.execute); every other walk goes at a walk.
+    const sprint = (m) => { if (m) m.allowSprinting = bot.rotnSprint === true; return m; };
+    pf.setMovements = (movements) => set(sprint(plantSafe(fallSafe(movements))));
+    if (pf.movements) sprint(plantSafe(fallSafe(pf.movements)));
     pf.rotnWalkSafety = true;
     return true;
 }

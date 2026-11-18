@@ -9,7 +9,7 @@ import { nightPhase } from '../library/night.js';
 import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
 import { threatFor, hurtBy } from '../library/threats.js';
-import { mayBelongToPlayer, knownBases } from '../library/hunting.js';
+import { mayBelongToPlayer, knownBases, isHuntableAnimal, tooWeakToHunt, HUNT_MIN_FOOD } from '../library/hunting.js';
 import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
 
@@ -17,6 +17,20 @@ import { parseStandOn } from '../library/stand_on.js';
 export const STAY_LIMITS = { modelMaxS: 120 };
 /** Modes that keep the bot alive: only a task giver who types !setMode may turn them off (CX23 soak). */
 export const SURVIVAL_MODES = ['self_preservation', 'cowardice', 'self_defense'];
+
+/**
+ * Soak 2 (rotn-v0.1.4): long walks while hungry burned the last food (8 -> 1 in 9 min: two
+ * !moveAway(64) and searches out to 256 blocks), and food 0 is instant death on this pack. Below
+ * HUNGRY_WALK.belowFood the model's !moveAway, !searchForBlock and !searchForEntity go at most
+ * HUNGRY_WALK.maxBlocks.
+ */
+export const HUNGRY_WALK = { belowFood: 8, maxBlocks: 32 };
+function hungryCap(agent, what, blocks) {
+    const food = agent.bot?.food;
+    if (!Number.isFinite(food) || food >= HUNGRY_WALK.belowFood || !(blocks > HUNGRY_WALK.maxBlocks)) return blocks;
+    skills.log(agent.bot, `${what} ${HUNGRY_WALK.maxBlocks} blocks at most at food ${food}, not ${blocks}: walking costs hunger, and food 0 kills you at once on this pack. Eat or !forage first.`);
+    return HUNGRY_WALK.maxBlocks;
+}
 
 /**
  * The block the running task (or else the self-prompt goal) says to stand on, when a walk to
@@ -308,7 +322,7 @@ export const actionsList = [
                 skills.log(agent.bot, `Minimum search range is 32.`);
                 range = 32;
             }
-            await skills.goToNearestBlock(agent.bot, block_type, 4, range);
+            await skills.goToNearestBlock(agent.bot, block_type, 4, hungryCap(agent, 'Searching', range));
         })
     },
     {
@@ -319,7 +333,7 @@ export const actionsList = [
             'search_range': { type: 'float', description: 'The range to search for the entity.', domain: [32, 512] }
         },
         perform: runAsAction(async (agent, entity_type, range) => {
-            await skills.goToNearestEntity(agent.bot, entity_type, 4, range);
+            await skills.goToNearestEntity(agent.bot, entity_type, 4, hungryCap(agent, 'Searching', range));
         })
     },
     {
@@ -327,7 +341,7 @@ export const actionsList = [
         description: 'Move away from the current location in any direction by a given distance.',
         params: {'distance': { type: 'float', description: 'The distance to move away.', domain: [0, Infinity] }},
         perform: runAsAction(async (agent, distance) => {
-            await skills.moveAway(agent.bot, distance);
+            await skills.moveAway(agent.bot, hungryCap(agent, 'Moving away', distance));
         })
     },
     {
@@ -511,6 +525,12 @@ export const actionsList = [
             // A mob that only fights back is not attacked unless it hurt the bot (#226 review: the
             // model attacked a grove sprite; rotn-data marks it ignore-unless-provoked).
             const mob = world.getNearbyEntities(agent.bot, 24).find(e => e.name === type);
+            // Soak 2: at food 4 or lower Hunger Overhaul's weakness leaves the bot unable to hurt an
+            // animal; the chase only burns the last hunger (food 0 kills on this pack).
+            if (mob && isHuntableAnimal(mob) && tooWeakToHunt(agent.bot) && !hurtBy(agent.bot, mob)) {
+                skills.log(agent.bot, `Not hunting ${type}: your food is ${agent.bot.food}, and at ${HUNT_MIN_FOOD} or lower you are too weak to hurt it (weakness). Eat anything you hold, or !forage nearby; food 0 kills you at once on this pack.`);
+                return;
+            }
             if (mob && threatFor(mob)?.reaction === 'ignore-unless-provoked' && !hurtBy(agent.bot, mob)) {
                 skills.log(agent.bot, `Not attacking ${type}: it attacks only when hurt, and it has not hurt you. Leave it alone; if it attacks you, the bot defends itself.`);
                 return;

@@ -2,6 +2,7 @@
 // own bash, taken from the workflow file, runs with a fake `curl` on PATH (real sha256sum and tar) against a stand-in
 // tarball whose SHA-256 is the pin. The cached copy is verified on every run, a bad one is never used, a download is
 // retried a bounded number of times, and nothing unverified is extracted. Plus the static pins. No network.
+import './isolate-tmp.mjs';
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';

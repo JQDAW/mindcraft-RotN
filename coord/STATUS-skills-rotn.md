@@ -1,6 +1,35 @@
 # Status: skills-rotn
 
-Updated: 2026-11-08T21:46Z (from `date -u`)
+Updated: 2026-11-09T01:46Z (from `date -u`)
+
+## Development paused (lead, 2026-11-09): open items (2026-11-09T01:46Z by `date -u`)
+
+Nothing below is in progress. I start nothing new until the lead says so.
+
+### Open PRs, waiting for the lead's review
+| PR | Head | What | State |
+| --- | --- | --- | --- |
+| #432 hunger | `23821af8` | Soak 2 fix 2 | Review points 1-4 and the sprint half of 5 are done |
+| #434 big slime | `47a46c7c` | Soak 2 fix 3 | Review (a) and (b) are done; the gore finding is in the body |
+| #435 stairs up | `d47b1ee9` | Soak 2 fix 4, plus two #431 follow-ups | Review 1-4 and the two follow-ups are done |
+
+- All three are mergeable. #435 has develop merged in at 6bf51f5f.
+- #432 and #435 both change the hunting reflex in `modes.js`, on nearby lines. Whichever merges second may need a quick develop merge.
+- All of this is tested offline only, with fake bots. None of these changes has run on a real server.
+
+### Not done
+1. **#431 review, the lookAt-window nit.** #435 carries the two #431 follow-ups the lead named on 2026-11-09; this third one is still to do.
+2. **#432 review 5, the other half.** `goToCoordinates`, `goToPlayer` and collect ranges are not capped while hungry. Those walks are usually a task giver's request.
+3. **The 22:48 soak-2 death: bulls.** "Gored to death" is Animania's `death.attack.bull`. A bull attacks only what hurt it, for 5 damage per hit (`EntityBullBase`, `EntityAIAttackMeleeBulls`). #434 does not cover this death. Proposed, for the lead to route:
+   - rotn-data: bulls as retaliating mobs instead of `ignore`.
+   - skills: no hunt of an Animania cow with a bull within about 12 blocks, and flee from a bull after a hit.
+   - A live check that `animania:cow_*` and `bull_*` are told apart correctly.
+4. **Requests to rotn-data (through the lead):** a size-aware slime entry, and `WEAPON_ATTACK` (now in `threats.js`) as a cited table.
+
+### To check when work resumes
+- **`block.canHarvest` with modded pickaxes (#435).** A plan is dropped when no pickaxe carried passes `canHarvest`. That is the same check `breakBlockAt` makes, but I have not checked it against modded pickaxes on the live registry. If one is not listed, the bot refuses a dig it could do.
+- **At the next soak:** the first live forage and the `food_floor` and `ate_when_low` lines (from the 2026-11-08 summary), the first stairs-up exit, and the `[night] dig out:` refusal lines.
+- **Cosmetic nits** from the 2026-11-08 summary are still open.
 
 ## 2026-11-08: the CX23 soak death spiral and G4 #5 food (summary, 2026-11-08T21:46Z by `date -u`)
 

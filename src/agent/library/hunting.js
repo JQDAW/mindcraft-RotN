@@ -11,6 +11,15 @@
 
 import * as mc from '../../utils/mcdata.js';
 
+/**
+ * Soak 2 (rotn-v0.1.4): at food 4 or lower (Normal difficulty) Hunger Overhaul gives weakness
+ * (-4 attack: a bare hand does nothing), slowness and mining slowdown (its jar's
+ * HungerOverhaulEventHook, config addLowHungerWeakness=true): the bot chased a sow it could not hurt
+ * until food 0 killed it. No hunting at this food level or lower: forage or eat instead.
+ */
+export const HUNT_MIN_FOOD = 4;
+export const tooWeakToHunt = (bot) => Number.isFinite(bot?.food) && bot.food <= HUNT_MIN_FOOD;
+
 export const HUNT = { radius: 16, ownedRadius: 8, baseRadius: 32, placedMax: 512, maxMs: 90_000, checkMs: 500, stuckMs: 8000, skipMs: 5 * 60_000 };
 
 /**

@@ -1,5 +1,6 @@
 // Offline unit tests for deploy/test-server.sh (gate G0). No Hetzner, no network, no Minecraft:
 // hcloud, ssh and scp are fakes (test/unit/fixtures/), driven through the real bash script.
+import './isolate-tmp.mjs';
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';

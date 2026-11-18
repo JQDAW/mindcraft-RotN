@@ -1,6 +1,7 @@
 // Offline tests for S1 (test/scenarios/s1/, test/runner/lib/s1.mjs): the reply parsers on the 1.12
 // reply forms, and the three S1 scenarios on a small simulated server with a fake mineflayer bot that
 // runs the real driver side (attachG2 for the census, attachScenario for the whisper probe).
+import './isolate-tmp.mjs';
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';

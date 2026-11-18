@@ -11,6 +11,7 @@
 // three `scoreboard` commands are answered in 1.12's form from the fake server's own food level, as 1.12
 // does: no score until the food changes after the objective exists; (2) the login UUID in the log gets
 // version digit 4, because the fake server runs offline. Loopback only; no LLM, no network.
+import './isolate-tmp.mjs';
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

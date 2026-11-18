@@ -1,17 +1,35 @@
 # Status: harness-ops
 
-Updated: 2026-11-09 (00:55 UTC, from `date -u`)
+Updated: 2026-11-09 (01:57 UTC, from `date -u`)
 
-## Now: soak 2 done (GO `G4-SOAK-2-20261108`); evidence PR #433. Idle until the lead's next task.
+## Now: development paused (lead, 2026-11-09). harness-ops has stopped; no paid run, no ssh, no new work.
 
-- **The run:** `g4-soak-2h` on the CX23 service, rotn-v0.1.4 (`f6107fc4`), ADR 0010 targets, one start. The result was FAIL, 6 of 9:
-  - pass: peak 622 MiB (target 850), USD 0.0129/h (target 0.05), no crash, naming, 5 of 5 deaths reported;
-  - fail: `agenda_done` (stalled at `stone_axe`), `food_floor` (lowest 1), `ate_when_low` (2 of 9).
-- **For skills-rotn:** 2 deaths were starvation at food 1 with full health. `mode:unstuck` interrupted the hole-shelter dig 71 times.
-- **Clean-up:** the test server was deleted at 00:39:40, then 0/0/0. The unit is `inactive`. The batch checkout `/home/mindcraft-RotN-batch/f6107fc4` is kept for a rerun.
-- Never G4 acceptance evidence: only step 7 counts.
+**Nothing is running or billing:** 0 servers, 0 Primary IPs, 0 labelled keys (counted with `grep -c .`, 01:57 UTC). The last read of the CX23 unit (`frcfld`, 00:39 UTC) was `inactive`, `NRestarts=0`.
 
-## Now: idle until the human finishes G4 step 0 (lead, 2026-11-08). Today's G4 offline work is merged; no paid run, nothing on the CX23.
+**Open PR:** #438, the `test/unit` temp-dir leak fix (`isolate-tmp.mjs`). It waits for review. Its body lists the same leak in `packages/` and `src/` tests for their owners.
+
+**Soak 2** (GO `G4-SOAK-2-20261108`, evidence #433, rotn-v0.1.4 `f6107fc4`, ADR 0010 targets): FAIL, 6 of 9. Never G4 acceptance evidence.
+- Pass: peak 622 MiB (target 850), USD 0.0129/h (target 0.05), no crash, naming, 5 of 5 deaths reported.
+- Fail: `agenda_done` (stalled at `stone_axe`), `food_floor` (lowest 1), `ate_when_low` (2 of 9 low lines had no eat after them).
+- 2 deaths were starvation at food 1 with full health. `mode:unstuck` interrupted the hole-shelter dig 71 times.
+- The 22:48 death was "gored to death" (server) with a player zombie near, so not clearly the slime.
+- skills-rotn's soak 2 fixes are its own open PRs (#432, #434, #435).
+
+**Open items, when work resumes:**
+- **G4 is not passed.** Another soak needs a new written GO.
+- **The step-7 runner is not started.** It gets its own PR for the lead's G4 evidence rule (below).
+- **No committed evidence yet** for `g4-control-commands`, `g4-second-bot`, `g4-restart-persistence`, `g4-service-reconnect` or D on S. `test/evidence/g4/` holds only the death rehearsal and the two soaks.
+- **Nits, for a later PR:**
+  - `TRY_IT.md`, at step 7: the death go-back rule needs "unless it died within 32 blocks of its bed"; every public chat line the bot reads is a model call; the go-back rule is a model instruction, not enforced. The hourly cost comes from the soak.
+  - #398: the probe skips an asset missing from the lockfile; `deploy.sh` retries a deterministic `npm ci` failure.
+  - #403: log `::error::` on a cache checksum mismatch; don't retry a deterministic mismatch; merge the two sentences at `deploy/cx23/README.md:136`.
+  - `mindcraft-rotn-ssh-gate.sh`'s comment on AcceptEnv: only at the next functional gate change, because editing it changes the installed SHA-256.
+  - #399's simulated bot parses chat by mineflayer's text patterns; since #400 the real bot uses the chat component. Offered to the lead, not asked for yet.
+- **Left on the CX33, not removed:**
+  - `/tmp` still has about 26,900 entries from earlier test runs. Only the 55 `rotn-scan-cli-*` dirs were deleted, as the lead asked.
+  - The batch checkouts in `/home/mindcraft-RotN-batch/`, including `f6107fc4` with its `node_modules`.
+
+## Earlier: idle until the human finishes G4 step 0 (lead, 2026-11-08). Today's G4 offline work is merged; no paid run, nothing on the CX23.
 
 - **G4 scenarios, built offline with fakes-only tests (none run yet):**
   - **#383 `g4-restart-persistence`** (#11, the agenda half): the ctl's stop then start; the agenda resumes "(resumed after a restart)" at a step not done before; no step done twice. No stop or start without progress first.

@@ -1,6 +1,7 @@
 // Offline tests for the G4 service adapter (test/runner/lib/service.mjs): the CX23 bot driven through the ssh gate
 // (ADR 0009). An async fake exec plays ssh + gate + ctl: it records argv, keeps a unit state and a journal, and can
 // refuse (126), fail (255), have the ctl refuse (2), or hold a call in flight. Nothing connects anywhere.
+import './isolate-tmp.mjs';
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

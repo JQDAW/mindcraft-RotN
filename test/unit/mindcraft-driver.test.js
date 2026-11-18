@@ -2,6 +2,7 @@
 // insecure settings), the environment it gives main.js, and that stopping it leaves no process behind.
 // main.js is replaced by test/unit/fixtures/fake-mindcraft-main.mjs, which starts an "agent" child the way
 // Mindcraft does. Offline: no Minecraft server, no LLM.
+import './isolate-tmp.mjs';
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';

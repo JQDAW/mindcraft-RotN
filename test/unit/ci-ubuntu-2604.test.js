@@ -3,6 +3,7 @@
 // Recommends chain). The workflow installs exactly bootstrap.sh's SETUP_PACKAGES with --no-install-recommends, and
 // after npm ci every native binding must link (ldd). The steps' own bash runs here with a fake apt-get and a fake
 // ldd; nothing is installed.
+import './isolate-tmp.mjs';
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

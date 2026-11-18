@@ -1,5 +1,6 @@
 // Offline tests for test/tools/secret-scan.mjs (G4 #8: no secrets in the repo). Every secret-shaped input, IPv4 quads
 // included, is built at run time from parts, so this file itself stays clean under the scan (#390 review).
+import './isolate-tmp.mjs';
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

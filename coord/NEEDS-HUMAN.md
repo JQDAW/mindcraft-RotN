@@ -8,10 +8,10 @@ Agents add items here when they need something only the human can do. The human 
   - (a) keep the auto-download and accept that the mod may change upstream;
   - (b) pin it too, for example with a local copy of the jar and the list.
   This isn't needed for G3; it matters before the bot joins the live server.
-- [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key, which is under Done): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
-- [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
+- [ ] **Before the bot joins your live server: should it answer only when addressed?** (lead, 2026-11-09; your decision). Today it reads every public chat line from anyone, and each line it reads is one LLM call. That is cheap with no other players (about USD 0.012 per hour in the soaks) but will cost more on a busy server.
+- [ ] **OpenRouter production key credit limit** (lead, 2026-11-09): ADR 0010's ceiling is USD 0.05 per hour, about USD 1.20 a day, plus player chat. Please check the limit you set allows that.
 - [ ] **Whitelist the bot** on the live server when the lead asks. This comes after G4, not G3: G4 runs only against disposable test servers, and the first live join follows the proven ready-to-try list (lead, 2026-11-07, aligned with `test/scenarios/g4/PLAN.md`).
-- [ ] **G4 step 0 on the CX23** (lead, 2026-11-08): follow `deploy/cx23/README.md`, "G4 step 0", with `<TAG>` = **`rotn-v0.1.2`** (it replaces `rotn-v0.1.1`: it adds the chat-sender security fix #400, the `deploy.sh` npm retry #398 and the G4 log lines). The reviewed gate (with `journal` and `metrics`, #365) is part of B1. Send the lead the two SHA-256s from B1; expected at `rotn-v0.1.2`: `mindcraft-rotn-ctl.sh` `613c02d9…8b94`, `mindcraft-rotn-ssh-gate.sh` `911ba9f7…05a7`. Before C1 (the deploy), check that GitHub release downloads work from the CX23 (`npm ci` fetches the canvas/gl prebuilds there; an outage on 2026-11-08 broke them for hours). C3, the first start, needs the lead's written GO and your GO confirming the env file's host is a test server.
+- [ ] **When development resumes: deploy the next release on the CX23** (lead, 2026-11-09). `rotn-v0.1.4` is live; the lead will name the next tag. FRCFLD is stopped and disabled. The env file's `"host"` still names a deleted test server (Hetzner can give that address to someone else), so it must be set again from the lead's GO before any start; nothing starts the bot until then. G4 step 0 itself is done (evidence #411).
 - [ ] **G4: the service GO marker names the bot** (#401): each S run's GO from the lead gives a GO id, and the runner is started with `ROTN_SERVICE_GO=<GO id>:<bot unit>:test-server-host-confirmed` (for example `...:frcfld:...`). Your confirmation in that GO covers that bot's env file only.
 - [ ] **G4: a trusted player for the control and task checks** (later). Follow, come, one trusted task, and a task kept across a service restart need a real player who is a task giver. Choose one:
   - about 10 minutes of you playing as JQDAW on a disposable test server, at a time harness-ops arranges;
@@ -40,6 +40,8 @@ Agents add items here when they need something only the human can do. The human 
      - **Done 2026-11-07:** smoke D on `198bacbb`, PASS 7/7 (evidence PR #308, validation only).
 
 ## Done
+
+- [x] **G4 step 0 on the CX23**: done by the human, 2026-11-08: reviewed ctl and gate installed and checked by SHA-256, `add-bot frcfld`, env file with the production OpenRouter key, `deploy.sh`, FRCFLD's device-code login (`--check` exit 0), first start on a test server (evidence #411).
 
 - [x] **G4: decide how the dev server drives the CX23**: done by the human on 2026-11-07, option (b). A dedicated key from the CX33 to `deploy@cx23`, restricted with `from=` (the CX33), `restrict` and a forced command, `/usr/local/sbin/mindcraft-rotn-ssh-gate`, which allows only `status`, `start` and `stop` with a valid bot name through `sudo -n mindcraft-rotn-ctl`. See ADR 0009.
 - [x] **CX23: swap the Orca targets** (done by the human, 2026-11-03 about 02:00 UTC, as they reported in the lead session; `orca environment list` on this PC shows only `cx23 deploy`). The deploy user has its own Orca environment with a folder workspace at /tmp; the root target is removed. Root SSH stays enabled on the server, key only, for the human.

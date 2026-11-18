@@ -2,6 +2,7 @@
 // per-scenario LLM records, the batch runner's spend stop (it stops, fetches the logs, exits 5), the
 // console allowlist (no give, summon or op commands), and `Server` as a test-only task giver.
 // Addresses and keys here are fakes; no network.
+import './isolate-tmp.mjs';
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
