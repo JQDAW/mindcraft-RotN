@@ -148,6 +148,7 @@ export function trackBotPlaced(bot) {
  * must not be fought (rotn-data provoked.fightBack false: an Animania bull, a polar bear, a panda, a
  * book wyrm); and, for an animal whose kind calls for help when hurt (Animania cows: every cow of
  * the breed within 16 joins in), another of its kind. A lone cow away from bulls is still hunted.
+ * Not covered yet (#453 review 5): a polar bear near its cub attacks unprovoked (vanilla AIAttackPlayer).
  */
 export function retaliationRisk(bot, target, { radius = HUNT.retaliationRadius } = {}) {
     const here = bot?.entity?.position;

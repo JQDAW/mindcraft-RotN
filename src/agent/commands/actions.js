@@ -544,17 +544,29 @@ export const actionsList = [
         name: '!attack',
         description: 'Attack and kill the nearest entity of a given type.',
         params: {'type': { type: 'string', description: 'The type of entity to attack.'}},
-        perform: runAsAction(async (agent, type) => {
+        perform: runAsAction(async (agent, type, context) => {
             // A mob that only fights back is not attacked unless it hurt the bot (#226 review: the
             // model attacked a grove sprite; rotn-data marks it ignore-unless-provoked).
             const mob = world.getNearbyEntities(agent.bot, 24).find(e => e.name === type);
+            // #453 review 2 and 3: an animal that must never be fought (rotn-data provoked.fightBack
+            // false: an Animania bull, a polar bear, a panda, a book wyrm) is never attacked by the
+            // model, hurt or not; a task giver who types it may, with a warning (ownership still holds).
+            const giver = context?.sender ?? null;
+            const never = mob ? threatFor(mob)?.provoked : null;
+            if (mob && never?.fightBack === false) {
+                if (!giver) {
+                    skills.log(agent.bot, `Not attacking ${type}: it must never be fought (it hits for ${never.damage}${never.health ? ` and has ${never.health} health` : ''}${never.callsForHelp ? ', and others join in' : ''}). Get away from it instead.`);
+                    return;
+                }
+                skills.log(agent.bot, `Warning: ${giver} asked for it, so attacking ${type}, which is never fought otherwise (it hits for ${never.damage}${never.health ? ` and has ${never.health} health` : ''}).`);
+            }
             // Soak 2: at food 4 or lower Hunger Overhaul's weakness leaves the bot unable to hurt an
             // animal; the chase only burns the last hunger (food 0 kills on this pack).
             if (mob && isHuntableAnimal(mob) && tooWeakToHunt(agent.bot) && !hurtBy(agent.bot, mob)) {
                 skills.log(agent.bot, `Not hunting ${type}: your food is ${agent.bot.food}, and at ${HUNT_MIN_FOOD} or lower you are too weak to hurt it (weakness). Eat anything you hold, or !forage nearby; food 0 kills you at once on this pack.`);
                 return;
             }
-            if (mob && threatFor(mob)?.reaction === 'ignore-unless-provoked' && !hurtBy(agent.bot, mob)) {
+            if (mob && threatFor(mob)?.reaction === 'ignore-unless-provoked' && !hurtBy(agent.bot, mob) && !(giver && never?.fightBack === false)) {
                 skills.log(agent.bot, `Not attacking ${type}: it attacks only when hurt, and it has not hurt you. Leave it alone; if it attacks you, the bot defends itself.`);
                 return;
             }
@@ -570,21 +582,33 @@ export const actionsList = [
             let known = null;
             try { known = mob ? threatOf(mob.name) : null; } catch { known = null; }
             // A mob that just hurt the bot may be fought back (self-defense comes first).
-            if (mob && mob.type !== 'player' && !HOSTILE.includes(known?.reaction) && !hurtBy(agent.bot, mob)) {
+            const forced = giver && never?.fightBack === false; // the giver's own call on a never-fight animal
+            if (mob && mob.type !== 'player' && !HOSTILE.includes(known?.reaction) && (forced || !hurtBy(agent.bot, mob))) {
                 const skipped = [], risky = [];
+                let riskyOne = null;
                 const bases = knownBases(agent);
                 // #448: nor one whose hunt brings a bull or a herd down on the bot (retaliationRisk).
-                const free = world.getNearbyEntities(agent.bot, 24).filter(e => e.name === type)
+                let free = world.getNearbyEntities(agent.bot, 24).filter(e => e.name === type)
                     .find(e => {
                         const why = mayBelongToPlayer(agent.bot, e, { bases });
                         if (why) { skipped.push(why); return false; }
                         const risk = retaliationRisk(agent.bot, e);
-                        if (risk) { risky.push(risk); return false; }
+                        if (risk) { risky.push(risk); riskyOne ??= e; return false; }
                         return true;
                     });
+                // #453 review 3: a task giver may override the bull and herd refusal (warned), never ownership.
+                if (!free && riskyOne && giver) {
+                    skills.log(agent.bot, `Warning: ${giver} asked for it, so attacking ${type} although ${risky[0]}.`);
+                    free = riskyOne;
+                }
                 if (!free) {
-                    if (skipped.length) skills.log(agent.bot, `Not attacking ${type}: it may belong to a player (${[...new Set(skipped)].join('; ')}). Find a wild one away from fences, farms and houses.`);
-                    else skills.log(agent.bot, `Not attacking ${type}: ${[...new Set(risky)].join('; ')}. Find a lone one, away from bulls.`);
+                    // #453 review 3: every reason, when the candidates were refused for different ones.
+                    const why = [];
+                    if (skipped.length) why.push(`it may belong to a player (${[...new Set(skipped)].join('; ')})`);
+                    if (risky.length) why.push([...new Set(risky)].join('; '));
+                    const hint = skipped.length && risky.length ? 'Find a lone, wild one away from bulls, fences, farms and houses.'
+                        : skipped.length ? 'Find a wild one away from fences, farms and houses.' : 'Find a lone one, away from bulls.';
+                    skills.log(agent.bot, `Not attacking ${type}: ${why.join('; and ')}. ${hint}`);
                     return;
                 }
                 await skills.attackEntity(agent.bot, free, true);

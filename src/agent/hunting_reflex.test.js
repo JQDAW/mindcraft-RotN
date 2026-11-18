@@ -186,6 +186,44 @@ test('#448: no hunt near a bull or of a cow in a herd that calls for help; a lon
     assert.match(cmd.bot.output, /Not attacking animania:cow_holstein: a animania:bull_holstein within 16 blocks \(it charges whoever hurts it or its herd; never hunt near one\)\. Find a lone one, away from bulls\./);
 });
 
+test('#453 review 2 and 3: the model never !attacks a never-fight animal, hurt or not; a task giver may, warned; a giver may override the bull and herd refusal, never ownership; both reasons are said', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bull = (id, x, extra = {}) => ({ id, name: 'animania:bull_holstein', type: 'mob', position: new Vec3(x + 0.5, 64, 0.5), height: 1.6, metadata: { 7: 24 }, ...extra });
+    const run = async (animals, cmd, context, setup = () => {}) => {
+        const agent = huntAgent({ animals });
+        const hit = [];
+        agent.bot.pvp = { attack: (e) => { hit.push(e.id); delete agent.bot.entities[e.id]; }, stop() {} };
+        agent.bot.equip = () => Promise.resolve();
+        setup(agent);
+        agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }));
+        await executeCommand(agent, cmd, context);
+        return { out: agent.bot.output, hit };
+    };
+    const hurtNow = (agent) => { agent.bot.lastDamageTime = Date.now(); agent.bot.lastDamageTaken = 5; };
+    // The model: never, also right after the bull hurt it.
+    let r = await run([bull(1, 2)], '!attack("animania:bull_holstein")', undefined, hurtNow);
+    assert.deepEqual(r.hit, []);
+    assert.match(r.out, /Not attacking animania:bull_holstein: it must never be fought \(it hits for 5 and has 24 health\)\. Get away from it instead\./);
+    // A giver who types it: attacked, with a warning.
+    r = await run([bull(1, 2)], '!attack("animania:bull_holstein")', { sender: 'JQDAW' });
+    assert.deepEqual(r.hit, [1]);
+    assert.match(r.out, /Warning: JQDAW asked for it, so attacking animania:bull_holstein, which is never fought otherwise/);
+    // ... but never a bull that may be a player's.
+    r = await run([bull(1, 2, { metadata: { 7: 24, 2: 'Ferdinand' } })], '!attack("animania:bull_holstein")', { sender: 'JQDAW' });
+    assert.deepEqual(r.hit, []);
+    assert.match(r.out, /it may belong to a player \(it has a name tag\)/);
+    // A cow near a bull: the model is refused; a giver gets it, warned.
+    r = await run([cow(1, 4), bull(2, 14)], '!attack("animania:cow_holstein")');
+    assert.deepEqual(r.hit, []);
+    r = await run([cow(1, 4), bull(2, 14)], '!attack("animania:cow_holstein")', { sender: 'JQDAW' });
+    assert.deepEqual(r.hit, [1]);
+    assert.match(r.out, /Warning: JQDAW asked for it, so attacking animania:cow_holstein although a animania:bull_holstein within 16 blocks/);
+    // Refused for two reasons (a named cow, and a lone-in-a-herd one): both are said.
+    r = await run([cow(1, 4, { metadata: { 7: 10, 2: 'Bessie' } }), cow(2, 7)], '!attack("animania:cow_holstein")');
+    assert.deepEqual(r.hit, []);
+    assert.match(r.out, /Not attacking animania:cow_holstein: it may belong to a player \(it has a name tag\); and in a herd: another animania:cow_holstein within 16 blocks.*\. Find a lone, wild one away from bulls, fences, farms and houses\./);
+});
+
 test('G4 #5: the hunting reflex does nothing when food is not due, at dusk or night, with a threat near, when busy, or sheltered', async (t) => {
     t.mock.method(console, 'log', () => {});
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16 })), [], 'food 16: not due');

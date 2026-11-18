@@ -24,6 +24,7 @@
 // variants take cover), so acting on them never makes the bot bolder (#186 review nit).
 import { threatOf, nightThreats } from '../../../packages/rotn-data/index.js';
 import * as mc from '../../utils/mcdata.js';
+import { mayBelongToPlayer } from './hunting.js';
 
 /** How far each reaction's mob is watched, and how far the bot moves away from it. */
 export const RANGES = {
@@ -50,7 +51,31 @@ function hitByIt(bot, x, now) {
     if (now - (bot.lastDamageTime ?? -Infinity) > PROVOKED_MS) return false;
     const p = x.t.provoked;
     if (!p) return x.d <= PROVOKED_DIST;
+    if (worldDamage(bot)) return false; // #453 review 1
     return x.d <= (p.reach ?? 2) + PROVOKED_REACH_SLACK || (Number.isFinite(p.damage) && (bot.lastDamageTaken ?? 0) >= p.damage);
+}
+
+/**
+ * #453 review 1: damage the world did, never an animal's hit: a fall (damage_record.js), or
+ * starving (food 0 and 1 damage).
+ */
+const worldDamage = (bot) => bot.lastDamageCause === 'fall' || bot.lastDamageCause === 'starving'
+    || (bot.food === 0 && (bot.lastDamageTaken ?? 0) <= 1);
+
+/**
+ * #453 review 1 (BLOCKER): hitting an animal back needs more than hitByIt: the hit was at least its
+ * damage AND it stood within its reach (+1) AND the world did not do it. A false fight on the live
+ * server would hit a player's wolf or llama.
+ */
+function fightsBack(bot, x, now) {
+    const p = x.t.provoked;
+    return !!p && now - (bot.lastDamageTime ?? -Infinity) <= PROVOKED_MS && !worldDamage(bot)
+        && x.d <= (p.reach ?? 2) + PROVOKED_REACH_SLACK && Number.isFinite(p.damage) && (bot.lastDamageTaken ?? 0) >= p.damage;
+}
+
+/** #453 review 1: whether this animal may be a player's (mayBelongToPlayer, the bot's known bases); unreadable: yes. */
+function ownedMaybe(bot, e) {
+    try { return !!mayBelongToPlayer(bot, e, { bases: bot.rotnBases?.() ?? [] }); } catch { return true; }
 }
 /**
  * Where a do-not-look mob shows it is angry: the 1.12 enderman's metadata index 13 ("screaming",
@@ -253,16 +278,22 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
     // false (an Animania bull: 5 a hit, 24 health; a polar bear, a panda, a book wyrm) or no data:
     // back off, RANGES.fight.away (a bull loses its target past 16 blocks), from it and the others
     // it calls for help.
+    // #453 review 1: fightBack true is hit back only on fightsBack (its own hit, not the world's),
+    // and never when it may be a player's (a tamed wolf, a chested llama): then the bot backs off.
     const hitter = calmOnes.find(x => isAngry(x.e) === null && hitByIt(bot, x, now));
     if (hitter) {
         const id = hitter.e.id, name = hitter.e.name, p = hitter.t.provoked;
-        if (p?.fightBack === true) return { action: 'fight', why: 'provoked', from: hitter.e, isEnemy: (e) => e.id === id };
-        return { action: 'flee', why: 'provoked', from: hitter.e, away: RANGES.fight.away,
+        const flee = { action: 'flee', why: 'provoked', from: hitter.e, away: RANGES.fight.away,
             isEnemy: (e) => e.id === id || (!!p?.callsForHelp && e.name === name) };
+        if (p?.fightBack !== true) return flee;
+        if (!fightsBack(bot, hitter, now)) return null;
+        if (ownedMaybe(bot, hitter.e)) return { ...flee, why: 'provoked, and it may be a player\'s' };
+        return { action: 'fight', why: 'provoked', from: hitter.e, isEnemy: (e) => e.id === id };
     }
     // #448: a food animal whose kind calls for help (Animania cows: the whole herd of the breed comes):
-    // a hit with two of one kind within reach is the herd: back off from it.
-    if (now - (bot.lastDamageTime ?? -Infinity) <= PROVOKED_MS) {
+    // a hit with two of one kind within reach is the herd: back off from it. #453 review 1: never
+    // for a fall or starving.
+    if (now - (bot.lastDamageTime ?? -Infinity) <= PROVOKED_MS && !worldDamage(bot)) {
         const herd = new Map();
         for (const e of Object.values(bot.entities ?? {})) {
             if (e === bot.entity || !e?.position) continue;
