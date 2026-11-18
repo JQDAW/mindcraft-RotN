@@ -4,13 +4,13 @@
 // server, no LLM.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY } from './agenda.js';
 import { Vec3 } from 'vec3';
 import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
@@ -121,7 +121,7 @@ test('the driver points the self-prompter at the current step and moves on when 
     assert.match(agent.self_prompter.prompt, /\(sticks\): Get at least 3 sticks: 2 for the crude axe and 1 for the Crafting Tools\. !collectBlocks\("stick", 3\)/);
 });
 
-test('a stopped self-prompter is restarted after a doubling back-off; after 3 runs the step is stuck and the agenda pauses', (t) => {
+test('a stopped self-prompter is restarted after a doubling back-off; after 3 runs the step is stuck, waits for its retry, and the agenda goes on (#463 decision)', (t) => {
     const agent = fakeAgent(t);
     const sp = agent.self_prompter;
     agendaTick(agent, { now: 0 });
@@ -142,17 +142,17 @@ test('a stopped self-prompter is restarted after a doubling back-off; after 3 ru
     assert.equal(sp.starts.length, 3, 'run 3 after 2 x BACKOFF_MS');
     sp.stop();
     assert.equal(agendaTick(agent, { now: t2 + 2 * BACKOFF_MS + TICK_MS }), 'stuck');
-    assert.equal(agent.said.at(-1), 'agenda step rocks stuck: 3 self-prompter runs; agenda paused');
-    assert.equal(agent.agenda.active, false);
-    assert.equal(agendaTick(agent, { now: t2 + 10 * BACKOFF_MS }), null, 'paused: no more runs');
-    assert.equal(sp.starts.length, 3);
+    assert.equal(agent.said.at(-1), 'agenda step rocks stuck: 3 self-prompter runs; retry 1 of 3 in 20 min or at the next full day; going on with the steps that do not need it');
+    assert.equal(agent.agenda.active, true, 'not paused');
+    assert.equal(agendaTick(agent, { now: t2 + 10 * BACKOFF_MS }), 'sticks', 'the next step that does not need rocks');
+    assert.equal(sp.starts.length, 4);
     // It survives a restart, and a giver's start gives the step a fresh budget.
     const again = new Agenda('FRCFLD', { dir: path.dirname(agent.agenda.file) });
-    assert.equal(again.active, false);
-    assert.equal(again.stuck.id, 'rocks');
-    assert.equal(again.existed, true, 'so autostart leaves it paused');
+    assert.equal(again.active, true);
+    assert.equal(again.stuck.rocks.cooling, true);
+    assert.equal(again.existed, true);
     again.start();
-    assert.deepEqual([again.active, again.stuck, again.spentOn('rocks').attempts], [true, null, 0]);
+    assert.deepEqual([again.active, again.stuck, again.spentOn('rocks').attempts], [true, {}, 0]);
 });
 
 test('a self-prompter that never stops is bounded by STEP_LLM_MS of self-prompting for the step', (t) => {
@@ -166,7 +166,7 @@ test('a self-prompter that never stops is bounded by STEP_LLM_MS of self-prompti
     assert.ok(now >= STEP_LLM_MS && now <= STEP_LLM_MS + 3 * TICK_MS, `stuck after about STEP_LLM_MS (${now} ms)`);
     assert.equal(agent.self_prompter.isActive(), false);
     assert.equal(agent.self_prompter.starts.length, 1);
-    assert.match(agent.said.at(-1), /^agenda step rocks stuck: 5 min of self-prompting; agenda paused$/);
+    assert.match(agent.said.at(-1), /^agenda step rocks stuck: 5 min of self-prompting; retry 1 of 3 in 20 min or at the next full day; going on with the steps that do not need it$/);
 });
 
 test('resuming after pause_when_empty is not a new run; a restart keeps the runs already spent', (t) => {
@@ -402,7 +402,7 @@ test('G3 round 6 B: a reserve that used its budget does not pause the agenda; it
     assert.equal(agendaTick(agent, { now: 0 }), 'stuck');
     assert.equal(agent.said.at(-1), `agenda step shelter_blocks stuck: ${STEP_LLM_MS / 60_000} min of self-prompting; going on without it until the night`);
     assert.equal(agent.agenda.active, true, 'not paused');
-    assert.equal(agent.agenda.stuck, null);
+    assert.deepEqual(agent.agenda.stuck, {}, 'no step waits');
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks');
 
     agent.bot.time.timeOfDay = 1000; // the next morning
@@ -695,27 +695,143 @@ test('#422 nit: the day\'s last food run is not stopped as it starts: it runs un
 });
 
 
-// #463 rework (soak 3, rotn-v0.1.5): stone_axe was stuck at 20:12 ("agenda paused"), and agendaTick
-// returned at once for a paused agenda: no food run for the last 67 min, food 8 -> 2, nothing held.
-test('#463 rework: an agenda paused on a stuck step still runs the food reserve; the stuck step itself waits for a giver', (t) => {
-    const agent = foodAgent(t, [], { food: 12, finished: false });
-    agent.agenda.markStuck('rocks', '5 min of self-prompting');
-    assert.equal(agent.agenda.active, false);
-    assert.equal(agendaTick(agent, { now: 0 }), 'food');
-    assert.equal(agent.said.at(-1), 'agenda step food started: keep food for the day and the night');
-    assert.match(agent.self_prompter.prompt, /^RotN agenda, step food \(food\): /);
-    // Fed: the reserve's run stops, and the stuck step is not driven.
+// #463 decision (soak 3, rotn-v0.1.5: stone_axe stuck at 20:12 paused the agenda, and the bot
+// idled for 67 min, food 8 -> 2): an autonomous bot never goes idle. A stuck step is retried with a
+// fresh budget after STUCK_RETRY.cooldownMs or at the next full day, at most STUCK_RETRY.max times;
+// meanwhile the steps that do not need it go on, else food, else the shelter's blocks.
+function doneAgent(t, doneIds, items = [], { food = 18, timeOfDay = 1000, day = 1, clock } = {}) {
+    const agent = fakeAgent(t, items);
+    agent.agenda = new Agenda('FRCFLD', { dir: tempDir(t), now: () => clock.now });
+    agent.agenda.start();
+    for (const id of doneIds) agent.agenda.done_at[id] = 1;
+    const self = { id: 0, type: 'player', position: new Vec3(0.5, 64, 0.5) };
+    Object.assign(agent.bot, { food, time: { timeOfDay, day }, entity: self, entities: { 0: self } });
+    return agent;
+}
+const FIRST_NINE = ['rocks', 'sticks', 'crude_axe', 'logs', 'first_plank', 'crafting_tools', 'crafting_table', 'planks_sticks', 'stone_pickaxe'];
+
+test('#463 decision: stone_axe stuck: the agenda stays active and goes on with cobblestone (it does not need the axe); the retry comes after the cooldown, with a fresh budget, and is said', (t) => {
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, FIRST_NINE, [stack('bread', 0, 4), stack('stone_pickaxe', 0, 1)], { clock });
+    let now = 0;
+    const tick = () => { now += TICK_MS; return agendaTick(agent, { now }); };
+    assert.equal(tick(), 'stone_axe');
+    agent.agenda.spent.stone_axe = { attempts: 1, llm_ms: STEP_LLM_MS };
+    assert.equal(tick(), 'stuck');
+    assert.equal(agent.said.at(-1), 'agenda step stone_axe stuck: 5 min of self-prompting; retry 1 of 3 in 20 min or at the next full day; going on with the steps that do not need it');
+    assert.equal(agent.agenda.active, true);
+    assert.equal(tick(), 'cobblestone', 'cobblestone needs the pickaxe, not the axe');
+    assert.match(agent.self_prompter.prompt, /^RotN agenda, step 11 of 11 \(cobblestone\)/);
+    assert.equal(agent.self_prompter.isActive(), true, 'self-prompting, not idle');
+    clock.now += STUCK_RETRY.cooldownMs - 1000;
+    assert.equal(tick(), 'cobblestone', 'not yet');
+    clock.now += 1000;
+    assert.equal(tick(), 'stone_axe', 'retried: back to the first step not done');
+    assert.ok(agent.said.includes('agenda step stone_axe retried (1 of 3): a fresh budget'));
+    assert.deepEqual(agent.agenda.spentOn('stone_axe').llm_ms, 0, 'a fresh budget');
+});
+
+test('#463 decision: the retry also comes at the next full day, if that is sooner than the cooldown', (t) => {
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, FIRST_NINE, [stack('bread', 0, 4), stack('stone_pickaxe', 0, 1)], { clock, day: 4, timeOfDay: 1000 });
+    let now = 0;
+    const tick = () => { now += TICK_MS; return agendaTick(agent, { now }); };
+    tick();
+    agent.agenda.spent.stone_axe = { attempts: 1, llm_ms: STEP_LLM_MS };
+    assert.equal(tick(), 'stuck');
+    clock.now += 5 * 60_000;
+    agent.bot.time = { timeOfDay: 23700, day: 4 }; // the sunrise: not full day yet
+    tick();
+    assert.equal(agent.agenda.stuck.stone_axe.cooling, true);
+    agent.bot.time = { timeOfDay: 1000, day: 5 }; // the next day, full daylight
+    assert.equal(tick(), 'stone_axe');
+    assert.ok(agent.said.includes('agenda step stone_axe retried (1 of 3): a fresh budget'));
+});
+
+test('#468 review 2: after 3 retries the step is never given up: one retry at each new full day, without limit; the steps that do not need it still go on', (t) => {
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, FIRST_NINE, [stack('bread', 0, 4), stack('stone_pickaxe', 0, 1)], { clock, day: 1 });
+    let now = 0;
+    const tick = () => { now += TICK_MS; return agendaTick(agent, { now }); };
+    const stuckNow = () => { agent.agenda.spent.stone_axe = { attempts: 1, llm_ms: STEP_LLM_MS }; return tick(); };
+    for (let retry = 1; retry <= 3; retry++) {
+        assert.equal(tick(), 'stone_axe');
+        assert.equal(stuckNow(), 'stuck');
+        assert.match(agent.said.at(-1), new RegExp(`retry ${retry} of 3 in 20 min`));
+        clock.now += STUCK_RETRY.cooldownMs;
+    }
+    assert.equal(tick(), 'stone_axe');
+    assert.equal(stuckNow(), 'stuck');
+    assert.equal(agent.said.at(-1), 'agenda step stone_axe stuck: 5 min of self-prompting; its 3 retries are spent: one retry at each new full day; going on with the steps that do not need it');
+    clock.now += 10 * STUCK_RETRY.cooldownMs;
+    assert.equal(tick(), 'cobblestone', 'the cooldown alone no longer retries it');
+    assert.match(describeAgenda(agent.agenda, agent.agenda.judge(agendaState(agent.bot), { readOnly: true }).step), /; stuck: stone_axe waits for its retry at the next full day \(3 retries spent\)/);
+    for (let day = 2; day <= 4; day++) {
+        agent.bot.time = { timeOfDay: 1000, day };
+        assert.equal(tick(), 'stone_axe', `day ${day}: retried`);
+        assert.equal(agent.said.filter(l => l === `agenda step stone_axe retried (${day + 2}, at a new full day): a fresh budget`).length, 1);
+        assert.equal(stuckNow(), 'stuck');
+        assert.equal(tick(), 'cobblestone', 'not again the same day');
+    }
+    assert.equal(agent.agenda.active, true);
+    assert.ok(!agent.said.includes('agenda done'), 'never finished by giving up');
+});
+
+test('#468 review 1: every step left waits on the stuck one: food first (a standing duty); fed: agendaTick returns null with the open goal (which step, what failed, when retried), never "agenda done"', (t) => {
+    const clock = { now: 1_000_000 };
+    // rocks stuck: everything but sticks needs it; sticks done.
+    const agent = doneAgent(t, ['sticks'], [], { clock, food: 14 });
+    let now = 0;
+    const tick = () => { now += TICK_MS; return agendaTick(agent, { now }); };
+    assert.equal(tick(), 'rocks');
+    agent.agenda.spent.rocks = { attempts: 1, llm_ms: STEP_LLM_MS };
+    assert.equal(tick(), 'stuck');
+    assert.equal(tick(), 'food', 'food 14, none held: the day\'s target as a standing duty');
+    assert.equal(agent._agenda_open_goal, null);
     agent.bot.inventory = { items: () => [stack('bread', 0, 4)], slots: [] };
-    assert.equal(agendaTick(agent, { now: TICK_MS }), null);
-    assert.equal(agent.self_prompter.prompt.startsWith('RotN agenda, step 1 '), false, 'never the stuck step');
-    assert.equal(agent.agenda.stuck.id, 'rocks', 'still paused on it');
-    // Fed and stuck from the start: nothing runs.
-    const idle = foodAgent(t, [stack('bread', 0, 4)], { food: 18, finished: false });
-    idle.agenda.markStuck('rocks', '5 min of self-prompting');
-    assert.equal(agendaTick(idle, { now: 0 }), null);
-    assert.equal(idle.self_prompter.starts.length, 0);
-    // A stopped agenda (not stuck) runs nothing, as before.
-    const stopped = foodAgent(t, [], { food: 12, finished: false });
-    stopped.agenda.stop();
-    assert.equal(agendaTick(stopped, { now: 0 }), null);
+    assert.equal(tick(), null, 'nothing runnable');
+    assert.match(agent._agenda_open_goal, /^Open goal while the agenda waits: step rocks \(collect 6 rocks\) is stuck: 5 min of self-prompting; it is retried with a fresh budget in about 20 min or at the next full day\. Its goal was: Collect at least 6 rocks/);
+    assert.match(agent._agenda_open_goal, /Until then: gather the materials it needs, and explore nearby for them .*Keep food worth at least \d+ hunger, and keep 10 blocks of dirt \(no pickaxe yet\) for the night's shelter: do not place them\.$/);
+    assert.equal(agent.said.filter(l => l === 'agenda open goal: step rocks waits; self-prompting on gathering for it').length, 1);
+    clock.now += 5 * 60_000;
+    assert.equal(tick(), null);
+    assert.match(agent._agenda_open_goal, /in about 15 min/, 'kept current');
+    assert.equal(agent.said.filter(l => /^agenda open goal/.test(l)).length, 1, 'said once');
+    assert.ok(!agent.said.includes('agenda done'));
+    clock.now += STUCK_RETRY.cooldownMs;
+    assert.equal(tick(), 'rocks');
+    assert.equal(agent._agenda_open_goal, null);
+});
+
+test('#468 review 5: !agenda (judge readOnly) changes no reserve\'s budget', (t) => {
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, [], [], { clock, food: 12 });
+    const a = agent.agenda;
+    a.spent.food = { attempts: 2, llm_ms: 1000 };
+    a.foodOffUntil = clock.now - 1; // its wait is over: a write would give a fresh budget
+    a.spent.shelter_blocks = { attempts: 1, llm_ms: 5 };
+    a.reserveOff = true;
+    const before = JSON.stringify({ spent: a.spent, off: a.foodOffUntil, day: a.foodDay, reserveOff: a.reserveOff });
+    agent.bot.time = { timeOfDay: 1000, day: 7 };
+    assert.equal(a.judge(agendaState(agent.bot), { readOnly: true }).step.id, 'food');
+    agent.bot.time = { timeOfDay: NIGHT_START - 2 * 1199, day: 7 }; // dusk: the shelter reserve's window
+    a.judge(agendaState(agent.bot), { readOnly: true });
+    agent.bot.time = { timeOfDay: NIGHT_START + 500, day: 7 }; // night: nothing due
+    a.judge(agendaState(agent.bot), { readOnly: true });
+    assert.equal(JSON.stringify({ spent: a.spent, off: a.foodOffUntil, day: a.foodDay, reserveOff: a.reserveOff }), before);
+    // The query command uses it.
+    assert.match(readFileSync(new URL('./commands/queries.js', import.meta.url), 'utf8'), /agent\.agenda\.judge\(agendaState\(agent\.bot, agent\._night\?\.clock\), \{ readOnly: true \}\)/);
+});
+
+test('#468 review 4: an agenda.json from before (one stuck step, the agenda paused) keeps the agenda inactive, with that step waiting; a giver\'s !agendaStart resumes it', (t) => {
+    const dir = tempDir(t);
+    writeFileSync(path.join(dir, 'agenda.json'), JSON.stringify({ version: 1, active: false, finished: false, done_at: {}, spent: { stone_axe: { attempts: 1, llm_ms: STEP_LLM_MS } }, stuck: { id: 'stone_axe', why: '5 min of self-prompting', at: 5 } }));
+    const a = new Agenda('FRCFLD', { dir, now: () => 10 });
+    assert.equal(a.active, false, 'not reactivated');
+    assert.deepEqual(a.stuck.stone_axe, { why: '5 min of self-prompting', at: 5, day: null, retries: 0, cooling: true, capped: false });
+    a.save();
+    const b = new Agenda('FRCFLD', { dir, now: () => 10 });
+    assert.equal(b.stuck.stone_axe.cooling, true, 'the new form round-trips');
+    b.start();
+    assert.deepEqual([b.active, b.stuck, b.spentOn('stone_axe').attempts], [true, {}, 0]);
 });

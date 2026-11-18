@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../utils/mcdata.js';
+import settings from './settings.js';
 import { requestReplan, replanPromptDue, hasReplan, QUIET_MS } from './replan.js';
 import { initModes, __modeForTest } from './modes.js';
 import { nightRoutineActive, replanHold, NIGHT_START, TICKS_PER_MIN } from './library/night.js';
@@ -21,6 +22,15 @@ test('soak 3: nightRoutineActive is the routine\'s state: anything but day (the 
     assert.equal(nightRoutineActive({}), false, 'no routine state yet');
     assert.equal(nightRoutineActive({ _night: { state: 'day' } }), false);
     for (const state of ['building', 'inside', 'exposed']) assert.equal(nightRoutineActive({ _night: { state } }), true, state);
+});
+
+test('#463 nit 3: with the night routine off (night_shelter false) the clock does not hold the prompt', (t) => {
+    const before = settings.night_shelter;
+    t.after(() => { settings.night_shelter = before; });
+    const dark = { _night: { state: 'day' }, bot: { time: { timeOfDay: NIGHT_START + 100 } } };
+    assert.equal(replanHold(dark), 'it is not full day yet');
+    settings.night_shelter = false;
+    assert.equal(replanHold(dark), null);
 });
 
 test('soak 3: replanPromptDue holds the prompt while held (night.replanHold)', () => {
