@@ -93,7 +93,9 @@ export function releaseFromJournal(lines, unit) {
     return { tag: m[1], sha12: m[2], source: 'release line', seen: name };
 }
 
-const SERVER_START_RE = /Starting minecraft server version /;
+// The Minecraft server's own start line, with log4j's prefix (#465 review: a chat line that merely contains the words
+// never counts); rotn-test.sh's START_RE is the same pattern.
+export const SERVER_START_RE = /^\[[0-9:]+\] \[[^\]]*\] \[net\.minecraft\.server\.dedicated\.DedicatedServer\]: Starting minecraft server version /;
 const MARKER_RE = /scenario-([0-9a-z]+-[0-9a-f]{6})-begin/;
 const JOIN_RE = /\]: (\S+) joined the game$/;
 /** Ticks per second: the most a Minecraft server's game time can advance (it never runs ahead of the clock). */

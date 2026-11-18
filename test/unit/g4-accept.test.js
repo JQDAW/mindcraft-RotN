@@ -182,7 +182,7 @@ describe('a fresh test server (e): the usage ledger, the log, and two server-sid
         const sent = [];
         const server = {
             log: () => { throw new Error('not used: the log comes from its start line on'); },
-            logSinceStart: () => parseSinceStartLog(['##rotn-test since-start files=latest.log found=1 lines=2 over=0', start, 'Done']),
+            logSinceStart: () => parseSinceStartLog(['##rotn-test since-start files=latest.log found=1 lines=2 over=0 nonempty=2', start, 'Done']),
             starts: () => parseStarts(['starts=1 files=1']),
             console: (cmd) => { sent.push(cmd); return ['[10:10:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 6000']; },
         };
@@ -194,7 +194,7 @@ describe('a fresh test server (e): the usage ledger, the log, and two server-sid
         assert.equal(fs.existsSync(path.join(dir, USAGE_FILE)), false, 'the check writes nothing');
         assert.equal(serverCreatedMs(dir, fs, path), created);
         // After 00:00 UTC the start line is in the rolled-over file (rotn-test reads it, then latest.log).
-        const rolled = { ...server, logSinceStart: () => parseSinceStartLog(['##rotn-test since-start files=2026-11-18-1.log.gz,latest.log found=1 lines=2 over=0', start, '[00:00:01] Done']) };
+        const rolled = { ...server, logSinceStart: () => parseSinceStartLog(['##rotn-test since-start files=2026-11-18-1.log.gz,latest.log found=1 lines=2 over=0 nonempty=2', start, '[00:00:01] Done']) };
         assert.equal(startAcceptance({ server: rolled, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.ok, true);
         // A server without the starts read, a console that refuses, an unreadable log, no server-create.json: not fresh.
         const { starts, ...noStarts } = server;
@@ -221,24 +221,31 @@ describe('a fresh test server (e): the usage ledger, the log, and two server-sid
             logSinceStart: (max) => { asked.push(max); return parseSinceStartLog(out); },
         });
         const run = (server, extra = {}) => startAcceptance({ server, env, scenarioId: 'g4-soak-2h', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000, ...extra }).fresh;
-        const long = run(answer([`##rotn-test since-start files=latest.log found=1 lines=${fromStart.length} over=0`, ...fromStart]));
+        const long = run(answer([`##rotn-test since-start files=latest.log found=1 lines=${fromStart.length} over=0 nonempty=${fromStart.length}`, ...fromStart]));
         assert.equal(long.ok, true, long.why);
         assert.deepEqual(asked, [LOG_SINCE_START_MAX], 'the default bound');
         // No start line in the files: fails closed (as before, the history cannot be checked).
-        assert.match(run(answer(['##rotn-test since-start files=latest.log found=0 lines=0 over=0'])).why, /start line is not in the fetched log/);
+        assert.match(run(answer(['##rotn-test since-start files=latest.log found=0 lines=0 over=0 nonempty=0'])).why, /start line is not in the fetched log/);
         // Past the bound: no lines come back, and the reason says so.
-        assert.match(run(answer(['##rotn-test since-start files=latest.log found=1 lines=250001 over=1'])).why,
+        assert.match(run(answer(['##rotn-test since-start files=latest.log found=1 lines=250001 over=1 nonempty=0'])).why,
             /log from its start line is 250001 lines, over the 200000-line \(or byte\) bound, so its history cannot be checked/);
-        assert.match(run(answer([`##rotn-test since-start files=latest.log found=1 lines=${fromStart.length} over=1`]), { logMax: 1000 }).why, /over the 1000-line/);
+        assert.match(run(answer([`##rotn-test since-start files=latest.log found=1 lines=${fromStart.length} over=1 nonempty=0`]), { logMax: 1000 }).why, /over the 1000-line/);
         // No header (an older rotn-test, or garbage): fails closed; a server object without the read: fails closed.
         assert.match(run(answer(fromStart)).why, /log from its start line could not be read/);
         const { logSinceStart, ...noRead } = answer([]);
         void logSinceStart;
         assert.match(run(noRead).why, /log from its start line could not be read/);
         // The parser: lines only when found and within the bound.
-        assert.deepEqual(parseSinceStartLog(['##rotn-test since-start files=a.log.gz,latest.log found=1 lines=1 over=0', start]),
+        assert.deepEqual(parseSinceStartLog(['##rotn-test since-start files=a.log.gz,latest.log found=1 lines=1 over=0 nonempty=1', start]),
             { files: ['a.log.gz', 'latest.log'], found: true, count: 1, over: false, lines: [start] });
-        assert.deepEqual(parseSinceStartLog(['##rotn-test since-start files=latest.log found=1 lines=9 over=1', 'x']).lines, []);
+        assert.deepEqual(parseSinceStartLog(['##rotn-test since-start files=latest.log found=1 lines=9 over=1 nonempty=0']).lines, []);
+        // #465 review: the header's nonempty count must match what came back, so a cut-off answer fails closed (no pipefail needed).
+        assert.equal(parseSinceStartLog(['##rotn-test since-start files=latest.log found=1 lines=3 over=0 nonempty=3', start, 'a']), null, 'one line short');
+        assert.equal(parseSinceStartLog(['##rotn-test since-start files=latest.log found=1 lines=1 over=0 nonempty=1', start, 'extra']), null, 'one line too many');
+        assert.equal(parseSinceStartLog(['##rotn-test since-start files=latest.log found=1 lines=9 over=1 nonempty=0', 'x']), null, 'lines after an over header');
+        assert.equal(parseSinceStartLog(['##rotn-test since-start files=latest.log found=1 lines=1 over=0', start]), null, 'the old header without nonempty');
+        assert.match(run(answer([`##rotn-test since-start files=latest.log found=1 lines=${fromStart.length} over=0 nonempty=${fromStart.length}`, ...fromStart.slice(0, 20000)])).why,
+            /log from its start line could not be read/, 'a truncated answer');
         assert.equal(parseSinceStartLog([]), null);
         assert.equal(parseSinceStartLog(null), null);
     });

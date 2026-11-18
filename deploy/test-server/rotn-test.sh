@@ -13,7 +13,8 @@
 #                                        server version" line on (not a fixed tail: RotN's startup alone writes over
 #                                        20,000 lines). N bounds the lines, ROTN_TEST_LOG_MAX_BYTES (48 MiB) the bytes.
 #                                        First line: "##rotn-test since-start files=<..> found=<0|1> lines=<n>
-#                                        over=<0|1>"; the lines follow only if found=1 and over=0 (else none)
+#                                        over=<0|1> nonempty=<k>"; the lines follow only if found=1 and over=0 (else
+#                                        none); k counts the non-empty ones, so a cut-off answer fails closed
 #   rotn-test build-log [N]              tail the first-boot build log
 #   rotn-test verify                     key=value facts for the G0 checks
 #   rotn-test restart [--timeout S]      restart the Minecraft server (G4 #1, server restart; test server only):
@@ -24,7 +25,7 @@
 #                                        125: after the new Done, Mod Director's downloads fail the pinned check
 #                                        (ADR 0008; phase failed:mod-director, the server stopped), as at first start.
 #   rotn-test starts                     how often the Minecraft server started on this box (G4 step 7, freshness):
-#                                        "Starting minecraft server" lines over every daily rolled-over
+#                                        start lines ($START_RE) over every daily rolled-over
 #                                        logs/YYYY-MM-DD-N.log.gz (log4j rolls at each start and at 00:00 UTC) plus
 #                                        latest.log; prints "starts=<n> files=<k>"; exit 3 if a file cannot be read
 #   rotn-test mod-director               check what Mod Director downloaded against the pinned list (ADR 0008):
@@ -38,6 +39,9 @@ STATE=${ROTN_TEST_REMOTE_STATE_DIR:-/var/lib/rotn-test}
 SERVER=${ROTN_TEST_SERVER_DIR:-/opt/rotn/server}
 SYSTEMCTL=${ROTN_TEST_SYSTEMCTL:-systemctl}
 SOCK=/opt/rotn/console.sock
+# The Minecraft server's own start line, with log4j's prefix, so a chat line or another logger's text that merely
+# contains the words never counts (#465 review). ERE for grep -E and awk (via ENVIRON: no escape processing).
+export START_RE='^\[[0-9:]+\] \[[^]]*\] \[net\.minecraft\.server\.dedicated\.DedicatedServer\]: Starting minecraft server version '
 LOG=$SERVER/logs/latest.log
 # build.sh's "server ready" line: [12:00:00] [Server thread/INFO] [minecraft/DedicatedServer]: Done (41.2s)! For help, ...
 DONE_REGEX='\]: Done \([0-9.,]+s\)! For help'
@@ -168,15 +172,18 @@ case $cmd in
       files="${rot:+$(basename "$rot"),}latest.log"
       if [[ $2 == rotated ]]; then
         echo "##rotn-test files: $files"
-        { [[ -n $old ]] && printf '%s\n' "$old"; [[ -f $LOG ]] && cat "$LOG"; } | tail -n "$n"
+        { [[ -z $old ]] || printf '%s\n' "$old"; [[ ! -f $LOG ]] || cat "$LOG"; } | tail -n "$n"
       else
         # One pass, holding at most N lines: each start line starts over; past N lines or the byte bound, "over".
-        { [[ -n $old ]] && printf '%s\n' "$old"; [[ -f $LOG ]] && cat "$LOG"; } |
+        { [[ -z $old ]] || printf '%s\n' "$old"; [[ ! -f $LOG ]] || cat "$LOG"; } |
           LC_ALL=C awk -v max="$n" -v maxb="${ROTN_TEST_LOG_MAX_BYTES:-50331648}" -v files="$files" '
-            index($0, "Starting minecraft server version ") { found = 1; c = 0; b = 0; over = 0; split("", buf) }
+            $0 ~ ENVIRON["START_RE"] { found = 1; c = 0; b = 0; over = 0; split("", buf) }
             found { c++; b += length($0) + 1; if (c > max || b > maxb) over = 1; else buf[c] = $0 }
             END {
-              printf "##rotn-test since-start files=%s found=%d lines=%d over=%d\n", files, found, c, over
+              # nonempty: the lines the caller keeps (it drops empty ones, and a trailing CR is stripped on the way).
+              k = 0
+              if (found && !over) for (i = 1; i <= c; i++) { x = buf[i]; sub(/\r$/, "", x); if (x != "") k++ }
+              printf "##rotn-test since-start files=%s found=%d lines=%d over=%d nonempty=%d\n", files, found, c, over, k
               if (found && !over) for (i = 1; i <= c; i++) print buf[i]
             }'
       fi
@@ -228,13 +235,13 @@ case $cmd in
         sleep "${ROTN_TEST_GZ_RETRY_S:-2}"
         txt=$(gzip -dc "$f" 2>/dev/null) || { echo "rotn-test: cannot read $(basename "$f") (gzip failed twice)" >&2; exit 3; }
       fi
-      c=$(printf '%s\n' "$txt" | grep -c 'Starting minecraft server version ' || true)
+      c=$(printf '%s\n' "$txt" | grep -cE "$START_RE" || true)
       n=$(( n + c ))
       k=$(( k + 1 ))
     done
     shopt -u nullglob
     if [[ -f $LOG ]]; then
-      c=$(grep -c 'Starting minecraft server version ' "$LOG" || true)
+      c=$(grep -cE "$START_RE" "$LOG" || true)
       n=$(( n + c ))
       k=$(( k + 1 ))
     fi

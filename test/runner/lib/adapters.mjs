@@ -123,15 +123,18 @@ export function parseStarts(lines) {
 export const LOG_SINCE_START_MAX = 200000;
 
 /**
- * `rotn-test log N since-start` output -> {files, found, count, over, lines}; null without its header line (fail
- * closed). lines is the log from the last start line on, [] when the start line was not found or the bound was hit.
+ * `rotn-test log N since-start` output (empty lines already dropped) -> {files, found, count, over, lines}; null
+ * without its header line, or when the lines do not match its nonempty count (fail closed). lines is the log from the last start line on, [] when the start line was not found or the bound was hit.
  */
 export function parseSinceStartLog(out) {
-    const m = /^##rotn-test since-start files=(\S*) found=([01]) lines=(\d+) over=([01])$/.exec(out?.[0] ?? '');
+    const m = /^##rotn-test since-start files=(\S*) found=([01]) lines=(\d+) over=([01]) nonempty=(\d+)$/.exec(out?.[0] ?? '');
     if (!m) return null;
     const found = m[2] === '1';
     const over = m[4] === '1';
     const lines = found && !over ? out.slice(1) : [];
+    // The caller's lines are the non-empty ones; any other count means a cut-off or garbled answer (#465 review): fail
+    // closed without relying on the remote shell's pipefail.
+    if (lines.length !== Number(m[5]) || (!(found && !over) && out.length !== 1)) return null;
     return { files: m[1].split(',').filter(Boolean), found, count: Number(m[3]), over, lines };
 }
 

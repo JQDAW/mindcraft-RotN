@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { SERVER_START_RE } from '../../runner/lib/g4-accept.mjs';
 
 const dir = process.env.FAKE_CTL_DIR;
 const logFile = path.join(dir, 'server.log');
@@ -17,10 +18,11 @@ if (cmd === 'log' && rest[1] === 'since-start') {
     // G4 step 7: rotn-test log N since-start over the fake's one log file (the bytes bound is rotn-test's own test).
     const lines = read();
     let at = -1;
-    lines.forEach((l, i) => { if (l.includes('Starting minecraft server version ')) at = i; });
+    lines.forEach((l, i) => { if (SERVER_START_RE.test(l)) at = i; });
     const from = at < 0 ? [] : lines.slice(at);
     const over = from.length > Number(rest[0]);
-    process.stdout.write([`##rotn-test since-start files=latest.log found=${at < 0 ? 0 : 1} lines=${from.length} over=${over ? 1 : 0}`,
+    const kept = at < 0 || over ? 0 : from.filter(Boolean).length;
+    process.stdout.write([`##rotn-test since-start files=latest.log found=${at < 0 ? 0 : 1} lines=${from.length} over=${over ? 1 : 0} nonempty=${kept}`,
         ...(over ? [] : from)].join('\n') + '\n');
 } else if (cmd === 'log') {
     process.stdout.write(read().slice(-Number(rest[0] ?? 100)).join('\n') + '\n');
@@ -45,7 +47,7 @@ if (cmd === 'log' && rest[1] === 'since-start') {
     process.stdout.write(read().slice(before).join('\n') + '\n');
 } else if (cmd === 'starts') {
     // G4 step 7: rotn-test starts over the fake's one log file.
-    process.stdout.write(`starts=${read().filter((l) => l.includes('Starting minecraft server version ')).length} files=1\n`);
+    process.stdout.write(`starts=${read().filter((l) => SERVER_START_RE.test(l)).length} files=1\n`);
 } else {
     process.stderr.write(`fake ctl: unsupported ${cmd}\n`);
     process.exit(2);
