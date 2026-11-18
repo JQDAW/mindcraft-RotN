@@ -3161,9 +3161,10 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
         // #444 review 3: away from all the enemies at once, not the nearest one: with a slime close
         // and a skeleton farther the nearest one changed, and so did the way, every tick. Each
         // enemy's weight is 1/d^2, so a near one counts most and a far one cannot pull the bot back
-        // towards it. The goal is set again only when that point moved.
+        // towards it. The goal is set again when that point moved, or (#449 review) when the
+        // pathfinder is not moving: a flee path that failed must not leave the bot standing there.
         const point = enemiesPoint(bot, isEnemy, distance) ?? enemy.position;
-        if (!away || away.distanceTo(point) > 1) {
+        if (!away || away.distanceTo(point) > 1 || bot.pathfinder.isMoving?.() === false) {
             away = point;
             bot.pathfinder.setMovements(new pf.Movements(bot));
             bot.pathfinder.setGoal(new pf.goals.GoalInvert(new pf.goals.GoalNear(point.x, point.y, point.z, distance + 1)));

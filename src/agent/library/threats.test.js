@@ -368,3 +368,18 @@ test('#444 review 3: avoidEnemies keeps away from all the enemies at once, near 
     assert.ok(score(-4, 2) < score(-4, -2), `${score(-4, 2)} vs ${score(-4, -2)}`);
     assert.equal(enemiesPoint(fightBot([]), () => true, 16), null);
 });
+
+test('#449 review: avoidEnemies sets its goal again when the pathfinder stopped (a failed flee path), not while it moves', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { avoidEnemies } = await import('./skills.js');
+    const run = async (moving) => {
+        const bot = fightBot([{ id: 911, name: 'slime', type: 'mob', position: new Vec3(3, 64, 0), height: 1 }]);
+        bot.pathfinder.isMoving = () => moving;
+        bot.pathfinder.setGoal = function (goal) { this.goals.push(goal); }; // the enemy stays; nothing ends the walk
+        setTimeout(() => { bot.interrupt_code = true; }, 1300); // about three ticks of 500 ms
+        await avoidEnemies(bot, 16, (e) => e.name === 'slime', () => false);
+        return bot.pathfinder.goals.length;
+    };
+    assert.ok(await run(false) >= 2, 'not moving: the goal is set again');
+    assert.equal(await run(true), 1, 'moving: the goal stands');
+});
