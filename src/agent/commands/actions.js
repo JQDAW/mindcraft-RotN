@@ -1,3 +1,4 @@
+import { Vec3 } from 'vec3';
 import * as skills from '../library/skills.js';
 import { buildShelter } from '../library/shelter.js';
 import settings from '../settings.js';
@@ -30,6 +31,21 @@ function hungryCap(agent, what, blocks) {
     if (!Number.isFinite(food) || food >= HUNGRY_WALK.belowFood || !(blocks > HUNGRY_WALK.maxBlocks)) return blocks;
     skills.log(agent.bot, `${what} ${HUNGRY_WALK.maxBlocks} blocks at most at food ${food}, not ${blocks}: walking costs hunger, and food 0 kills you at once on this pack. Eat or !forage first.`);
     return HUNGRY_WALK.maxBlocks;
+}
+
+/**
+ * #432 nit: below HUNGRY_WALK.belowFood, !goToCoordinates and !goToPlayer walk at most
+ * HUNGRY_WALK.maxBlocks toward a target farther than that: the goal's closeness becomes the
+ * distance left after such a walk. Returns the closeness to use (unchanged when not capped).
+ */
+export function hungryCloseness(agent, toward, target, closeness) {
+    const food = agent.bot?.food;
+    const here = agent.bot?.entity?.position;
+    if (!Number.isFinite(food) || food >= HUNGRY_WALK.belowFood || !here || !target) return closeness;
+    const d = here.distanceTo(target);
+    if (!(d - (Number.isFinite(closeness) ? closeness : 0) > HUNGRY_WALK.maxBlocks)) return closeness;
+    skills.log(agent.bot, `Walking ${HUNGRY_WALK.maxBlocks} blocks at most toward ${toward} at food ${food}, not ${Math.round(d)}: walking costs hunger, and food 0 kills you at once on this pack. Eat or !forage first.`);
+    return d - HUNGRY_WALK.maxBlocks;
 }
 
 /**
@@ -259,7 +275,8 @@ export const actionsList = [
             'closeness': {type: 'float', description: 'How close to get to the player.', domain: [0, Infinity]}
         },
         perform: runAsAction(async (agent, player_name, closeness) => {
-            await skills.goToPlayer(agent.bot, player_name, closeness);
+            const target = skills.findPlayer(agent.bot, player_name)?.entity?.position;
+            await skills.goToPlayer(agent.bot, player_name, hungryCloseness(agent, player_name, target, closeness));
         })
     },
     {
@@ -287,6 +304,8 @@ export const actionsList = [
         },
         perform: runAsAction(async (agent, x, y, z, closeness) => {
             if (!deathSpotOk(agent, x, y, z)) return;
+            const near = hungryCloseness(agent, `${x}, ${y}, ${z}`, new Vec3(x, y, z), closeness);
+            if (near !== closeness) { await skills.goToPosition(agent.bot, x, y, z, near); return; } // part of the way: no stand-on
             const stand = standOnTarget(agent, x, y, z);
             if (stand) {
                 skills.log(agent.bot, `The task says to stand on the ${stand.name ?? 'block'} at ${stand.x} ${stand.y} ${stand.z}, so standing on top of it and checking.`);
@@ -449,7 +468,7 @@ export const actionsList = [
             'num': { type: 'int', description: 'The number of blocks to collect.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
         perform: runAsAction(async (agent, type, num) => {
-            await skills.collectBlock(agent.bot, type, num);
+            await skills.collectBlock(agent.bot, type, num, null, hungryCap(agent, 'Collecting within', 64));
         })
     },
     {

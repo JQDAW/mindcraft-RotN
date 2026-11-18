@@ -650,19 +650,21 @@ test('G4 #5 forage: the food reserve names the ripe wild food near (full block n
     assert.match(FOOD_RESERVE_STEP.goal, /Gather ripe wild food first with !forage/);
 });
 
-test('soak 2: the food reserve says food 0 kills at once; at food 4 or lower it asks for no hunt (weakness) but eating anything and !forage', (t) => {
+test('soak 2: the food reserve says food 0 kills at once; at food 4 or lower it asks for no hunt (weakness) but eating what it holds and !forage; at food 5 or lower it names the emergency foods (#432 nit)', (t) => {
     assert.match(FOOD_RESERVE_STEP.goal, /food 0 kills you at once, at any health/);
     const cow = { id: 1, type: 'mob', name: 'animania:cow_holstein', metadata: { 7: 10 }, position: new Vec3(6.5, 64, 0.5) };
     const weak = foodAgent(t, [], { food: 4, entities: { 1: cow } });
     assert.equal(agendaTick(weak, { now: 0 }), 'food');
     const p = weak.self_prompter.prompt;
     assert.match(p, /Food 0 kills you at once on this pack, at any health, and long walks cost hunger: stay near\./);
-    assert.match(p, /At food 4 you are too weak to hunt \(weakness\): eat anything you hold, even raw meat or rotten flesh, and !forage nearby; do not walk far\./);
+    assert.match(p, /At food 4 you are too weak to hunt \(weakness\): eat the food you hold, and !forage nearby; do not walk far\./);
     assert.doesNotMatch(p, /!attack\(/, 'no hunt offered');
     // #432 review 3: no "never eat" contradicting it.
     assert.doesNotMatch(p, /Do not eat raw chicken or rotten flesh/);
-    assert.match(p, /At food 5 or lower anything edible beats starving: raw chicken before rotten flesh; never cloudsbluff\./);
-    assert.match(FOOD_RESERVE_STEP.goal, /Do not eat raw chicken or rotten flesh unless your food is 5 or lower \(then raw chicken before rotten flesh, never cloudsbluff\)/);
+    // #432 nit: the allowed emergency foods are named, in order, and nothing wider.
+    assert.match(p, /At food 5 or lower, with no other food, eat only these, in this order: a golden apple, raw venison, raw tofenison, raw chicken, rotten flesh, then hawthorn berries; never cloudsbluff, chorus fruit, pufferfish, raw eggs or any other food\./);
+    assert.doesNotMatch(p, /anything edible|eat anything/);
+    assert.match(FOOD_RESERVE_STEP.goal, /Do not eat raw chicken or rotten flesh unless your food is 5 or lower, and then only these, in this order: a golden apple, raw venison, raw tofenison, raw chicken, rotten flesh, then hawthorn berries; never cloudsbluff, chorus fruit, pufferfish, raw eggs or any other food\./);
     const fed = foodAgent(t, [], { food: 10, entities: { 1: cow } });
     agendaTick(fed, { now: 0 });
     assert.match(fed.self_prompter.prompt, /!attack\("animania:cow_holstein"\)/, 'at food 10 the hunt is offered');
