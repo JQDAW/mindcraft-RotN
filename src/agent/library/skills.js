@@ -12,6 +12,7 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS } from "./death_report.js";
+import { shelterEnemy } from "./threats.js";
 import { logAte, fightJournal } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -1717,10 +1718,37 @@ async function pickUpNear(bot, pos, L = AXE_CHOP_LIMITS) {
 
 export const AXE_CHOP_OPS = { place: placeNear, pickup: pickUpNear, takeBack: takeBackByHand };
 
-export async function pickupNearbyItems(bot) {
+/**
+ * The item-pickup reflex (soak 3, rotn-v0.1.5): no item within DEATH_SPOT_RADIUS (horizontally) of
+ * a death spot from the last COLLECT_LIMITS.deathSpotMs (collectBlocks' rule: a player zombie rose
+ * there and never leaves), and none while a hostile mob (one the shelter fight would hit) is within
+ * hostileRange of the item or of the bot.
+ */
+export const ITEM_PICKUP = { hostileRange: 12 };
+
+/** Why the item-pickup reflex leaves this item alone now, or null. */
+export function itemPickupRefusal(bot, item, now = Date.now()) {
+    const p = item?.position;
+    if (!p) return null;
+    const dim = bot?.game?.dimension;
+    const spots = typeof bot?.rotnDeathSpots === 'function' ? bot.rotnDeathSpots(now) : [];
+    const spot = spots.find(s => s?.pos && now - s.at < COLLECT_LIMITS.deathSpotMs
+        && (s.dimension == null || dim == null || s.dimension === dim)
+        && Math.hypot(p.x - s.pos.x, p.z - s.pos.z) <= DEATH_SPOT_RADIUS);
+    if (spot) return `within ${DEATH_SPOT_RADIUS} blocks of where you died recently (a player zombie rises there and never leaves)`;
+    const here = bot?.entity?.position;
+    const mob = Object.values(bot?.entities ?? {}).find(e => e && e !== bot.entity && e.position && shelterEnemy(e)
+        && (e.position.distanceTo(p) <= ITEM_PICKUP.hostileRange || (here && e.position.distanceTo(here) <= ITEM_PICKUP.hostileRange)));
+    if (mob) return `a ${mob.name} is within ${ITEM_PICKUP.hostileRange} blocks`;
+    return null;
+}
+
+export async function pickupNearbyItems(bot, { allow = null } = {}) {
     /**
      * Pick up all nearby items.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
+     * @param {{allow?: (item: Entity) => boolean}} options, allow: only items it accepts (checked
+     * before each walk; the item-pickup reflex passes itemPickupRefusal).
      * @returns {Promise<boolean>} true if the items were picked up, false otherwise.
      * @example
      * await skills.pickupNearbyItems(bot);
@@ -1733,7 +1761,7 @@ export async function pickupNearbyItems(bot) {
     // to goal!", then "Collected 0 stick."). Such an item is skipped; the pickups go on.
     const skipped = new Set();
     const getNearestItem = bot => bot.nearestEntity(entity => entity.name === 'item' && bot.entity.position.distanceTo(entity.position) < distance
-        && !skipped.has(entity) && itemOnGround(bot, entity));
+        && !skipped.has(entity) && itemOnGround(bot, entity) && (!allow || allow(entity)));
     let nearestItem = getNearestItem(bot);
     let pickedUp = 0;
     while (nearestItem && !bot.interrupt_code) { // #340 nit 3: a stop ends the pickups

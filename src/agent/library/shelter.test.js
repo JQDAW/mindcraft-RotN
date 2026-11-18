@@ -364,6 +364,51 @@ test('G3 round 2 B: the model\'s !buildShelter is refused by day (the night rout
     assert.ok(giver.placed.length > 0, 'a task giver who typed it is obeyed by day');
 });
 
+// Soak 3 (rotn-v0.1.5): at 20:01:33 (dawn: the clock said day, the routine still sheltered) the
+// model's !buildShelter interrupted the routine's hole three times in a second, then answered "by day".
+test('soak 3: while the night routine runs (dawn gap included) the model\'s !buildShelter is refused before it interrupts anything; a giver\'s is obeyed', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { ActionManager } = await import('../action_manager.js');
+    const { shelterCommandRefusal } = await import('../commands/actions.js');
+    const make = (timeOfDay, state, typed = 0) => {
+        const { bot, placed } = fakeBot();
+        Object.assign(bot, { time: { timeOfDay }, emit() {}, interrupt_code: false });
+        const agent = {
+            bot, control: { typed }, interrupts: 0,
+            clearBotLogs() { bot.output = ''; bot.interrupt_code = false; },
+            requestInterrupt() { agent.interrupts++; }, cleanKill() {}, history: { add() {} },
+        };
+        if (state) agent._night = { state };
+        agent.actions = new ActionManager(agent);
+        return { agent, placed };
+    };
+    const perform = getCommand('!buildShelter').perform;
+    for (const state of ['building', 'inside', 'exposed']) {
+        const dawn = make(23500, state); // past NIGHT_END: nightPhase says day
+        // The routine's own job is running: the command must not stop it.
+        let release;
+        const job = dawn.agent.actions.runAction('action:digPit', () => new Promise(r => { release = r; }));
+        const said = await perform(dawn.agent);
+        assert.match(said, new RegExp(`^Not building a shelter now: the night routine is seeing to it \\(${state}\\) until full day, and this would interrupt it\\.`));
+        assert.equal(dawn.agent.interrupts, 0, 'the routine\'s job was not interrupted');
+        assert.equal(dawn.agent.actions.currentActionLabel, 'action:digPit');
+        assert.deepEqual(dawn.placed, []);
+        release(); await job;
+    }
+    const night = make(18000, 'building');
+    assert.match(shelterCommandRefusal(night.agent), /night routine is seeing to it \(building\)/, 'at night too');
+    const day = make(1000, 'day');
+    assert.match(await perform(day.agent), /^Not building a shelter by day: the night routine builds one at dusk\./);
+    assert.equal(day.agent.interrupts, 0, 'by day the refusal interrupts nothing either');
+    const giver = make(23500, 'building', 1);
+    assert.equal(shelterCommandRefusal(giver.agent), null);
+    await perform(giver.agent);
+    assert.ok(giver.placed.length > 0, 'a task giver who typed it is obeyed while the routine runs');
+    const dusk = make(12000, 'day');
+    await perform(dusk.agent);
+    assert.ok(dusk.placed.length > 0, 'at dusk before the routine starts, the model\'s builds');
+});
+
 // #229 review 2: with a chest or table open, clickWindow acts on that window and the cursor is its
 // selectedItem. stowCarried puts that stack into the window's inventory part, closes the window
 // (closing a 1.12 container throws a cursor stack on the ground), and bounds each click.

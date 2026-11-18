@@ -78,6 +78,17 @@ export function nightPhase(timeOfDay) {
     return minutesToSunset(t) <= SHELTER_LEAD_MIN ? 'dusk' : 'day';
 }
 
+/**
+ * Whether the night routine (night_routine.js, state on agent._night) is running: from the build at
+ * dusk until full day, so the dawn gap too (soak 3: past NIGHT_END the clock's phase is 'day' while
+ * the routine still shelters until full day). The re-plan prompt waits for it, and the model's
+ * !buildShelter does not cut into it.
+ */
+export function nightRoutineActive(agent) {
+    const s = agent?._night?.state;
+    return typeof s === 'string' && s !== 'day';
+}
+
 /** A time value stuck longer than this (the measured freeze plus a margin) is not trusted. */
 export const STUCK_BOUND_MIN = FREEZE_MIN + 5;
 

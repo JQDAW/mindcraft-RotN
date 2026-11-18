@@ -7,7 +7,7 @@ import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
 import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
-import { REPAIR_LABEL, nightPhase, minutesToSunset } from './library/night.js';
+import { REPAIR_LABEL, nightPhase, minutesToSunset, nightRoutineActive } from './library/night.js';
 import { RESERVE_LEAD_MIN } from './agenda.js';
 import { huntTarget, knownBases, huntAnimal, skipAnimal, HUNT, tooWeakToHunt } from './library/hunting.js';
 import { forageTarget } from './library/foraging.js';
@@ -575,8 +575,22 @@ const modes_list = [
         wait: 2, // number of seconds to wait after noticing an item to pick it up
         prev_item: null,
         noticed_at: -1,
+        refusedSaid: new Set(),
         update: async function (agent) {
-            let item = world.getNearestEntityWhere(agent.bot, entity => entity.name === 'item', 8);
+            // Soak 3 (rotn-v0.1.5): the reflex walked the bot to its dropped items at the death spot,
+            // beside the player zombie risen there, and it died again. Items near a recent death
+            // spot, or with a hostile mob near, are left alone (skills.itemPickupRefusal).
+            const allow = (entity) => {
+                const why = skills.itemPickupRefusal(agent.bot, entity);
+                if (why && !this.refusedSaid.has(entity.id)) {
+                    if (this.refusedSaid.size >= 32) this.refusedSaid.clear();
+                    this.refusedSaid.add(entity.id);
+                    const p = entity.position;
+                    console.log(`[reflex] item pickup: leaving the item at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)} alone: ${why}`);
+                }
+                return !why;
+            };
+            let item = world.getNearestEntityWhere(agent.bot, entity => entity.name === 'item' && allow(entity), 8);
             let empty_inv_slots = agent.bot.inventory.emptySlotCount();
             if (item && item !== this.prev_item && await world.isClearPath(agent.bot, item) && empty_inv_slots > 1) {
                 if (this.noticed_at === -1) {
@@ -586,7 +600,7 @@ const modes_list = [
                     say(agent, `Picking up item!`);
                     this.prev_item = item;
                     execute(this, agent, async () => {
-                        await skills.pickupNearbyItems(agent.bot);
+                        await skills.pickupNearbyItems(agent.bot, { allow: (e) => !skills.itemPickupRefusal(agent.bot, e) });
                     });
                     this.noticed_at = -1;
                 }
@@ -792,14 +806,23 @@ let last_replan_prompt_at = 0;
 function maybePromptReplan(controller, now = Date.now()) {
     const agent = _agent;
     if (!agent?.replan) return; // nothing requested (the common case, every tick)
+    const nightRoutine = nightRoutineActive(agent);
     const due = replanPromptDue(agent, {
         now,
         idle: agent.isIdle(),
         reflexActive: controller.anyActive(),
         selfPrompting: agent.self_prompter.isActive(),
         lastPromptAt: last_replan_prompt_at,
+        nightRoutine,
     });
-    if (!due) return;
+    if (!due) {
+        const r = agent.replan;
+        if (nightRoutine && (r.interrupted || r.due) && !r.nightHeldSaid) {
+            r.nightHeldSaid = true;
+            console.log('[reflex] re-plan prompt held: the night routine is running; it goes once the routine ends (full day)');
+        }
+        return;
+    }
     last_replan_prompt_at = now;
     const note = takeReplanNote(agent);
     console.log(`[reflex] re-plan prompt: ${note}`);
