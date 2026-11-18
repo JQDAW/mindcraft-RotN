@@ -307,7 +307,8 @@ const modes_list = [
         // first; it is off, agent.js). Before cowardice and self_defense in this list, so the bot
         // can eat at food 6 or lower in a fight: the loop stops at the first active mode (#206 review 4).
         name: 'eating',
-        description: 'Eat at food 12 or lower when idle and no threat is near, and at 6 or lower always, in a fight too. Never hawthorn berries or cloudsbluff, except at food 5 or lower with nothing else (food 0 kills on this pack); bread only when nothing else is left.',
+        // #432 nit: the emergency foods are named from food.EMERGENCY_FOODS; cloudsbluff is never eaten.
+        description: `Eat at food 12 or lower when idle and no threat is near, and at 6 or lower always, in a fight too. At food ${food.EMERGENCY_FOOD} or lower with nothing else (food 0 kills on this pack): ${food.emergencyFoodText()}, in that order; never ${food.NEVER_EAT_TEXT.replace(' or any other food', '')}. Bread only when nothing else is left.`,
         interrupts: ['all'],
         on: true,
         active: false,
