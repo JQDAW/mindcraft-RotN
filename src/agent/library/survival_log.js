@@ -10,8 +10,13 @@
 //
 // Soak 2 (rotn-v0.1.4): the server sends no death messages, and two deaths had no cause in the
 // journal. The hurt line names the likely source: 'starving' (food 0: Hunger Overhaul's
-// damageOnStarve=200 kills at once), the nearest mob within HURT.mobRange (its entity type), 'fall'
-// when the bot was falling, else 'unknown'.
+// damageOnStarve=200 kills at once), a mob within HURT.mobRange (its entity type), 'fall' when the
+// bot was falling, else 'unknown'. Soak 3 (rotn-v0.1.5): the nearest entity of any kind was named,
+// and that was most often Zombie Awareness's invisible scent marker on the bot's own trail
+// (zombieawareness:entityscent) or the soul left at a death spot (randomthings:playersoul), not
+// the zombie that hit. Now only an entity that can hurt counts (mayHurt: rotn-data level not
+// 'none', or an animal that fights back when provoked, or a player); of those, the nearest that
+// swung its arm in the last HURT.swingMs, else the nearest hostile one, else the nearest.
 //
 // Tokens never hold spaces: <item> is food.foodKey, "<registry name>:<meta>" ("minecraft:bread:0",
 // "rustic:wildberries:0"), from the eating reflex and the consume skill alike; <mob> the
@@ -19,6 +24,7 @@
 // custom name, username or server text reaches the journal. The console only: chat is unchanged.
 
 // No import of food.js (it imports this file): the eat threshold is passed in (bindSurvivalLog).
+import { threatFor } from './threats.js';
 
 export const SURVIVAL_TAG = '[survival]';
 /** The food line's period, and the least time between two "low" lines (G4: no periodic line more than once a minute). */
@@ -40,20 +46,51 @@ export const fightEndLine = (mob, outcome, ms) => {
 };
 export const fleeLine = (mob, why) => `${SURVIVAL_TAG} flee ${token(mob)} (${String(why ?? 'unknown').replace(/[()\n\r]/g, ' ').trim() || 'unknown'})`;
 export const hurtLine = (amount, before, after, source) => `${SURVIVAL_TAG} hurt ${num(amount)} health ${num(before)}->${num(after)} (by ${token(source)})`;
-export const HURT = { minDrop: 4, windowMs: 2000, mobRange: 5 };
+export const HURT = { minDrop: 4, windowMs: 2000, mobRange: 5, swingMs: 1000 };
 
-/** The likely source of the damage just taken (see the header): 'starving', a mob type, 'fall' or 'unknown'. */
-export function hurtSource(bot) {
+/** Swings kept per bot (bindSurvivalLog): older ones are dropped once there are more than this many. */
+const SWINGS_KEPT = 64;
+
+/**
+ * Whether an entity can have dealt the damage (soak 3): a player, a mob rotn-data rates above
+ * 'none' (or an unknown one mc.isHostile counts), or an animal that fights back when provoked (a
+ * bull). Not a marker such as zombieawareness:entityscent or randomthings:playersoul (level 'none').
+ */
+export function mayHurt(e) {
+    if (!e || e.type === 'object' || e.name === 'item') return false;
+    if (e.type === 'player') return true;
+    const t = threatFor(e);
+    return !!t && (t.level !== 'none' || !!t.provoked);
+}
+
+const isHostileThreat = (e) => e.type !== 'player' && ['hostile', 'dangerous'].includes(threatFor(e)?.level);
+
+/**
+ * The likely source of the damage just taken (see the header): 'starving', a mob type, 'fall' or
+ * 'unknown'. `swings` maps entity id to the time of its last arm swing (bindSurvivalLog).
+ */
+export function hurtSource(bot, { swings = null, now = Date.now() } = {}) {
     if (Number.isFinite(bot?.food) && bot.food <= 0) return 'starving';
     const here = bot?.entity?.position;
     if (here) {
         const near = Object.values(bot.entities ?? {})
-            .filter(e => e && e !== bot.entity && e.position && e.type !== 'object' && e.name !== 'item' && e.position.distanceTo(here) <= HURT.mobRange)
-            .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here))[0];
-        if (near) return mobName(near);
+            .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(here) <= HURT.mobRange && mayHurt(e))
+            .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here));
+        const swung = near.find(e => now - (swings?.get(e.id) ?? -Infinity) <= HURT.swingMs);
+        const pick = swung ?? near.find(isHostileThreat) ?? near[0];
+        if (pick) return mobName(pick);
     }
     if ((bot?.entity?.velocity?.y ?? 0) < -0.5) return 'fall';
     return 'unknown';
+}
+
+/** Note an entity's arm swing (the attack animation) for hurtSource. */
+export function noteSwing(swings, entity, now = Date.now()) {
+    if (!entity || entity.id == null) return;
+    swings.set(entity.id, now);
+    if (swings.size > SWINGS_KEPT) {
+        for (const [id, at] of swings) if (now - at > HURT.swingMs) swings.delete(id);
+    }
 }
 
 /**
@@ -71,7 +108,7 @@ export function hurtCheck(state, bot, now = Date.now()) {
     if (!w || h > w.from) { state.hurt = { from: h, at: now }; return null; }
     if (now - w.at > HURT.windowMs) w = state.hurt = { from: last, at: now };
     if (w.from - h < HURT.minDrop) return null;
-    const text = hurtLine(w.from - h, w.from, h, hurtSource(bot));
+    const text = hurtLine(w.from - h, w.from, h, hurtSource(bot, { swings: state.swings, now }));
     state.hurt = { from: h, at: now };
     console.log(text);
     return text;
@@ -130,10 +167,11 @@ export function foodCheck(state, bot, now = Date.now(), eatAt = 12) {
     return text;
 }
 
-/** Wire the food line to the bot: every physics tick and health update checks it (cheap; rate-limited). */
+/** Wire the food and hurt lines to the bot: every physics tick and health update checks them (cheap; rate-limited); every arm swing is noted for the hurt source. */
 export function bindSurvivalLog(bot, { eatAt }) {
-    const state = {};
+    const state = { swings: new Map() };
     const check = () => { try { foodCheck(state, bot, Date.now(), eatAt); } catch { /* never breaks the bot */ } };
+    bot.on('entitySwingArm', (e) => { try { noteSwing(state.swings, e); } catch { /* never breaks the bot */ } });
     bot.on('health', () => { try { hurtCheck(state, bot, Date.now()); } catch { /* never breaks the bot */ } });
     bot.on('health', check);
     bot.on('physicsTick', check);
