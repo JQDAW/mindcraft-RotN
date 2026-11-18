@@ -22,8 +22,11 @@ export function installProgress(bot) {
     return true;
 }
 
-/** Bounds of what counts as progress: a dig gets 2 x its estimate (at least digMinMs); closer by `closer` blocks. */
-export const PROGRESS = { digMinMs: 5000, closer: 0.5 };
+/**
+ * Bounds of what counts as progress: a dig gets 2 x its estimate (at least digMinMs), once per
+ * position until it has not been seen for digForgetMs; closer by `closer` blocks.
+ */
+export const PROGRESS = { digMinMs: 5000, closer: 0.5, digForgetMs: 30_000 };
 
 /** How far the action's target is: the fight's target (mineflayer-pvp), else the walk's goal heuristic. */
 function targetDistance(bot) {
@@ -48,20 +51,28 @@ function targetDistance(bot) {
  * target. Progress: a block broken or placed since the last call; a dig still within 2 x
  * bot.digTime (at least PROGRESS.digMinMs) after it was first seen; the target PROGRESS.closer
  * nearer than the nearest yet. #431 review 1: a new dig or a new target is not progress by itself
- * (its start is only recorded), so a retry loop that starts over in place is still freed.
+ * (its start is only recorded), so a retry loop that starts over in place is still freed. A
+ * position keeps its one allowance across gaps shorter than digForgetMs (memo.digs), so stopping
+ * and restarting the same dig does not renew it; a block really broken does.
  */
 export function actionProgress(bot, memo, now = Date.now()) {
     const stamp = bot?.rotnProgressAt ?? 0;
-    if (stamp > (memo.progressSeen ?? 0)) { memo.progressSeen = stamp; return 'a block broken or placed'; }
+    if (stamp > (memo.progressSeen ?? 0)) { memo.progressSeen = stamp; memo.digs?.clear(); return 'a block broken or placed'; }
+    const digs = (memo.digs ??= new Map());
+    for (const [k, seen] of digs) if (now - seen.at > PROGRESS.digForgetMs) digs.delete(k);
     const dig = bot?.targetDigBlock;
     if (dig) {
         const key = dig.position ? `${dig.position.x},${dig.position.y},${dig.position.z}` : String(dig.name);
-        if (memo.digKey !== key) {
+        const seen = digs.get(key);
+        if (!seen) {
             let est = null;
             try { est = bot.digTime?.(dig); } catch { est = null; }
-            Object.assign(memo, { digKey: key, digSince: now, digAllowMs: Math.max(PROGRESS.digMinMs, 2 * (Number.isFinite(est) ? est : 0)) });
-        } else if (now - memo.digSince <= memo.digAllowMs) return 'a dig underway';
-    } else memo.digKey = null;
+            digs.set(key, { since: now, at: now, allowMs: Math.max(PROGRESS.digMinMs, 2 * (Number.isFinite(est) ? est : 0)) });
+        } else {
+            seen.at = now;
+            if (now - seen.since <= seen.allowMs) return 'a dig underway';
+        }
+    }
     const d = targetDistance(bot);
     if (!d) { memo.targetKey = null; return null; }
     if (memo.targetKey !== d.key) { memo.targetKey = d.key; memo.targetBest = d.dist; return null; } // only its start
