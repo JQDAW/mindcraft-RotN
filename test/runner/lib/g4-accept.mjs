@@ -145,6 +145,7 @@ export function freshServer({ server, stateDir, usage, logLines, goId, run, scen
     if (starts.starts !== 1) return { ok: false, why: `not fresh: the Minecraft server started ${starts.starts} times on this box (over ${starts.files} log file(s)); a fresh test server has started once` };
     if (!Number.isFinite(createdMs)) return { ok: false, why: 'the test server\'s creation time is unknown (server-create.json)' };
     if (!Number.isInteger(gametime)) return { ok: false, why: 'the world\'s age could not be read (time query gametime)' };
+    if (gametime < 0) return { ok: false, why: `the world's age ${gametime} ticks is negative, so it is not a real reading` };
     const bound = gametimeBound(createdMs, nowMs);
     if (gametime > bound) return { ok: false, why: `not fresh: the world is ${gametime} ticks old, more than the ${bound} ticks (20 a second) since the test server was created` };
     const facts = `started once; world ${gametime} of at most ${bound} ticks`;
@@ -272,11 +273,14 @@ export function checkAcceptanceResults(results, { complete = null, g3OnServiceRe
         if (!/^[0-9a-f]{40,64}$/.test(String(rel.commit)) || !/^[0-9a-f]{12}$/.test(String(rel.sha12)) || !rel.commit.startsWith(rel.sha12)) why.push('its release commit is missing or does not match what the journal showed');
         if (a.fresh?.ok !== true) why.push('its test server is not recorded as fresh');
         // The recorded server facts themselves, not only fresh.ok (#446 review): one start, and a world no older than
-        // the server when the facts were read.
+        // the server when the facts were read (0 <= gametime <= bound).
+        // readAt is taken as recorded: a forged later readAt widens the bound, but the bound only catches a world
+        // older than its server anyway; starts = 1 (checked here too), the ledger and the log stay the real proof.
         const f = a.fresh?.facts ?? {};
         if (f.starts?.starts !== 1) why.push(`its recorded server starts are ${f.starts?.starts ?? 'missing'}, not 1`);
         const bound = gametimeBound(Date.parse(f.createdAt), Date.parse(f.readAt));
         if (!Number.isInteger(f.gametime) || bound === null) why.push('its recorded world age, server creation or read time is missing');
+        else if (f.gametime < 0) why.push(`its recorded world age ${f.gametime} ticks is negative`);
         else if (f.gametime > bound) why.push(`its recorded world age ${f.gametime} ticks is above the ${bound} ticks since the server was created`);
         if (typeof r.server !== 'string' || !r.server) why.push('it names no test server');
         if (r.gate === 'G3' && (r.gateValid !== false || !(r.weakenedParams ?? []).includes(g3OnServiceReason))) why.push('a G3 scenario on S that is not marked "never G3 gate evidence"');

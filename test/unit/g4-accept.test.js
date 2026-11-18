@@ -161,6 +161,7 @@ describe('a fresh test server (e): the usage ledger, the log, and two server-sid
         assert.match(freshServer({ ...base, gametime: 12001 }).why, /world is 12001 ticks old, more than the 12000 ticks/);
         assert.match(freshServer({ ...base, gametime: 5000000 }).why, /older|more than/);
         assert.match(freshServer({ ...base, gametime: null }).why, /world's age could not be read/);
+        assert.match(freshServer({ ...base, gametime: -1 }).why, /world's age -1 ticks is negative/, 'a negative world age (#454 review)');
         assert.match(freshServer({ ...base, createdMs: null }).why, /creation time is unknown/);
         assert.equal(freshServer({ ...base, gametime: 0, nowMs: created - 5000 }).ok, true, 'a clock behind the creation time: bound 0, a new world 0');
         assert.match(freshServer({ ...base, gametime: 1, nowMs: created - 5000 }).why, /more than the 0 ticks/);
@@ -413,6 +414,8 @@ describe('the step-7 evidence check over a set of results', () => {
         assert.match(out(facts({ starts: null })), /recorded server starts are missing, not 1/);
         assert.match(out(facts({ gametime: 12001 })), /recorded world age 12001 ticks is above the 12000 ticks/);
         assert.match(out(facts({ gametime: null })), /recorded world age, server creation or read time is missing/);
+        assert.match(out(facts({ gametime: -1 })), /recorded world age -1 ticks is negative/, 'a negative world age (#454 review)');
+        assert.deepEqual(check([{ file: 'ok.json', result: accResult({ scenario: 'g4-soak-2h', fresh: { ...FRESH, facts: { ...FRESH.facts, gametime: 0 } } }) }]).problems, [], 'a world age of 0: fine');
         assert.match(out(facts({ readAt: null })), /read time is missing/);
         assert.match(out((b) => ({ g4Acceptance: { ...b.g4Acceptance, fresh: { ok: true, why: 'fresh' } } })), /recorded server starts are missing/);
         assert.deepEqual(check([{ file: 'ok.json', result: accResult({ scenario: 'g4-soak-2h', fresh: { ...FRESH, facts: { ...FRESH.facts, gametime: 12000 } } }) }]).problems, [], 'at the bound: fine');
