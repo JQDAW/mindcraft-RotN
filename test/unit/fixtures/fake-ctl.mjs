@@ -23,7 +23,7 @@ if (cmd === 'log' && rest[1] === 'since-start') {
     const over = from.length > Number(rest[0]);
     const kept = at < 0 || over ? 0 : from.filter(Boolean).length;
     process.stdout.write([`##rotn-test since-start files=latest.log found=${at < 0 ? 0 : 1} lines=${from.length} over=${over ? 1 : 0} nonempty=${kept}`,
-        ...(over ? [] : from)].join('\n') + '\n');
+        ...(over ? [] : from), '##rotn-test end'].join('\n') + '\n');
 } else if (cmd === 'log') {
     process.stdout.write(read().slice(-Number(rest[0] ?? 100)).join('\n') + '\n');
 } else if (cmd === 'console') {
