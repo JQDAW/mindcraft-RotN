@@ -91,6 +91,7 @@ export const G3_CONSOLE_ALLOW = [
     /^scoreboard objectives remove [A-Za-z0-9_]{1,16}$/,
     new RegExp(`^scoreboard players list ${NAME}$`),
     /^time query daytime$/,
+    /^time query gametime$/,                                               // read-only: the world's age (G4 step 7 freshness)
     /^gamerule [A-Za-z]+$/,                                                // read-only: the query form only, never a value
     new RegExp(`^setblock (${markerCells}) minecraft:gold_block$`),        // the pinned task markers only (#208 review, G3_MARKERS)
 ];
@@ -145,6 +146,9 @@ export const G4_TEST_SERVER_NOT_GATE = 'a G4 scenario on a test server is a rehe
 
 /** Why a G4 run on the CX23 service (set-up S) is not G4 evidence either, until the step-7 runner (lead, #433 review). */
 export const G4_SERVICE_NOT_GATE = 'a G4 run on the CX23 service (set-up S) is not an acceptance run: G4 evidence comes only from the step-7 acceptance runs (test/scenarios/g4/PLAN.md)';
+
+/** Why a G3 scenario run on the CX23 service (a G4 S run, e.g. D on S) is never G3 gate evidence (#389 review). */
+export const G3_ON_SERVICE_NOT_GATE = 'a G4 S run (the CX23 service, --service): never G3 gate evidence';
 
 /**
  * What run.mjs applies to a scenario (#122 review findings 3 and 4):

@@ -488,6 +488,10 @@ describe('run.mjs end to end with its real adapters (fake test-server CLI and fa
             assert.match(driverLog, /DRIVER \{"type":"spawn","bot":"FRCFLD"\}/);
             assert.match(driverLog, /DRIVER \{"type":"env","ctl":false,"stateDir":false,"hcloud":false,"extra":"kept"\}/, 'finding 5');
             assert.match(r.stderr, /SMOKE run, not a G1 pass: stayMs=3000/);
+            // G4 step 7 (#446 review): EVERY run on a test server writes its usage line, here a G1 run on a driver.
+            const usage = fs.readFileSync(path.join(tmp, 'usage.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+            assert.deepEqual(usage.map((e) => [e.runId, e.scenario, e.goId, e.run, e.bot]), [[res.runId, 'g1-login-chat-walk', null, null, 'driver']]);
+            assert.equal(res.g4Acceptance, undefined, 'not a step-7 scenario: no acceptance record');
         } finally {
             fs.rmSync(tmp, { recursive: true, force: true });
         }

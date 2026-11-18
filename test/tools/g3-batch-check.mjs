@@ -26,6 +26,11 @@
 // gate exactly "G4", a KNOWN g4- scenario whose own gate is G4, the runner's service record with a GO id, and a
 // "service <unit> via cx23-ctl" driver; it fails closed (an unknown id is checked). Anything less (a G4 T rehearsal,
 // anything claiming G3 or a g3 scenario) is checked as before.
+// G4 step 7 (lib/g4-accept.mjs): a G3 scenario run as a step-7 acceptance run on S (D, and C in run 5) is no batch
+// either. isG3AcceptanceOnService skips exactly those: gate exactly "G3", a step-7 g3- scenario, the runner's
+// g4Acceptance record, a "service <unit> via cx23-ctl" driver with a GO id, and marked "never G3 gate evidence" (so it
+// can never count for G3). --tree then runs the G4 step-7 check (checkAcceptanceResults) over every result under <dir>,
+// so step-7 evidence is checked in the same CI step; test/tools/g4-accept-check.mjs runs it alone (and --complete).
 //
 // Prints one line per problem; exit 0 = consistent, 1 = not, 2 = usage. See crossCheckBatch in
 // test/runner/lib/g3.mjs.
@@ -33,7 +38,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { crossCheckBatch, isG3Result } from '../runner/lib/g3.mjs';
+import { crossCheckBatch, G3_ON_SERVICE_NOT_GATE, isG3Result } from '../runner/lib/g3.mjs';
+import { checkAcceptanceResults, isAcceptanceRecord, SERVICE_DRIVER_RE, STEP7_SCENARIOS } from '../runner/lib/g4-accept.mjs';
 
 const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const isBatchFile = (f) => path.basename(f) === 'batch.json';
@@ -96,6 +102,13 @@ export function isG4ServiceResult(result, scenarioGates = {}) {
 }
 
 
+/** A G3 scenario's step-7 acceptance record on S (see the header): skipped by the G3 tree check, checked by the G4 one. */
+export function isG3AcceptanceOnService(result) {
+    return isAcceptanceRecord(result) && result.gate === 'G3' && STEP7_SCENARIOS.includes(result.scenario) && /^g3-/.test(result.scenario)
+        && SERVICE_DRIVER_RE.test(String(result.driver ?? '')) && typeof result.service?.goId === 'string'
+        && result.gateValid === false && (result.weakenedParams ?? []).includes(G3_ON_SERVICE_NOT_GATE);
+}
+
 /**
  * Every G3 result under root must be covered by its nearest batch.json, and each such batch.json must
  * vouch for all the G3 results it covers. Returns the problems (empty = consistent, or no G3 results).
@@ -104,6 +117,7 @@ export function checkEvidenceTree(root, { g3Scenarios = [], scenarioGates = {} }
     if (!fs.existsSync(root)) return [];
     const problems = [];
     const byBatch = new Map();
+    const all = [];
     for (const f of jsonFilesUnder(root)) {
         let result;
         try {
@@ -112,7 +126,9 @@ export function checkEvidenceTree(root, { g3Scenarios = [], scenarioGates = {} }
             problems.push(`${f}: cannot be read as JSON (${e.code ?? 'parse error'}), so it may hide a G3 result`);
             continue;
         }
+        if (!isBatchFile(f)) all.push({ file: f, result });
         if (!isG3Result(result, g3Scenarios)) continue;
+        if (isG3AcceptanceOnService(result) && !isBatchFile(f)) continue;   // a step-7 run on S: the G4 check below
         if (isG4ServiceResult(result, scenarioGates) && !isBatchFile(f)) continue;   // a G4 service run: no batch
         if (isBatchFile(f)) {
             problems.push(`${f}: a batch.json that is itself a G3 result: not a batch summary, and not gate evidence`);
@@ -132,6 +148,7 @@ export function checkEvidenceTree(root, { g3Scenarios = [], scenarioGates = {} }
         if (kind === 'neither') problems.push(`${b}: says neither gate: true nor smoke: true, so its ${files.length} G3 result(s) are rejected (only batch.mjs --gate writes gate: true)`);
         if (kind === 'both') problems.push(`${b}: says both gate: true and smoke: true, so its ${files.length} G3 result(s) are rejected`);
     }
+    problems.push(...checkAcceptanceResults(all, { g3OnServiceReason: G3_ON_SERVICE_NOT_GATE }).problems);
     return problems;
 }
 

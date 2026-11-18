@@ -13,7 +13,7 @@ import { Buffer } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { writeAtomic, readJsonRetry } from './fixtures/atomic-write.mjs';
 import zlib from 'node:zlib';
-import { parseRotatedLog } from '../runner/lib/adapters.mjs';
+import { parseRotatedLog, parseStarts } from '../runner/lib/adapters.mjs';
 import { windowsShellSkip } from './fixtures/windows-skip.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -1682,5 +1682,49 @@ describe('the server log rolls over at 00:00 UTC (round 3 batch B): rotn-test lo
 
     test('parseRotatedLog without a header keeps every line', () => {
         assert.deepEqual(parseRotatedLog(['a', 'b']), { files: [], lines: ['a', 'b'] });
+    });
+});
+
+describe('G4 step 7 freshness: rotn-test starts counts the server starts over EVERY rolled-over log', () => {
+    const bash = findBash();
+    const helper = fwd(path.join(repo, 'deploy', 'test-server', 'rotn-test.sh'));
+    const START = '[10:00:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Starting minecraft server version 1.12.2';
+    const serverDir = () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-starts-'));
+        fs.mkdirSync(path.join(dir, 'logs'));
+        return dir;
+    };
+    const starts = (dir, env = {}) => spawnSync(bash, [helper, 'starts'], { encoding: 'utf8', env: { ...process.env, ROTN_TEST_SERVER_DIR: fwd(dir), ROTN_TEST_GZ_RETRY_S: '0', ...env } });
+
+    test('a fresh server: one start in latest.log; a midnight roll-over keeps it one; a restart (or an earlier life) makes it more', () => {
+        const dir = serverDir();
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), `${START}\nDone\n`);
+        let r = starts(dir);
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(parseStarts(r.stdout.split('\n').filter(Boolean)), { starts: 1, files: 1 });
+        // 00:00 UTC: the start moved into a daily .gz; latest.log has none. Still one.
+        fs.writeFileSync(path.join(dir, 'logs', '2026-11-18-1.log.gz'), zlib.gzipSync(`${START}\nDone\n`));
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'after midnight\n');
+        assert.deepEqual(parseStarts(starts(dir).stdout.split('\n').filter(Boolean)), { starts: 1, files: 2 });
+        // A restart: the old latest.log rolled into another .gz and a new start in latest.log. Every daily file counts,
+        // not only the newest (an older .gz with the first start is still read).
+        fs.writeFileSync(path.join(dir, 'logs', '2026-11-19-1.log.gz'), zlib.gzipSync('after midnight\n'));
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), `${START}\n`);
+        assert.deepEqual(parseStarts(starts(dir).stdout.split('\n').filter(Boolean)), { starts: 2, files: 3 });
+        // Forge's debug-N.log.gz repeats latest.log: never counted.
+        fs.writeFileSync(path.join(dir, 'logs', 'debug-1.log.gz'), zlib.gzipSync(`${START}\n`));
+        assert.deepEqual(parseStarts(starts(dir).stdout.split('\n').filter(Boolean)), { starts: 2, files: 3 });
+    });
+
+    test('no logs at all: 0 starts; an unreadable .gz: exit 3 and no count (never a short count); extra arguments: usage', () => {
+        const dir = serverDir();
+        assert.equal(starts(dir).stdout.trim(), 'starts=0 files=0');
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), `${START}\n`);
+        fs.writeFileSync(path.join(dir, 'logs', '2026-11-18-1.log.gz'), zlib.gzipSync(`${START}\n`).subarray(0, 12));
+        const bad = starts(dir);
+        assert.equal(bad.status, 3);
+        assert.match(bad.stderr, /cannot read 2026-11-18-1\.log\.gz \(gzip failed twice\)/);
+        assert.equal(bad.stdout, '');
+        assert.equal(spawnSync(bash, [helper, 'starts', 'x'], { encoding: 'utf8', env: { ...process.env, ROTN_TEST_SERVER_DIR: fwd(dir) } }).status, 2);
     });
 });
