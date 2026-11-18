@@ -33,8 +33,9 @@
 #                 new Done line (each step up to TIMEOUT_S, 30..900, default 300). Exit 4: no stop; 5: no Done;
 #                 6: the start failed; 125: after the new Done, Mod Director's downloads fail the pinned check
 #                 (ADR 0008; the server is stopped, phase failed:mod-director), an infra fault as at first start.
-#   log [N] [rotated]  Tail the server log; with rotated, over the newest rolled-over log too (log4j rolls
-#                 latest.log at 00:00 UTC; the first line names the files).
+#   log [N] [rotated|since-start]  Tail the server log; with rotated, over the newest rolled-over log too (log4j
+#                 rolls latest.log at 00:00 UTC; the first line names the files). since-start: the same files from
+#                 the server's last start line on, at most N lines (G4 step 7; the first line says found/lines/over).
 #   build-log [N]  Tail the cloud-init build log.
 #   ssh [CMD]     Open an SSH session (or run CMD) on the server.
 #   env           Print TEST_SERVER_* exports for the server.
@@ -1188,8 +1189,9 @@ main() {
       fi
       exit "$rc" ;;
     log)
-      # log [N] [rotated]: rotated also reads the newest daily rolled-over logs/YYYY-MM-DD-N.log.gz (00:00 UTC; rotn-test.sh).
-      [[ ${ARGS[0]:-100} =~ ^[0-9]+$ && ( -z ${ARGS[1]:-} || ${ARGS[1]:-} == rotated ) ]] || die "usage: log [N] [rotated]"
+      # log [N] [rotated|since-start]: rotated also reads the newest daily rolled-over logs/YYYY-MM-DD-N.log.gz (00:00 UTC;
+      # rotn-test.sh); since-start reads the same files from the server's last start line on, N lines at most (G4 step 7).
+      [[ ${ARGS[0]:-100} =~ ^[0-9]+$ && ( -z ${ARGS[1]:-} || ${ARGS[1]:-} == rotated || ${ARGS[1]:-} == since-start ) ]] || die "usage: log [N] [rotated|since-start]"
       load_meta; rssh "rotn-test log ${ARGS[0]:-100} ${ARGS[1]:-}" | tr -d '\r' ;;
     build-log) load_meta; rssh "rotn-test build-log ${ARGS[0]:-100}" | tr -d '\r' ;;
     ssh) load_meta; rssh "${ARGS[@]}" ;;

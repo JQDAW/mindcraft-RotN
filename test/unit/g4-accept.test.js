@@ -15,7 +15,7 @@ import {
     parseLedger, recordUsage, releaseFromJournal, runOf, serverCreatedMs, startAcceptance,
 } from '../runner/lib/g4-accept.mjs';
 import { timeQuery } from '../runner/lib/s1.mjs';
-import { parseStarts } from '../runner/lib/adapters.mjs';
+import { LOG_SINCE_START_MAX, parseSinceStartLog, parseStarts } from '../runner/lib/adapters.mjs';
 import { releaseLine, releaseLineFor } from '../../src/mindcraft/release_line.js';
 import { G3_CONSOLE_ALLOW, G3_ON_SERVICE_NOT_GATE, G4_SERVICE_NOT_GATE, consoleAllowFor } from '../runner/lib/g3.mjs';
 import { acceptanceApplies, policyReasonApplies, resolveTag } from '../runner/run.mjs';
@@ -181,8 +181,8 @@ describe('a fresh test server (e): the usage ledger, the log, and two server-sid
         fs.writeFileSync(path.join(dir, 'server-create.json'), JSON.stringify({ server: { created: '2026-11-18T10:00:00Z' } }));
         const sent = [];
         const server = {
-            log: () => [start, 'Done'],
-            logRotated: () => { throw new Error('not needed'); },
+            log: () => { throw new Error('not used: the log comes from its start line on'); },
+            logSinceStart: () => parseSinceStartLog(['##rotn-test since-start files=latest.log found=1 lines=2 over=0', start, 'Done']),
             starts: () => parseStarts(['starts=1 files=1']),
             console: (cmd) => { sent.push(cmd); return ['[10:10:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 6000']; },
         };
@@ -193,17 +193,54 @@ describe('a fresh test server (e): the usage ledger, the log, and two server-sid
         assert.deepEqual(sent, ['time query gametime']);
         assert.equal(fs.existsSync(path.join(dir, USAGE_FILE)), false, 'the check writes nothing');
         assert.equal(serverCreatedMs(dir, fs, path), created);
-        // After 00:00 UTC the start line is in the rolled-over file.
-        const rolled = { ...server, log: () => ['[00:00:01] Done'], logRotated: () => ({ files: ['2026-11-18-1.log.gz', 'latest.log'], lines: [start, '[00:00:01] Done'] }) };
+        // After 00:00 UTC the start line is in the rolled-over file (rotn-test reads it, then latest.log).
+        const rolled = { ...server, logSinceStart: () => parseSinceStartLog(['##rotn-test since-start files=2026-11-18-1.log.gz,latest.log found=1 lines=2 over=0', start, '[00:00:01] Done']) };
         assert.equal(startAcceptance({ server: rolled, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.ok, true);
         // A server without the starts read, a console that refuses, an unreadable log, no server-create.json: not fresh.
         const { starts, ...noStarts } = server;
         void starts;
         assert.match(startAcceptance({ server: noStarts, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.why, /starts could not be counted/);
         assert.match(startAcceptance({ server: { ...server, console: () => { throw new Error('refused'); } }, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.why, /world's age could not be read/);
-        assert.match(startAcceptance({ server: { ...server, log: () => { throw new Error('ssh'); } }, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.why, /log could not be read/);
+        assert.match(startAcceptance({ server: { ...server, logSinceStart: () => { throw new Error('ssh'); } }, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.why, /log could not be read/);
         const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'g4-accept-'));
         assert.match(startAcceptance({ server, env: { ...env, TEST_SERVER_STATE_DIR: bare }, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.why, /creation time is unknown/);
+    });
+
+    test('soak 3: the log comes from the start line on, not a fixed tail: a startup over 20,000 lines passes; no start line, past the bound or no answer fails closed', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g4-accept-'));
+        fs.writeFileSync(path.join(dir, 'server-create.json'), JSON.stringify({ server: { created: '2026-11-18T10:00:00Z' } }));
+        const env = { ...envFor({ run: 1 }), TEST_SERVER_NAME: 'mcr-test-x', TEST_SERVER_STATE_DIR: dir };
+        // The live pack (soak 3): about 20,200 lines from the start line to Done. A 20,000-line tail lost the start line.
+        const startup = Array.from({ length: 25000 }, (_, i) => `[10:00:01] [main/INFO] [FML]: startup line ${i}`);
+        const fromStart = [start, ...startup, '[10:02:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Done (19.867s)!'];
+        assert.equal(fromStart.slice(-20000).some((l) => l.includes('Starting minecraft server version ')), false, 'a 20,000-line tail misses it');
+        const asked = [];
+        const answer = (out) => ({
+            starts: () => parseStarts(['starts=1 files=1']),
+            console: () => ['[10:10:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 6000'],
+            logSinceStart: (max) => { asked.push(max); return parseSinceStartLog(out); },
+        });
+        const run = (server, extra = {}) => startAcceptance({ server, env, scenarioId: 'g4-soak-2h', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000, ...extra }).fresh;
+        const long = run(answer([`##rotn-test since-start files=latest.log found=1 lines=${fromStart.length} over=0`, ...fromStart]));
+        assert.equal(long.ok, true, long.why);
+        assert.deepEqual(asked, [LOG_SINCE_START_MAX], 'the default bound');
+        // No start line in the files: fails closed (as before, the history cannot be checked).
+        assert.match(run(answer(['##rotn-test since-start files=latest.log found=0 lines=0 over=0'])).why, /start line is not in the fetched log/);
+        // Past the bound: no lines come back, and the reason says so.
+        assert.match(run(answer(['##rotn-test since-start files=latest.log found=1 lines=250001 over=1'])).why,
+            /log from its start line is 250001 lines, over the 200000-line \(or byte\) bound, so its history cannot be checked/);
+        assert.match(run(answer([`##rotn-test since-start files=latest.log found=1 lines=${fromStart.length} over=1`]), { logMax: 1000 }).why, /over the 1000-line/);
+        // No header (an older rotn-test, or garbage): fails closed; a server object without the read: fails closed.
+        assert.match(run(answer(fromStart)).why, /log from its start line could not be read/);
+        const { logSinceStart, ...noRead } = answer([]);
+        void logSinceStart;
+        assert.match(run(noRead).why, /log from its start line could not be read/);
+        // The parser: lines only when found and within the bound.
+        assert.deepEqual(parseSinceStartLog(['##rotn-test since-start files=a.log.gz,latest.log found=1 lines=1 over=0', start]),
+            { files: ['a.log.gz', 'latest.log'], found: true, count: 1, over: false, lines: [start] });
+        assert.deepEqual(parseSinceStartLog(['##rotn-test since-start files=latest.log found=1 lines=9 over=1', 'x']).lines, []);
+        assert.equal(parseSinceStartLog([]), null);
+        assert.equal(parseSinceStartLog(null), null);
     });
 
     test('recordUsage: EVERY run on a test server writes a line, marked or not; a failed write is reported', () => {

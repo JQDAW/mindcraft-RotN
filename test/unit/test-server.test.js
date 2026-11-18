@@ -13,7 +13,7 @@ import { Buffer } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { writeAtomic, readJsonRetry } from './fixtures/atomic-write.mjs';
 import zlib from 'node:zlib';
-import { parseRotatedLog, parseStarts } from '../runner/lib/adapters.mjs';
+import { parseRotatedLog, parseSinceStartLog, parseStarts } from '../runner/lib/adapters.mjs';
 import { windowsShellSkip } from './fixtures/windows-skip.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -1673,15 +1673,79 @@ describe('the server log rolls over at 00:00 UTC (round 3 batch B): rotn-test lo
     test('bad arguments are refused, on the server and in test-server.sh before any SSH', () => {
         const dir = serverDir();
         assert.equal(helperRun(dir, ['log', 'x']).status, 2);
-        for (const args of [['log', 'abc'], ['log', '10', 'all'], ['log', '10', 'rotated;id']]) {
+        assert.equal(helperRun(dir, ['log', '10', 'since-start;id']).status, 2);
+        for (const args of [['log', 'abc'], ['log', '10', 'all'], ['log', '10', 'rotated;id'], ['log', '10', 'since-start;id'], ['log', 'x', 'since-start']]) {
             const r = spawnSync(bash, [fwd(script), ...args], { encoding: 'utf8', env: { ...process.env, TEST_SERVER_NAME: 'mcr-test-none' } });
             assert.notEqual(r.status, 0, args.join(' '));
-            assert.match(r.stderr, /usage: log \[N\] \[rotated\]/, args.join(' '));
+            assert.match(r.stderr, /usage: log \[N\] \[rotated\|since-start\]/, args.join(' '));
         }
     });
 
     test('parseRotatedLog without a header keeps every line', () => {
         assert.deepEqual(parseRotatedLog(['a', 'b']), { files: [], lines: ['a', 'b'] });
+    });
+});
+
+describe('G4 step 7 freshness (soak 3): rotn-test log N since-start reads from the last start line on, bounded', () => {
+    const bash = findBash();
+    const helper = fwd(path.join(repo, 'deploy', 'test-server', 'rotn-test.sh'));
+    const START = '[18:32:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Starting minecraft server version 1.12.2';
+    const serverDir = () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-logs-'));
+        fs.mkdirSync(path.join(dir, 'logs'));
+        return dir;
+    };
+    const helperRun = (dir, args, env = {}) => spawnSync(bash, [helper, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ROTN_TEST_SERVER_DIR: fwd(dir), ...env } });
+    const out = (r) => r.stdout.split('\n').filter(Boolean);
+
+    test('a startup longer than 20,000 lines comes back whole, from the start line to the end (a fixed tail lost it)', () => {
+        const dir = serverDir();
+        const startup = Array.from({ length: 25000 }, (_, i) => `[18:32:30] [main/INFO] [FML]: startup line ${i}`);
+        const after = [START, ...startup, '[18:33:57] Done (19.867s)!', 'scenario-r1-begin'];
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), ['pre 1', 'pre 2', ...after].join('\n') + '\n');
+        assert.equal(out(helperRun(dir, ['log', '20000'])).includes(START), false, 'the old 20,000-line tail misses the start line');
+        const r = helperRun(dir, ['log', '200000', 'since-start']);
+        assert.equal(r.status, 0, r.stderr);
+        const lines = out(r);
+        assert.equal(lines[0], `##rotn-test since-start files=latest.log found=1 lines=${after.length} over=0`);
+        assert.deepEqual(lines.slice(1), after);
+        assert.deepEqual(parseSinceStartLog(lines), { files: ['latest.log'], found: true, count: after.length, over: false, lines: after });
+    });
+
+    test('the LAST start line counts; after 00:00 UTC it is in the newest daily .gz, then latest.log follows', () => {
+        const dir = serverDir();
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), `old\n${START}\nfirst run\n${START}\nsecond run\n`);
+        assert.deepEqual(out(helperRun(dir, ['log', '100', 'since-start'])), ['##rotn-test since-start files=latest.log found=1 lines=2 over=0', START, 'second run']);
+        fs.writeFileSync(path.join(dir, 'logs', '2026-11-18-1.log.gz'), zlib.gzipSync(`boot\n${START}\nDone\n`));
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'after midnight\n');
+        assert.deepEqual(out(helperRun(dir, ['log', '100', 'since-start'])),
+            ['##rotn-test since-start files=2026-11-18-1.log.gz,latest.log found=1 lines=3 over=0', START, 'Done', 'after midnight']);
+    });
+
+    test('fails closed: no start line, or past the line or byte bound, gives the header and no lines', () => {
+        const dir = serverDir();
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'no start here\nDone\n');
+        const none = helperRun(dir, ['log', '100', 'since-start']);
+        assert.equal(none.status, 0, none.stderr);
+        assert.deepEqual(out(none), ['##rotn-test since-start files=latest.log found=0 lines=0 over=0']);
+        assert.deepEqual(parseSinceStartLog(out(none)).lines, []);
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), `${START}\na\nb\nc\n`);
+        assert.deepEqual(out(helperRun(dir, ['log', '3', 'since-start'])), ['##rotn-test since-start files=latest.log found=1 lines=4 over=1']);
+        assert.deepEqual(out(helperRun(dir, ['log', '4', 'since-start'])).length, 5, 'exactly at the bound: all of it');
+        assert.deepEqual(out(helperRun(dir, ['log', '100', 'since-start'], { ROTN_TEST_LOG_MAX_BYTES: '50' })), ['##rotn-test since-start files=latest.log found=1 lines=4 over=1']);
+        // No latest.log at all: still a header, found=0.
+        fs.rmSync(path.join(dir, 'logs', 'latest.log'));
+        assert.deepEqual(out(helperRun(dir, ['log', '100', 'since-start'])), ['##rotn-test since-start files=latest.log found=0 lines=0 over=0']);
+    });
+
+    test('an unreadable .gz fails the whole answer (exit 3, no header), as for rotated', () => {
+        const dir = serverDir();
+        fs.writeFileSync(path.join(dir, 'logs', '2026-11-18-1.log.gz'), zlib.gzipSync(`${START}\n`).subarray(0, 12));
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'x\n');
+        const r = helperRun(dir, ['log', '100', 'since-start'], { ROTN_TEST_GZ_RETRY_S: '0' });
+        assert.equal(r.status, 3);
+        assert.equal(r.stdout, '');
+        assert.equal(parseSinceStartLog(out(r)), null);
     });
 });
 

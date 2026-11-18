@@ -13,7 +13,16 @@ const online = () => fs.existsSync(path.join(dir, 'online'));
 const pos = () => (fs.existsSync(posFile) ? JSON.parse(fs.readFileSync(posFile, 'utf8')) : [0.5, 64, 0.5]);
 const [cmd, ...rest] = process.argv.slice(2);
 
-if (cmd === 'log') {
+if (cmd === 'log' && rest[1] === 'since-start') {
+    // G4 step 7: rotn-test log N since-start over the fake's one log file (the bytes bound is rotn-test's own test).
+    const lines = read();
+    let at = -1;
+    lines.forEach((l, i) => { if (l.includes('Starting minecraft server version ')) at = i; });
+    const from = at < 0 ? [] : lines.slice(at);
+    const over = from.length > Number(rest[0]);
+    process.stdout.write([`##rotn-test since-start files=latest.log found=${at < 0 ? 0 : 1} lines=${from.length} over=${over ? 1 : 0}`,
+        ...(over ? [] : from)].join('\n') + '\n');
+} else if (cmd === 'log') {
     process.stdout.write(read().slice(-Number(rest[0] ?? 100)).join('\n') + '\n');
 } else if (cmd === 'console') {
     const line = rest.slice(rest.indexOf('--') + 1).join(' ');
