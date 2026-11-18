@@ -428,3 +428,16 @@ test('#453 review 4: avoidEnemies sets its goal again only after 2 ticks in a ro
     assert.equal(await run((i) => i % 2 === 1), 1, 'one tick still, then moving again: the path stands');
     assert.ok(await run(() => false) >= 2, 'still for 2 ticks: set again');
 });
+
+test('#453 nit 1: an animal that did not react hides neither a second one that did nor the herd', () => {
+    const now = 100_000;
+    const at = (name, x) => ({ ...mob(name, x), metadata: { 7: 6 } });
+    const plan = (entities, damage) => threatPlan(fakeBot(entities, { lastDamageTime: now - 500, lastDamageTaken: damage, food: 12 }), { now });
+    // A peck of 1: the rooster (damage 2) did not do it; the ferret (damage 1) next to it did.
+    const rooster = at('animania:rooster_leghorn', 1.2), ferret = at('animania:ferret_grey', 2.5);
+    const peck = plan([rooster, ferret], 1);
+    assert.deepEqual([peck?.action, peck?.from], ['fight', ferret]);
+    // A rooster that did not react, and a Holstein herd in reach: the herd is fled.
+    const herd = plan([rooster, at('animania:cow_holstein', 1.5), at('animania:cow_holstein', -2)], 1);
+    assert.equal(herd?.why, 'a herd fights back');
+});

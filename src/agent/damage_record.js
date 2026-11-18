@@ -8,6 +8,10 @@
  * #453 review 1: a fall counts as the damage's cause when the bot dropped more than FALL.minDrop
  * blocks (1.12 fall damage starts past 3) and landed within FALL.landedMs of the damage, or is
  * still in the air that far below where it left the ground.
+ * Not yet seen live (#453 nit 3): this relies on the 'move' event with onGround (from the position
+ * packets) arriving around the 'health' packet of the landing; either order is covered (landed
+ * within FALL.landedMs, or still in the air below the take-off point), but the real order and
+ * timing on this server are to be confirmed in the next live run.
  */
 export const FALL = { minDrop: 3, landedMs: 1000 };
 
