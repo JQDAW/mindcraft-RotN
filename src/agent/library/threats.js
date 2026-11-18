@@ -24,7 +24,7 @@
 // variants take cover), so acting on them never makes the bot bolder (#186 review nit).
 import { threatOf, nightThreats } from '../../../packages/rotn-data/index.js';
 import * as mc from '../../utils/mcdata.js';
-import { mayBelongToPlayer } from './hunting.js';
+import { mayBelongToPlayer } from './ownership.js';
 
 /** How far each reaction's mob is watched, and how far the bot moves away from it. */
 export const RANGES = {
@@ -280,13 +280,15 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
     // it calls for help.
     // #453 review 1: fightBack true is hit back only on fightsBack (its own hit, not the world's),
     // and never when it may be a player's (a tamed wolf, a chested llama): then the bot backs off.
-    const hitter = calmOnes.find(x => isAngry(x.e) === null && hitByIt(bot, x, now));
+    // #453 nit 1: each animal by its own rule in the search, so one that did not react (a rooster
+    // next to a ferret's peck) neither hides a second one that did nor the herd below.
+    const reacts = (x) => isAngry(x.e) === null && (x.t.provoked?.fightBack === true ? fightsBack(bot, x, now) : hitByIt(bot, x, now));
+    const hitter = calmOnes.find(reacts);
     if (hitter) {
         const id = hitter.e.id, name = hitter.e.name, p = hitter.t.provoked;
         const flee = { action: 'flee', why: 'provoked', from: hitter.e, away: RANGES.fight.away,
             isEnemy: (e) => e.id === id || (!!p?.callsForHelp && e.name === name) };
         if (p?.fightBack !== true) return flee;
-        if (!fightsBack(bot, hitter, now)) return null;
         if (ownedMaybe(bot, hitter.e)) return { ...flee, why: 'provoked, and it may be a player\'s' };
         return { action: 'fight', why: 'provoked', from: hitter.e, isEnemy: (e) => e.id === id };
     }
