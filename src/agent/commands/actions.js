@@ -4,7 +4,7 @@ import { buildShelter } from '../library/shelter.js';
 import settings from '../settings.js';
 import convoManager from '../conversation.js';
 import { addTask, cancelTask } from '../task_queue.js';
-import { finishTask } from '../priority.js';
+import { finishTask, endOpenGoal } from '../priority.js';
 import { forgetNightGoal } from '../night_routine.js';
 import { hasAutonomyPrefix } from '../agenda_driver.js';
 import { nightPhase, nightRoutineActive } from '../library/night.js';
@@ -776,7 +776,7 @@ export const actionsList = [
         perform: async function (agent, context) {
             agent.self_prompter.stop();
             // #463 nit 1: a task giver's !endGoal also ends the goal the night stopped (resumeNightGoal).
-            if (context?.sender) forgetNightGoal(agent);
+            if (context?.sender) { forgetNightGoal(agent); endOpenGoal(agent); } // #468 review 1 (iii): and the open goal until the retry
             return 'Self-prompting stopped.';
         }
     },

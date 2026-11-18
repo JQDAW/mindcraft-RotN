@@ -545,6 +545,12 @@ export class Agenda {
      * waits on a stuck one): which step, what failed, when it is retried; gather what it needs,
      * explore nearby, keep the food and shelter reserves. Null when no step waits.
      */
+    /** The current stuck window's key (#468 review 1: the open goal's budget is per window), or null. */
+    openGoalKey() {
+        const stuck = this.steps.find(s => this.isWaiting(s.id));
+        return stuck ? `${stuck.id}@${this.stuck[stuck.id].at}` : null;
+    }
+
     openGoal(state = null) {
         const stuck = this.steps.find(s => this.isWaiting(s.id));
         if (!stuck) return null;

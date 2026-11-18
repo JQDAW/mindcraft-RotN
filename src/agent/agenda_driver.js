@@ -155,7 +155,7 @@ function tickState(agent) {
 export function agendaTick(agent, { now = Date.now() } = {}) {
     const agenda = agent.agenda;
     // A stuck step no longer pauses the agenda (#463 decision, STUCK_RETRY): it stays active.
-    if (!agenda?.active && !agenda?.finished) { agent._agenda_open_goal = null; return null; }
+    if (!agenda?.active && !agenda?.finished) { agent._agenda_open_goal = agent._agenda_open_key = null; return null; }
     if (now - (agent._agenda_tick_at ?? -Infinity) < TICK_MS) return null;
     const last = agent._agenda_tick_at;
     agent._agenda_tick_at = now;
@@ -216,9 +216,10 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         const open = agenda.openGoal(state);
         if (open && agent._agenda_open_goal == null) say(agent, `agenda open goal: step ${agenda.steps.find(s => agenda.isWaiting(s.id))?.id} waits; self-prompting on gathering for it`);
         agent._agenda_open_goal = open;
+        agent._agenda_open_key = open ? agenda.openGoalKey() : null;
         return null;
     }
-    agent._agenda_open_goal = null;
+    agent._agenda_open_goal = agent._agenda_open_key = null;
     if (!step) {
         say(agent, 'agenda done');
         agenda.finish();

@@ -23,6 +23,7 @@ import { hasWeapon, shelterEnemy } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
 import { say, isGiverGoal, ownsPrompt } from './agenda_driver.js';
+import { OPEN_GOAL_PREFIX } from './agenda.js';
 import settings from './settings.js';
 import { heldFoodHunger, FOOD_TARGET } from './library/food.js';
 
@@ -162,7 +163,8 @@ export function leaveShelterFor(agent, why) {
 function holdAutonomy(agent) {
     const sp = agent.self_prompter;
     if (sp.isActive()) {
-        if (!ownsPrompt(agent) && sp.prompt) agent._night_goal = sp.prompt;
+        // #468 review 2: not the open goal: the agenda gives it again (under its window budget).
+        if (!ownsPrompt(agent) && sp.prompt && !sp.prompt.startsWith(OPEN_GOAL_PREFIX)) agent._night_goal = sp.prompt;
         sp.stop(false);
     }
     agent._agenda_paused = true;

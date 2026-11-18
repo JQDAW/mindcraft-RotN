@@ -161,8 +161,8 @@ function typedResumePending(agent, now) {
  * One tick of the priority stack. Returns what it did, for tests and logs:
  * 'held:<kind>' (a control hold), 'task:<id>' or 'task:<id>:waiting' (a task runs or waits for
  * the checkpoint), 'task:<id>:yield' (a paused conversation or a giver's !goal), 'task:<id>:failed',
- * 'relocating', 'night-goal' (the model's goal the night stopped started again), 'goal:open' (the open
- * goal started: nothing in the agenda runnable), modelGoalTick's 'goal' or 'goal:stopped', or
+ * 'relocating', 'night-goal' (the model's goal the night stopped started again), 'goal:open…' (the open
+ * goal: nothing in the agenda runnable; openGoalTick), modelGoalTick's 'goal' or 'goal:stopped', or
  * agendaTick's result (null, 'paused', 'yield', 'done', 'stuck', a step id).
  */
 export function autonomyTick(agent, { now = Date.now() } = {}) {
@@ -221,22 +221,86 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
  * often it swaps them, get one agenda step's LLM time together, then self-prompting stops. A goal
  * a task giver typed is not limited. Returns null, 'goal' or 'goal:stopped'.
  */
+/**
+ * #468 review: the open goal's budget, per stuck window (from a step getting stuck until its retry;
+ * agent._agenda_open_key): starts BACKOFF_MS apart, the wait doubling per start up to
+ * maxBackoffMs; all its self-prompting (the model's own !goal during it too) counted against one
+ * step's LLM time (stepBudget) for the whole window, never reset by a restart. Spent, or ended by a
+ * task giver's !endGoal: no open goal until the retry (the reserves and reflexes still run).
+ */
+export const OPEN_GOAL = { maxBackoffMs: 10 * 60_000 };
+
+/** The open goal's state for the current stuck window ({key, llmMs, starts, lastStartAt, running, at, ended}), or null. */
+function openGoalWindow(agent) {
+    const key = agent._agenda_open_key;
+    if (!key) return null;
+    if (agent._open_goal?.key !== key) agent._open_goal = { key, llmMs: 0, starts: 0, lastStartAt: null, running: false, at: null, ended: false, spentSaid: false };
+    return agent._open_goal;
+}
+
+/** #468 review 1 (iii): a task giver's !endGoal ends the open goal until the stuck step's retry. */
+export function endOpenGoal(agent) {
+    const w = openGoalWindow(agent);
+    if (!w) return false;
+    w.ended = true;
+    w.running = false;
+    return true;
+}
+
+/**
+ * The open goal (#468 review 1): while nothing in the agenda is runnable, agenda.openGoal is the
+ * model's own goal, under OPEN_GOAL's budget for the stuck window. Returns 'goal:open' (started),
+ * 'goal:open:running', 'goal:open:spent', 'goal:open:ended', 'goal:open:backoff', or undefined when
+ * there is none (the model's other goals go on below).
+ */
+function openGoalTick(agent, now, open) {
+    const sp = agent.self_prompter;
+    const w = openGoalWindow(agent);
+    if (!w) return undefined;
+    const budget = stepBudget().llm_ms;
+    if (w.running) {
+        if (sp.isActive() && !ownsPrompt(agent) && !sp.goal_by) {
+            w.llmMs += Math.min(Math.max(0, now - w.at), MAX_TICK_GAP_MS);
+            w.at = now;
+            // Its text is kept current (the minutes to the retry) while it runs.
+            if (sp.prompt === agent._open_goal_prompt && sp.prompt !== open) {
+                sp.prompt = open;
+                agent._open_goal_prompt = open;
+            }
+            if (w.llmMs < budget) return 'goal:open:running';
+            sp.stop(false);
+            w.running = false;
+        } else {
+            w.running = false; // it stopped (the model's !endGoal, the night), or the agenda or a giver took over
+            if (sp.isActive()) return undefined;
+        }
+    }
+    if (sp.isActive() || sp.loop_active || sp.isPaused?.()) return undefined;
+    if (w.ended) return 'goal:open:ended';
+    if (w.llmMs >= budget) {
+        if (!w.spentSaid) {
+            w.spentSaid = true;
+            say(agent, `agenda open goal: its ${minutes(budget)} of self-prompting for this wait are spent; none until the retry`);
+        }
+        return 'goal:open:spent';
+    }
+    if (w.starts > 0 && now < w.lastStartAt + Math.min(BACKOFF_MS * 2 ** (w.starts - 1), OPEN_GOAL.maxBackoffMs)) return 'goal:open:backoff';
+    w.starts++;
+    w.lastStartAt = now;
+    w.running = true;
+    w.at = now;
+    agent._model_goal = null;
+    agent._open_goal_prompt = open;
+    sp.start(open);
+    return 'goal:open';
+}
+
 function modelGoalTick(agent, now) {
     const sp = agent.self_prompter;
-    // #468 review 1: while nothing in the agenda is runnable, the open goal (agenda.openGoal) is the
-    // model's own goal: started when nothing self-prompts, and counted below like any model goal
-    // (one step's LLM time, then stopped; the next tick starts it again with a fresh count). Its
-    // text is kept current (the minutes to the retry) while it runs.
     const open = agent.agenda?.active ? agent._agenda_open_goal : null;
-    if (open && !sp.isActive() && !sp.loop_active && !sp.isPaused?.()) {
-        agent._model_goal = null;
-        agent._open_goal_prompt = open;
-        sp.start(open);
-        return 'goal:open';
-    }
-    if (open && sp.isActive() && sp.prompt === agent._open_goal_prompt && sp.prompt !== open) {
-        sp.prompt = open;
-        agent._open_goal_prompt = open;
+    if (open) {
+        const r = openGoalTick(agent, now, open);
+        if (r !== undefined) return r;
     }
     if (!sp.isActive() || ownsPrompt(agent) || sp.goal_by) {
         agent._model_goal = null;

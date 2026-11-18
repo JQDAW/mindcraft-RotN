@@ -1915,3 +1915,18 @@ test('#463 nits 1 and 2: a giver\'s !endGoal or !stop forgets the goal the night
     await stop(stopped, { sender: 'JQDAW' });
     assert.equal(stopped._night_goal, null);
 });
+
+test('#468 review 2: the night does not save the open goal (the agenda gives it again, under its window budget)', async (t) => {
+    quiet(t);
+    const { OPEN_GOAL_PREFIX } = await import('./agenda.js');
+    const agent = fakeAgent({ t: DUSK });
+    agent.self_prompter.prompt = `${OPEN_GOAL_PREFIX}step stone_axe (craft a stone axe) is stuck: 5 min of self-prompting; …`;
+    nightTick(agent, { now: Date.now(), ops: ops() });
+    await settle(agent);
+    assert.equal(agent.self_prompter.active, false, 'stopped at dusk');
+    assert.equal(agent._night_goal, undefined, 'not saved');
+    agent.bot.time.timeOfDay = MORNING;
+    nightTick(agent, { now: Date.now() + 1, ops: ops() });
+    await settle(agent);
+    assert.equal(resumeNightGoal(agent), false, 'nothing to restart');
+});
