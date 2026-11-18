@@ -104,7 +104,15 @@ export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries 
         // new Done line). Never re-sent after an ordinary failure (a second restart is not harmless); only a bash that
         // never started (nothing ran) is retried. Up to timeoutS for each of the stop and the start, plus a margin.
         restart: (timeoutS = 300) => call(['restart', String(timeoutS)], { ordinaryRetries: 0, callTimeoutMs: (2 * timeoutS + 60) * 1000 }),
+        // G4 step 7 (freshness): the server's starts over every rolled-over log (test-server.sh starts): {starts, files} or null.
+        starts: () => parseStarts(call(['starts'])),
     };
+}
+
+/** `rotn-test starts` output -> {starts, files}; null for anything else. */
+export function parseStarts(lines) {
+    const m = (lines ?? []).map((l) => /^starts=(\d+) files=(\d+)$/.exec(l)).find(Boolean);
+    return m ? { starts: Number(m[1]), files: Number(m[2]) } : null;
 }
 
 /** `rotn-test log N rotated` output -> {files, lines}; files is [] when the header line is missing. */

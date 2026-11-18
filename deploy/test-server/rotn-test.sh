@@ -18,6 +18,10 @@
 #                                        S; 5: no new Done line within S (or it exits first); 6: the start failed;
 #                                        125: after the new Done, Mod Director's downloads fail the pinned check
 #                                        (ADR 0008; phase failed:mod-director, the server stopped), as at first start.
+#   rotn-test starts                     how often the Minecraft server started on this box (G4 step 7, freshness):
+#                                        "Starting minecraft server" lines over every daily rolled-over
+#                                        logs/YYYY-MM-DD-N.log.gz (log4j rolls at each start and at 00:00 UTC) plus
+#                                        latest.log; prints "starts=<n> files=<k>"; exit 3 if a file cannot be read
 #   rotn-test mod-director               check what Mod Director downloaded against the pinned list (ADR 0008):
 #                                        exit 0 OK, 1 a problem, 3 cannot check; one line per pinned file
 set -euo pipefail
@@ -193,6 +197,30 @@ case $cmd in
     ;;
   mod-director)
     mod_director_check
+    ;;
+  starts)
+    (( $# == 0 )) || { echo "usage: rotn-test starts" >&2; exit 2; }
+    # Never a short count: a rolled-over file that cannot be read (log4j may still be writing it) is retried once,
+    # then the whole answer fails (exit 3). Forge's debug-N.log.gz files are not counted (they repeat latest.log).
+    n=0
+    k=0
+    shopt -s nullglob
+    for f in "$SERVER"/logs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.log.gz; do
+      if ! txt=$(gzip -dc "$f" 2>/dev/null); then
+        sleep "${ROTN_TEST_GZ_RETRY_S:-2}"
+        txt=$(gzip -dc "$f" 2>/dev/null) || { echo "rotn-test: cannot read $(basename "$f") (gzip failed twice)" >&2; exit 3; }
+      fi
+      c=$(printf '%s\n' "$txt" | grep -c 'Starting minecraft server version ' || true)
+      n=$(( n + c ))
+      k=$(( k + 1 ))
+    done
+    shopt -u nullglob
+    if [[ -f $LOG ]]; then
+      c=$(grep -c 'Starting minecraft server version ' "$LOG" || true)
+      n=$(( n + c ))
+      k=$(( k + 1 ))
+    fi
+    echo "starts=$n files=$k"
     ;;
   restart)
     # [--timeout S], S a positive whole number with no leading zero (#324 review: no 0, no octal); nothing else.
