@@ -10,7 +10,7 @@ import { nightPhase } from '../library/night.js';
 import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
 import { threatFor, hurtBy } from '../library/threats.js';
-import { mayBelongToPlayer, knownBases, isHuntableAnimal, tooWeakToHunt, HUNT_MIN_FOOD } from '../library/hunting.js';
+import { mayBelongToPlayer, retaliationRisk, knownBases, isHuntableAnimal, tooWeakToHunt, HUNT_MIN_FOOD } from '../library/hunting.js';
 import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
 
@@ -567,12 +567,20 @@ export const actionsList = [
             try { known = mob ? threatOf(mob.name) : null; } catch { known = null; }
             // A mob that just hurt the bot may be fought back (self-defense comes first).
             if (mob && mob.type !== 'player' && !HOSTILE.includes(known?.reaction) && !hurtBy(agent.bot, mob)) {
-                const skipped = [];
+                const skipped = [], risky = [];
                 const bases = knownBases(agent);
+                // #448: nor one whose hunt brings a bull or a herd down on the bot (retaliationRisk).
                 const free = world.getNearbyEntities(agent.bot, 24).filter(e => e.name === type)
-                    .find(e => { const why = mayBelongToPlayer(agent.bot, e, { bases }); if (why) skipped.push(why); return !why; });
+                    .find(e => {
+                        const why = mayBelongToPlayer(agent.bot, e, { bases });
+                        if (why) { skipped.push(why); return false; }
+                        const risk = retaliationRisk(agent.bot, e);
+                        if (risk) { risky.push(risk); return false; }
+                        return true;
+                    });
                 if (!free) {
-                    skills.log(agent.bot, `Not attacking ${type}: it may belong to a player (${[...new Set(skipped)].join('; ')}). Find a wild one away from fences, farms and houses.`);
+                    if (skipped.length) skills.log(agent.bot, `Not attacking ${type}: it may belong to a player (${[...new Set(skipped)].join('; ')}). Find a wild one away from fences, farms and houses.`);
+                    else skills.log(agent.bot, `Not attacking ${type}: ${[...new Set(risky)].join('; ')}. Find a lone one, away from bulls.`);
                     return;
                 }
                 await skills.attackEntity(agent.bot, free, true);

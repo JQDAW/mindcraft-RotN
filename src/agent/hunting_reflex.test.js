@@ -108,7 +108,8 @@ test('soak 2: a hunt that got stuck (the sow uphill) is not started again on the
     const saved = { ...HUNT };
     Object.assign(HUNT, { checkMs: 10, stuckMs: 60 });
     t.after(() => Object.assign(HUNT, saved));
-    const agent = huntAgent({ animals: [cow(1, 3), cow(2, 9)] });
+    // Two breeds: two cows of one breed are a herd (#448), which is not hunted.
+    const agent = huntAgent({ animals: [cow(1, 3), cow(2, 9, { name: 'animania:cow_angus' })] });
     const attacked = [];
     agent.bot.pvp = { attack: (e) => attacked.push(e.id), stop() {} };
     agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: false }; };
@@ -154,6 +155,37 @@ test('#431 review 7 (owed): an older hunt\'s unstuck stop is not held against th
     assert.equal(agent.bot.rotnHuntSkip?.get(1), undefined, 'not skipped: this hunt was not stopped by unstuck');
 });
 
+// #448 (soak 2's 22:48 "gored to death"): an Animania bull charges whoever hurts it or its herd,
+// and Animania cows call every cow of their breed within 16 when one is hurt.
+test('#448: no hunt near a bull or of a cow in a herd that calls for help; a lone cow is hunted; !attack says why', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { retaliationRisk, nearbyHuntable } = await import('./library/hunting.js');
+    const bull = (id, x) => ({ id, name: 'animania:bull_holstein', type: 'mob', position: new Vec3(x + 0.5, 64, 0.5), height: 1.6, metadata: { 7: 10 } });
+    const angus = (id, x) => cow(id, x, { name: 'animania:cow_angus' });
+    // A bull 10 blocks off: nothing is hunted, and the reason names it.
+    const withBull = huntAgent({ animals: [cow(1, 4), bull(2, 14)] });
+    assert.deepEqual(await hunt(withBull), [], 'no hunt near a bull');
+    assert.match(retaliationRisk(withBull.bot, withBull.bot.entities[1]), /^a animania:bull_holstein within 16 blocks/);
+    assert.deepEqual(nearbyHuntable(withBull.bot), []);
+    // A herd: two Holsteins 3 apart.
+    const herd = huntAgent({ animals: [cow(1, 4), cow(2, 7)] });
+    assert.deepEqual(await hunt(herd), [], 'no hunt of a herd that calls for help');
+    assert.match(retaliationRisk(herd.bot, herd.bot.entities[1]), /^in a herd: another animania:cow_holstein within 16 blocks/);
+    // A lone Holstein, an Angus nearby (another breed does not answer): hunted.
+    const lone = huntAgent({ animals: [cow(1, 4), angus(2, 7)] });
+    assert.equal(retaliationRisk(lone.bot, lone.bot.entities[1]), null);
+    assert.deepEqual(await hunt(lone), ['mode:hunting']);
+    // A bull 20 from the cow but 15 from the bot still counts (the walk takes the bot near it).
+    const behind = huntAgent({ animals: [cow(1, 4), bull(2, -15)] });
+    assert.match(retaliationRisk(behind.bot, behind.bot.entities[1]), /bull_holstein within 16/);
+    // !attack refuses with the reason.
+    const cmd = huntAgent({ animals: [cow(1, 4), bull(2, 14)] });
+    cmd.bot.pvp = { attack: () => assert.fail('never attacked'), stop() {} };
+    cmd.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: cmd.bot.output, interrupted: false }));
+    await executeCommand(cmd, '!attack("animania:cow_holstein")');
+    assert.match(cmd.bot.output, /Not attacking animania:cow_holstein: a animania:bull_holstein within 16 blocks \(it charges whoever hurts it or its herd; never hunt near one\)\. Find a lone one, away from bulls\./);
+});
+
 test('G4 #5: the hunting reflex does nothing when food is not due, at dusk or night, with a threat near, when busy, or sheltered', async (t) => {
     t.mock.method(console, 'log', () => {});
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16 })), [], 'food 16: not due');
@@ -178,7 +210,8 @@ test('G4 #5: the hunting reflex never hunts an animal that may belong to a playe
 
 test('G4 #5: !attack refuses an animal that may belong to a player, and takes a wild one of the same kind', async (t) => {
     t.mock.method(console, 'log', () => {});
-    const named = cow(1, 3, { metadata: { 2: 'Bessie' } }), wild = cow(2, 8);
+    // The wild one more than 16 blocks from the named one: together they would be a herd (#448).
+    const named = cow(1, 3, { metadata: { 2: 'Bessie' } }), wild = cow(2, -20);
     const agent = huntAgent({ animals: [named, wild] });
     const attacked = [];
     agent.bot.pvp = { attack: (e) => { attacked.push(e.id); delete agent.bot.entities[e.id]; }, stop() {} };

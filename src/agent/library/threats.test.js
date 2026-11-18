@@ -312,3 +312,40 @@ test('#434 nit: a ranged mob near a big slime steers the flee, and the walk keep
     assert.equal(armed.why, 'ranged');
     assert.equal(armed.isEnemy(slime), false);
 });
+
+test('#448: a provoked animal reacts only to its own hit (its damage, or within its reach): a bull or a polar bear is fled, a rooster hit back; starving next to one is not', () => {
+    const now = 100_000;
+    const at = (name, x, extra = {}) => ({ ...mob(name, x), ...extra });
+    const hit = (entities, damage) => threatPlan(fakeBot(entities, { lastDamageTime: now - 500, lastDamageTaken: damage }), { now });
+    const bull = at('animania:bull_holstein', 1.5);
+    const gored = hit([bull], 5);
+    assert.deepEqual([gored.action, gored.why, gored.from, gored.away], ['flee', 'provoked', bull, RANGES.fight.away]);
+    assert.equal(gored.isEnemy(bull), true);
+    // 3.5 away (beyond its reach 2 + 1): a hit of 5 is its own; starving (1) is not.
+    const far = at('animania:bull_holstein', 3.5);
+    assert.equal(hit([far], 5).action, 'flee');
+    assert.equal(hit([far], 1), null, 'starving or a fall next to a bull: no flee');
+    assert.equal(threatPlan(fakeBot([bull]), { now }), null, 'no hit, no reaction');
+    // A rooster can be fought back (fightBack true).
+    const rooster = at('animania:rooster_leghorn', 1.2);
+    const peck = hit([rooster], 2);
+    assert.deepEqual([peck.action, peck.why, peck.from], ['fight', 'provoked', rooster]);
+    // A polar bear calls the others: they are kept away from too.
+    const bear = at('minecraft:polar_bear', 1.5), other = at('minecraft:polar_bear', 6);
+    const mauled = hit([bear, other], 6);
+    assert.equal(mauled.action, 'flee');
+    assert.equal(mauled.isEnemy(other), true);
+});
+
+test('#448: two cows of one herd within reach at a hit: back off from the herd; one cow (the hunt\'s) is no reason', () => {
+    const now = 100_000;
+    const cow = (x, name = 'animania:cow_holstein') => mob(name, x);
+    const hit = (entities) => threatPlan(fakeBot(entities, { lastDamageTime: now - 500, lastDamageTaken: 2 }), { now });
+    const a = cow(1.5), b = cow(-2);
+    const herd = hit([a, b]);
+    assert.deepEqual([herd.action, herd.why, herd.away], ['flee', 'a herd fights back', RANGES.fight.away]);
+    assert.equal(herd.isEnemy(b), true);
+    assert.equal(hit([cow(1.5)]), null, 'one cow hitting back during its hunt');
+    assert.equal(hit([cow(1.5), cow(-2, 'animania:cow_angus')]), null, 'two breeds do not answer each other');
+    assert.equal(threatPlan(fakeBot([a, b]), { now }), null, 'no hit');
+});
