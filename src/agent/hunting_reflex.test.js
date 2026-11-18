@@ -294,6 +294,22 @@ test('#432 nit: below food 8, !goToCoordinates and !goToPlayer walk 32 blocks at
     assert.equal(hungryCloseness(agent, 'there', new Vec3(30.5, 64, 0.5), 2), 2, 'within 32: unchanged');
 });
 
+test('#443 review 1: a task giver\'s typed command is never capped while hungry; the model\'s same command is', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const run = async (cmd, context) => {
+        const agent = huntAgent({ food: 7, animals: [cow(1, 40)], blocks: { '40,64,0': 'dirt' } });
+        agent.bot.players = { JQDAW: { username: 'JQDAW', entity: { id: 5, type: 'player', username: 'JQDAW', position: new Vec3(60.5, 64, 0.5), height: 1.8 } } };
+        agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }), () => ({ message: agent.bot.output, interrupted: false }));
+        await executeCommand(agent, cmd, context);
+        return agent.bot.output;
+    };
+    for (const cmd of ['!goToCoordinates(100.5, 64, 0.5, 2)', '!goToPlayer("JQDAW", 3)', '!collectBlocks("dirt", 1)', '!moveAway(64)',
+        '!searchForEntity("animania:cow_holstein", 128)', '!searchForBlock("dirt", 128)']) {
+        assert.match(await run(cmd), /at most at food 7|at most toward .* at food 7/, `the model's ${cmd} is capped`);
+        assert.doesNotMatch(await run(cmd, { sender: 'JQDAW' }), /at most/, `a giver's typed ${cmd} is not`);
+    }
+});
+
 test('#432 nit: the eating mode names the emergency foods and never cloudsbluff as allowed', () => {
     const d = __modeForTest('eating').description;
     assert.match(d, /At food 5 or lower with nothing else \(food 0 kills on this pack\): a golden apple, raw venison, raw tofenison, raw chicken, rotten flesh, then hawthorn berries, in that order; never cloudsbluff, chorus fruit, pufferfish, raw eggs\./);

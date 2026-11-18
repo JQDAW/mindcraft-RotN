@@ -3129,6 +3129,20 @@ export async function moveAwayFromEntity(bot, entity, distance=16) {
     return await boundedGoto(bot, inverted_goal, GO_TO_LIMITS.fleeMs) === true;
 }
 
+/** The enemies within `distance` as one point, each weighted 1/d^2 (avoidEnemies), or null when there is none. */
+export function enemiesPoint(bot, isEnemy, distance) {
+    const here = bot.entity.position;
+    let w = 0, x = 0, y = 0, z = 0;
+    for (const e of Object.values(bot.entities ?? {})) {
+        if (!e?.position || e === bot.entity || !isEnemy(e)) continue;
+        const d = here.distanceTo(e.position);
+        if (d >= distance) continue;
+        const k = 1 / Math.max(d * d, 0.25);
+        w += k; x += k * e.position.x; y += k * e.position.y; z += k * e.position.z;
+    }
+    return w > 0 ? Vec3(x / w, y / w, z / w) : null;
+}
+
 export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHostile(entity), canHit=() => true) {
     /**
      * Move a given distance away from all nearby enemy mobs.
@@ -3142,11 +3156,18 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
      **/
     bot.modes.pause('self_preservation'); // prevents damage-on-low-health from interrupting the bot
     let enemy = world.getNearestEntityWhere(bot, isEnemy, distance);
+    let away = null; // the point the walk keeps away from
     while (enemy) {
-        const follow = new pf.goals.GoalFollow(enemy, distance+1); // move a little further away
-        const inverted_goal = new pf.goals.GoalInvert(follow);
-        bot.pathfinder.setMovements(new pf.Movements(bot));
-        bot.pathfinder.setGoal(inverted_goal, true);
+        // #444 review 3: away from all the enemies at once, not the nearest one: with a slime close
+        // and a skeleton farther the nearest one changed, and so did the way, every tick. Each
+        // enemy's weight is 1/d^2, so a near one counts most and a far one cannot pull the bot back
+        // towards it. The goal is set again only when that point moved.
+        const point = enemiesPoint(bot, isEnemy, distance) ?? enemy.position;
+        if (!away || away.distanceTo(point) > 1) {
+            away = point;
+            bot.pathfinder.setMovements(new pf.Movements(bot));
+            bot.pathfinder.setGoal(new pf.goals.GoalInvert(new pf.goals.GoalNear(point.x, point.y, point.z, distance + 1)));
+        }
         await new Promise(resolve => setTimeout(resolve, 500));
         enemy = world.getNearestEntityWhere(bot, isEnemy, distance);
         if (bot.interrupt_code) {

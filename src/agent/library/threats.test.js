@@ -349,3 +349,22 @@ test('#448: two cows of one herd within reach at a hit: back off from the herd; 
     assert.equal(hit([cow(1.5), cow(-2, 'animania:cow_angus')]), null, 'two breeds do not answer each other');
     assert.equal(threatPlan(fakeBot([a, b]), { now }), null, 'no hit');
 });
+
+test('#444 review 3: avoidEnemies keeps away from all the enemies at once, near ones weighing most, not only from the nearest', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { avoidEnemies, enemiesPoint } = await import('./skills.js');
+    const slime = { id: 901, name: 'slime', type: 'mob', position: new Vec3(3, 64, 0), height: 1 };
+    const skeleton = { id: 902, name: 'skeleton', type: 'mob', position: new Vec3(0, 64, -10), height: 1.9 };
+    const bot = fightBot([slime, skeleton]);
+    const p = enemiesPoint(bot, () => true, 16);
+    assert.ok(p.x > 2.5 && p.x < 3 && p.z < -0.5 && p.z > -1.5, `the point leans to the slime, a little towards the skeleton: ${p}`);
+    await avoidEnemies(bot, 16, (e) => ['slime', 'skeleton'].includes(e.name), () => false);
+    assert.equal(bot.pathfinder.goals.length, 1);
+    const goal = bot.pathfinder.goals[0];
+    assert.equal(goal.goal?.constructor?.name, 'GoalNear', 'away from one point, not following the nearest mob');
+    // Away from both: a step south-west scores better than one north-west (towards the skeleton);
+    // following only the slime they would score the same.
+    const score = (x, z) => goal.heuristic({ x, y: 64, z });
+    assert.ok(score(-4, 2) < score(-4, -2), `${score(-4, 2)} vs ${score(-4, -2)}`);
+    assert.equal(enemiesPoint(fightBot([]), () => true, 16), null);
+});

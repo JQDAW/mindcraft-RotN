@@ -26,7 +26,8 @@ export const SURVIVAL_MODES = ['self_preservation', 'cowardice', 'self_defense']
  * HUNGRY_WALK.maxBlocks.
  */
 export const HUNGRY_WALK = { belowFood: 8, maxBlocks: 32 };
-function hungryCap(agent, what, blocks) {
+function hungryCap(agent, what, blocks, context) {
+    if (context?.sender) return blocks; // lead decision (#443 review): a task giver's typed command is not capped
     const food = agent.bot?.food;
     if (!Number.isFinite(food) || food >= HUNGRY_WALK.belowFood || !(blocks > HUNGRY_WALK.maxBlocks)) return blocks;
     skills.log(agent.bot, `${what} ${HUNGRY_WALK.maxBlocks} blocks at most at food ${food}, not ${blocks}: walking costs hunger, and food 0 kills you at once on this pack. Eat or !forage first.`);
@@ -37,8 +38,11 @@ function hungryCap(agent, what, blocks) {
  * #432 nit: below HUNGRY_WALK.belowFood, !goToCoordinates and !goToPlayer walk at most
  * HUNGRY_WALK.maxBlocks toward a target farther than that: the goal's closeness becomes the
  * distance left after such a walk. Returns the closeness to use (unchanged when not capped).
+ * Lead decision (#443 review): a task giver's typed command (context.sender, as !stay and
+ * !setMode) is never capped; the caps are for the model's own walks.
  */
-export function hungryCloseness(agent, toward, target, closeness) {
+export function hungryCloseness(agent, toward, target, closeness, context) {
+    if (context?.sender) return closeness;
     const food = agent.bot?.food;
     const here = agent.bot?.entity?.position;
     if (!Number.isFinite(food) || food >= HUNGRY_WALK.belowFood || !here || !target) return closeness;
@@ -274,9 +278,9 @@ export const actionsList = [
             'player_name': {type: 'string', description: 'The name of the player to go to.'},
             'closeness': {type: 'float', description: 'How close to get to the player.', domain: [0, Infinity]}
         },
-        perform: runAsAction(async (agent, player_name, closeness) => {
+        perform: runAsAction(async (agent, player_name, closeness, context) => {
             const target = skills.findPlayer(agent.bot, player_name)?.entity?.position;
-            await skills.goToPlayer(agent.bot, player_name, hungryCloseness(agent, player_name, target, closeness));
+            await skills.goToPlayer(agent.bot, player_name, hungryCloseness(agent, player_name, target, closeness, context));
         })
     },
     {
@@ -302,9 +306,9 @@ export const actionsList = [
             'z': {type: 'float', description: 'The z coordinate.', domain: [-Infinity, Infinity]},
             'closeness': {type: 'float', description: 'How close to get to the location.', domain: [0, Infinity]}
         },
-        perform: runAsAction(async (agent, x, y, z, closeness) => {
+        perform: runAsAction(async (agent, x, y, z, closeness, context) => {
             if (!deathSpotOk(agent, x, y, z)) return;
-            const near = hungryCloseness(agent, `${x}, ${y}, ${z}`, new Vec3(x, y, z), closeness);
+            const near = hungryCloseness(agent, `${x}, ${y}, ${z}`, new Vec3(x, y, z), closeness, context);
             if (near !== closeness) { await skills.goToPosition(agent.bot, x, y, z, near); return; } // part of the way: no stand-on
             const stand = standOnTarget(agent, x, y, z);
             if (stand) {
@@ -336,12 +340,12 @@ export const actionsList = [
             'type': { type: 'BlockName', description: 'The block type to go to.' },
             'search_range': { type: 'float', description: 'The range to search for the block. Minimum 32.', domain: [10, 512] }
         },
-        perform: runAsAction(async (agent, block_type, range) => {
+        perform: runAsAction(async (agent, block_type, range, context) => {
             if (range < 32) {
                 skills.log(agent.bot, `Minimum search range is 32.`);
                 range = 32;
             }
-            await skills.goToNearestBlock(agent.bot, block_type, 4, hungryCap(agent, 'Searching', range));
+            await skills.goToNearestBlock(agent.bot, block_type, 4, hungryCap(agent, 'Searching', range, context));
         })
     },
     {
@@ -351,16 +355,16 @@ export const actionsList = [
             'type': { type: 'string', description: 'The type of entity to go to.' },
             'search_range': { type: 'float', description: 'The range to search for the entity.', domain: [32, 512] }
         },
-        perform: runAsAction(async (agent, entity_type, range) => {
-            await skills.goToNearestEntity(agent.bot, entity_type, 4, hungryCap(agent, 'Searching', range));
+        perform: runAsAction(async (agent, entity_type, range, context) => {
+            await skills.goToNearestEntity(agent.bot, entity_type, 4, hungryCap(agent, 'Searching', range, context));
         })
     },
     {
         name: '!moveAway',
         description: 'Move away from the current location in any direction by a given distance.',
         params: {'distance': { type: 'float', description: 'The distance to move away.', domain: [0, Infinity] }},
-        perform: runAsAction(async (agent, distance) => {
-            await skills.moveAway(agent.bot, hungryCap(agent, 'Moving away', distance));
+        perform: runAsAction(async (agent, distance, context) => {
+            await skills.moveAway(agent.bot, hungryCap(agent, 'Moving away', distance, context));
         })
     },
     {
@@ -467,8 +471,8 @@ export const actionsList = [
             'type': { type: 'BlockOrItemName', description: 'The block or item to collect: a block (e.g. "log") or an item that comes from breaking blocks (e.g. "stick" from a felled tree, "pyrotech:rock" from rock piles and stone).' },
             'num': { type: 'int', description: 'The number of blocks to collect.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
-        perform: runAsAction(async (agent, type, num) => {
-            await skills.collectBlock(agent.bot, type, num, null, hungryCap(agent, 'Collecting within', 64));
+        perform: runAsAction(async (agent, type, num, context) => {
+            await skills.collectBlock(agent.bot, type, num, null, hungryCap(agent, 'Collecting within', 64, context));
         })
     },
     {
