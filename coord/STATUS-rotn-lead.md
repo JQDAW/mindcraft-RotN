@@ -1,12 +1,12 @@
 # Status: rotn-lead
 
-Updated: 2026-11-09 02:06 UTC (from `date -u`)
+Updated: 2026-11-18 17:34 UTC (from `date -u`)
 
 
 ## Snapshot (2026-11-18 17:40 UTC): development resumed; the pause list is done; rotn-v0.1.5 next
 
 **Merged since the resume (2026-11-18)**
-- Survival and food: #435 (a pit with no sideways exit is left by stairs up), #443, #444, #445 (hunger caps; a craft never opens a table it did not reach, which also explains step 0's `windowOpen` timeout), #449 (a giver's typed commands skip the hunger caps; one flee direction for all enemies).
+- Survival and food: #435 (a pit with no sideways exit is left by stairs up), #443 (hunger caps), #444 (the flee from a ranged mob near a big slime), #445 (a craft never opens a table it did not reach, which also explains step 0's `windowOpen` timeout), #449 (a giver's typed commands skip the hunger caps; one flee direction for all enemies).
 - Soak 2's gored death (G4 #5): rotn-data #448 (cited threat entries for Animania bulls and other animals that fight back) and skills-rotn #453 (no hunt near a bull or a herd that calls for help; react only to that animal's own hit, never to starvation or a fall; never hit an animal that may be a player's).
 - CX23 service (net-forge): #441 (a deterministic startup crash ends with exit 3; spawn timeouts stay transient), #442 (graceful SIGTERM), #450 (follow-ups).
 - Step 7 (harness-ops): #446 (the acceptance runner, `ROTN_G4_ACCEPT`, and the step-7 evidence check), #454 (the set check re-reads the server facts; gametime is a step-7-only console entry). The lead's #447 adds the `[release] <tag>-<sha12>` startup line that condition (c) reads.
