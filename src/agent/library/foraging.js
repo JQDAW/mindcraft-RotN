@@ -10,17 +10,17 @@
 // - never food that rotn-data's avoidFood flags (cloudsbluff);
 // - never a crop that may be a player's, like animals (the lead's hard rule): within
 //   FORAGE.ownedRadius of player-built blocks (fences, beds, chests, torches ...) or of farmland,
-//   crop stakes, trellises or flower pots the bot did not place, or within HUNT.baseRadius of a
+//   crop stakes, trellises or flower pots the bot did not place, or within OWNERSHIP.baseRadius of a
 //   known player base.
 // Block names are full registry names (rustic:wildberry_bush; minecraft: added to vanilla ones).
 // Pure helpers only (no skills import): skills.forageNearby walks, right-clicks and breaks.
 
 import * as rotnData from '../../../packages/rotn-data/index.js';
-import { HUNT, PLAYER_BUILT, nearBase, playerBuiltNear } from './hunting.js';
+import { OWNERSHIP, PLAYER_BUILT, nearBase, playerBuiltNear } from './ownership.js';
 
 export const FORAGE = {
     radius: 24, // the reflex and !forage look this far for a ready block
-    ownedRadius: HUNT.ownedRadius, // player-built blocks this near: the crop may be a player's
+    ownedRadius: OWNERSHIP.ownedRadius, // player-built blocks this near: the crop may be a player's
     reach: 3, // walk this near before a right-click or a break
     triedMs: 10 * 60_000, // a block the bot failed to forage is left alone this long
     triedMax: 256,
