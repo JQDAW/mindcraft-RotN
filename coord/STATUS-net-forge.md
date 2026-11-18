@@ -29,7 +29,7 @@ Worktree `/home/mindcraft-RotN-worktrees/net-forge` on the CX33 dev server (was 
     - So no window opens, and mineflayer waits 20 s.
     - The bot's 14:46:07 line and its shelter 13 blocks from the table at 14:49 fit this. That is an inference: the step-0 journal is not committed.
 - **Open requests:**
-  - **For skills-rotn (via the lead):** before `bot.craft` at a table, check the walk's result and the distance to the table (at most about 4.5 blocks). Report "could not reach the crafting table at X, N blocks away" instead of waiting 20 s.
+  - **Skills side: resolved by #445** (skills-rotn, merged 2026-11-18 15:55Z: `tableInReach`, `TABLE_REACH` 4.5, "Could not get within reach", in `craftRecipe` and `craftByFill`). No open request.
   - **For the lead (optional):** grep the step-0 journal for `synthetic open_window` or `no vanilla window known`. If neither appears, forge-bridge is ruled out for that timeout.
   - **Decision, if wanted:** a permanent auth failure before login (`spawn_timeout:auth-permanent`) still retries forever. Making it fatal after 3 in a row, like the `auth` kick's `retryCap`, is a one-line change.
 
