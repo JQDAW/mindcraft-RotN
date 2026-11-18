@@ -207,15 +207,21 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
     }
     // Soak 2: a big slime, with no real weapon (attack SLIME.minAttack) or health under
     // SLIME.minHealth: keep away from it. #434 review (b): after a creeper (it steers by the
-    // creeper) and after being outnumbered. No parentheses in the why: fleeLine turns them to spaces.
-    const slimes = near.filter(x => isBigSlime(x.e) && x.d <= RANGES.fight.near);
-    if (slimes.length && !canFightSlime(bot)) {
+    // creeper) and after being outnumbered. #434 nit: a ranged mob near as well steers the flee (it
+    // shoots from farther), and the walk keeps away from the slime too. No parentheses in the why:
+    // fleeLine turns them to spaces.
+    const slimes = canFightSlime(bot) ? [] : near.filter(x => isBigSlime(x.e) && x.d <= RANGES.fight.near);
+    const ranged = within('take-cover');
+    if (ranged.length) {
+        const shoots = is('take-cover');
+        return { action: 'flee', why: 'ranged', from: ranged[0].e, away: RANGES['take-cover'].away,
+            isEnemy: slimes.length ? (e) => shoots(e) || isBigSlime(e) : shoots };
+    }
+    if (slimes.length) {
         const size = slimeSize(slimes[0].e);
         return { action: 'flee', why: `a big slime of size ${size ?? 'unknown'}, and no weapon of attack ${SLIME.minAttack} or more, or health under ${SLIME.minHealth}`,
             from: slimes[0].e, away: RANGES.fight.away, isEnemy: isBigSlime };
     }
-    const ranged = within('take-cover');
-    if (ranged.length) return { action: 'flee', why: 'ranged', from: ranged[0].e, away: RANGES['take-cover'].away, isEnemy: is('take-cover') };
     if (melee.length) return { action: 'fight', why: 'melee', from: melee[0].e, isEnemy: is('fight') };
 
     const calmOnes = near.filter(x => x.t.reaction === 'ignore-unless-provoked' && x.d <= PROVOKED_DIST);

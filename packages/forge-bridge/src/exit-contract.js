@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import process from 'node:process';
 import { EXIT, classifyKick } from './kicks.js';
+import { STOP_SIGNAL_CATEGORY } from './graceful-quit.js';
 
 export const REQUESTED_RESTART = 'requested_restart';
 const TASK_CODES = new Set([2, 4]);
@@ -60,10 +61,13 @@ export function writeExitReason({ category, exitCode, retryCap }, { env = proces
  * @param {Error} [o.error] a startup error; exitCode 3 on it means fatal (auth-guard)
  * @param {boolean} [o.requestedRestart] cleanKill: a deliberate restart
  * @param {boolean} [o.clientEnded] the Minecraft connection is already gone
+ * @param {string} [o.stopSignal] SIGTERM/SIGINT received (graceful-quit.js): a clean stop, whatever else happened
  */
-export function recordAgentExit({ kick = null, event, reason, error, requestedRestart = false, clientEnded = false } = {}, io = {}) {
+export function recordAgentExit({ kick = null, event, reason, error, requestedRestart = false, clientEnded = false, stopSignal = null } = {}, io = {}) {
     let r;
-    if (error) {
+    if (stopSignal) {
+        r = { category: STOP_SIGNAL_CATEGORY, exitCode: EXIT.CLEAN };
+    } else if (error) {
         const code = error.exitCode === EXIT.FATAL ? EXIT.FATAL : EXIT.TRANSIENT;
         r = { category: error.category ?? (code === EXIT.FATAL ? 'setup' : 'error'), exitCode: code };
     } else if (requestedRestart && !clientEnded) {

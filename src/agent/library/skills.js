@@ -205,9 +205,13 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
         return false;
     }
     
-    if (craftingTable && bot.entity.position.distanceTo(craftingTable.position) > 4) {
-        await goToNearestBlock(bot, 'crafting_table', 4, craftingTableRange);
-        if (run.aborted) return false; // the finally picks a placed table up
+    if (craftingTable) {
+        // CX23 step 0 (14:46): a table up to 16 away was right-clicked after a walk that did not get
+        // there; the server ignores that, and mineflayer waited 20 s for the window.
+        const reach = await tableInReach(bot, craftingTable, itemName, ops, !placedTable);
+        if (reach.placed) placedTable = true;
+        if (run.aborted || !reach.table) return false; // the finally picks a placed table up
+        craftingTable = reach.table;
     }
 
     const recipe = recipes[0];
@@ -281,8 +285,44 @@ async function pickUpTable(bot) {
     }
 }
 
-/** How craftByFill places and picks up a table (tests pass their own). */
-export const CRAFT_TABLE_OPS = { place: placeTableNear, pickUp: pickUpTable };
+/** The walk to the nearest crafting table for a craft; its result is judged by tableInReach. */
+const walkToTable = (bot) => goToNearestBlock(bot, 'crafting_table', 4, 16);
+
+/** How craftRecipe and craftByFill place, pick up and walk to a table (tests pass their own). */
+export const CRAFT_TABLE_OPS = { place: placeTableNear, pickUp: pickUpTable, walk: walkToTable };
+
+/**
+ * How near a crafting table must be to open it. The server ignores a right-click from much farther
+ * (about 8 blocks), and mineflayer then waits 20 s for a window that never opens (CX23 step 0,
+ * 14:46: craftRecipe took a table up to 16 away and crafted although the walk had not got there).
+ */
+export const TABLE_REACH = 4.5;
+
+/**
+ * A crafting table within TABLE_REACH for a craft: `table` itself, or after the walk (ops.walk) the
+ * nearest one within reach. When the walk did not get there: with `mayPlace` and a table held, one
+ * is placed near (ops.place); else nothing is opened and the bot says why. Returns
+ * {table: the table to use or null, placed: whether a table was placed here}.
+ */
+async function tableInReach(bot, table, itemName, ops, mayPlace) {
+    const near = (t) => !!t?.position && bot.entity.position.distanceTo(t.position) <= TABLE_REACH;
+    if (near(table)) return { table, placed: false };
+    try { await (ops.walk ?? walkToTable)(bot); } catch (err) { log(bot, `The walk to the crafting table failed (${safeError(err)}).`); }
+    const nearest = world.getNearestBlock(bot, 'crafting_table', 16);
+    if (near(nearest)) return { table: nearest, placed: false };
+    if (near(table)) return { table, placed: false };
+    const p = table.position;
+    const far = `the crafting table at ${p.x}, ${p.y}, ${p.z} (${bot.entity.position.distanceTo(p).toFixed(1)} blocks away; it opens from ${TABLE_REACH} at most)`;
+    if (mayPlace && countItem(bot, 'crafting_table') > 0) {
+        log(bot, `Could not get within reach of ${far}; placing your crafting table here instead.`);
+        const mine = await ops.place(bot, itemName);
+        if (near(mine)) return { table: mine, placed: true };
+        if (mine) log(bot, `The crafting table placed for ${itemName} is out of reach too; not crafting.`);
+        return { table: null, placed: !!mine };
+    }
+    log(bot, `Could not get within reach of ${far}, so ${itemName} was not crafted. Walk nearer to it, or carry a crafting table.`);
+    return { table: null, placed: false };
+}
 
 /**
  * Craft by rotn-data's recipe with the stacks canFill assigns (C1): for a mix of kinds (1 igneous and
@@ -319,8 +359,10 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
                 if (!table) return false;
             }
             if (run.aborted) return false; // the finally picks a placed table up
-            if (bot.entity.position.distanceTo(table.position) > 4)
-                await goToNearestBlock(bot, 'crafting_table', 4, 16);
+            const reach = await tableInReach(bot, table, itemName, ops, !placed);
+            if (reach.placed) placed = true;
+            if (run.aborted || !reach.table) return false; // the finally picks a placed table up
+            table = reach.table;
         }
         const { Recipe } = prismarineRecipe(bot.registry);
         while (made < num && !bot.interrupt_code && !run.aborted) {
