@@ -37,6 +37,45 @@ function makeReasonFile(base, log) {
 }
 const TASK_CODES = new Set([2, 4]);
 
+// Graceful stop, main-process side. SIGTERM (systemctl stop) or SIGINT (Ctrl-C):
+// no more restarts; each agent gets the signal, quits its server connection
+// (packages/forge-bridge/src/graceful-quit.js) and exits; then the main process
+// exits 0. An agent still running after SHUTDOWN_DEADLINE_MS is killed, so the
+// stop ends within a few seconds (the unit's TimeoutStopSec is 30). A second
+// signal exits at once. One handler per signal source; it covers every
+// AgentProcess made with that source (deps.signals, the process by default).
+export const SHUTDOWN_DEADLINE_MS = 5000;
+const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT'];
+const shutdownGroups = new WeakMap();
+function joinShutdownGroup(agent) {
+    const { signals, exit, setTimer, clearTimer, log } = agent.deps;
+    let group = shutdownGroups.get(signals);
+    if (!group) {
+        group = { agents: new Set(), signal: null };
+        const onSignal = (signal) => {
+            if (group.signal) {
+                log.log(`[agent_process] ${signal} again: exiting now.`);
+                exit(EXIT.CLEAN);
+                return;
+            }
+            group.signal = signal;
+            log.log(`[agent_process] ${signal}: stopping ${group.agents.size} agent(s), exiting within ${SHUTDOWN_DEADLINE_MS / 1000} s.`);
+            const timer = setTimer(() => {
+                for (const a of group.agents) a.killNow();
+                log.log(`[agent_process] agents did not exit within ${SHUTDOWN_DEADLINE_MS / 1000} s; killed.`);
+                exit(EXIT.CLEAN);
+            }, SHUTDOWN_DEADLINE_MS);
+            Promise.all([...group.agents].map(a => a.shutdown(signal))).then(() => {
+                clearTimer(timer);
+                exit(EXIT.CLEAN);
+            });
+        };
+        for (const s of SHUTDOWN_SIGNALS) signals.on(s, onSignal);
+        shutdownGroups.set(signals, group);
+    }
+    group.agents.add(agent);
+}
+
 // Exit-code contract, ADR 0003 decision 5 (net-forge brief item 8):
 //   0  clean stop: not restarted. A single-bot service (MINDCRAFT_SINGLE_BOT_SERVICE=1,
 //      set by the mindcraft-rotn@<bot> unit) ends the main process with 0, also after
@@ -57,14 +96,14 @@ export class AgentProcess {
     /**
      * @param {string} name
      * @param {number} port
-     * @param {object} [deps] injected for tests: spawn, exit, setTimer, clearTimer, now, env, policy, guard, crashGuard, log, logout, reasonBase
+     * @param {object} [deps] injected for tests: spawn, exit, setTimer, clearTimer, now, env, policy, guard, crashGuard, log, logout, reasonBase, signals
      */
     constructor(name, port, deps = {}) {
         this.name = name;
         this.port = port;
         this.deps = {
             spawn, exit: (c) => process.exit(c), setTimer: setTimeout, clearTimer: clearTimeout, now: Date.now,
-            env: process.env, log: console, logout: logoutAgent, reasonBase: os.tmpdir(),
+            env: process.env, log: console, logout: logoutAgent, reasonBase: os.tmpdir(), signals: process,
             ...deps,
         };
         this.policy = this.deps.policy ?? createRestartPolicy();
@@ -75,10 +114,13 @@ export class AgentProcess {
         this.restartTimer = null;
         this.stopRequested = false;
         this.restartRequested = false;
+        this.shuttingDown = false;
+        joinShutdownGroup(this);
     }
 
     start(load_memory=false, init_message=null, count_id=0) {
         const d = this.deps;
+        if (this.shuttingDown) return; // a stop signal came in; nothing starts again
         this.count_id = count_id;
         this.running = true;
         this.stopRequested = false;
@@ -159,6 +201,27 @@ export class AgentProcess {
         }
         this.stopRequested = true;
         this.process.kill('SIGINT');
+    }
+
+    /**
+     * Graceful stop for a SIGTERM/SIGINT of the main process: no restart, the agent
+     * gets the same signal (it quits its server connection and exits).
+     * @returns {Promise<void>} resolves when the agent process has exited
+     */
+    shutdown(signal = 'SIGTERM') {
+        this.shuttingDown = true;
+        this.cancelPendingRestart();
+        if (!this.running || !this.process) return Promise.resolve();
+        this.stopRequested = true;
+        return new Promise((resolve) => {
+            this.process.once('exit', () => resolve());
+            // systemd's KillMode=control-group already signalled the agent; a second one is ignored there.
+            try { this.process.kill(signal); } catch { /* already gone */ }
+        });
+    }
+
+    killNow() {
+        if (this.running && this.process) { try { this.process.kill('SIGKILL'); } catch { /* already gone */ } }
     }
 
     forceRestart() {

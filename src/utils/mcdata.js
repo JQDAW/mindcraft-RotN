@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -249,7 +249,9 @@ export function initBot(username, { onMsaCode } = {}) {
     // returns the exit code: the kick's (3 for fatal), or 1.
     forge.recordExit = (o = {}) => {
         forge.exitRecorded = true;
-        return recordAgentExit({ ...o, kick: forge.bridge?.lastKick ?? null, clientEnded: bot._client?.ended !== false });
+        return recordAgentExit({
+            ...o, kick: forge.bridge?.lastKick ?? null, clientEnded: bot._client?.ended !== false, stopSignal: forge.stopSignal ?? null,
+        });
     };
     // agent.js's spawn-timeout exit(1) has no recordExit: give it a reason (spawn_timeout), so an
     // outage before login is retried with backoff and never ends as a crash loop (#441 review 1).
@@ -257,6 +259,8 @@ export function initBot(username, { onMsaCode } = {}) {
         spawnTimeoutMs: Number(settings.spawn_timeout) * 1000, recorded: () => forge.exitRecorded === true,
         classify: (err) => classifyBeforeJoinError(err, { profileFailure: lastProfileFetchFailure() }),
     });
+    // SIGTERM/SIGINT (systemctl stop, Ctrl-C, AgentProcess.stop): quit the server connection, then exit 0.
+    forge.gracefulQuit = installGracefulQuit(bot);
 
     // Throttle position packets to avoid kicks on Paper/Spigot servers. Inside each
     // 50 ms window the newest position and look are kept and merged, so the server

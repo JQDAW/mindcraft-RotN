@@ -185,9 +185,7 @@ export async function digPit(bot, { radius = PIT.radius, progress = {} } = {}) {
             if (bot.entity.position.floored().y <= q.y) continue; // dug before the interruption
             if (bot.interrupt_code) return null;
             const block = bot.blockAt(q);
-            let estMs = null;
-            try { estMs = bot.digTime?.(block) ?? null; } catch { estMs = null; }
-            const limitMs = Math.max(PIT.digSlackMs, 2 * (Number.isFinite(estMs) ? estMs : 0));
+            const { estMs, limitMs } = digBudget(bot, block);
             log(bot, `Digging ${block?.name ?? 'the block'} at ${at(q)}${Number.isFinite(estMs) ? ` (about ${(estMs / 1000).toFixed(1)} s by hand)` : ''}.`);
             const dug = await digWithin(bot, block, limitMs);
             if (dug === 'timeout') {
@@ -215,6 +213,13 @@ export async function digPit(bot, { radius = PIT.radius, progress = {} } = {}) {
     return P.offset(0, -PIT.depth, 0);
 }
 
+/** A dig's estimate (null when unknown) and its limit: twice the estimate, at least PIT.digSlackMs (#431). */
+export function digBudget(bot, block) {
+    let estMs = null;
+    try { estMs = bot.digTime?.(block) ?? null; } catch { estMs = null; }
+    return { estMs, limitMs: Math.max(PIT.digSlackMs, 2 * (Number.isFinite(estMs) ? estMs : 0)) };
+}
+
 /** What the bot's state was at a hung dig (#431 review 3): onGround, isInWater, effects, the held item. */
 function digState(bot) {
     const e = bot.entity ?? {};
@@ -226,13 +231,21 @@ function digState(bot) {
  * Dig one block by hand within ms: true, false (it cannot be dug), or 'timeout' (the dig is
  * stopped). #431 review 6: the equip and the dig are this function's own, and no dig starts once
  * the time is up (a breakBlockAt still equipping could start one after digPit returned).
+ * `equip` (#435 review 2): the caller's own equip, which also decides whether the block can be
+ * broken (false: it cannot); used in place of equipForBlock and the registry's canHarvest, which do
+ * not know modded rock (forge-bridge leaves harvestTools unset, and with no material every tool
+ * digs it alike, so equipForBlock keeps what is held).
  */
-async function digWithin(bot, block, ms) {
+export async function digWithin(bot, block, ms, { equip = null } = {}) {
     let timer, cancelled = false;
     const dig = (async () => {
         if (bot.game?.gameMode !== 'creative') {
-            try { await bot.tool?.equipForBlock?.(block); } catch { /* digs with what is in hand */ }
-            if (block.canHarvest && !block.canHarvest(bot.heldItem ? bot.heldItem.type : null)) return false;
+            if (equip) {
+                if (!await equip()) return false;
+            } else {
+                try { await bot.tool?.equipForBlock?.(block); } catch { /* digs with what is in hand */ }
+                if (block.canHarvest && !block.canHarvest(bot.heldItem ? bot.heldItem.type : null)) return false;
+            }
         }
         if (cancelled) return false;
         await bot.dig(block, true);
