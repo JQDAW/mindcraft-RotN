@@ -558,7 +558,7 @@ test('SIGTERM on the main process: the agent gets it, nothing restarts, the main
     assert.equal(h.timers[0].ms, 5000, 'the deadline');
     h.children[0].emit('exit', 0, null); // graceful-quit.js: quit, then exit 0
     await tick();
-    assert.ok(h.exits.length >= 1 && h.exits.every(c => c === 0), String(h.exits));
+    assert.deepEqual(h.exits, [0], 'exit(0) once (#442 nit)');
     assert.equal(h.timers[0].cleared, true, 'the deadline is cleared');
     assert.equal(h.timers.length, 1, 'no restart scheduled');
     assert.equal(h.children.length, 1);
@@ -614,4 +614,37 @@ test('SIGTERM: an agent that does not exit is killed at the deadline; a pending 
     twice.deps.signals.emit('SIGINT', 'SIGINT');
     assert.deepEqual(twice.exits, [0]);
     assert.ok(twice.lines.some(l => /SIGINT again: exiting now/.test(l)));
+});
+
+test('a stop signal ends the main process with exactly one exit(0), also when the deadline and the agent exit race (#442 nit)', async () => {
+    const h = harness({ MINDCRAFT_SINGLE_BOT_SERVICE: '1' }, { killEmits: false });
+    const ap = new AgentProcess('FRCFLD', 8080, h.deps);
+    ap.start();
+    h.children[0].kill = () => {};
+    h.deps.signals.emit('SIGTERM', 'SIGTERM');
+    h.timers[0].fn(); // the deadline fires first
+    h.children[0].emit('exit', 0, null); // then the agent exits
+    await tick();
+    h.deps.signals.emit('SIGTERM', 'SIGTERM'); // and a second signal
+    assert.deepEqual(h.exits, [0]);
+    assert.ok(h.lines.some(l => /FRCFLD: stopped \(stop requested \(single-bot service\)\)\./.test(l)), h.lines.join('\n'));
+});
+
+test('attachSpawnTimeoutReason: a second initBot in the same process replaces the listeners, the newest bot counts (#441 nit)', () => {
+    const proc = new EventEmitter();
+    proc.env = { MINDCRAFT_EXIT_REASON_FILE: '/reason.json' };
+    const writes = [];
+    let t = 0;
+    const opts = { spawnTimeoutMs: 1000, proc, now: () => t, writeFile: (f, b) => writes.push(JSON.parse(b)) };
+    const first = new EventEmitter();
+    const h1 = attachSpawnTimeoutReason(first, opts);
+    const second = new EventEmitter();
+    attachSpawnTimeoutReason(second, opts);
+    assert.equal(proc.listenerCount('exit'), 1);
+    assert.equal(proc.listenerCount('uncaughtExceptionMonitor'), 1);
+    h1.dispose(); // the old handle no longer owns the listeners
+    assert.equal(proc.listenerCount('exit'), 1);
+    t = 5_000;
+    proc.emit('exit', 1); // neither bot spawned: one reason, not one per initBot
+    assert.deepEqual(writes, [{ category: 'spawn_timeout', exitCode: 1 }]);
 });

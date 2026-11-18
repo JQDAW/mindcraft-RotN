@@ -44,6 +44,8 @@ const TASK_CODES = new Set([2, 4]);
 // stop ends within a few seconds (the unit's TimeoutStopSec is 30). A second
 // signal exits at once. One handler per signal source; it covers every
 // AgentProcess made with that source (deps.signals, the process by default).
+// The group ends the main process exactly once (finish); an agent exiting during
+// the stop leaves that to the group.
 export const SHUTDOWN_DEADLINE_MS = 5000;
 const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT'];
 const shutdownGroups = new WeakMap();
@@ -51,11 +53,16 @@ function joinShutdownGroup(agent) {
     const { signals, exit, setTimer, clearTimer, log } = agent.deps;
     let group = shutdownGroups.get(signals);
     if (!group) {
-        group = { agents: new Set(), signal: null };
+        group = { agents: new Set(), signal: null, exited: false };
+        const finish = () => {
+            if (group.exited) return;
+            group.exited = true;
+            exit(EXIT.CLEAN);
+        };
         const onSignal = (signal) => {
             if (group.signal) {
                 log.log(`[agent_process] ${signal} again: exiting now.`);
-                exit(EXIT.CLEAN);
+                finish();
                 return;
             }
             group.signal = signal;
@@ -63,11 +70,11 @@ function joinShutdownGroup(agent) {
             const timer = setTimer(() => {
                 for (const a of group.agents) a.killNow();
                 log.log(`[agent_process] agents did not exit within ${SHUTDOWN_DEADLINE_MS / 1000} s; killed.`);
-                exit(EXIT.CLEAN);
+                finish();
             }, SHUTDOWN_DEADLINE_MS);
             Promise.all([...group.agents].map(a => a.shutdown(signal))).then(() => {
                 clearTimer(timer);
-                exit(EXIT.CLEAN);
+                finish();
             });
         };
         for (const s of SHUTDOWN_SIGNALS) signals.on(s, onSignal);
@@ -160,7 +167,10 @@ export class AgentProcess {
             }, this.policy, this.guard, this.crashGuard);
             this.lastDecision = decision;
 
-            if (decision.action === 'exit') {
+            if (decision.action === 'exit' && this.shuttingDown) {
+                // A stop signal is under way: the shutdown group ends the main process, once.
+                d.log.log(`[agent_process] ${this.name}: stopped (${decision.reason}).`);
+            } else if (decision.action === 'exit') {
                 if (decision.code === EXIT.FATAL) {
                     d.log.error(`[agent_process] ${this.name}: FATAL (${decision.reason}). Not restarting; a human must act (see coord/NEEDS-HUMAN.md).`);
                 } else if (TASK_CODES.has(decision.code)) {
@@ -239,7 +249,10 @@ export class AgentProcess {
                  this.start(true, 'Agent process restarted.', this.count_id);
             });
             this.restartRequested = true; // not a stop: the once('exit') above restarts it
-            this.stop(); // sends SIGINT
+            // SIGINT. Since #442 the agent handles it (graceful-quit.js): it quits its server
+            // connection and exits within 3 s, so this restart waits up to 3 s for the old
+            // connection to close, inside the 5 s warning above.
+            this.stop();
         } else {
              this.start(true, 'Agent process restarted.', this.count_id);
         }

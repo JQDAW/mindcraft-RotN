@@ -26,12 +26,17 @@ if (cmd === 'log') {
         p[2] += Number(m[1]);
         fs.writeFileSync(posFile, JSON.stringify(p));
         add(`<FRCFLD> walked ${p.join(' ')}`);
-    } else if (line === 'tp FRCFLD ~ ~ ~') add(`Teleported FRCFLD to ${pos().join(', ')}`);
+    } else if (line === 'seed' && process.env.FAKE_CTL_SEED) add(`Seed: [${process.env.FAKE_CTL_SEED}]`);
+    else if (line === 'time query gametime' && process.env.FAKE_CTL_GAMETIME) add(`Time is ${process.env.FAKE_CTL_GAMETIME}`);
+    else if (line === 'tp FRCFLD ~ ~ ~') add(`Teleported FRCFLD to ${pos().join(', ')}`);
     else if (line === 'list') {
         add(`There are ${online() ? 1 : 0}/10 players online:`);
         add(online() ? 'FRCFLD' : '');
     }
     process.stdout.write(read().slice(before).join('\n') + '\n');
+} else if (cmd === 'starts') {
+    // G4 step 7: rotn-test starts over the fake's one log file.
+    process.stdout.write(`starts=${read().filter((l) => l.includes('Starting minecraft server version ')).length} files=1\n`);
 } else {
     process.stderr.write(`fake ctl: unsupported ${cmd}\n`);
     process.exit(2);
