@@ -1,5 +1,6 @@
 import { testforblockVerdict } from './g2.mjs';
 import { parseLine } from './server-log.mjs';
+import { STEP7_SCENARIOS } from './g4-accept.mjs';
 
 // G3 rules the runner enforces for every G3 scenario (coord/STATUS-harness-ops.md, "G3 batches";
 // lead, #101 and #116 review):
@@ -91,7 +92,6 @@ export const G3_CONSOLE_ALLOW = [
     /^scoreboard objectives remove [A-Za-z0-9_]{1,16}$/,
     new RegExp(`^scoreboard players list ${NAME}$`),
     /^time query daytime$/,
-    /^time query gametime$/,                                               // read-only: the world's age (G4 step 7 freshness)
     /^gamerule [A-Za-z]+$/,                                                // read-only: the query form only, never a value
     new RegExp(`^setblock (${markerCells}) minecraft:gold_block$`),        // the pinned task markers only (#208 review, G3_MARKERS)
 ];
@@ -139,7 +139,11 @@ export const SCENARIO_CONSOLE_EXTRA = Object.freeze({
  * these parameters. params: the run's effective parameters (run.mjs: the scenario's defaults under --param);
  * without them, the scenario's defaults.
  */
-export const consoleAllowFor = (scenario, params = scenario?.defaults) => [...G3_CONSOLE_ALLOW, ...(SCENARIO_CONSOLE_EXTRA[scenario?.id]?.(params ?? {}) ?? [])];
+export const consoleAllowFor = (scenario, params = scenario?.defaults) => [...G3_CONSOLE_ALLOW, ...(SCENARIO_CONSOLE_EXTRA[scenario?.id]?.(params ?? {}) ?? []),
+    ...(STEP7_SCENARIOS.includes(scenario?.id) ? STEP7_CONSOLE_EXTRA : [])];
+
+/** G4 step 7 only (#446 review): the world's age for the freshness check (lib/g4-accept.mjs), read-only. */
+export const STEP7_CONSOLE_EXTRA = Object.freeze([/^time query gametime$/]);
 
 /** Why a G4 run with a spawned driver (set-up T) is never G4 evidence (lead, #316 review). */
 export const G4_TEST_SERVER_NOT_GATE = 'a G4 scenario on a test server is a rehearsal: G4 evidence comes only from the CX23 service (test/scenarios/g4/PLAN.md)';

@@ -551,13 +551,14 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **(e) Host and freshness:** the host is confirmed for this run by `ROTN_SERVICE_GO`. Freshness is never self-asserted; it is read before the scenario starts:
   - **the usage ledger** `$TEST_SERVER_STATE_DIR/usage.jsonl`: **every** run.mjs run on a test server writes one line before its scenario, marked or not. An earlier line is allowed only from the same GO and run AND another scenario (run 5's session is the only legitimate sharing); the same scenario again (a rerun on the same server) fails;
   - **the server log** since its last `Starting minecraft server` line: every scenario marker must be such an allowed run, and nobody joined before one began;
-  - **two server-side facts:** the Minecraft server started exactly once on the box (`test-server.sh starts`, `rotn-test starts`, over every daily rolled-over log plus `latest.log`; the build starts it once and nothing restarts it before an acceptance run), and the world's age (`time query gametime`, on the console allowlist) is at most 20 ticks a second since the test server was created (Hetzner's `created` in `server-create.json`).
-  - The facts are recorded in `g4Acceptance.fresh.facts`.
+  - **two server-side facts:** the Minecraft server started exactly once on the box (`test-server.sh starts`, `rotn-test starts`, over every daily rolled-over log plus `latest.log`; the build starts it once and nothing restarts it before an acceptance run), and the world's age (`time query gametime`, a console entry for step-7 scenarios only) is at most 20 ticks a second since the test server was created (Hetzner's `created` in `server-create.json`).
+  - **What each part proves:** the gametime bound only catches a world OLDER than its server (a world copied in, or a reused box). The real proof of a fresh server is starts = 1 together with the usage ledger and the log.
+  - The facts are recorded in `g4Acceptance.fresh.facts` (`starts`, `gametime`, `createdAt`, `readAt`), and the evidence check re-checks them (starts = 1, gametime within the bound at `readAt`), not `fresh.ok` alone.
   - Run each step-7 run on its own new test server, and run nothing else on it first.
 - **A failed check in a valid run is evidence too** (the G3 rule): `valid` says the run counts, `pass` says how it went.
 - **The evidence check:** `node test/tools/g4-accept-check.mjs --tree test/evidence [--complete <GO id>]`, and `g3-batch-check.mjs --tree` in CI runs the same check.
   - Every G4 pass must be a valid acceptance run, and every record must follow its conditions.
-  - A valid record must show its marker (GO in the acceptance form), unit, GO, release, fresh server and test server.
+  - A valid record must show its marker (GO in the acceptance form), unit, GO, release, fresh server (with its recorded facts re-checked) and test server.
   - Per GO: one tag and one commit; no test server serves two runs; no scenario runs twice on one server.
   - `--complete` is the G4 claim: every step-7 scenario has a valid result in that GO that passed (a failed run rerun on a new server and passing counts).
   - A step-7 G3 scenario on S needs no `batch.json` (`isG3AcceptanceOnService`); the step-7 check covers it.

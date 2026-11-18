@@ -101,8 +101,11 @@ CPX42 at EUR 0.1381/h, each server billed at least 1 h; the CX23 is already paid
 - **The command,** per run:
   `ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed ROTN_G4_ACCEPT=<GO id>:<run>:<tag>:gate-ctl-hashes-confirmed node test/runner/run.mjs --scenario <id> --service <unit> --out ...`
 - **The release** is read only from the bot's `[release] <tag>-<sha12>` line after the unit's start (#447).
-- **Freshness** is read from the test server, never asserted: its usage ledger (every run writes one), its log, its start count (`test-server.sh starts`: exactly one) and the world's age (`time query gametime`: at most 20 ticks a second since the server was created).
+- **Freshness** is read from the test server, never asserted: its usage ledger (every run writes one), its log, its start count (`test-server.sh starts`: exactly one) and the world's age (`time query gametime`: at most 20 ticks a second since the server was created). The gametime bound only catches a world older than its server; the real proof is starts = 1 together with the ledger and the log. The evidence check re-checks the recorded facts.
 - **The verdict:** the result's `g4Acceptance` says whether the run counts and, if not, why. `node test/tools/g4-accept-check.mjs --tree test/evidence --complete <GO id>` is the G4 claim over all six runs.
+
+**Step 7 rehearsal checklist** (on a test server, before the acceptance GO):
+- [ ] Right after `deploy/test-server.sh up`, run `TEST_SERVER_NAME=<name> deploy/test-server.sh starts` and confirm `starts=1` on the live pack. Mod Director could restart the JVM at its first start; **if it is 2, report it to the lead before any change** (to the check or the build).
 
 #8's secret scan runs in CI, and #9 is the document. A failure follows the G3 rule: the remaining runs still run, the failure stays in the evidence, and only the failed scenario reruns after its fix, with the human's approval.
 

@@ -17,7 +17,7 @@ import {
 import { timeQuery } from '../runner/lib/s1.mjs';
 import { parseStarts } from '../runner/lib/adapters.mjs';
 import { releaseLine, releaseLineFor } from '../../src/mindcraft/release_line.js';
-import { G3_ON_SERVICE_NOT_GATE, G4_SERVICE_NOT_GATE } from '../runner/lib/g3.mjs';
+import { G3_CONSOLE_ALLOW, G3_ON_SERVICE_NOT_GATE, G4_SERVICE_NOT_GATE, consoleAllowFor } from '../runner/lib/g3.mjs';
 import { acceptanceApplies, policyReasonApplies, resolveTag } from '../runner/run.mjs';
 import { G2_WORLD_SEED } from '../runner/lib/g2.mjs';
 import { checkEvidenceTree, isG3AcceptanceOnService } from '../tools/g3-batch-check.mjs';
@@ -29,7 +29,9 @@ const GO = 'G4-ACCEPT-20261118';
 const TAG = 'rotn-v0.1.5';
 const SHA = 'f0e1d2c3b4a5968778695a4b3c2d1e0f11223344';
 const RELEASE = { tag: TAG, sha12: SHA.slice(0, 12), source: 'release line' };
-const FRESH = { ok: true, why: 'fresh: no join and no scenario since the server started' };
+// A fresh server as run.mjs records it: the check's verdict and the server facts it read (created 10:00, read 10:10).
+const FRESH = { ok: true, why: 'fresh: no earlier run, join or scenario; started once; world 6000 of at most 12000 ticks',
+    facts: { starts: { starts: 1, files: 1 }, gametime: 6000, createdAt: '2026-11-18T10:00:00.000Z', readAt: '2026-11-18T10:10:00.000Z' } };
 const envFor = ({ unit = 'frcfld', run = 1, go = GO, svcGo = go, tag = TAG } = {}) => ({
     ROTN_SERVICE_GO: `${svcGo}:${unit}:test-server-host-confirmed`,
     ROTN_G4_ACCEPT: `${go}:${run}:${tag}:gate-ctl-hashes-confirmed`,
@@ -186,7 +188,7 @@ describe('a fresh test server (e): the usage ledger, the log, and two server-sid
         const env = { ...envFor({ run: 5 }), TEST_SERVER_NAME: 'mcr-test-x', TEST_SERVER_STATE_DIR: dir };
         const a = startAcceptance({ server, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 });
         assert.equal(a.fresh.ok, true, a.fresh.why);
-        assert.deepEqual(a.facts, { starts: { starts: 1, files: 1 }, gametime: 6000, createdAt: '2026-11-18T10:00:00.000Z' });
+        assert.deepEqual(a.facts, { starts: { starts: 1, files: 1 }, gametime: 6000, createdAt: '2026-11-18T10:00:00.000Z', readAt: '2026-11-18T10:10:00.000Z' });
         assert.deepEqual(sent, ['time query gametime']);
         assert.equal(fs.existsSync(path.join(dir, USAGE_FILE)), false, 'the check writes nothing');
         assert.equal(serverCreatedMs(dir, fs, path), created);
@@ -278,6 +280,16 @@ describe('the rule: each missing condition gives not-gate with its reason; a com
     test('the not-gate reason names every missing condition', () => {
         const acc = evalWith({ env: { ROTN_SERVICE_GO: envFor().ROTN_SERVICE_GO }, fresh: { ok: false, why: 'not fresh: x' } });
         assert.match(notAcceptanceReason(acc), /^not a G4 acceptance run: \(a\) no ROTN_G4_ACCEPT .*; \(d\) .*; \(e\) not fresh: x$/);
+    });
+});
+
+describe('the console: time query gametime is a step-7-only entry (#446 review)', () => {
+    test('every step-7 scenario admits it; no other scenario, and not the general G3 list', () => {
+        const admits = (id) => consoleAllowFor({ id, defaults: {} }, {}).some((re) => re.test('time query gametime'));
+        for (const id of STEP7_SCENARIOS) assert.equal(admits(id), true, id);
+        for (const id of ['g3-first-night', 'g3-rocks-to-stone-tools', 's1-arbiters', 'g2-blocks-named']) assert.equal(admits(id), false, id);
+        assert.equal(G3_CONSOLE_ALLOW.some((re) => re.test('time query gametime')), false);
+        assert.equal(admits('g4-soak-2h') && !consoleAllowFor({ id: 'g4-soak-2h', defaults: {} }, {}).some((re) => re.test('time set 0')), true, 'only the query');
     });
 });
 
@@ -395,6 +407,15 @@ describe('the step-7 evidence check over a set of results', () => {
         assert.match(out((b) => ({ g4Acceptance: { ...b.g4Acceptance, release: { ...b.g4Acceptance.release, commit: '0'.repeat(40) } } })), /commit is missing or does not match/);
         assert.match(out((b) => ({ g4Acceptance: { ...b.g4Acceptance, fresh: { ok: false } } })), /not recorded as fresh/);
         assert.match(out(() => ({ server: null })), /names no test server/);
+        // The recorded server facts are re-checked, not only fresh.ok (#446 review).
+        const facts = (patch) => (b) => ({ g4Acceptance: { ...b.g4Acceptance, fresh: { ...b.g4Acceptance.fresh, facts: { ...b.g4Acceptance.fresh.facts, ...patch } } } });
+        assert.match(out(facts({ starts: { starts: 2, files: 2 } })), /recorded server starts are 2, not 1/);
+        assert.match(out(facts({ starts: null })), /recorded server starts are missing, not 1/);
+        assert.match(out(facts({ gametime: 12001 })), /recorded world age 12001 ticks is above the 12000 ticks/);
+        assert.match(out(facts({ gametime: null })), /recorded world age, server creation or read time is missing/);
+        assert.match(out(facts({ readAt: null })), /read time is missing/);
+        assert.match(out((b) => ({ g4Acceptance: { ...b.g4Acceptance, fresh: { ok: true, why: 'fresh' } } })), /recorded server starts are missing/);
+        assert.deepEqual(check([{ file: 'ok.json', result: accResult({ scenario: 'g4-soak-2h', fresh: { ...FRESH, facts: { ...FRESH.facts, gametime: 12000 } } }) }]).problems, [], 'at the bound: fine');
         assert.match(out((b) => ({ g4Acceptance: { ...b.g4Acceptance, marker: { ...b.g4Acceptance.marker, goId: 'G4-SOAK-3' } } })), /not a step-7 acceptance marker/);
         const d = accResult({ scenario: 'g3-untrusted-refused' });
         assert.match(check([{ file: 'd.json', result: { ...d, weakenedParams: [], gateValid: true } }]).problems.join('\n'), /never G3 gate evidence/);
