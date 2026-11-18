@@ -1,7 +1,7 @@
 {
   "format": "rotn-threat-reactions/1",
   "pack": "3.3.4",
-  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source: the rule's confidence, 'inferred' unless the rule says 'verified'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Optional fields on an entry or class rule: 'ranged', 'explodes', and 'lookAt': false for a mob that is dangerous to look at: its targeting starts when a player looks at it (the enderman's stare check), or its gaze attack needs the player to look back (the gorgon), so the bot must not look at its head; threatOf returns lookAt true otherwise. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
+  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source: the rule's confidence, 'inferred' unless the rule says 'verified'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Optional fields on an entry or class rule: 'ranged', 'explodes', and 'lookAt': false for a mob that is dangerous to look at: its targeting starts when a player looks at it (the enderman's stare check), or its gaze attack needs the player to look back (the gorgon), so the bot must not look at its head; threatOf returns lookAt true otherwise. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'. Optional 'provoked' on an entry or group, for a mob that fights back once hurt (reaction 'ignore-unless-provoked'; a food animal the bot hunts, an Animania cow or hen, keeps 'ignore' so it may still be hunted, and 'provoked' says what happens once it is hit): damage (per hit, before armour), health, callsForHelp and helpers (who joins in), fightBack (false: do not fight it back early; get away), and for the Animania bulls reach, attackIntervalTicks, chaseSpeed, width, stepHeight and angerMetadata (the entity metadata index that is true while it charges). 'groups': like an entity entry, for the explicit 'members' list (any threat level), checked after 'entities' and before 'classRules'; threatOf returns the group's id as 'group'.",
   "general": {
     "summary": "At night stay sealed in a cobblestone or stone shelter with light only inside; a dirt shack is not safe because mobs dig and pillar. Retreat if two or more hostiles come at once.",
     "confidence": "documented",
@@ -641,6 +641,93 @@
         "Death drops: mods/corpsecomplex-1.12.2-1.0.12.0.jar with config/corpsecomplex.cfg lines 136-148 (Keep Armor, Keep Mainhand, Keep Offhand true; Keep Hotbar, Keep Main Inventory false), line 195 'Drop Despawn Timer'=600 s, lines 91 and 97 (50% of XP lost, 25% recoverable), lines 112-118 (food level kept, 13-14)",
         "Fire: EntityZombiePlayer overrides setFire (func_70015_d(int)) with a bare return (bytecode 0: return; #243 review), so it never catches fire: EntityZombie's daylight burning (onLivingUpdate's setFire(8)) does nothing, and neither do the ignition from lava, fire or Fire Aspect; direct fire and lava damage still applies (attackEntityFrom func_70097_a is not overridden). config/hordes.cfg lines 146, 149 and 152 (zombiePlayersBurn, zombiePlayersFireImmune, zombiePlayersOnlyHurtByPlayers) configure The Hordes' own hordes:zombie_player (entities.json: net.smileycorp.hordes.common.entities.EntityZombiePlayer), which spawns from Hordes infection deaths or zombie graves, both off (line 110 infectionSpawnsZombiePlayers=false, line 140 zombieGraves=false); The-Hordes-1.12.2-1.1.7.jar (SHA-256 882e8a4563cd69964a71b0e4c7584069bd77844110d8fb256d856464fe0c4ed3) has no 'corosus' or 'zombie_players' string in any class, so it does not touch this entity"
       ]
+    },
+    "futuremc:panda": {
+      "reaction": "ignore-unless-provoked",
+      "summary": "A panda (jungle only) fights back when hit, and nearby pandas join in; a hit does 6 damage (3 hearts). Leave pandas alone.",
+      "confidence": "verified",
+      "provoked": {
+        "damage": 6,
+        "callsForHelp": true,
+        "helpers": "pandas nearby",
+        "fightBack": false
+      },
+      "evidence": [
+        "Future-MC-0.2.21.jar (in the pack as mods/Future-MC-0.2.21.jar, SHA-256 e1e6ec0397ae0479ad1d42557a03b97f9a159628f83829bb5ceab4822af978be): thedarkcolour.futuremc.entity.panda.EntityPanda extends EntityAnimal (not IMob). func_184651_r (initEntityAI) adds EntityPanda$AIAttack (an EntityAIAttackMelee, speed 1.2, bytecode 58-68) and EntityPanda$AIRevenge (318-324); EntityPanda$AIRevenge extends EntityAIHurtByTarget, built with callsForHelp true (constructor bytecode 2-7). No player target task",
+        "func_110147_ax: MOVEMENT_SPEED 0.15, ATTACK_DAMAGE 6.0 (bytecode 23-29); func_70652_k deals ATTACK_DAMAGE (30-42)",
+        "Spawns (dump spawns.json, creature): minecraft:jungle, minecraft:jungle_hills, minecraft:mutated_jungle",
+        "Vanilla 1.12 EntityAIHurtByTarget (not in the pack's jars; behaviour unverified on this pack): it targets the entity that last hurt the mob (its revenge target), so any hit the bot lands counts, including a sword sweep that clips it; it keeps that target while the target is within the mob's follow range (16 by default) and has not been out of sight for more than 60 ticks; with callsForHelp true it also gives that target to every mob of the same class nearby (within the follow range) that has none",
+        "Not settled: whether a panda of the non-aggressive kinds panics instead of fighting (EntityPanda$PanicGoal and the genes were not read), and its max health"
+      ]
+    },
+    "defiledlands:book_wyrm": {
+      "reaction": "ignore-unless-provoked",
+      "summary": "A book wyrm (Defiled Lands biomes only) bites back for 5 damage when hit, and nearby book wyrms join in; 12 health. Leave it alone.",
+      "confidence": "verified",
+      "provoked": {
+        "damage": 5,
+        "health": 12,
+        "callsForHelp": true,
+        "helpers": "book wyrms nearby",
+        "fightBack": false
+      },
+      "evidence": [
+        "defiledlands-1.12.2-1.4.3.jar (in the pack as mods/defiledlands-1.12.2-1.4.3.jar, SHA-256 62e8d6b2ecfd97c87b6a7f481e6d3b2ee28494b28cb9745b9e7151f2f0ee3f36): lykrast.defiledlands.common.entity.passive.EntityBookWyrm extends EntityAnimal (not IMob). func_184651_r adds EntityAILeapAtTarget (bytecode 40-45), EntityAIAttackMelee(1.2) (58-63) and EntityBookWyrm$AIHurtByTarget (194-199), an EntityAIHurtByTarget with callsForHelp true (constructor 7-12) that does nothing on Peaceful (func_75250_a 0-17). No player target task",
+        "func_110147_ax: MAX_HEALTH 12.0, MOVEMENT_SPEED 0.26; func_70652_k: attackEntityFrom(DamageSource.causeMobDamage(this), 5.0f) (2-7)",
+        "Spawns (dump spawns.json, creature): the seven Defiled Lands biomes only (defiledlands:desert_defiled, forest_tenebra, forest_vilespine, hills_defiled, ice_plains_defiled, plains_defiled, swamp_defiled)",
+        "Vanilla 1.12 EntityAIHurtByTarget (not in the pack's jars; behaviour unverified on this pack): it targets the entity that last hurt the mob (its revenge target), so any hit the bot lands counts, including a sword sweep that clips it; it keeps that target while the target is within the mob's follow range (16 by default) and has not been out of sight for more than 60 ticks; with callsForHelp true it also gives that target to every mob of the same class nearby (within the follow range) that has none"
+      ]
+    },
+    "minecraft:wolf": {
+      "reaction": "ignore-unless-provoked",
+      "summary": "A wild wolf leaves players alone until one hurts it; then it and every wolf of its pack nearby turn angry and bite (8 health each). This pack makes wolves 20% faster. Do not hit one; if a pack turns on the bot, get out of reach or behind a door.",
+      "confidence": "vanilla",
+      "provoked": {
+        "damage": 2,
+        "health": 8,
+        "callsForHelp": true,
+        "helpers": "wolves nearby",
+        "fightBack": true
+      },
+      "evidence": [
+        "Vanilla 1.12 EntityWolf (not in the pack's jars; not checked on this pack): neutral, EntityAIHurtByTarget(this, true) so the pack joins; a wild wolf has 8 health and ATTACK_DAMAGE 2.0",
+        "config/roughmobsrevamped.cfg:116 attributesModifier wolf;generic.movementSpeed;1;0.2 (operator 1 = multiply and add: 20% faster); not on Special AI's depacify list (config/Special_AI.cfg:24-33)",
+        "Spawns (dump spawns.json, creature): 34 biomes, 18 of them overworld"
+      ]
+    },
+    "minecraft:polar_bear": {
+      "reaction": "ignore-unless-provoked",
+      "summary": "A polar bear (snowy biomes) attacks a player who comes near its cub, and anyone who hurts it or a cub; a hit does 6 damage. On this pack it has 50 health and 3 armour. Never hit one and stay away from cubs; if one charges, do not fight it early (fightBack false): get away.",
+      "confidence": "vanilla",
+      "provoked": {
+        "damage": 6,
+        "health": 50,
+        "callsForHelp": true,
+        "helpers": "polar bears nearby",
+        "fightBack": false
+      },
+      "evidence": [
+        "Vanilla 1.12 EntityPolarBear (not in the pack's jars; not checked on this pack): an adult with a cub near targets players near it (EntityPolarBear$AIAttackPlayer) and retaliates with help (EntityPolarBear$AIHurtByTarget); 30 health, ATTACK_DAMAGE 6.0",
+        "config/roughmobsrevamped.cfg:117-119 attributesModifier minecraft:polar_bear: maxHealth +20 (operator 0 = add), armor +3, knockbackResistance +3",
+        "Spawns (dump spawns.json, creature): biomesoplenty:cold_desert, biomesoplenty:glacier, iceandfire:glacier, minecraft:ice_flats, minecraft:ice_mountains, minecraft:mutated_ice_flats"
+      ]
+    },
+    "minecraft:llama": {
+      "reaction": "ignore-unless-provoked",
+      "summary": "A llama spits at whoever hurts it (1 damage), and its herd or caravan joins in. Harmless enough; do not hit one.",
+      "confidence": "vanilla",
+      "ranged": true,
+      "provoked": {
+        "damage": 1,
+        "callsForHelp": true,
+        "helpers": "llamas nearby",
+        "fightBack": true
+      },
+      "evidence": [
+        "Vanilla 1.12 EntityLlama (not in the pack's jars; not checked on this pack): EntityLlama$AIHurtByTarget (with help) and EntityAIAttackRanged with EntityLlamaSpit (1 damage)",
+        "No config/roughmobsrevamped.cfg attributesModifier line names the llama; not on Special AI's depacify list (config/Special_AI.cfg:24-33)",
+        "Spawns (dump spawns.json, creature): extreme hills, savanna rock and Biomes O' Plenty mountain, alps foothills, shrubland and steppe biomes (10)"
+      ]
     }
   },
   "classRules": [
@@ -740,6 +827,227 @@
         "NetherEx-1.12.2-2.2.5.jar (in the pack as mods/NetherEx-1.12.2-2.2.5.jar, SHA-256 ab71d3f63d8905727c769ddfe8c4849d735a4d9feb502a9135ce27e16bca815e): EntityGhastling extends EntityGhast and uses EntityAIGhastlingFireballAttack",
         "twilightforest-1.12.2-3.14.jar (in the pack as mods/twilightforest-1.12.2-3.14.jar, SHA-256 cf9f7798d50c70097ece08a8822d58b0f43547ea57cb620fd798b33ec5762c61): EntityTFTowerGhast extends EntityGhast with EntityLargeFireball; EntityTFMiniGhast extends EntityTFTowerGhast",
         "Not checked: each variant's own extra behaviour (for example the king or queen ghast) and whether Special Mobs' config changes a variant's ranged attack"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "id": "animania-bulls",
+      "members": [
+        "animania:bull_angus",
+        "animania:bull_friesian",
+        "animania:bull_hereford",
+        "animania:bull_highland",
+        "animania:bull_holstein",
+        "animania:bull_jersey",
+        "animania:bull_longhorn",
+        "animania:bull_mooshroom"
+      ],
+      "reaction": "ignore-unless-provoked",
+      "confidence": "verified",
+      "summary": "A bull never attacks first: nothing in it looks for players. It charges whatever hurts it (a hit, an arrow, or a sword sweep that clips it while the bot fights next to it) at 1.8 times its walking speed and gores for 5 damage (2.5 hearts) once a second within 2 blocks, with knockback; it has 24 health, and four of its hits kill an unarmoured player from full health. About one Animania cow in three spawns with a bull of its breed on the same spot. Never hit a bull and do not swing at anything right next to one. If one is charging, do not fight it early: get where it cannot follow (a gap or doorway 1 block wide, since it is 1.6 blocks wide; or 2 or more blocks up, since it steps up 1.1 blocks), or more than 16 blocks away, or out of its sight for 3 s (the vanilla rules for losing a target). Its death message is \"gored to death\", which an Animania cow's hit also gives.",
+      "provoked": {
+        "damage": 5,
+        "attackIntervalTicks": 20,
+        "reach": 2,
+        "health": 24,
+        "chaseSpeed": 1.8,
+        "callsForHelp": false,
+        "helpers": null,
+        "fightBack": false,
+        "angerMetadata": {
+          "index": 20,
+          "type": "boolean",
+          "field": "EntityBullBase.FIGHTING",
+          "note": "true while the bull is charging. Computed from the class order (not seen on a server): vanilla indexes 0-12 up to EntityAgeable, EntityAnimaniaCow 13-19, then FIGHTING"
+        },
+        "width": 1.6,
+        "stepHeight": 1.1
+      },
+      "evidence": [
+        "animania-1.12.2-1.7.3.jar (in the pack as mods/animania-1.12.2-1.7.3.jar, SHA-256 87e248a3cf00cde9ef0eec876eb1d3d5f576cd92b4c6a0eebc7b82b69f28d76a): the eight bull classes (com.animania.common.entities.cows.Cow<Breed>$EntityBull<Breed>, the dump's classes for animania:bull_*) each extend EntityBullBase and add only a cow type and egg colours (packages/rotn-data/test/fixtures/animal-retaliation-3.3.4/animals.javap.txt '## Animania bull classes')",
+        "Attack AI: EntityBullBase.<init> bytecode 43-76: only when AnimaniaConfig.gameRules.animalsCanAttackOthers (46, ifeq 79) and not getSterilized (53, ifne 79) it adds EntityAIAttackMeleeBulls(this, 1.8, false) to tasks (field_70714_bg) at priority 0; config/animania.cfg:28 B:animalsCanAttackOthers=true (pinned pack zip, default configs). setSize(1.6, 1.8) at 6-10, stepHeight (field_70138_W) 1.1 at 33-35",
+        "Targeting: EntityBullBase adds no target task; EntityAnimaniaCow.<init> (its superclass) adds to targetTasks (field_70715_bh) only EntityAIHurtByTarget(this, false) at priority 14 (bytecode 341-359) and, with animalsCanAttackOthers (362-368), EntityAIHurtByTarget(this, false, EntityPlayer.class) at priority 1 (372-394): retaliation only, callsForHelp false, and the class array is the vanilla excluded-reinforcement list, not a target list. No EntityAINearestAttackableTarget anywhere in the cow classes",
+        "EntityAIAttackMeleeBulls.func_75250_a (shouldExecute) bytecode 0-103: runs only with an attack target (getAttackTarget func_70638_az non-null, alive, not a skeleton); it wakes a sleeping bull or sets FIGHTING true (setFighting at 63-65), then paths to the target; func_75251_c (resetTask) sets FIGHTING false (74-76); func_190102_a (checkAndPerformAttack): when the squared distance is within getAttackReachSqr ((2 x width)^2 + target width) and attackTick is 0 it sets attackTick 20 (22-24), swings and calls attackEntityAsMob",
+        "Damage: EntityBullBase.func_70652_k (attackEntityAsMob) bytecode 0-90: only when it can see the target (func_70685_l at 4) and getDistance (func_70032_d) <= 2.0 (10-17) it calls attackEntityFrom(new EntityDamageSource(\"bull\", this), 5.0f) (20-33), then knocks a player back with strength 1.0 (47-86). The ATTACK_DAMAGE attribute (4.0, func_110147_ax bytecode 44) is not used",
+        "Stats: EntityBullBase.func_110147_ax: MAX_HEALTH 24.0 (bytecode 11), MOVEMENT_SPEED 0.2 (26). Not on Special AI's depacify list (config/Special_AI.cfg:24-33 lists only minecraft:skeleton_horse, minecraft:zombie_horse, specialmobs:endercreeper, netherex:salamander, betteranimalsplus:zotzpyre, coroutil:bat_smart, betteranimalsplus:shark, mod_lavacow:pingu); no config/roughmobsrevamped.cfg attributesModifier line names an Animania animal; config/scalinghealth/main.cfg:383 \"Allow Peaceful Extra Health\"=false",
+        "Anger flag: EntityBullBase static {} creates FIGHTING first (createKey func_187226_a with DataSerializers.field_187198_h BOOLEAN, bytecode 0-8), then STERILIZED and MATE_UNIQUE_ID; EntityAnimaniaCow static {} creates seven keys before it (AGE, WATERED, FED, HANDFED, SLEEPING, SLEEPTIMER, INTERACTED)",
+        "Spawning with cows: GenericBehavior.initialSpawnFemale (called by EntityCowBase.onInitialSpawn) bytecode 11-174: rand.nextInt(3); when at most 4 animals of the kind are within 64 blocks (20-42), 0 spawns the breed's male (AnimaniaType.getMale, mated to the cow) and 1 a calf, at the cow's position (144-170)",
+        "Death message: the animania jar's assets/animania/lang/en_US.lang:319 death.attack.bull=%1$s was gored to death; EntityCowBase.func_70652_k uses the same \"bull\" damage source (animania-cows)",
+        "Vanilla 1.12 EntityAIHurtByTarget (not in the pack's jars; behaviour unverified on this pack): it targets the entity that last hurt the mob (its revenge target), so any hit the bot lands counts, including a sword sweep that clips it; it keeps that target while the target is within the mob's follow range (16 by default) and has not been out of sight for more than 60 ticks; with callsForHelp true it also gives that target to every mob of the same class nearby (within the follow range) that has none. EntityAIAttackMeleeBulls is built with longMemory false, so it stops when its path ends and starts again while the target is kept",
+        "Not settled: the metadata index 20 has not been read from a live bull; a mod that adds data parameters to a vanilla base class would shift it (as it would the enderman's 13). Whether a bot can outrun a charging bull was not measured"
+      ]
+    },
+    {
+      "id": "animania-cows",
+      "members": [
+        "animania:cow_angus",
+        "animania:cow_friesian",
+        "animania:cow_hereford",
+        "animania:cow_highland",
+        "animania:cow_holstein",
+        "animania:cow_jersey",
+        "animania:cow_longhorn",
+        "animania:cow_mooshroom"
+      ],
+      "reaction": "ignore",
+      "confidence": "verified",
+      "summary": "An Animania cow fights back: a hit makes it, and every other cow of the same breed nearby, chase the attacker and hit for 2 damage once a second (18 health each). The hit counts as a bull's (\"gored to death\"). One cow is a safe kill with a weapon; a herd turning on the bot is not. Hunt a cow only with no other cow of its breed within 16 blocks and no bull near (one cow in three spawns with a bull on the same spot), finish it quickly, and back off if a second one comes. The reaction stays 'ignore' because cows are food: the bot may start the fight.",
+      "provoked": {
+        "damage": 2,
+        "reach": 2,
+        "health": 18,
+        "callsForHelp": true,
+        "helpers": "same breed (class) within 16 blocks",
+        "fightBack": true
+      },
+      "evidence": [
+        "animania-1.12.2-1.7.3.jar (in the pack as mods/animania-1.12.2-1.7.3.jar, SHA-256 87e248a3cf00cde9ef0eec876eb1d3d5f576cd92b4c6a0eebc7b82b69f28d76a): the eight cow classes (Cow<Breed>$EntityCow<Breed>, the dump's classes for animania:cow_*) extend EntityCowBase",
+        "EntityCowBase.<init> bytecode 46-83, with no config check: EntityAIAttackMelee(this, 1.2, false) at priority 4 in tasks (46-62) and EntityAIHurtByTarget(this, true) at priority 1 in targetTasks (66-83; iconst_1 at 75 = callsForHelp)",
+        "Damage: EntityCowBase.func_70652_k bytecode 0-113: wakes a sleeping cow, then, when it can see the target and getDistance <= 2.0 (27-41), attackEntityFrom(new EntityDamageSource(\"bull\", this), 2.0f) (44-56) and a knockback of a player (70-109)",
+        "Stats: EntityCowBase.func_110147_ax: MAX_HEALTH 18.0, MOVEMENT_SPEED 0.2, ATTACK_DAMAGE 2.0. Not on Special AI's depacify list (config/Special_AI.cfg:24-33 lists only minecraft:skeleton_horse, minecraft:zombie_horse, specialmobs:endercreeper, netherex:salamander, betteranimalsplus:zotzpyre, coroutil:bat_smart, betteranimalsplus:shark, mod_lavacow:pingu); no config/roughmobsrevamped.cfg attributesModifier line names an Animania animal; config/scalinghealth/main.cfg:383 \"Allow Peaceful Extra Health\"=false",
+        "Vanilla 1.12 EntityAIHurtByTarget (not in the pack's jars; behaviour unverified on this pack): it targets the entity that last hurt the mob (its revenge target), so any hit the bot lands counts, including a sword sweep that clips it; it keeps that target while the target is within the mob's follow range (16 by default) and has not been out of sight for more than 60 ticks; with callsForHelp true it also gives that target to every mob of the same class nearby (within the follow range) that has none. Same class means the same breed: a Holstein cow calls Holstein cows, not bulls or calves (each breed's cow is its own class)",
+        "Calves (animania:calf_*) extend EntityCalfBase, which adds no attack task (pack-wide scan of the cow classes' AI, 2026-11-18); they only get EntityAnimaniaCow's target tasks and do no damage"
+      ]
+    },
+    {
+      "id": "animania-hens",
+      "members": [
+        "animania:hen_leghorn",
+        "animania:hen_orpington",
+        "animania:hen_plymouth_rock",
+        "animania:hen_rhode_island_red",
+        "animania:hen_wyandotte"
+      ],
+      "reaction": "ignore",
+      "confidence": "verified",
+      "summary": "An Animania hen pecks back for 2 damage when hit (6 health); others do not join in. Weak: a hen is safe to kill. The reaction stays 'ignore' because hens are food.",
+      "provoked": {
+        "damage": 2,
+        "health": 6,
+        "callsForHelp": false,
+        "helpers": null,
+        "fightBack": true
+      },
+      "evidence": [
+        "animania-1.12.2-1.7.3.jar (in the pack as mods/animania-1.12.2-1.7.3.jar, SHA-256 87e248a3cf00cde9ef0eec876eb1d3d5f576cd92b4c6a0eebc7b82b69f28d76a): EntityAnimaniaChicken.<init> bytecode 235-252 adds EntityAIHurtByTarget(this, false) at priority 0 in targetTasks, with no config check; func_110147_ax: MAX_HEALTH 6.0, MOVEMENT_SPEED 0.29",
+        "EntityHenBase.<init> adds EntityAILeapAtTarget (bytecode 47-59) and EntityAIAttackMelee (63-78) to tasks with no config check; its other targets (with animalsCanAttackOthers) are Animania frogs and toads. func_70652_k: attackEntityFrom(DamageSource.causeMobDamage(this), 2.0f) (14-18) after waking a sleeping hen",
+        "Chicks (animania:chick_*) add no attack task. Not on Special AI's depacify list (config/Special_AI.cfg:24-33 lists only minecraft:skeleton_horse, minecraft:zombie_horse, specialmobs:endercreeper, netherex:salamander, betteranimalsplus:zotzpyre, coroutil:bat_smart, betteranimalsplus:shark, mod_lavacow:pingu); no config/roughmobsrevamped.cfg attributesModifier line names an Animania animal; config/scalinghealth/main.cfg:383 \"Allow Peaceful Extra Health\"=false",
+        "Vanilla 1.12 EntityAIHurtByTarget (not in the pack's jars; behaviour unverified on this pack): it targets the entity that last hurt the mob (its revenge target), so any hit the bot lands counts, including a sword sweep that clips it; it keeps that target while the target is within the mob's follow range (16 by default) and has not been out of sight for more than 60 ticks; with callsForHelp true it also gives that target to every mob of the same class nearby (within the follow range) that has none"
+      ]
+    },
+    {
+      "id": "animania-roosters",
+      "members": [
+        "animania:rooster_leghorn",
+        "animania:rooster_orpington",
+        "animania:rooster_plymouth_rock",
+        "animania:rooster_rhode_island_red",
+        "animania:rooster_wyandotte"
+      ],
+      "reaction": "ignore-unless-provoked",
+      "confidence": "verified",
+      "summary": "An Animania rooster pecks back for 2 damage when hit (6 health); others do not join in. Weak: fight it back or walk away; do not hit one by accident.",
+      "provoked": {
+        "damage": 2,
+        "health": 6,
+        "callsForHelp": false,
+        "helpers": null,
+        "fightBack": true
+      },
+      "evidence": [
+        "animania-1.12.2-1.7.3.jar (in the pack as mods/animania-1.12.2-1.7.3.jar, SHA-256 87e248a3cf00cde9ef0eec876eb1d3d5f576cd92b4c6a0eebc7b82b69f28d76a): EntityAnimaniaChicken.<init> bytecode 235-252 adds EntityAIHurtByTarget(this, false) at priority 0 in targetTasks, with no config check; func_110147_ax: MAX_HEALTH 6.0, MOVEMENT_SPEED 0.29",
+        "EntityRoosterBase.<init> adds EntityAILeapAtTarget (48-58) and EntityAIAttackMelee (62-76) with no config check; its other targets are hedgehogs, ferrets, frogs and toads. func_70652_k: causeMobDamage, 2.0f (2-6)",
+        "Chicks (animania:chick_*) add no attack task. Not on Special AI's depacify list (config/Special_AI.cfg:24-33 lists only minecraft:skeleton_horse, minecraft:zombie_horse, specialmobs:endercreeper, netherex:salamander, betteranimalsplus:zotzpyre, coroutil:bat_smart, betteranimalsplus:shark, mod_lavacow:pingu); no config/roughmobsrevamped.cfg attributesModifier line names an Animania animal; config/scalinghealth/main.cfg:383 \"Allow Peaceful Extra Health\"=false",
+        "Vanilla 1.12 EntityAIHurtByTarget (not in the pack's jars; behaviour unverified on this pack): it targets the entity that last hurt the mob (its revenge target), so any hit the bot lands counts, including a sword sweep that clips it; it keeps that target while the target is within the mob's follow range (16 by default) and has not been out of sight for more than 60 ticks; with callsForHelp true it also gives that target to every mob of the same class nearby (within the follow range) that has none"
+      ]
+    },
+    {
+      "id": "animania-peafowl",
+      "members": [
+        "animania:peacock_blue",
+        "animania:peacock_charcoal",
+        "animania:peacock_opal",
+        "animania:peacock_peach",
+        "animania:peacock_purple",
+        "animania:peacock_taupe",
+        "animania:peacock_white",
+        "animania:peahen_blue",
+        "animania:peahen_charcoal",
+        "animania:peahen_opal",
+        "animania:peahen_peach",
+        "animania:peahen_purple",
+        "animania:peahen_taupe",
+        "animania:peahen_white",
+        "animania:peachick_blue",
+        "animania:peachick_charcoal",
+        "animania:peachick_opal",
+        "animania:peachick_peach",
+        "animania:peachick_purple",
+        "animania:peachick_taupe",
+        "animania:peachick_white"
+      ],
+      "reaction": "ignore-unless-provoked",
+      "confidence": "verified",
+      "summary": "Animania peafowl peck back for 2 damage when hit (7 health); others do not join in. Weak: fight it back or walk away.",
+      "provoked": {
+        "damage": 2,
+        "health": 7,
+        "callsForHelp": false,
+        "helpers": null,
+        "fightBack": true
+      },
+      "evidence": [
+        "animania-1.12.2-1.7.3.jar (in the pack as mods/animania-1.12.2-1.7.3.jar, SHA-256 87e248a3cf00cde9ef0eec876eb1d3d5f576cd92b4c6a0eebc7b82b69f28d76a): EntityAnimaniaPeacock.<init> (the base of every peacock, peahen and peachick class): with animalsCanAttackOthers (bytecode 249-252, ifeq 293) EntityAILeapAtTarget (261-271) and EntityAIAttackMelee (280-290); then, with no condition, EntityAIHurtByTarget(this, false) at priority 0 in targetTasks (293-311). config/animania.cfg:28 B:animalsCanAttackOthers=true (pinned pack zip, default configs)",
+        "func_70652_k: attackEntityFrom(DamageSource.causeMobDamage(this), 2.0f) (2-6); func_110147_ax: MAX_HEALTH 7.0, MOVEMENT_SPEED 0.25, ATTACK_DAMAGE 1.5 (unused)",
+        "Not on Special AI's depacify list (config/Special_AI.cfg:24-33 lists only minecraft:skeleton_horse, minecraft:zombie_horse, specialmobs:endercreeper, netherex:salamander, betteranimalsplus:zotzpyre, coroutil:bat_smart, betteranimalsplus:shark, mod_lavacow:pingu); no config/roughmobsrevamped.cfg attributesModifier line names an Animania animal; config/scalinghealth/main.cfg:383 \"Allow Peaceful Extra Health\"=false",
+        "Vanilla 1.12 EntityAIHurtByTarget (not in the pack's jars; behaviour unverified on this pack): it targets the entity that last hurt the mob (its revenge target), so any hit the bot lands counts, including a sword sweep that clips it; it keeps that target while the target is within the mob's follow range (16 by default) and has not been out of sight for more than 60 ticks; with callsForHelp true it also gives that target to every mob of the same class nearby (within the follow range) that has none"
+      ]
+    },
+    {
+      "id": "animania-ferrets",
+      "members": [
+        "animania:ferret_grey",
+        "animania:ferret_white"
+      ],
+      "reaction": "ignore-unless-provoked",
+      "confidence": "verified",
+      "summary": "A wild Animania ferret bites back for 1 damage when hit (8 health). Harmless enough: fight it back or walk away.",
+      "provoked": {
+        "damage": 1,
+        "health": 8,
+        "callsForHelp": false,
+        "helpers": null,
+        "fightBack": true
+      },
+      "evidence": [
+        "animania-1.12.2-1.7.3.jar (in the pack as mods/animania-1.12.2-1.7.3.jar, SHA-256 87e248a3cf00cde9ef0eec876eb1d3d5f576cd92b4c6a0eebc7b82b69f28d76a): EntityFerretBase.initAI adds EntityAIAttackMelee (bytecode 134-146) and, after the animalsCanAttackOthers block (344, ifeq 505) that adds its chick and rodent targets, EntityAIHurtByTarget(this, false) at priority 9 (505-524), with no condition",
+        "func_70652_k: attackEntityFrom(DamageSource.causeMobDamage(this), 1.0f) (2-6); func_110147_ax: MAX_HEALTH 8.0, MOVEMENT_SPEED 0.35",
+        "Not on Special AI's depacify list (config/Special_AI.cfg:24-33 lists only minecraft:skeleton_horse, minecraft:zombie_horse, specialmobs:endercreeper, netherex:salamander, betteranimalsplus:zotzpyre, coroutil:bat_smart, betteranimalsplus:shark, mod_lavacow:pingu); no config/roughmobsrevamped.cfg attributesModifier line names an Animania animal; config/scalinghealth/main.cfg:383 \"Allow Peaceful Extra Health\"=false",
+        "Vanilla 1.12 EntityAIHurtByTarget (not in the pack's jars; behaviour unverified on this pack): it targets the entity that last hurt the mob (its revenge target), so any hit the bot lands counts, including a sword sweep that clips it; it keeps that target while the target is within the mob's follow range (16 by default) and has not been out of sight for more than 60 ticks; with callsForHelp true it also gives that target to every mob of the same class nearby (within the follow range) that has none"
+      ]
+    },
+    {
+      "id": "animania-hedgehogs",
+      "members": [
+        "animania:hedgehog",
+        "animania:hedgehog_albino"
+      ],
+      "reaction": "ignore-unless-provoked",
+      "confidence": "verified",
+      "summary": "An Animania hedgehog bites back for 2 damage when hit (8 health). Weak: fight it back or walk away.",
+      "provoked": {
+        "damage": 2,
+        "health": 8,
+        "callsForHelp": false,
+        "helpers": null,
+        "fightBack": true
+      },
+      "evidence": [
+        "animania-1.12.2-1.7.3.jar (in the pack as mods/animania-1.12.2-1.7.3.jar, SHA-256 87e248a3cf00cde9ef0eec876eb1d3d5f576cd92b4c6a0eebc7b82b69f28d76a): EntityHedgehogBase.initAI adds EntityAIAttackMelee (bytecode 150-165) and, after the animalsCanAttackOthers block (324, ifeq 411), EntityAIHurtByTarget(this, false) at priority 13 (411-430), with no condition",
+        "func_70652_k: attackEntityFrom(DamageSource.causeMobDamage(this), 2.0f) (2-6); func_110147_ax: MAX_HEALTH 8.0, MOVEMENT_SPEED 0.25",
+        "Not on Special AI's depacify list (config/Special_AI.cfg:24-33 lists only minecraft:skeleton_horse, minecraft:zombie_horse, specialmobs:endercreeper, netherex:salamander, betteranimalsplus:zotzpyre, coroutil:bat_smart, betteranimalsplus:shark, mod_lavacow:pingu); no config/roughmobsrevamped.cfg attributesModifier line names an Animania animal; config/scalinghealth/main.cfg:383 \"Allow Peaceful Extra Health\"=false",
+        "Vanilla 1.12 EntityAIHurtByTarget (not in the pack's jars; behaviour unverified on this pack): it targets the entity that last hurt the mob (its revenge target), so any hit the bot lands counts, including a sword sweep that clips it; it keeps that target while the target is within the mob's follow range (16 by default) and has not been out of sight for more than 60 ticks; with callsForHelp true it also gives that target to every mob of the same class nearby (within the follow range) that has none"
       ]
     }
   ]
