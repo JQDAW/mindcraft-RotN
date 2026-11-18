@@ -15,6 +15,8 @@ import { OWNERSHIP, mayBelongToPlayer } from './ownership.js';
 export const HUNT_MIN_FOOD = 4;
 export const tooWeakToHunt = (bot) => Number.isFinite(bot?.food) && bot.food <= HUNT_MIN_FOOD;
 
+// ownedRadius, baseRadius and placedMax are copied from OWNERSHIP (ownership.js), their source of
+// truth: the ownership checks and foraging read OWNERSHIP, so changing HUNT.* has no effect on them.
 export const HUNT = { retaliationRadius: 16, radius: 16, ...OWNERSHIP, maxMs: 90_000, checkMs: 500, stuckMs: 8000, skipMs: 5 * 60_000 };
 
 /**
