@@ -1,8 +1,34 @@
 # Status: harness-ops
 
-Updated: 2026-11-18 (16:57 UTC, from `date -u`)
+Updated: 2026-11-18 (22:17 UTC, from `date -u`)
 
-## Now: the G4 step-7 runner is merged (#446); its review nits are PR #454. Offline only: no paid run, no ssh.
+## Now: soak 3 is done (#464, merged); the step-7 log fix is merged (#465), its nits are PR #466. Idle until the next task.
+
+**Nothing is running or billing:** 0 servers, 0 Primary IPs and 0 labelled keys (counted with `grep -c .`, 22:17 UTC). The CX23 unit `frcfld` was `inactive (dead)` and `disabled` at 21:22 UTC, read through the gate.
+
+- **Soak 3** (GO `G4-SOAK-3-20261118`, evidence #464, `rotn-v0.1.5` `518e782e`, ADR 0010 targets): **FAIL, 6 of 9.** It is never G4 acceptance evidence.
+  - **Passed:** login; naming; no crash (NRestarts 0); peak memory **518 MiB** (target 850); spend **USD 0.0089/h** (target 0.05); all 12 deaths reported.
+  - **Failed:** `agenda_done` (stuck at step 10, `stone_axe`); `food_floor` (lowest 2); `ate_when_low` (1 of 1 low lines).
+  - The journal showed `[release] rotn-v0.1.5-518e782eff28`, and FRCFLD's state was fresh at start.
+  - **For skills-rotn:**
+    - the self-prompter stopped at 20:15:35 and never restarted, through the 20:42 morning: no agenda or food work for 67 minutes;
+    - death cascades in the shelter at night: 7 deaths in 15 min, then 5 in 4 min. RotN zombies dig in, the repair falls short, and the bot respawns with 0 dirt near zombie players.
+  - Test server `mcr-test-20261118-183051`: `test-server.sh starts` right after `up` gave `starts=1` (the step 7 rehearsal check). It was deleted at 21:23 UTC; cost about EUR 0.41 plus the IPv4.
+- **#465 (merged): step-7 freshness reads the server log from its start line on.**
+  - Soak 3 showed that RotN's startup alone writes about 20,200 lines after the start line. The old 20,000-line tail lost it, so (e) would have failed every acceptance run.
+  - `rotn-test log N since-start` returns the newest daily `.gz` plus `latest.log`, from the last start line on. It is bounded at 200,000 lines and 48 MiB, and it fails closed.
+- **#466 (open): the #465 nits.**
+  - A clean exit with no `latest.log`.
+  - A `nonempty` count in the header, so a cut-off answer fails closed.
+  - The start line is anchored to the server's log4j prefix in `rotn-test` and in `SERVER_START_RE`.
+- **#461 (merged): the #454 nits.** The set check rejects a negative recorded gametime, and a comment says `readAt` is taken as recorded.
+- **Before the acceptance runs (still open):**
+  - `git fetch --tags` on the CX33 checkout used;
+  - #466 merged (its anchoring applies to the `starts` count too);
+  - the open question whether `g3-task-preempts-agenda` (C, run 5) works on S with the trusted player.
+- **Questions to the lead go as plain text in my reply** (CLAUDE.md, 2026-11-18).
+
+## Earlier: the G4 step-7 runner is merged (#446); its review nits were PR #454 (merged). Offline only: no paid run, no ssh.
 
 - **#446 (merged): the step-7 acceptance runner** (`test/runner/lib/g4-accept.mjs`; PLAN.md step 7; DRIVER.md "G4 step 7").
   - **The rule:** one acceptance GO for all six runs, id `G4-ACCEPT-<yyyymmdd>[-letter]`. `ROTN_G4_ACCEPT=<GO>:<run 1-6>:<plain rotn-vX.Y.Z>:gate-ctl-hashes-confirmed` next to `ROTN_SERVICE_GO`. A run counts only if (a)-(e) hold, and `result.json` records each (`g4Acceptance`); any missing one makes the run not-gate, with the reason.
