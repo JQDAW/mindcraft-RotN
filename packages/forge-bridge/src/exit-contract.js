@@ -9,7 +9,9 @@
 //   1  transient. Restarted with backoff (createRestartPolicy). A deliberate restart
 //      (category requested_restart: !restart, the stuck mode, mindserver restart-agent)
 //      restarts at once without touching the backoff streak.
-//   3  fatal. Not restarted; the main process ends with 3.
+//   3  fatal. Not restarted; the main process ends with 3. Also the end of a crash
+//      loop: the same unexplained crash, quickly, several times in a row
+//      (createCrashLoopGuard).
 //   2, 4  reserved for Mindcraft's task framework.
 
 import fs from 'node:fs';
@@ -99,6 +101,106 @@ export function createRequestedRestartGuard({ max = 5, windowMs = 600_000 } = {}
 }
 
 /**
+ * What kind of crash an agent exit was, or null if it was not a crash.
+ * A crash is an exit 1 the agent gave no reason for (an uncaught exception, a
+ * rejected promise, init_agent.js's startup catch), a startup error the agent
+ * recorded as category 'error', or a signal the main process did not send
+ * (SIGABRT from a V8 heap limit, SIGSEGV, an OOM kill). Kicks and disconnects
+ * carry their own category and are never crashes: a server that is down or
+ * restarting is retried with backoff for as long as it takes (G4 #1). So is a
+ * spawn timeout (agent.js's process.exit(1) when the bot has not spawned after
+ * settings.spawn_timeout): attachSpawnTimeoutReason records it as
+ * spawn_timeout[:<before-join kind>], not a crash.
+ * Note: every recordAgentExit({error}) whose error has no category of its own
+ * gets category 'error' and so counts as a crash here ('startup error'); an
+ * error that is expected to clear by itself should carry its own category.
+ */
+export function crashSignature({ code, signal = null, reason = null } = {}) {
+    if (reason) return reason.category === 'error' && !reason.fatal ? 'startup error' : null;
+    if (code === null || code === undefined) return signal && !STOP_SIGNALS.has(signal) ? `signal ${signal}` : null;
+    return code === EXIT.TRANSIENT ? 'exit 1 without a reason' : null;
+}
+
+export const SPAWN_TIMEOUT_CATEGORY = 'spawn_timeout';
+
+/**
+ * Agent side, from initBot: gives agent.js's spawn-timeout exit a reason, so the
+ * main process retries it with backoff and never counts it as a crash (#441
+ * review 1). agent.js exits 1 there without calling recordExit, and the causes
+ * are mostly outside the bot: Microsoft, Xbox or session servers down, DNS
+ * failures (minecraft-protocol emits only 'error', no 'end'), a blackholed
+ * server (the SYN times out after ~127 s, past the 30 s spawn timeout), a
+ * server stalling the login.
+ *
+ * At process exit it writes {category: spawn_timeout[:<kind>], exitCode: 1} only
+ * when all of these hold: the exit code is 1; the bot never spawned; no exit
+ * reason was recorded in this process; no uncaught exception or unhandled
+ * rejection happened (those stay crashes: the CX23 ENOENT came before spawn);
+ * and at least `spawnTimeoutMs` (less 1 s) passed since the bot was created, so
+ * an early exit(1), such as init_agent.js's startup catch, stays a crash.
+ * <kind> is classifyBeforeJoinError's kind of the last error before login
+ * (network, http-5xx, auth-permanent, ...), when there was one.
+ * @param {object} bot mineflayer bot ('error', 'spawn')
+ * @param {object} o
+ * @param {number} o.spawnTimeoutMs settings.spawn_timeout in ms
+ * @param {() => boolean} [o.recorded] true once recordExit ran in this process
+ * @param {(err: Error) => {kind: string}} [o.classify] classifyBeforeJoinError
+ */
+export function attachSpawnTimeoutReason(bot, { spawnTimeoutMs, recorded = () => false, classify = null, proc = process, now = Date.now, writeFile } = {}) {
+    const createdAt = now();
+    let spawned = false;
+    let crashed = false;
+    let beforeJoinKind = null;
+    bot.once('spawn', () => { spawned = true; });
+    bot.on('error', (err) => {
+        if (spawned || !classify) return;
+        try { beforeJoinKind = classify(err)?.kind ?? null; } catch { /* keep the last one */ }
+    });
+    const onCrash = () => { crashed = true; };
+    const onExit = (code) => {
+        if (code !== EXIT.TRANSIENT || spawned || crashed || recorded()) return;
+        if (!Number.isFinite(spawnTimeoutMs) || now() - createdAt < spawnTimeoutMs - 1000) return;
+        const category = beforeJoinKind ? `${SPAWN_TIMEOUT_CATEGORY}:${beforeJoinKind}` : SPAWN_TIMEOUT_CATEGORY;
+        writeExitReason({ category, exitCode: EXIT.TRANSIENT }, { env: proc.env ?? process.env, ...(writeFile ? { writeFile } : {}) });
+    };
+    proc.on('uncaughtExceptionMonitor', onCrash);
+    proc.on('exit', onExit);
+    return {
+        get beforeJoinKind() { return beforeJoinKind; },
+        dispose() { proc.removeListener('uncaughtExceptionMonitor', onCrash); proc.removeListener('exit', onExit); },
+    };
+}
+
+/**
+ * Ends an in-process crash loop. The same crash `max` times in a row, each
+ * within `quickMs` of the agent's spawn, is deterministic (the CX23's first
+ * start, 2026-11-08: a missing template file, ENOENT in a callback, crashed
+ * every agent start). Restarting it in-process only repeats it, so the caller
+ * ends the main process with 3, which the unit does not restart
+ * (RestartPreventExitStatus=0 3). Exit 1 would not stop it either: each main
+ * process lives about 4 min through the backoff, so systemd's start limit
+ * (6 starts in 10 min) is never reached and the loop goes on, just slower.
+ * Any other exit (decideAgentExit notes every exit: clean, task, fatal, kick,
+ * disconnect, requested stop or restart), a different crash or a longer
+ * session starts the count again.
+ */
+export function createCrashLoopGuard({ max = 5, quickMs = 300_000 } = {}) {
+    let last = null;
+    let count = 0;
+    return {
+        /** @returns {{loop:boolean, count:number, signature:string|null}} */
+        note(signature, connectedMs = 0) {
+            if (!signature || connectedMs >= quickMs) { last = null; count = 0; return { loop: false, count, signature: null }; }
+            count = signature === last ? count + 1 : 1;
+            last = signature;
+            return { loop: count >= max, count, signature };
+        },
+        get max() { return max; },
+        get quickMs() { return quickMs; },
+    };
+}
+
+/**
  * Main-process side: what to do when an agent process ends. Pure apart from the
  * policy and guard state it is given.
  * `connectedMs` is measured from spawn, not from the Minecraft login: the
@@ -108,7 +210,11 @@ export function createRequestedRestartGuard({ max = 5, windowMs = 600_000 } = {}
 export function decideAgentExit({
     code, signal, requestedStop = false, restartRequested = false, singleBotService = false,
     connectedMs = 0, reason = null, now = Date.now(),
-}, policy, guard = null) {
+}, policy, guard = null, crashGuard = null) {
+    // Every exit is noted, so any exit that is not a crash (a requested stop or
+    // restart, clean, task, fatal, codes above 3, kicks) starts the count again.
+    const crashSig = restartRequested || requestedStop ? null : crashSignature({ code, signal, reason });
+    const crash = crashGuard?.note(crashSig, connectedMs);
     if (restartRequested) return { action: 'none', reason: 'restart requested by the main process' };
     if (requestedStop || STOP_SIGNALS.has(signal)) {
         return singleBotService
@@ -127,6 +233,10 @@ export function decideAgentExit({
         // Adds nothing to the streak, but a long session still resets it (PR #23 review 1).
         policy.noteSession?.(connectedMs);
         return { action: 'restart', delayMs: 0, reason: REQUESTED_RESTART };
+    }
+    if (crash?.loop) {
+        const mins = Math.round(crashGuard.quickMs / 60_000);
+        return { action: 'exit', code: EXIT.FATAL, reason: `crash_loop: ${crash.signature}, ${crash.count} times in a row, each within ${mins} min of the start` };
     }
     // 1, or killed by a signal the main process did not send: transient.
     const c = reason && !reason.fatal ? reason : { category: code === null ? `signal ${signal}` : 'transient', fatal: false, exitCode: EXIT.TRANSIENT };

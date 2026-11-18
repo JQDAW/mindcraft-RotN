@@ -4,7 +4,9 @@
 //
 // threatOf combines the entity facts (entity(): hostile = IMob or bytecode-cited player targeting,
 // dangerous = entity-overrides.json) with the hand-written reactions in threat-reactions.json.
-// Order, first match wins: dangerous -> 'avoid' (source 'override'); an 'entities' entry; a
+// Order, first match wins: dangerous -> 'avoid' (source 'override'); an 'entities' entry; a 'groups'
+// entry listing the name in its 'members' (any level: the animals that fight back, such as Animania's
+// bulls and cows; G4 #5, soak 2's "gored to death"); a
 // 'classRules' entry matching the dumped class's simple name, for hostile mobs (source: the rule's
 // confidence, default 'inferred': the creeper variants keep distance and the skeleton variants take
 // cover; the Special Mobs enderman and witch variants ignore unless provoked and take cover, also
@@ -32,6 +34,11 @@ export const NIGHT_THREATS_NOT_REFLECTED = [
     "MultiMob's spawn lists: they carry no biome filter of their own (plains lists ghasts and wither skeletons) and apply their conditions at spawn time, so they are not read.",
 ];
 
+/** The group (threat-reactions.json 'groups') whose explicit members list has this name, or null. */
+function groupOf(catalog, name) {
+    return (catalog.threatReactions?.groups ?? []).find((g) => g.members?.includes(name)) ?? null;
+}
+
 /** The dumped class's simple name ("fathertoast.specialmobs.entity.creeper.EntityFireCreeper" -> "EntityFireCreeper"). */
 const simpleClass = (cls) => (typeof cls === 'string' ? cls.slice(cls.lastIndexOf('.') + 1) : '');
 
@@ -48,10 +55,16 @@ function classRule(catalog, e) {
  * @returns {{name: string, displayName: string|null, level: 'dangerous'|'hostile'|'none',
  *   reaction: string, source: 'override'|'documented'|'vanilla'|'verified'|'inferred'|'default', rule?: string,
  *   variantNote?: string,
+ *   group?: string, provoked: object|null,
  *   summary: string|null, explodes: boolean, ranged: boolean, lookAt: boolean, evidence: string[]}|null}
  *   null for an unknown entity. lookAt false: the mob is dangerous to look at (its targeting starts
  *   when a player looks at it, like the enderman's stare, or its gaze attack needs the player to look
- *   back, like the gorgon's), so do not look at its head (#186 review: a field, not a regex on the summary)
+ *   back, like the gorgon's), so do not look at its head (#186 review: a field, not a regex on the summary).
+ *   provoked: for a mob that fights back, what it does once hurt (threat-reactions.json description):
+ *   { damage, health?, callsForHelp, helpers, fightBack, ... }; the Animania bulls add reach,
+ *   attackIntervalTicks, chaseSpeed, width, stepHeight and angerMetadata ({ index, type, field, note }:
+ *   the metadata entry that is true while the bull charges). null otherwise. group: the group's id
+ *   when the entry came from 'groups'.
  */
 export function threatOf(catalog, input) {
     const e = catalog.entity(input);
@@ -61,9 +74,9 @@ export function threatOf(catalog, input) {
     const base = { name: e.name, displayName: e.displayName ?? null, level };
     // A dangerous mob is avoided whatever else applies (entity-overrides.json wins).
     if (level === 'dangerous') {
-        return { ...base, reaction: 'avoid', source: 'override', summary: e.threat?.note ?? null, explodes: false, ranged: false, lookAt: e.threat?.lookAt !== false, evidence: overrideEvidence };
+        return { ...base, reaction: 'avoid', source: 'override', summary: e.threat?.note ?? null, explodes: false, ranged: false, lookAt: e.threat?.lookAt !== false, provoked: null, evidence: overrideEvidence };
     }
-    const entry = catalog.threatReactions?.entities?.[e.name];
+    const entry = catalog.threatReactions?.entities?.[e.name] ?? groupOf(catalog, e.name);
     const rule = !entry && level === 'hostile' ? classRule(catalog, e) : null;
     const r = entry ?? rule;
     const out = {
@@ -74,8 +87,10 @@ export function threatOf(catalog, input) {
         explodes: !!r?.explodes,
         ranged: !!r?.ranged,
         lookAt: r?.lookAt !== false,
+        provoked: r?.provoked ? structuredClone(r.provoked) : null,
         evidence: [...(r?.evidence ?? []), ...overrideEvidence],
     };
+    if (entry?.members) out.group = entry.id;
     if (rule) out.rule = rule.id;
     if (rule?.note) out.note = rule.note;
     // What this variant does beyond the rule's reaction (#143 review: e.g. the thief enderman
