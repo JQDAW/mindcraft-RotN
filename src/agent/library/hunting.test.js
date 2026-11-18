@@ -78,12 +78,13 @@ test('G4 #5: within 32 blocks of a known player base (a place in memory named ba
 });
 
 test('G4 #5: the target is the nearest animal that may not belong to a player; the others are named', () => {
-    const bot = world({ animals: [cow(2, { metadata: { 2: 'Bessie' } }), cow(5, { vehicle: { id: 9 } }), cow(9), { name: 'animania:calf_holstein', position: new Vec3(1.5, 64, 0.5), metadata: HEALTH }], blocks: {} });
+    // The wild one is an Angus: three Holsteins within 16 would be a herd (#448), which is not hunted.
+    const bot = world({ animals: [cow(2, { metadata: { 2: 'Bessie' } }), cow(5, { vehicle: { id: 9 } }), cow(9, { name: 'animania:cow_angus' }), { name: 'animania:calf_holstein', position: new Vec3(1.5, 64, 0.5), metadata: HEALTH }], blocks: {} });
     const skipped = [];
     const t = huntTarget(bot, { skipped });
     assert.equal(t?.position.x, 9.5);
     assert.deepEqual(skipped, ['animania:cow_holstein: it has a name tag', 'animania:cow_holstein: it is on a leash']);
-    assert.deepEqual(nearbyHuntable(bot), ['animania:cow_holstein']);
+    assert.deepEqual(nearbyHuntable(bot), ['animania:cow_angus']);
     assert.equal(huntTarget(world({ animals: [cow(2, { metadata: { 2: 'Bessie' } })] })), null);
 });
 
@@ -160,7 +161,7 @@ test('soak 2: a hunt that gets nowhere (no move, no closer, no hit) ends stuck a
 
 test('soak 2: an animal the hunt could not get is left alone for HUNT.skipMs (the target and the prompt\'s list)', async () => {
     const { skipAnimal } = await import('./hunting.js');
-    const bot = world({ animals: [cow(4), cow(9)] });
+    const bot = world({ animals: [cow(4), cow(9, { name: 'animania:cow_angus' })] }); // two breeds: no herd (#448)
     assert.equal(huntTarget(bot).id, 1);
     skipAnimal(bot, 1);
     assert.equal(huntTarget(bot).id, 2, 'the next one');

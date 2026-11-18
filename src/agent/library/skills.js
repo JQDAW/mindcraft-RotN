@@ -3157,14 +3157,20 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
     bot.modes.pause('self_preservation'); // prevents damage-on-low-health from interrupting the bot
     let enemy = world.getNearestEntityWhere(bot, isEnemy, distance);
     let away = null; // the point the walk keeps away from
+    let still = 0; // ticks in a row the pathfinder was not moving
     while (enemy) {
         // #444 review 3: away from all the enemies at once, not the nearest one: with a slime close
         // and a skeleton farther the nearest one changed, and so did the way, every tick. Each
         // enemy's weight is 1/d^2, so a near one counts most and a far one cannot pull the bot back
-        // towards it. The goal is set again only when that point moved.
+        // towards it. The goal is set again when that point moved, or (#449 review) when the
+        // pathfinder has not moved for 2 ticks in a row (about 1 s; #453 review 4: not every tick,
+        // which would restart a path still being computed): a failed flee path must not leave the
+        // bot standing there.
         const point = enemiesPoint(bot, isEnemy, distance) ?? enemy.position;
-        if (!away || away.distanceTo(point) > 1) {
+        still = away && bot.pathfinder.isMoving?.() === false ? still + 1 : 0;
+        if (!away || away.distanceTo(point) > 1 || still >= 2) {
             away = point;
+            still = 0;
             bot.pathfinder.setMovements(new pf.Movements(bot));
             bot.pathfinder.setGoal(new pf.goals.GoalInvert(new pf.goals.GoalNear(point.x, point.y, point.z, distance + 1)));
         }

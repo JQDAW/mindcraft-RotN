@@ -10,6 +10,7 @@
 // which only leaves more animals alone (it fails safe).
 
 import * as mc from '../../utils/mcdata.js';
+import { threatFor } from './threats.js';
 
 /**
  * Soak 2 (rotn-v0.1.4): at food 4 or lower (Normal difficulty) Hunger Overhaul gives weakness
@@ -20,7 +21,7 @@ import * as mc from '../../utils/mcdata.js';
 export const HUNT_MIN_FOOD = 4;
 export const tooWeakToHunt = (bot) => Number.isFinite(bot?.food) && bot.food <= HUNT_MIN_FOOD;
 
-export const HUNT = { radius: 16, ownedRadius: 8, baseRadius: 32, placedMax: 512, maxMs: 90_000, checkMs: 500, stuckMs: 8000, skipMs: 5 * 60_000 };
+export const HUNT = { retaliationRadius: 16, radius: 16, ownedRadius: 8, baseRadius: 32, placedMax: 512, maxMs: 90_000, checkMs: 500, stuckMs: 8000, skipMs: 5 * 60_000 };
 
 /**
  * Soak 2 (rotn-v0.1.4): the reflex hunted the same sow, uphill and out of reach, 6 times in 4 min;
@@ -141,7 +142,31 @@ export function trackBotPlaced(bot) {
     };
 }
 
-/** The nearest animal the bot may hunt (within radius, not a baby, not maybe a player's), or null; `skipped` gets the reasons. */
+/**
+ * #448 (soak 2's "gored to death", G4 #5): why hunting this animal would bring a fight the bot must
+ * not take, or null. Within HUNT.retaliationRadius (16) of the animal or of the bot: an animal that
+ * must not be fought (rotn-data provoked.fightBack false: an Animania bull, a polar bear, a panda, a
+ * book wyrm); and, for an animal whose kind calls for help when hurt (Animania cows: every cow of
+ * the breed within 16 joins in), another of its kind. A lone cow away from bulls is still hunted.
+ * Not covered yet (#453 review 5): a polar bear near its cub attacks unprovoked (vanilla AIAttackPlayer).
+ */
+export function retaliationRisk(bot, target, { radius = HUNT.retaliationRadius } = {}) {
+    const here = bot?.entity?.position;
+    if (!target?.position) return null;
+    const calls = !!threatFor(target)?.provoked?.callsForHelp;
+    for (const e of Object.values(bot?.entities ?? {})) {
+        if (!e?.position || e === target || e === bot.entity) continue;
+        const near = e.position.distanceTo(target.position) <= radius || (!!here && e.position.distanceTo(here) <= radius);
+        if (!near) continue;
+        const p = threatFor(e)?.provoked;
+        if (p && p.fightBack === false) return `a ${e.name} within ${radius} blocks (it charges whoever hurts it or its herd; never hunt near one)`;
+        if (calls && e.name === target.name && e.position.distanceTo(target.position) <= radius)
+            return `in a herd: another ${e.name} within ${radius} blocks, and its kind calls the herd when one is hurt`;
+    }
+    return null;
+}
+
+/** The nearest animal the bot may hunt (within radius, not a baby, not maybe a player's, no retaliation risk), or null; `skipped` gets the reasons. */
 export function huntTarget(bot, { bases = [], radius = HUNT.radius, skipped = [] } = {}) {
     const here = bot?.entity?.position;
     if (!here) return null;
@@ -149,7 +174,7 @@ export function huntTarget(bot, { bases = [], radius = HUNT.radius, skipped = []
         .filter(e => e && e !== bot.entity && e.position && isHuntableAnimal(e) && e.position.distanceTo(here) <= radius && !skippedNow(bot, e))
         .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here));
     for (const e of animals) {
-        const why = mayBelongToPlayer(bot, e, { bases });
+        const why = mayBelongToPlayer(bot, e, { bases }) ?? retaliationRisk(bot, e);
         if (!why) return e;
         skipped.push(`${e.name}: ${why}`);
     }
@@ -163,7 +188,7 @@ export function nearbyHuntable(bot, { bases = [], radius = 32 } = {}) {
     return Object.values(bot.entities ?? {})
         .filter(e => e && e !== bot.entity && e.position && isHuntableAnimal(e) && e.position.distanceTo(here) <= radius && !skippedNow(bot, e))
         .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here))
-        .filter(e => !mayBelongToPlayer(bot, e, { bases }))
+        .filter(e => !mayBelongToPlayer(bot, e, { bases }) && !retaliationRisk(bot, e))
         .map(e => e.name);
 }
 

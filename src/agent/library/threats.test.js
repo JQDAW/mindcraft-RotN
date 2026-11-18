@@ -313,6 +313,43 @@ test('#434 nit: a ranged mob near a big slime steers the flee, and the walk keep
     assert.equal(armed.isEnemy(slime), false);
 });
 
+test('#448: a provoked animal reacts only to its own hit (its damage, or within its reach): a bull or a polar bear is fled, a rooster hit back; starving next to one is not', () => {
+    const now = 100_000;
+    const at = (name, x, extra = {}) => ({ ...mob(name, x), ...extra });
+    const hit = (entities, damage) => threatPlan(fakeBot(entities, { lastDamageTime: now - 500, lastDamageTaken: damage }), { now });
+    const bull = at('animania:bull_holstein', 1.5);
+    const gored = hit([bull], 5);
+    assert.deepEqual([gored.action, gored.why, gored.from, gored.away], ['flee', 'provoked', bull, RANGES.fight.away]);
+    assert.equal(gored.isEnemy(bull), true);
+    // 3.5 away (beyond its reach 2 + 1): a hit of 5 is its own; starving (1) is not.
+    const far = at('animania:bull_holstein', 3.5);
+    assert.equal(hit([far], 5).action, 'flee');
+    assert.equal(hit([far], 1), null, 'starving or a fall next to a bull: no flee');
+    assert.equal(threatPlan(fakeBot([bull]), { now }), null, 'no hit, no reaction');
+    // A rooster can be fought back (fightBack true); its metadata is read, so it is not taken for a player's.
+    const rooster = at('animania:rooster_leghorn', 1.2, { metadata: { 7: 6 } });
+    const peck = hit([rooster], 2);
+    assert.deepEqual([peck.action, peck.why, peck.from], ['fight', 'provoked', rooster]);
+    // A polar bear calls the others: they are kept away from too.
+    const bear = at('minecraft:polar_bear', 1.5), other = at('minecraft:polar_bear', 6);
+    const mauled = hit([bear, other], 6);
+    assert.equal(mauled.action, 'flee');
+    assert.equal(mauled.isEnemy(other), true);
+});
+
+test('#448: two cows of one herd within reach at a hit: back off from the herd; one cow (the hunt\'s) is no reason', () => {
+    const now = 100_000;
+    const cow = (x, name = 'animania:cow_holstein') => mob(name, x);
+    const hit = (entities) => threatPlan(fakeBot(entities, { lastDamageTime: now - 500, lastDamageTaken: 2 }), { now });
+    const a = cow(1.5), b = cow(-2);
+    const herd = hit([a, b]);
+    assert.deepEqual([herd.action, herd.why, herd.away], ['flee', 'a herd fights back', RANGES.fight.away]);
+    assert.equal(herd.isEnemy(b), true);
+    assert.equal(hit([cow(1.5)]), null, 'one cow hitting back during its hunt');
+    assert.equal(hit([cow(1.5), cow(-2, 'animania:cow_angus')]), null, 'two breeds do not answer each other');
+    assert.equal(threatPlan(fakeBot([a, b]), { now }), null, 'no hit');
+});
+
 test('#444 review 3: avoidEnemies keeps away from all the enemies at once, near ones weighing most, not only from the nearest', async (t) => {
     t.mock.method(console, 'log', () => {});
     const { avoidEnemies, enemiesPoint } = await import('./skills.js');
@@ -330,4 +367,64 @@ test('#444 review 3: avoidEnemies keeps away from all the enemies at once, near 
     const score = (x, z) => goal.heuristic({ x, y: 64, z });
     assert.ok(score(-4, 2) < score(-4, -2), `${score(-4, 2)} vs ${score(-4, -2)}`);
     assert.equal(enemiesPoint(fightBot([]), () => true, 16), null);
+});
+
+test('#449 review: avoidEnemies sets its goal again when the pathfinder stopped (a failed flee path), not while it moves', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { avoidEnemies } = await import('./skills.js');
+    const run = async (moving) => {
+        const bot = fightBot([{ id: 911, name: 'slime', type: 'mob', position: new Vec3(3, 64, 0), height: 1 }]);
+        bot.pathfinder.isMoving = () => moving;
+        bot.pathfinder.setGoal = function (goal) { this.goals.push(goal); }; // the enemy stays; nothing ends the walk
+        setTimeout(() => { bot.interrupt_code = true; }, 1300); // about three ticks of 500 ms
+        await avoidEnemies(bot, 16, (e) => e.name === 'slime', () => false);
+        return bot.pathfinder.goals.length;
+    };
+    assert.ok(await run(false) >= 2, 'not moving: the goal is set again');
+    assert.equal(await run(true), 1, 'moving: the goal stands');
+});
+
+// #453 review 1 (BLOCKER): a false fight would hit a player's wolf or llama on the live server.
+test('#453 review 1: starving or falling next to a rooster or wolf is no fight; an owned wolf is fled, never fought; the herd flee ignores a fall', () => {
+    const now = 100_000;
+    const at = (name, x, metadata = { 7: 8 }) => ({ ...mob(name, x), metadata });
+    const plan = (entities, extra) => threatPlan(fakeBot(entities, { lastDamageTime: now - 500, food: 12, ...extra }), { now });
+    const rooster = at('animania:rooster_leghorn', 1.2), wolf = at('minecraft:wolf', 1.5);
+    for (const animal of [rooster, wolf]) {
+        assert.equal(plan([animal], { lastDamageTaken: 2 })?.action, 'fight', `${animal.name}: its own hit is fought back`);
+        assert.equal(plan([animal], { lastDamageTaken: 1, food: 0 }), null, `${animal.name}: starving next to it`);
+        assert.equal(plan([animal], { lastDamageTaken: 1, lastDamageCause: 'starving' }), null);
+        assert.equal(plan([animal], { lastDamageTaken: 4, lastDamageCause: 'fall' }), null, `${animal.name}: a fall next to it`);
+        assert.equal(plan([animal], { lastDamageTaken: 1 }), null, `${animal.name}: less than its damage`);
+    }
+    assert.equal(plan([at('minecraft:wolf', 3.5)], { lastDamageTaken: 2 }), null, 'beyond its reach + 1: not its hit to fight back');
+    // A tamed wolf (an owner UUID in its metadata) hits: back off, never hit it.
+    const owned = at('minecraft:wolf', 1.5, { 7: 8, 16: '12345678-1234-1234-1234-123456789abc' });
+    const tamed = plan([owned], { lastDamageTaken: 2 });
+    assert.deepEqual([tamed.action, tamed.why], ['flee', 'provoked, and it may be a player\'s']);
+    assert.equal(tamed.isEnemy(owned), true);
+    // Unreadable metadata counts as maybe a player's.
+    assert.equal(plan([{ ...mob('minecraft:wolf', 1.5) }], { lastDamageTaken: 2 }).action, 'flee');
+    // A bull next to a fall or starving: no flee either.
+    assert.equal(plan([at('animania:bull_holstein', 1.5)], { lastDamageTaken: 4, lastDamageCause: 'fall' }), null);
+    // The herd flee: never for a fall.
+    const herd = [at('animania:cow_holstein', 1.5), at('animania:cow_holstein', -2)];
+    assert.equal(plan(herd, { lastDamageTaken: 2 }).why, 'a herd fights back');
+    assert.equal(plan(herd, { lastDamageTaken: 4, lastDamageCause: 'fall' }), null);
+});
+
+test('#453 review 4: avoidEnemies sets its goal again only after 2 ticks in a row not moving', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { avoidEnemies } = await import('./skills.js');
+    const run = async (moving) => {
+        const bot = fightBot([{ id: 921, name: 'slime', type: 'mob', position: new Vec3(3, 64, 0), height: 1 }]);
+        let n = 0;
+        bot.pathfinder.isMoving = () => moving(n++);
+        bot.pathfinder.setGoal = function (goal) { this.goals.push(goal); };
+        setTimeout(() => { bot.interrupt_code = true; }, 2300); // about five ticks
+        await avoidEnemies(bot, 16, (e) => e.name === 'slime', () => false);
+        return bot.pathfinder.goals.length;
+    };
+    assert.equal(await run((i) => i % 2 === 1), 1, 'one tick still, then moving again: the path stands');
+    assert.ok(await run(() => false) >= 2, 'still for 2 ticks: set again');
 });

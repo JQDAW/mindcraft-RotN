@@ -24,6 +24,7 @@
 // variants take cover), so acting on them never makes the bot bolder (#186 review nit).
 import { threatOf, nightThreats } from '../../../packages/rotn-data/index.js';
 import * as mc from '../../utils/mcdata.js';
+import { mayBelongToPlayer } from './hunting.js';
 
 /** How far each reaction's mob is watched, and how far the bot moves away from it. */
 export const RANGES = {
@@ -37,6 +38,45 @@ export const OUTNUMBERED = 2;
 /** A mob whose anger the bot cannot read: back off this soon after a hit, this close to it. */
 const PROVOKED_MS = 3000;
 const PROVOKED_DIST = 4;
+/** #448: how much farther than its reach an animal may stand and still be taken for the one that hit (it closes in to swing). */
+const PROVOKED_REACH_SLACK = 1;
+
+/**
+ * #448 (soak 2's "gored to death"): whether a recent hit counts as this provoked animal's. With
+ * rotn-data's provoked block: the hit was at least its damage, or it stood within its reach (+1).
+ * Starving, a fall or another mob's small hit next to it no longer count. Without that block, as
+ * before: any hit while it is within PROVOKED_DIST.
+ */
+function hitByIt(bot, x, now) {
+    if (now - (bot.lastDamageTime ?? -Infinity) > PROVOKED_MS) return false;
+    const p = x.t.provoked;
+    if (!p) return x.d <= PROVOKED_DIST;
+    if (worldDamage(bot)) return false; // #453 review 1
+    return x.d <= (p.reach ?? 2) + PROVOKED_REACH_SLACK || (Number.isFinite(p.damage) && (bot.lastDamageTaken ?? 0) >= p.damage);
+}
+
+/**
+ * #453 review 1: damage the world did, never an animal's hit: a fall (damage_record.js), or
+ * starving (food 0 and 1 damage).
+ */
+const worldDamage = (bot) => bot.lastDamageCause === 'fall' || bot.lastDamageCause === 'starving'
+    || (bot.food === 0 && (bot.lastDamageTaken ?? 0) <= 1);
+
+/**
+ * #453 review 1 (BLOCKER): hitting an animal back needs more than hitByIt: the hit was at least its
+ * damage AND it stood within its reach (+1) AND the world did not do it. A false fight on the live
+ * server would hit a player's wolf or llama.
+ */
+function fightsBack(bot, x, now) {
+    const p = x.t.provoked;
+    return !!p && now - (bot.lastDamageTime ?? -Infinity) <= PROVOKED_MS && !worldDamage(bot)
+        && x.d <= (p.reach ?? 2) + PROVOKED_REACH_SLACK && Number.isFinite(p.damage) && (bot.lastDamageTaken ?? 0) >= p.damage;
+}
+
+/** #453 review 1: whether this animal may be a player's (mayBelongToPlayer, the bot's known bases); unreadable: yes. */
+function ownedMaybe(bot, e) {
+    try { return !!mayBelongToPlayer(bot, e, { bases: bot.rotnBases?.() ?? [] }); } catch { return true; }
+}
 /**
  * Where a do-not-look mob shows it is angry: the 1.12 enderman's metadata index 13 ("screaming",
  * set while it targets a player; 12 is its carried block). Tied to the mob itself, not to any
@@ -64,6 +104,9 @@ export function threatFor(entity) {
             // rotn-data's lookAt (#187): false for a mob that targets whoever looks at it (the
             // enderman family, the ender creeper) or whose gaze needs a look back (the cockatrice).
             doNotLook: t.lookAt === false,
+            // rotn-data #448: an animal that hits back when hurt ({damage, reach?, callsForHelp,
+            // fightBack, ...}; fightBack false: never fight it, get away), or null.
+            provoked: t.provoked ?? null,
         } : null);
     }
     const known = cache.get(entity.name);
@@ -230,11 +273,39 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
         const id = angry.e.id;
         return { action: 'fight', why: 'provoked', from: angry.e, isEnemy: (e) => e.id === id };
     }
-    // Its anger cannot be read: never attack it; after a hit right next to it, back off.
-    const unread = calmOnes.find(x => isAngry(x.e) === null);
-    if (unread && now - (bot.lastDamageTime ?? 0) <= PROVOKED_MS) {
-        const id = unread.e.id;
-        return { action: 'flee', why: 'provoked', from: unread.e, away: RANGES.fight.away, isEnemy: (e) => e.id === id };
+    // Its anger cannot be read: never attack it unprovoked. After its hit (hitByIt), rotn-data's
+    // fightBack decides (#448, the lead's decision): true (a rooster, a wolf, a llama): hit it back;
+    // false (an Animania bull: 5 a hit, 24 health; a polar bear, a panda, a book wyrm) or no data:
+    // back off, RANGES.fight.away (a bull loses its target past 16 blocks), from it and the others
+    // it calls for help.
+    // #453 review 1: fightBack true is hit back only on fightsBack (its own hit, not the world's),
+    // and never when it may be a player's (a tamed wolf, a chested llama): then the bot backs off.
+    const hitter = calmOnes.find(x => isAngry(x.e) === null && hitByIt(bot, x, now));
+    if (hitter) {
+        const id = hitter.e.id, name = hitter.e.name, p = hitter.t.provoked;
+        const flee = { action: 'flee', why: 'provoked', from: hitter.e, away: RANGES.fight.away,
+            isEnemy: (e) => e.id === id || (!!p?.callsForHelp && e.name === name) };
+        if (p?.fightBack !== true) return flee;
+        if (!fightsBack(bot, hitter, now)) return null;
+        if (ownedMaybe(bot, hitter.e)) return { ...flee, why: 'provoked, and it may be a player\'s' };
+        return { action: 'fight', why: 'provoked', from: hitter.e, isEnemy: (e) => e.id === id };
+    }
+    // #448: a food animal whose kind calls for help (Animania cows: the whole herd of the breed comes):
+    // a hit with two of one kind within reach is the herd: back off from it. #453 review 1: never
+    // for a fall or starving.
+    if (now - (bot.lastDamageTime ?? -Infinity) <= PROVOKED_MS && !worldDamage(bot)) {
+        const herd = new Map();
+        for (const e of Object.values(bot.entities ?? {})) {
+            if (e === bot.entity || !e?.position) continue;
+            const p = threatFor(e)?.provoked;
+            if (!p?.callsForHelp || e.position.distanceTo(me) > (p.reach ?? 2) + PROVOKED_REACH_SLACK) continue;
+            herd.set(e.name, [...(herd.get(e.name) ?? []), e]);
+        }
+        const mob = [...herd.values()].find(list => list.length >= 2);
+        if (mob) {
+            const name = mob[0].name;
+            return { action: 'flee', why: 'a herd fights back', from: mob[0], away: RANGES.fight.away, isEnemy: (e) => e.name === name };
+        }
     }
     return null;
 }
