@@ -161,8 +161,9 @@ function typedResumePending(agent, now) {
  * One tick of the priority stack. Returns what it did, for tests and logs:
  * 'held:<kind>' (a control hold), 'task:<id>' or 'task:<id>:waiting' (a task runs or waits for
  * the checkpoint), 'task:<id>:yield' (a paused conversation or a giver's !goal), 'task:<id>:failed',
- * 'relocating', 'night-goal' (the model's goal the night stopped started again), or agendaTick's
- * result (null, 'paused', 'yield', 'done', 'stuck', a step id).
+ * 'relocating', 'night-goal' (the model's goal the night stopped started again), 'goal:open' (the open
+ * goal started: nothing in the agenda runnable), modelGoalTick's 'goal' or 'goal:stopped', or
+ * agendaTick's result (null, 'paused', 'yield', 'done', 'stuck', a step id).
  */
 export function autonomyTick(agent, { now = Date.now() } = {}) {
     const sp = agent.self_prompter;
@@ -209,7 +210,9 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
 
     // 4. The agenda.
     const res = agendaTick(agent, { now });
-    if (res === null && !agent.agenda?.active) return modelGoalTick(agent, now);
+    // #468 review 1: nothing runnable in the agenda (agenda._agenda_open_goal): the open goal runs
+    // as the model's own goal.
+    if (res === null && (!agent.agenda?.active || agent._agenda_open_goal)) return modelGoalTick(agent, now);
     return res;
 }
 
@@ -220,6 +223,21 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
  */
 function modelGoalTick(agent, now) {
     const sp = agent.self_prompter;
+    // #468 review 1: while nothing in the agenda is runnable, the open goal (agenda.openGoal) is the
+    // model's own goal: started when nothing self-prompts, and counted below like any model goal
+    // (one step's LLM time, then stopped; the next tick starts it again with a fresh count). Its
+    // text is kept current (the minutes to the retry) while it runs.
+    const open = agent.agenda?.active ? agent._agenda_open_goal : null;
+    if (open && !sp.isActive() && !sp.loop_active && !sp.isPaused?.()) {
+        agent._model_goal = null;
+        agent._open_goal_prompt = open;
+        sp.start(open);
+        return 'goal:open';
+    }
+    if (open && sp.isActive() && sp.prompt === agent._open_goal_prompt && sp.prompt !== open) {
+        sp.prompt = open;
+        agent._open_goal_prompt = open;
+    }
     if (!sp.isActive() || ownsPrompt(agent) || sp.goal_by) {
         agent._model_goal = null;
         return null;

@@ -995,3 +995,71 @@ test('security: "[Server] JQDAW: !stop" (a /say) is not JQDAW; JQDAW\'s chat and
     assert.equal(agent.isTaskGiver('JQDAW'), true);
 });
 
+
+// #468 review 1 and 2 (soak 3, rotn-v0.1.5: stone_axe stuck at 20:12 paused the agenda; the bot idled
+// 67 min). With no step left that does not need the stuck one, the open goal runs as the model's
+// own goal (under its LLM budget); the stuck step is retried 3 times, then once at each new full day.
+function soak3Agent(t, clock) {
+    const agent = fakeAgent(t, { agenda: false });
+    agent.agenda = new Agenda('FRCFLD', { dir: agent.dir, now: () => clock.now });
+    agent.agenda.start();
+    // Steps 1-9 done (as by 19:31), and cobblestone too: nothing left that does not need stone_axe.
+    for (const id of ['rocks', 'sticks', 'crude_axe', 'logs', 'first_plank', 'crafting_tools', 'crafting_table', 'planks_sticks', 'stone_pickaxe', 'cobblestone']) agent.agenda.done_at[id] = 1;
+    agent.bot = fakeBot([{ name: 'bread', metadata: 0, count: 4 }, { name: 'stone_pickaxe', metadata: 0, count: 1 }]);
+    Object.assign(agent.bot, { food: 18, time: { timeOfDay: 1000, day: 1 } });
+    return agent;
+}
+
+test('#468 review 1: in the cooldown window the open goal runs as the model\'s own goal: which step, what failed', (t) => {
+    const clock = { now: 1_000_000 };
+    const agent = soak3Agent(t, clock);
+    const sp = agent.self_prompter;
+    assert.equal(autonomyTick(agent, { now: 0 }), 'stone_axe');
+    agent.agenda.spent.stone_axe = { attempts: 1, llm_ms: STEP_LLM_MS };
+    assert.equal(autonomyTick(agent, { now: TICK_MS }), 'stuck');
+    assert.equal(sp.isActive(), false);
+    assert.equal(autonomyTick(agent, { now: 2 * TICK_MS }), 'goal:open');
+    assert.equal(sp.isActive(), true);
+    assert.match(sp.prompt, /^Open goal while the agenda waits: step stone_axe \(craft a stone axe\) is stuck: 5 min of self-prompting; it is retried with a fresh budget in about 20 min or at the next full day\. Its goal was: Craft a stone axe/);
+    assert.notEqual(sp.prompt, agent._autonomy_prompt, 'not the agenda\'s own prompt: the model-goal budget counts it');
+    assert.equal(autonomyTick(agent, { now: 3 * TICK_MS }), 'goal', 'counted as the model\'s goal');
+    assert.equal(autonomyTick(agent, { now: 4 * TICK_MS }), 'goal');
+    assert.equal(agent._model_goal.ms, TICK_MS, 'its time counts against the model-goal budget');
+    assert.ok(agent.said.includes('agenda open goal: step stone_axe waits; self-prompting on gathering for it'));
+});
+
+test('#468 review 1+2: the soak 3 replay over several in-game days: a goal every tick, never idle; retried 3 times, then once at each new full day', (t) => {
+    const before = settings.night_shelter;
+    settings.night_shelter = false; // the days only: the night routine has its own tests
+    t.after(() => { settings.night_shelter = before; });
+    const clock = { now: 1_000_000 };
+    const start = clock.now;
+    const agent = soak3Agent(t, clock);
+    const sp = agent.self_prompter;
+    const DAY_MS = 20 * 60_000;
+    const results = new Map();
+    let idle = 0, prev = null;
+    for (let now = 0; now <= 5 * DAY_MS; now += TICK_MS) {
+        clock.now = start + now;
+        agent.bot.time = { timeOfDay: 1000, day: 1 + Math.floor(now / DAY_MS) };
+        const r = autonomyTick(agent, { now });
+        results.set(r, (results.get(r) ?? 0) + 1);
+        assert.ok(r !== null && r !== 'waiting', `tick at ${now / 1000} s: ${r}`);
+        // A goal every tick: self-prompting, except the one tick a run is stopped (stuck, or the
+        // open goal's budget spent), after which the next tick starts again.
+        if (!sp.isActive()) {
+            assert.ok(['stuck', 'goal:stopped'].includes(r), `idle at ${now / 1000} s after ${prev}: ${r}`);
+            idle++;
+        }
+        prev = r;
+    }
+    const retries = agent.said.filter(l => /^agenda step stone_axe retried/.test(l));
+    assert.deepEqual(retries.slice(0, 3), [1, 2, 3].map(n => `agenda step stone_axe retried (${n} of 3): a fresh budget`));
+    assert.ok(retries.length >= 5, retries.join('\n'));
+    assert.ok(retries.slice(3).every(l => /retried \(\d+, at a new full day\)/.test(l)));
+    assert.ok(agent.said.some(l => /its 3 retries are spent: one retry at each new full day/.test(l)));
+    assert.ok(!agent.said.includes('agenda done'));
+    assert.equal(agent.agenda.active, true);
+    assert.ok(results.get('goal:open') > 0 && results.get('goal') > 0, [...results].join(' '));
+    assert.ok(idle < 0.02 * (5 * DAY_MS / TICK_MS), `idle ticks: ${idle}`);
+});
