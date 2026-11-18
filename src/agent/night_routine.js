@@ -14,10 +14,10 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, shelterShell } from './library/night.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, shelterShell, dumpState } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE } from './library/shelter.js';
 import { goToGoal, descendFromTree } from './library/skills.js';
-import { stowCarried } from './library/rotn_sources.js';
+import { stowCarried, toolAllows, allowedTool } from './library/rotn_sources.js';
 import { digPit, pitOut, moveAwayFrom, PIT, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { hasWeapon, shelterEnemy } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
@@ -315,28 +315,74 @@ function exitPlan(bot, feet, d) {
 }
 
 /**
- * #435 review 1: the block no tool the bot has can harvest (breaking it would be refused), among the
- * plan's blocks: the hand or a pickaxe carried, or null when all of them can be broken.
+ * #435 review: the tool rule for breaking b, from rotn-data's dump, as shelter.js judges its walls:
+ * {type, minLevel} when the dump says a tool is required, null when the hand will do, false when
+ * nothing breaks it (negative hardness, or a tool required but none named: bedrock), undefined
+ * when the dump does not know the block. The registry's canHarvest is no guide on this pack:
+ * forge-bridge leaves harvestTools unset for modded blocks, so it says yes to modded rock by hand.
+ */
+function toolRule(b) {
+    const st = dumpState(b);
+    if (!st) return undefined;
+    if (st.hardness < 0 || (st.toolRequired && !st.harvestTool)) return false;
+    if (!st.toolRequired) return null;
+    return { type: st.harvestTool, minLevel: Number.isInteger(st.harvestLevel) ? Math.max(0, st.harvestLevel) : 0 };
+}
+
+/**
+ * #435 review 1: the block among the plan's blocks that no tool the bot carries can break, or null
+ * when all of them can be. By the dump (toolAllows: toolLevels against the harvest level); a block
+ * the dump does not know, by the registry's rule with the hand or a pickaxe carried.
  */
 function unharvestable(bot, plan) {
     if (bot.game?.gameMode === 'creative') return null;
-    const tools = [null, ...(bot.inventory?.items?.() ?? []).filter(i => /pickaxe/.test(i.name)).map(i => i.type)];
-    return plan.dig.map(q => bot.blockAt(q)).find(b => typeof b?.canHarvest === 'function' && !tools.some(t => b.canHarvest(t))) ?? null;
+    const picks = [null, ...(bot.inventory?.items?.() ?? []).filter(i => /pickaxe/.test(i.name)).map(i => i.type)];
+    const breakable = (b) => {
+        const rule = toolRule(b);
+        if (rule === null) return true;
+        if (rule === false) return false;
+        if (rule) return toolAllows(bot, rule);
+        return typeof b?.canHarvest !== 'function' || picks.some(t => b.canHarvest(t));
+    };
+    return plan.dig.map(q => bot.blockAt(q)).find(b => !breakable(b)) ?? null;
+}
+
+/**
+ * #435 review 2: the equip for an exit dig, when the dump knows the block: a tool it requires is put
+ * in hand explicitly (the best one the rule allows; false when none is carried); otherwise
+ * equipForBlock picks, and the hand is good enough. Undefined: digWithin's own equip and check.
+ */
+function exitEquip(bot, block) {
+    const rule = toolRule(block);
+    if (rule === undefined) return undefined;
+    if (rule === false) return () => Promise.resolve(false);
+    if (rule === null) return async () => { try { await bot.tool?.equipForBlock?.(block); } catch { /* the hand will do */ } return true; };
+    return async () => {
+        const tool = allowedTool(bot, rule);
+        if (!tool) return false;
+        if (bot.heldItem?.name !== tool.name || (bot.heldItem?.metadata ?? 0) !== (tool.metadata ?? 0)) await bot.equip(tool, 'hand');
+        return true;
+    };
 }
 
 /** How near a block must be to break it (as breakBlockAt): the higher steps are walked up to. */
 const EXIT_REACH = 4.5;
+/** The walk of an exit (tests pass their own): never digs, bounded by goToGoal. */
+const exitWalk = (bot, goal) => goToGoal(bot, goal, { canDig: false });
+
 /** Dig one cell of an exit within the per-block limit (#435 review 2, digBudget): true when it is gone or was free. */
-async function digExitCell(bot, q) {
+async function digExitCell(bot, q, walk) {
     if (isEmpty(bot.blockAt(q))) return true;
     if (bot.entity.position.distanceTo(q) > EXIT_REACH) {
-        try { await goToGoal(bot, new pf.goals.GoalNear(q.x, q.y, q.z, 4), { canDig: false }); }
+        try { await walk(bot, new pf.goals.GoalNear(q.x, q.y, q.z, 4)); }
         catch (err) { console.log(`[night] dig out: no walk to ${at(q)}: ${err?.message ?? err}`); return false; }
         if (bot.entity.position.distanceTo(q) > EXIT_REACH) return false;
     }
     const block = bot.blockAt(q);
     const { limitMs } = digBudget(bot, block);
-    const dug = await digWithin(bot, block, limitMs);
+    const equip = exitEquip(bot, block);
+    const dug = await digWithin(bot, block, limitMs, equip ? { equip } : {});
+    if (dug === false) console.log(`[night] dig out: could not break ${block.name} at ${at(q)}${equip ? ' (no tool it needs in hand)' : ''}`);
     if (dug === 'timeout') console.log(`[night] dig out: ${block.name} at ${at(q)} was not dug within ${(limitMs / 1000).toFixed(1)} s`);
     return dug === true;
 }
@@ -346,10 +392,12 @@ async function digExitCell(bot, q) {
  * G3 round 6 B: it needs no pickaxe, which a bot that died and built its shelter of dirt does not
  * have), then the plan with the fewest blocks; each side's refusal is logged. The opening is
  * checked after digging. A plan with a block the bot cannot harvest is dropped before anything is
- * dug (#435 review 1: the roof stays on), and with no sideways plan left it takes stairs up. Returns
- * the side's lower wall position (stairs: the cell at the top), or null.
+ * dug (#435 review 1: the roof stays on), and with no sideways plan left it takes stairs up. A plan
+ * that fails after the bot walked up its stairs walks the bot back to feet before anything else
+ * (#435 review 4). Returns the side's lower wall position (stairs: the cell at the top), or null.
+ * `walk` is for tests.
  */
-export async function digOut(bot, feet) {
+export async function digOut(bot, feet, { walk = exitWalk } = {}) {
     // The pickaxe must be where breakBlockAt's equipForBlock looks (#229 review).
     const moved = await stowCarried(bot, (i) => /pickaxe/.test(i.name), { resyncMs: 0 }); // no wait: it is night
     if (moved.length) console.log(`[night] moved ${moved.join(' and ')} back into the inventory to dig out`);
@@ -370,7 +418,7 @@ export async function digOut(bot, feet) {
         let dug = true;
         for (const q of plan.dig) {
             if (bot.interrupt_code) return null;
-            dug = await digExitCell(bot, q);
+            dug = await digExitCell(bot, q, walk);
             if (!dug) break;
         }
         if (dug && plan.dig.every(q => isEmpty(bot.blockAt(q)))) {
@@ -378,6 +426,15 @@ export async function digOut(bot, feet) {
             return plan.how === 'stairs' ? plan.exit : feet.plus(plan.d); // stairs: the cell at the top
         }
         console.log(`[night] dig out: could not open the ${sideName(plan.d)} side`);
+        // #435 review 4: a failed plan does not leave the bot part-way up its stairs: the next plan,
+        // and the next try, start from the shelter's cell, which is where the night routine looks.
+        if (!bot.entity.position.floored().equals(feet)) {
+            try { await walk(bot, new pf.goals.GoalBlock(feet.x, feet.y, feet.z)); } catch { /* checked below */ }
+            if (!bot.entity.position.floored().equals(feet)) {
+                console.log(`[night] dig out: could not get back to ${at(feet)} after a failed way out (now at ${exactAt(bot)})`);
+                return null;
+            }
+        }
     }
     return null;
 }
@@ -741,7 +798,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 bot.rotnSheltered = false;
                 n.state = 'day';
                 n.site = null;
-                Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, pitProgress: {}, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false });
+                Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false });
                 line(agent, text);
             };
             const failedTry = (why) => {
@@ -754,7 +811,11 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 }
             };
             if (walkedOut) {
-                handBack(`[night] morning: out of the shelter at ${at(n.site)}; back to work`);
+                // #435 review 4: a failed way out that could not walk the bot back is no way out.
+                const stranded = n.exitLeftAt && bot.entity.position.floored().equals(n.exitLeftAt);
+                handBack(stranded
+                    ? `[night] morning: a way out of the shelter at ${at(n.site)} failed part-way and the bot is at ${at(n.exitLeftAt)}; back to work, maybe still enclosed: dig a way out`
+                    : `[night] morning: out of the shelter at ${at(n.site)}; back to work`);
                 return null;
             }
             // #364 review 3: mobs that do not burn wait outside in the day: no opening while one is near.
@@ -774,8 +835,10 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             }
             const out = n.pit ? () => ops.pitOut(bot, n.site) : () => ops.digOut(bot, n.site);
             startJob(agent, n, 'action:leaveShelter', out, (side) => {
-                if (side) handBack(`[night] morning: dug out of the shelter at ${at(side)}; back to work`);
-                else failedTry(`no safe side of the shelter at ${at(n.site)} to open yet`);
+                if (side) { handBack(`[night] morning: dug out of the shelter at ${at(side)}; back to work`); return; }
+                const here = bot.entity.position.floored();
+                n.exitLeftAt = here.equals(n.site) ? null : here; // #435 review 4: where a failed try left it
+                failedTry(`no safe side of the shelter at ${at(n.site)} to open yet`);
             });
             return 'night:inside';
         }

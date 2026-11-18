@@ -259,6 +259,7 @@ test('D2b-2: digOut opens the lower and upper wall on a side with no water or la
         blockAt: (p) => blockOf(world.get(key(p.floored())) ?? (p.y < 64 ? 'dirt' : 'air'), p.floored()),
         dig: (b) => { world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve(); },
     };
+    withPick(bot);
     const side = await digOut(bot, SITE);
     assert.ok(side.equals(new Vec3(-1, 64, 0)), `opened ${side}`);
     assert.deepEqual(dug, ['-1,65,0', '-1,64,0']);
@@ -381,6 +382,7 @@ test('#204 review 5: digOut skips a side under gravel, a hillside and a side it 
         blockAt: (p) => blockOf(world.get(key(p.floored())) ?? (p.y < 64 ? 'dirt' : 'air'), p.floored()),
         dig: (b) => { world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve(); },
     };
+    withPick(bot);
     const side = await digOut(bot, SITE);
     assert.ok(side.equals(new Vec3(0, 64, -1)), `opened ${side}`);
     assert.ok(!dug.includes('1,65,0') && !dug.includes('-1,65,0'), 'east and west untouched');
@@ -475,6 +477,7 @@ test('#229 review: digOut with the pickaxe in the off hand moves it back, equips
         // like mineflayer-tool: the best tool among inventory.items() only
         tool: { equipForBlock: () => { bot.heldItem = inventory.items().find(i => /pickaxe/.test(i.name)) ?? null; return Promise.resolve(); } },
         moveSlotItem: (from, to) => { slots[to] = slots[from]; slots[from] = null; return Promise.resolve(); },
+        equip: (item) => { bot.heldItem = item; return Promise.resolve(); },
         blockAt: (p) => blockOf(world.get(key(p.floored())) ?? (p.y < 64 ? 'dirt' : 'air'), p.floored()),
         // like the server: cobblestone does not break by hand
         dig: (b) => {
@@ -1245,7 +1248,10 @@ test('#355 review 2: a block that hurts on contact (cactus) in the bot\'s space 
 // Round 10 B: at dawn "found no safe side to open; back to work" and the bot stayed walled in at
 // -34 64 -49: digOut only took a side with the two cells beyond it free, and the ground on the west
 // was one block higher (the crafting table stood on it). In this terrain the other sides failed too.
-function exitWorld(extra = {}, { canHarvest = (name) => name !== 'bedrock' } = {}) {
+const PICK = { name: 'stone_pickaxe', type: 274, metadata: 0, count: 1 };
+/** #435 review: the bot of a rock shelter carries a pickaxe (the dump says rock needs one); equip puts an item in hand. */
+const withPick = (bot, items = [PICK]) => Object.assign(bot, { inventory: { items: () => items, slots: [] }, equip: (item) => { bot.heldItem = item; return Promise.resolve(); } });
+function exitWorld(extra = {}, { canHarvest = (name) => name !== 'bedrock', items = [PICK] } = {}) {
     const key = (p) => `${p.x},${p.y},${p.z}`;
     const world = new Map();
     for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { world.set(`${x},64,${z}`, 'cobblestone'); world.set(`${x},65,${z}`, 'cobblestone'); }
@@ -1267,6 +1273,7 @@ function exitWorld(extra = {}, { canHarvest = (name) => name !== 'bedrock' } = {
         },
         dig: (b) => { world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve(); },
     };
+    withPick(bot, items);
     return { bot, world, dug };
 }
 const ring = (y, name, k = 2) => Object.fromEntries([[k, 0], [-k, 0], [0, k], [0, -k]].map(([x, z]) => [`${x},${y},${z}`, name]));
@@ -1400,6 +1407,24 @@ test('round 10 B: in the morning a shelter with no way out is tried again RETRY_
     assert.equal(nightState(agent).exitTries, 0);
 });
 
+test('#435 review 4: a failed try that left the bot part-way up its stairs does not hand back as out of the shelter', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops({ side: null });
+    o.digOut = () => { o.digs++; agent.bot.entity.position = new Vec3(2.5, 66, 0.5); return Promise.resolve(null); };
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    agent.bot.time.timeOfDay = MORNING;
+    nightTick(agent, { now: 10, ops: o });
+    await settle(agent);
+    assert.equal(o.digs, 1);
+    nightTick(agent, { now: 11, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'day');
+    assert.ok(!agent.chat.some(l => /morning: out of the shelter at 0, 64, 0; back to work$/.test(l)), agent.chat.join('\n'));
+    assert.match(agent.chat.at(-1), /a way out of the shelter at 0, 64, 0 failed part-way and the bot is at 2, 66, 0; back to work, maybe still enclosed: dig a way out$/);
+});
+
 test('round 10 B: out of the shelter between two morning tries (pushed, or it dug itself out), the bot hands back at once', async (t) => {
     quiet(t);
     const agent = fakeAgent({ t: NIGHT });
@@ -1420,23 +1445,70 @@ test('round 10 B: out of the shelter between two morning tries (pushed, or it du
 });
 
 // #364 review (REQUEST CHANGES on 625af577).
-test('#435 review 1: with no tool for the rock, no plan is begun: a dirt roof over stone stays on', async (t) => {
+// #435 review (on d47b1ee9): forge-bridge's extendRegistry leaves harvestTools unset for modded
+// blocks, so the registry's canHarvest says yes to Underground Biomes rock by hand; and with no
+// material every tool digs it alike, so equipForBlock keeps whatever is held.
+test('#435 review 1-3: modded rock (registry canHarvest yes by hand): with no pickaxe no plan is begun; a pickaxe not in hand is put in hand for each rock dig', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (l) => logs.push(String(l)));
-    const PICK = 274;
-    const canHarvest = (name, tool) => !/stone/.test(name) || tool === PICK;
-    const pit = { ...quarry(), '0,66,0': 'dirt' };
-    const { bot, world, dug } = exitWorld(pit, { canHarvest });
-    assert.equal(await digOut(bot, SITE), null, 'no way out it can dig');
-    assert.deepEqual(dug, [], 'nothing was dug');
-    assert.equal(world.get('0,66,0'), 'dirt', 'the roof stays on');
-    assert.ok(logs.some(l => /no stairs up on the east side \(no tool to break (cobble)?stone at /.test(l)), logs.join('\n'));
-    // With a pickaxe in the inventory the same stairs are dug, and the roof goes first.
-    const armed = exitWorld(pit, { canHarvest });
-    armed.bot.inventory.items = () => [{ name: 'stone_pickaxe', type: PICK }];
-    armed.bot.tool.equipForBlock = () => { armed.bot.heldItem = { name: 'stone_pickaxe', type: PICK }; return Promise.resolve(); };
+    const UB = 'undergroundbiomes:metamorphic_stone';
+    const rock = Object.fromEntries(Object.keys({ ...quarry(), ...ring(64, 'x', 1), ...ring(65, 'x', 1) }).map(k => [k, UB]));
+    const pit = { ...rock, '0,66,0': 'dirt' }; // a dirt roof over the rock
+    const registryDefault = () => true; // harvestTools undefined
+    const bare = exitWorld(pit, { canHarvest: registryDefault, items: [] });
+    assert.equal(await digOut(bare.bot, SITE), null, 'no way out it can dig');
+    assert.deepEqual(bare.dug, [], 'nothing was dug');
+    assert.equal(bare.world.get('0,66,0'), 'dirt', 'the roof stays on');
+    assert.ok(logs.some(l => /no stairs up on the east side \(no tool to break undergroundbiomes:metamorphic_stone at /.test(l)), logs.join('\n'));
+    // A pickaxe in the inventory, dirt in hand; equipForBlock keeps what is held.
+    const armed = exitWorld(pit, { canHarvest: registryDefault });
+    armed.bot.heldItem = { name: 'dirt', type: 3, metadata: 0 };
+    const held = [];
+    const dig = armed.bot.dig;
+    armed.bot.dig = (b, ...rest) => { held.push(`${b.name} with ${armed.bot.heldItem?.name}`); return dig(b, ...rest); };
     assert.ok((await digOut(armed.bot, SITE))?.equals(new Vec3(3, 66, 0)));
-    assert.equal(armed.dug[0], '0,66,0');
+    assert.equal(armed.dug[0], '0,66,0', 'the roof first');
+    const rockDigs = held.filter(h => h.startsWith(UB));
+    assert.ok(rockDigs.length >= 2, held.join('; '));
+    assert.deepEqual([...new Set(rockDigs)], [`${UB} with stone_pickaxe`], held.join('; '));
+});
+
+test('#435 review 4: a stairs plan that fails part-way up walks the bot back to the shelter before the next plan', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const saved = PIT.digSlackMs;
+    PIT.digSlackMs = 30;
+    t.after(() => { PIT.digSlackMs = saved; });
+    // Rock rising away from the shelter: the way up is 4 steps, and the top step is out of reach from the floor.
+    const tops = [[1, 66], [2, 66], [3, 67], [4, 68], [5, 67]];
+    const terrace = Object.assign({}, ...tops.flatMap(([k, top]) => Array.from({ length: top - 63 }, (_, i) => ring(64 + i, 'stone', k))));
+    const { bot, dug } = exitWorld(terrace);
+    bot.digTime = () => 10;
+    bot.stopDigging = () => {};
+    const dig = bot.dig;
+    bot.dig = (b, ...rest) => (b.position.x === 4 ? new Promise(() => {}) : dig(b, ...rest)); // the east top step never breaks
+    const walks = [];
+    const walk = (b, goal) => {
+        walks.push(`${goal.constructor.name} ${goal.x},${goal.y},${goal.z}`);
+        b.entity.position = goal.constructor.name === 'GoalBlock' ? new Vec3(goal.x + 0.5, goal.y, goal.z + 0.5)
+            : new Vec3(goal.x - Math.sign(goal.x) * 2 + 0.5, goal.y - 1, goal.z + 0.5);
+        return Promise.resolve();
+    };
+    const out = await digOut(bot, SITE, { walk });
+    assert.deepEqual(walks.slice(0, 2), ['GoalNear 4,68,0', 'GoalBlock 0,64,0'], walks.join('; '));
+    assert.ok(walks.slice(2).length > 0 && walks.slice(2).every(w => w.startsWith('GoalNear -')), `then only the west steps: ${walks.join('; ')}`);
+    assert.ok(out?.equals(new Vec3(-5, 68, 0)), `out on the west: ${out}`);
+    assert.ok(dug.includes('-4,68,0'));
+    assert.ok(logs.some(l => /could not open the east side/.test(l)), logs.join('\n'));
+    // The walk back fails: no other plan is tried from part-way up.
+    const stuck = exitWorld(terrace);
+    Object.assign(stuck.bot, { digTime: () => 10, stopDigging: () => {} });
+    const sdig = stuck.bot.dig;
+    stuck.bot.dig = (b, ...rest) => (b.position.x === 4 ? new Promise(() => {}) : sdig(b, ...rest));
+    const noWayBack = (b, goal) => { if (goal.constructor.name !== 'GoalBlock') b.entity.position = new Vec3(2.5, 67, 0.5); return Promise.resolve(); };
+    assert.equal(await digOut(stuck.bot, SITE, { walk: noWayBack }), null);
+    assert.ok(!stuck.dug.some(k => k.startsWith('-')), 'nothing dug on the west');
+    assert.ok(logs.some(l => /could not get back to 0, 64, 0 after a failed way out/.test(l)));
 });
 
 test('#435 review 2: an exit dig has the per-block limit: a hung dig ends that plan and the next side is tried; a quick side beats a slow hand-diggable one', async (t) => {

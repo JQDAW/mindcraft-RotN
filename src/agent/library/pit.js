@@ -231,13 +231,21 @@ function digState(bot) {
  * Dig one block by hand within ms: true, false (it cannot be dug), or 'timeout' (the dig is
  * stopped). #431 review 6: the equip and the dig are this function's own, and no dig starts once
  * the time is up (a breakBlockAt still equipping could start one after digPit returned).
+ * `equip` (#435 review 2): the caller's own equip, which also decides whether the block can be
+ * broken (false: it cannot); used in place of equipForBlock and the registry's canHarvest, which do
+ * not know modded rock (forge-bridge leaves harvestTools unset, and with no material every tool
+ * digs it alike, so equipForBlock keeps what is held).
  */
-export async function digWithin(bot, block, ms) {
+export async function digWithin(bot, block, ms, { equip = null } = {}) {
     let timer, cancelled = false;
     const dig = (async () => {
         if (bot.game?.gameMode !== 'creative') {
-            try { await bot.tool?.equipForBlock?.(block); } catch { /* digs with what is in hand */ }
-            if (block.canHarvest && !block.canHarvest(bot.heldItem ? bot.heldItem.type : null)) return false;
+            if (equip) {
+                if (!await equip()) return false;
+            } else {
+                try { await bot.tool?.equipForBlock?.(block); } catch { /* digs with what is in hand */ }
+                if (block.canHarvest && !block.canHarvest(bot.heldItem ? bot.heldItem.type : null)) return false;
+            }
         }
         if (cancelled) return false;
         await bot.dig(block, true);
