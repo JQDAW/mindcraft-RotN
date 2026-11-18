@@ -431,18 +431,18 @@ test('soak 2: unstuck never moves the bot while the action makes progress; with 
     const started = setup({ targetDigBlock: dirt, digTime: () => 30_000 }, memo);
     started.mode.stuck_time = 0; // the dig starts after a moment in place
     r = await run(started);
-    assert.equal(memo.digKey, '-42,66,-53', 'the start is recorded');
+    assert.ok(memo.digs.has('-42,66,-53'), 'the start is recorded');
     r = await run(setup({ targetDigBlock: dirt, digTime: () => 30_000 }, memo));
     assert.equal(r.moved, false, 'the same dig on the next tick: no move');
     const key = '-42,66,-53';
-    r = await run(setup({ targetDigBlock: dirt, digTime: () => 30_000 }, { digKey: key, digSince: Date.now() - 50_000, digAllowMs: 60_000 }));
+    r = await run(setup({ targetDigBlock: dirt, digTime: () => 30_000 }, { digs: new Map([[key, { since: Date.now() - 50_000, at: Date.now() - 1000, allowMs: 60_000 }]]) }));
     assert.equal(r.moved, false, 'a dig within twice its time: no move');
     // The fight's target getting closer.
     const sow = { id: 9, position: position.offset(4, 0, 0) };
     r = await run(setup({ pvp: { target: sow } }, { targetKey: 'pvp:9', targetBest: 8 }));
     assert.equal(r.moved, false, 'the target is closer than before: no move');
     // No progress: the dig past twice its time, the target no closer: it moves the bot, as before.
-    r = await run(setup({ targetDigBlock: dirt, digTime: () => 30_000 }, { digKey: key, digSince: Date.now() - 61_000, digAllowMs: 60_000 }));
+    r = await run(setup({ targetDigBlock: dirt, digTime: () => 30_000 }, { digs: new Map([[key, { since: Date.now() - 61_000, at: Date.now() - 1000, allowMs: 60_000 }]]) }));
     assert.equal(r.moved, true, 'a dig past twice its time: stuck');
     r = await run(setup({ pvp: { target: sow } }, { targetKey: 'pvp:9', targetBest: 4 }));
     assert.equal(r.moved, true, 'the target no closer: stuck');
@@ -462,6 +462,41 @@ test('soak 2: installProgress stamps a block broken (diggingCompleted) or placed
     await new Promise(r => setTimeout(r, 5));
     assert.equal(await bot.placeBlock({}, {}), 'placed');
     assert.ok(bot.rotnProgressAt > dug);
+});
+
+test('#431 review 1 (owed): a dig that stops and restarts at one position has one allowance across short gaps', async () => {
+    const { actionProgress, PROGRESS } = await import('./library/progress.js');
+    const block = (x) => ({ name: 'dirt', position: new Vec3(x, 63, 1) });
+    const [a, b] = [block(1), block(2)];
+    const bot = { digTime: () => 1000, entity: { position: new Vec3(1, 64, 1) }, targetDigBlock: null, rotnProgressAt: 0 };
+    let memo = {};
+    const tick = (ms, dig) => { bot.targetDigBlock = dig; return actionProgress(bot, memo, ms); };
+    // The allowance of a: max(5000, 2 x 1000) from 1000.
+    assert.equal(tick(1000, a), null, 'its start is only recorded');
+    assert.equal(tick(2000, a), 'a dig underway');
+    assert.equal(tick(3000, null), null, 'a gap');
+    assert.equal(tick(4000, a), 'a dig underway', 'the same allowance after the gap');
+    assert.equal(tick(5500, null), null);
+    assert.equal(tick(6000, a), 'a dig underway', 'still within it');
+    assert.equal(tick(6500, null), null);
+    assert.equal(tick(7000, a), null, 'spent: restarting did not renew it');
+    assert.equal(tick(8000, a), null);
+    // Two positions in turn: each has its own one allowance, neither renews the other.
+    assert.equal(tick(8500, b), null, 'b starts');
+    assert.equal(tick(9000, a), null, 'a is still spent');
+    assert.equal(tick(9500, b), 'a dig underway');
+    assert.equal(tick(14000, b), null, 'b is spent too');
+    // Not seen for digForgetMs: a new dig there.
+    const later = 14000 + PROGRESS.digForgetMs + 1;
+    assert.equal(tick(later, a), null, 'recorded anew');
+    assert.equal(tick(later + 1000, a), 'a dig underway');
+    // A block really broken renews it.
+    memo = {};
+    assert.equal(tick(1000, a), null);
+    bot.rotnProgressAt = 1500;
+    assert.equal(tick(2000, a), 'a block broken or placed');
+    assert.equal(tick(7500, a), null, 'recorded anew, not spent');
+    assert.equal(tick(8000, a), 'a dig underway');
 });
 
 test('#431 review 1: a retry loop that starts over in place (a new goal or a new dig each time, no closer) is still freed by unstuck', async (t) => {
@@ -491,7 +526,7 @@ test('#431 review 1: a retry loop that starts over in place (a new goal or a new
     const memo = { targetKey: new GoalNear(30, 64, 5, 1), targetBest: 25 };
     assert.equal(await run(setup({ pathfinder: { goal: new GoalNear(30, 64, 5, 1) } }, memo)), true, 'a new goal is no progress: freed');
     // A dig that keeps starting over on new blocks it never finishes.
-    const memo2 = { digKey: '5,63,5', digSince: Date.now(), digAllowMs: 60_000 };
+    const memo2 = { digs: new Map([['5,63,5', { since: Date.now(), at: Date.now(), allowMs: 60_000 }]]) };
     assert.equal(await run(setup({ targetDigBlock: { name: 'dirt', position: new Vec3(6, 63, 5) } }, memo2)), true, 'a new dig is no progress: freed');
 });
 

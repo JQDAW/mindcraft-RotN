@@ -13,6 +13,7 @@ import settings from './settings.js';
 import { autonomyTick } from './priority.js';
 import { shelterQuiet, SHELTER_QUIET_MODES } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
+import { PIT } from './library/pit.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -258,6 +259,7 @@ test('D2b-2: digOut opens the lower and upper wall on a side with no water or la
         blockAt: (p) => blockOf(world.get(key(p.floored())) ?? (p.y < 64 ? 'dirt' : 'air'), p.floored()),
         dig: (b) => { world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve(); },
     };
+    withPick(bot);
     const side = await digOut(bot, SITE);
     assert.ok(side.equals(new Vec3(-1, 64, 0)), `opened ${side}`);
     assert.deepEqual(dug, ['-1,65,0', '-1,64,0']);
@@ -380,6 +382,7 @@ test('#204 review 5: digOut skips a side under gravel, a hillside and a side it 
         blockAt: (p) => blockOf(world.get(key(p.floored())) ?? (p.y < 64 ? 'dirt' : 'air'), p.floored()),
         dig: (b) => { world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve(); },
     };
+    withPick(bot);
     const side = await digOut(bot, SITE);
     assert.ok(side.equals(new Vec3(0, 64, -1)), `opened ${side}`);
     assert.ok(!dug.includes('1,65,0') && !dug.includes('-1,65,0'), 'east and west untouched');
@@ -474,6 +477,7 @@ test('#229 review: digOut with the pickaxe in the off hand moves it back, equips
         // like mineflayer-tool: the best tool among inventory.items() only
         tool: { equipForBlock: () => { bot.heldItem = inventory.items().find(i => /pickaxe/.test(i.name)) ?? null; return Promise.resolve(); } },
         moveSlotItem: (from, to) => { slots[to] = slots[from]; slots[from] = null; return Promise.resolve(); },
+        equip: (item) => { bot.heldItem = item; return Promise.resolve(); },
         blockAt: (p) => blockOf(world.get(key(p.floored())) ?? (p.y < 64 ? 'dirt' : 'air'), p.floored()),
         // like the server: cobblestone does not break by hand
         dig: (b) => {
@@ -1031,6 +1035,19 @@ test('#431 review 2: a night of repeated fights (self_defense stops the build ag
     assert.equal(agent.chat.at(-1), '[night] in the shelter at 0, 64, 0 until morning');
 });
 
+test('#431 review 2 (owed): an older run\'s stopper is not counted for this run', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    agent.bot.modes = { anyActive: () => false, isOn: () => true, setOn: () => true };
+    agent.bot.inventory = { items: () => [], slots: [] };
+    agent.rotnLastInterrupt = { by: 'self_defense', of: 'action:buildShelter', at: 1 };
+    agent.actions.runAction = () => Promise.resolve({ message: '', interrupted: true }); // stopped, by no reflex this time
+    nightTick(agent, { now: RETRY_MS + 1, ops: ops() });
+    await settle(agent);
+    assert.equal(nightState(agent).threatInterrupts ?? 0, 0, 'not counted as a threat reflex');
+    assert.equal(nightState(agent).interrupts, 1);
+});
+
 test('#431 review 2: an exposed night does not retry while a hostile mob is near, nor more than EXPOSED_RETRIES times', async (t) => {
     quiet(t);
     const agent = fakeAgent({ t: NIGHT });
@@ -1231,7 +1248,10 @@ test('#355 review 2: a block that hurts on contact (cactus) in the bot\'s space 
 // Round 10 B: at dawn "found no safe side to open; back to work" and the bot stayed walled in at
 // -34 64 -49: digOut only took a side with the two cells beyond it free, and the ground on the west
 // was one block higher (the crafting table stood on it). In this terrain the other sides failed too.
-function exitWorld(extra = {}) {
+const PICK = { name: 'stone_pickaxe', type: 274, metadata: 0, count: 1 };
+/** #435 review: the bot of a rock shelter carries a pickaxe (the dump says rock needs one); equip puts an item in hand. */
+const withPick = (bot, items = [PICK]) => Object.assign(bot, { inventory: { items: () => items, slots: [] }, equip: (item) => { bot.heldItem = item; return Promise.resolve(); } });
+function exitWorld(extra = {}, { canHarvest = (name) => name !== 'bedrock', items = [PICK] } = {}) {
     const key = (p) => `${p.x},${p.y},${p.z}`;
     const world = new Map();
     for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { world.set(`${x},64,${z}`, 'cobblestone'); world.set(`${x},65,${z}`, 'cobblestone'); }
@@ -1249,13 +1269,19 @@ function exitWorld(extra = {}) {
         blockAt: (p) => {
             const q = p.floored();
             const name = world.get(key(q)) ?? (q.y < 64 ? 'dirt' : 'air');
-            return { name, metadata: 0, boundingBox: reg.blocksByName[name]?.boundingBox ?? 'block', position: q, canHarvest: () => name !== 'bedrock' }; // a modded name: a solid block
+            return { name, metadata: 0, boundingBox: reg.blocksByName[name]?.boundingBox ?? 'block', position: q, canHarvest: (tool) => canHarvest(name, tool) }; // a modded name: a solid block
         },
         dig: (b) => { world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve(); },
     };
+    withPick(bot, items);
     return { bot, world, dug };
 }
 const ring = (y, name, k = 2) => Object.fromEntries([[k, 0], [-k, 0], [0, k], [0, -k]].map(([x, z]) => [`${x},${y},${z}`, name]));
+/** Soak 2: solid stone from y 66 up to `top` within r of the shelter, so no stairs lead up (the sideways tests keep their meaning). */
+const lid = (top = 72, r = 6) => Object.fromEntries(Array.from({ length: (2 * r + 1) ** 2 * (top - 65) }, (_, i) => {
+    const x = (i % (2 * r + 1)) - r, z = (Math.floor(i / (2 * r + 1)) % (2 * r + 1)) - r, y = 66 + Math.floor(i / (2 * r + 1) ** 2);
+    return [`${x},${y},${z}`, 'stone'];
+}));
 
 test('round 10 B: digOut takes a side whose ground is one block higher, and digs the headroom over the opening', async (t) => {
     quiet(t);
@@ -1281,7 +1307,7 @@ test('round 10 B: digOut tunnels through a hillside on every side, up to EXIT_DE
     assert.deepEqual(dug.sort(), ['1,64,0', '1,65,0', '2,64,0', '2,65,0']);
     assert.equal(EXIT_DEPTH, 3);
     // Deeper than EXIT_DEPTH on every side: nothing is dug.
-    const deep = exitWorld(Object.assign({}, ...[2, 3, 4].flatMap(k => [ring(64, 'stone', k), ring(65, 'stone', k)])));
+    const deep = exitWorld(Object.assign(lid(), ...[2, 3, 4].flatMap(k => [ring(64, 'stone', k), ring(65, 'stone', k)])));
     assert.equal(await digOut(deep.bot, SITE), null);
     assert.deepEqual(deep.dug, []);
 });
@@ -1317,9 +1343,36 @@ test('round 10 B: digOut never digs a step-up or tunnel side with lava next to i
     assert.ok(!dug.some(k => k.startsWith('1,')), `east untouched: ${dug}`);
     assert.ok(logs.some(l => /dig out: not the east side \(liquid or fire (next to|at) /.test(l)), logs.join('\n'));
     // A hill on every side, with lava beside each tunnel's second cell: no side is dug at all.
-    const tunnel = exitWorld({ ...ring(64, 'stone'), ...ring(65, 'stone'), '2,64,1': 'lava', '-2,64,1': 'lava', '1,64,2': 'lava', '-1,64,-2': 'lava' });
+    const tunnel = exitWorld({ ...lid(), ...ring(64, 'stone'), ...ring(65, 'stone'), '2,64,1': 'lava', '-2,64,1': 'lava', '1,64,2': 'lava', '-1,64,-2': 'lava' });
     assert.equal(await digOut(tunnel.bot, SITE), null);
     assert.deepEqual(tunnel.dug, [], 'every side is planned before anything is dug');
+});
+
+/** Rock 4 deep on every side of the shelter at its level and one higher; the surface beyond is open. */
+const quarry = () => Object.assign({}, ...[2, 3, 4].flatMap(k => [ring(64, 'stone', k), ring(65, 'stone', k)]), ring(66, 'stone', 1), ring(66, 'stone', 2));
+
+// Soak 2 (rotn-v0.1.4, 23:21): the night shelter was a quarry pit, rock on every side for more than
+// EXIT_DEPTH; digOut only went sideways and handed back still enclosed.
+test('soak 2: a shelter at the bottom of a pit (no sideways exit) is left by stairs up, at most UP_STEPS', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const { UP_STEPS } = await import('./night_routine.js');
+    assert.equal(UP_STEPS, 4);
+    // Rock 4 deep on every side at the bot's level (y 64-65) and one higher (y 66) out to 2; the
+    // surface (y 66 beyond 2, y 67 everywhere) is open.
+    const pit = quarry();
+    const { bot, world, dug } = exitWorld(pit);
+    const side = await digOut(bot, SITE);
+    assert.ok(side?.equals(new Vec3(3, 66, 0)), `out at the top: ${side}`);
+    // Step 1: the roof over the bot and the cells at x 1, y 65-66; step 2: the headroom at x 1, y 67 and x 2, y 66-67.
+    assert.deepEqual(dug.sort(), ['0,66,0', '1,65,0', '1,66,0', '2,66,0'].sort(), `the stairs: ${dug}`);
+    assert.equal(world.get('1,64,0'), 'cobblestone', 'the first step stays');
+    assert.equal(world.get('2,65,0'), 'stone', 'the second step stays');
+    assert.ok(logs.some(l => /dig out: the east side \(stairs up, 2 steps, 4 blocks\)/.test(l)), logs.join('\n'));
+    // A lid of stone over everything: no stairs either, nothing dug.
+    const closed = exitWorld({ ...lid(), ...pit });
+    assert.equal(await digOut(closed.bot, SITE), null);
+    assert.deepEqual(closed.dug, []);
 });
 
 test('round 10 B: in the morning a shelter with no way out is tried again RETRY_MS later, EXIT_TRIES times, then the bot hands back saying it is still enclosed', async (t) => {
@@ -1354,6 +1407,24 @@ test('round 10 B: in the morning a shelter with no way out is tried again RETRY_
     assert.equal(nightState(agent).exitTries, 0);
 });
 
+test('#435 review 4: a failed try that left the bot part-way up its stairs does not hand back as out of the shelter', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops({ side: null });
+    o.digOut = () => { o.digs++; agent.bot.entity.position = new Vec3(2.5, 66, 0.5); return Promise.resolve(null); };
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    agent.bot.time.timeOfDay = MORNING;
+    nightTick(agent, { now: 10, ops: o });
+    await settle(agent);
+    assert.equal(o.digs, 1);
+    nightTick(agent, { now: 11, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'day');
+    assert.ok(!agent.chat.some(l => /morning: out of the shelter at 0, 64, 0; back to work$/.test(l)), agent.chat.join('\n'));
+    assert.match(agent.chat.at(-1), /a way out of the shelter at 0, 64, 0 failed part-way and the bot is at 2, 66, 0; back to work, maybe still enclosed: dig a way out$/);
+});
+
 test('round 10 B: out of the shelter between two morning tries (pushed, or it dug itself out), the bot hands back at once', async (t) => {
     quiet(t);
     const agent = fakeAgent({ t: NIGHT });
@@ -1374,6 +1445,124 @@ test('round 10 B: out of the shelter between two morning tries (pushed, or it du
 });
 
 // #364 review (REQUEST CHANGES on 625af577).
+// #435 review (on d47b1ee9): forge-bridge's extendRegistry leaves harvestTools unset for modded
+// blocks, so the registry's canHarvest says yes to Underground Biomes rock by hand; and with no
+// material every tool digs it alike, so equipForBlock keeps whatever is held.
+test('#435 review 1-3: modded rock (registry canHarvest yes by hand): with no pickaxe no plan is begun; a pickaxe not in hand is put in hand for each rock dig', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const UB = 'undergroundbiomes:metamorphic_stone';
+    const rock = Object.fromEntries(Object.keys({ ...quarry(), ...ring(64, 'x', 1), ...ring(65, 'x', 1) }).map(k => [k, UB]));
+    const pit = { ...rock, '0,66,0': 'dirt' }; // a dirt roof over the rock
+    const registryDefault = () => true; // harvestTools undefined
+    const bare = exitWorld(pit, { canHarvest: registryDefault, items: [] });
+    assert.equal(await digOut(bare.bot, SITE), null, 'no way out it can dig');
+    assert.deepEqual(bare.dug, [], 'nothing was dug');
+    assert.equal(bare.world.get('0,66,0'), 'dirt', 'the roof stays on');
+    assert.ok(logs.some(l => /no stairs up on the east side \(no tool to break undergroundbiomes:metamorphic_stone at /.test(l)), logs.join('\n'));
+    // A pickaxe in the inventory, dirt in hand; equipForBlock keeps what is held.
+    const armed = exitWorld(pit, { canHarvest: registryDefault });
+    armed.bot.heldItem = { name: 'dirt', type: 3, metadata: 0 };
+    const held = [];
+    const dig = armed.bot.dig;
+    armed.bot.dig = (b, ...rest) => { held.push(`${b.name} with ${armed.bot.heldItem?.name}`); return dig(b, ...rest); };
+    assert.ok((await digOut(armed.bot, SITE))?.equals(new Vec3(3, 66, 0)));
+    assert.equal(armed.dug[0], '0,66,0', 'the roof first');
+    const rockDigs = held.filter(h => h.startsWith(UB));
+    assert.ok(rockDigs.length >= 2, held.join('; '));
+    assert.deepEqual([...new Set(rockDigs)], [`${UB} with stone_pickaxe`], held.join('; '));
+});
+
+test('#435 review 4: a stairs plan that fails part-way up walks the bot back to the shelter before the next plan', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const saved = PIT.digSlackMs;
+    PIT.digSlackMs = 30;
+    t.after(() => { PIT.digSlackMs = saved; });
+    // Rock rising away from the shelter: the way up is 4 steps, and the top step is out of reach from the floor.
+    const tops = [[1, 66], [2, 66], [3, 67], [4, 68], [5, 67]];
+    const terrace = Object.assign({}, ...tops.flatMap(([k, top]) => Array.from({ length: top - 63 }, (_, i) => ring(64 + i, 'stone', k))));
+    const { bot, dug } = exitWorld(terrace);
+    bot.digTime = () => 10;
+    bot.stopDigging = () => {};
+    const dig = bot.dig;
+    bot.dig = (b, ...rest) => (b.position.x === 4 ? new Promise(() => {}) : dig(b, ...rest)); // the east top step never breaks
+    const walks = [];
+    const walk = (b, goal) => {
+        walks.push(`${goal.constructor.name} ${goal.x},${goal.y},${goal.z}`);
+        b.entity.position = goal.constructor.name === 'GoalBlock' ? new Vec3(goal.x + 0.5, goal.y, goal.z + 0.5)
+            : new Vec3(goal.x - Math.sign(goal.x) * 2 + 0.5, goal.y - 1, goal.z + 0.5);
+        return Promise.resolve();
+    };
+    const out = await digOut(bot, SITE, { walk });
+    assert.deepEqual(walks.slice(0, 2), ['GoalNear 4,68,0', 'GoalBlock 0,64,0'], walks.join('; '));
+    assert.ok(walks.slice(2).length > 0 && walks.slice(2).every(w => w.startsWith('GoalNear -')), `then only the west steps: ${walks.join('; ')}`);
+    assert.ok(out?.equals(new Vec3(-5, 68, 0)), `out on the west: ${out}`);
+    assert.ok(dug.includes('-4,68,0'));
+    assert.ok(logs.some(l => /could not open the east side/.test(l)), logs.join('\n'));
+    // The walk back fails: no other plan is tried from part-way up.
+    const stuck = exitWorld(terrace);
+    Object.assign(stuck.bot, { digTime: () => 10, stopDigging: () => {} });
+    const sdig = stuck.bot.dig;
+    stuck.bot.dig = (b, ...rest) => (b.position.x === 4 ? new Promise(() => {}) : sdig(b, ...rest));
+    const noWayBack = (b, goal) => { if (goal.constructor.name !== 'GoalBlock') b.entity.position = new Vec3(2.5, 67, 0.5); return Promise.resolve(); };
+    assert.equal(await digOut(stuck.bot, SITE, { walk: noWayBack }), null);
+    assert.ok(!stuck.dug.some(k => k.startsWith('-')), 'nothing dug on the west');
+    assert.ok(logs.some(l => /could not get back to 0, 64, 0 after a failed way out/.test(l)));
+});
+
+test('#435 review 2: an exit dig has the per-block limit: a hung dig ends that plan and the next side is tried; a quick side beats a slow hand-diggable one', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const saved = PIT.digSlackMs;
+    PIT.digSlackMs = 30;
+    t.after(() => { PIT.digSlackMs = saved; });
+    const walls = { ...ring(64, 'dirt', 1), ...ring(65, 'dirt', 1) };
+    const { bot, world, dug } = exitWorld(walls);
+    let stopped = 0;
+    const dig = bot.dig;
+    bot.digTime = () => 10;
+    bot.stopDigging = () => { stopped++; };
+    bot.dig = (b, ...rest) => {
+        if (b.position.x !== 1) return dig(b, ...rest);
+        bot.targetDigBlock = b;
+        return new Promise(() => {}); // the east wall never breaks
+    };
+    assert.ok((await digOut(bot, SITE))?.equals(new Vec3(-1, 64, 0)), 'the next side');
+    assert.equal(stopped, 1, 'the hung dig was stopped');
+    assert.equal(world.get('1,65,0'), 'dirt');
+    assert.deepEqual(dug.sort(), ['-1,64,0', '-1,65,0']);
+    assert.ok(logs.some(l => /dig out: dirt at 1, 6[45], 0 was not dug within 0\.0 s/.test(l)), logs.join('\n'));
+    // Rooty dirt is hand-diggable but slow (hardness 20): the dirt side goes first, though east comes first otherwise.
+    const slow = exitWorld({ ...walls, '1,64,0': 'dynamictrees:rootydirt', '1,65,0': 'dynamictrees:rootydirt' });
+    assert.ok((await digOut(slow.bot, SITE))?.equals(new Vec3(-1, 64, 0)));
+    assert.equal(slow.world.get('1,64,0'), 'dynamictrees:rootydirt');
+});
+
+test('#435 review 3: stairs that end under rock are refused and report nothing dug out; leaves overhead do not count', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const over = (name) => Object.fromEntries([[3, 0], [-3, 0], [0, 3], [0, -3]].map(([x, z]) => [`${x},70,${z}`, name]));
+    const cave = exitWorld({ ...quarry(), ...over('stone') });
+    assert.equal(await digOut(cave.bot, SITE), null);
+    assert.deepEqual(cave.dug, []);
+    assert.ok(logs.some(l => /no stairs up on the east side \(no open sky over 3, 66, 0\)/.test(l)), logs.join('\n'));
+    const forest = exitWorld({ ...quarry(), ...over('leaves') });
+    assert.ok((await digOut(forest.bot, SITE))?.equals(new Vec3(3, 66, 0)));
+});
+
+test('#435 review 4: an unloaded cell (blockAt null) in a plan refuses it, with no throw and nothing dug', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const { bot, dug } = exitWorld(quarry());
+    const base = bot.blockAt;
+    const unloaded = new Set(['1,66,0', '-1,66,0', '0,66,1', '0,66,-1']);
+    bot.blockAt = (p) => (unloaded.has(`${p.x},${p.y},${p.z}`) ? null : base(p));
+    assert.equal(await digOut(bot, SITE), null);
+    assert.deepEqual(dug, []);
+    assert.ok(logs.some(l => /no stairs up on the east side \(an unloaded cell at or next to /.test(l)), logs.join('\n'));
+});
+
 test('#364 review 1: digOut never digs a Dynamic Trees branch or trunk shell (it would fell the tree onto the bot)', async (t) => {
     quiet(t);
     // A hill on every side; the east and west tunnels go through a trunk, south through a thick
