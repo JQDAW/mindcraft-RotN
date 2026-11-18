@@ -26,7 +26,9 @@
 //       - two server-side facts: the Minecraft server started exactly once on the box (`rotn-test starts`, over every
 //         rolled-over log; the build starts it once and nothing restarts it before an acceptance run), and the world's
 //         age (`time query gametime`) is at most 20 ticks a second since the test server was created (Hetzner's
-//         creation time in <TEST_SERVER_STATE_DIR>/server-create.json), so the world is no older than the server.
+//         creation time in <TEST_SERVER_STATE_DIR>/server-create.json), so the world is no older than the server. That
+//         bound only catches a world OLDER than its server; the real proof is starts = 1, the ledger and the log. The
+//         facts are recorded (fresh.facts) and the evidence check re-checks them, not fresh.ok alone.
 //
 // A failed check in a valid acceptance run is still evidence: the failure stays in the evidence (the G3 rule), so
 // "valid" says whether the run counts, and pass says how it went.
@@ -95,6 +97,15 @@ const MARKER_RE = /scenario-([0-9a-z]+-[0-9a-f]{6})-begin/;
 const JOIN_RE = /\]: (\S+) joined the game$/;
 /** Ticks per second: the most a Minecraft server's game time can advance (it never runs ahead of the clock). */
 export const TICKS_PER_S = 20;
+/**
+ * The most ticks a world can have if it is no older than its test server: 20 a second since the server was created.
+ * It only catches a world OLDER than the server (#446 review); the proof of a fresh server is starts = 1, the usage
+ * ledger and the log. null if a time is unknown.
+ */
+export function gametimeBound(createdMs, atMs) {
+    if (!Number.isFinite(createdMs) || !Number.isFinite(atMs)) return null;
+    return Math.ceil(Math.max(0, atMs - createdMs) / 1000 * TICKS_PER_S);
+}
 
 /**
  * Is the test server fresh for this step-7 run? Never self-asserted (lead, #446 review):
@@ -134,7 +145,7 @@ export function freshServer({ server, stateDir, usage, logLines, goId, run, scen
     if (starts.starts !== 1) return { ok: false, why: `not fresh: the Minecraft server started ${starts.starts} times on this box (over ${starts.files} log file(s)); a fresh test server has started once` };
     if (!Number.isFinite(createdMs)) return { ok: false, why: 'the test server\'s creation time is unknown (server-create.json)' };
     if (!Number.isInteger(gametime)) return { ok: false, why: 'the world\'s age could not be read (time query gametime)' };
-    const bound = Math.ceil(Math.max(0, nowMs - createdMs) / 1000 * TICKS_PER_S);
+    const bound = gametimeBound(createdMs, nowMs);
     if (gametime > bound) return { ok: false, why: `not fresh: the world is ${gametime} ticks old, more than the ${bound} ticks (20 a second) since the test server was created` };
     const facts = `started once; world ${gametime} of at most ${bound} ticks`;
     return { ok: true, why: usage.length ? `fresh: only other scenarios of this run used it (${usage.length}); ${facts}` : `fresh: no earlier run, join or scenario; ${facts}` };
@@ -260,6 +271,13 @@ export function checkAcceptanceResults(results, { complete = null, g3OnServiceRe
         if (rel.tag !== m.tag) why.push(`its release ${rel.tag ?? 'none'} is not the confirmed tag ${m.tag}`);
         if (!/^[0-9a-f]{40,64}$/.test(String(rel.commit)) || !/^[0-9a-f]{12}$/.test(String(rel.sha12)) || !rel.commit.startsWith(rel.sha12)) why.push('its release commit is missing or does not match what the journal showed');
         if (a.fresh?.ok !== true) why.push('its test server is not recorded as fresh');
+        // The recorded server facts themselves, not only fresh.ok (#446 review): one start, and a world no older than
+        // the server when the facts were read.
+        const f = a.fresh?.facts ?? {};
+        if (f.starts?.starts !== 1) why.push(`its recorded server starts are ${f.starts?.starts ?? 'missing'}, not 1`);
+        const bound = gametimeBound(Date.parse(f.createdAt), Date.parse(f.readAt));
+        if (!Number.isInteger(f.gametime) || bound === null) why.push('its recorded world age, server creation or read time is missing');
+        else if (f.gametime > bound) why.push(`its recorded world age ${f.gametime} ticks is above the ${bound} ticks since the server was created`);
         if (typeof r.server !== 'string' || !r.server) why.push('it names no test server');
         if (r.gate === 'G3' && (r.gateValid !== false || !(r.weakenedParams ?? []).includes(g3OnServiceReason))) why.push('a G3 scenario on S that is not marked "never G3 gate evidence"');
         if (r.runId && runIds.has(r.runId)) why.push(`its runId ${r.runId} is also in ${runIds.get(r.runId)}`);
@@ -356,7 +374,7 @@ export function startAcceptance({ server, env, scenarioId, logTail = 20000, cons
     const createdMs = stateDir ? serverCreatedMs(stateDir, fsImpl, pathImpl) : null;
     const fresh = freshServer({ server: env?.TEST_SERVER_NAME || null, stateDir, usage, logLines, goId: mk.ok ? mk.goId : null, run: mk.ok ? mk.run : null,
         scenarioId, starts, gametime, createdMs, nowMs });
-    return { fresh, facts: { starts, gametime, createdAt: Number.isFinite(createdMs) ? new Date(createdMs).toISOString() : null } };
+    return { fresh, facts: { starts, gametime, createdAt: Number.isFinite(createdMs) ? new Date(createdMs).toISOString() : null, readAt: new Date(nowMs).toISOString() } };
 }
 
 /**

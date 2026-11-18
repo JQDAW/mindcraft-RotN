@@ -5,7 +5,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { ctlServer } from '../runner/lib/adapters.mjs';
-import { G3_CONSOLE_ALLOW, SCENARIO_CONSOLE_EXTRA, consoleAllowFor, guardConsole } from '../runner/lib/g3.mjs';
+import { consoleAllowFor, G3_CONSOLE_ALLOW, guardConsole, SCENARIO_CONSOLE_EXTRA, STEP7_CONSOLE_EXTRA } from '../runner/lib/g3.mjs';
 import { loadScenarios } from '../runner/run.mjs';
 
 const RECONNECT = { id: 'g4-service-reconnect', gate: 'G4', defaults: { bot: 'FRCFLD' } };
@@ -71,7 +71,8 @@ describe('g4-service-reconnect\'s console rules: kick this run\'s bot only, and 
         const list = consoleAllowFor(RECONNECT);
         assert.equal(ok(list, 'stop'), true);
         for (const bad of ['stop now', ' stop', 'stop ', 'restart', 'kill FRCFLD', 'op FRCFLD', 'whitelist remove FRCFLD']) assert.equal(ok(list, bad), false, bad);
-        assert.equal(list.length, G3_CONSOLE_ALLOW.length + 2, 'kick and stop only');
+        assert.equal(list.length, G3_CONSOLE_ALLOW.length + 2 + STEP7_CONSOLE_EXTRA.length, 'kick and stop only, plus the step-7 gametime query (#446 review)');
+        assert.deepEqual(STEP7_CONSOLE_EXTRA.map(String), ['/^time query gametime$/']);
         assert.deepEqual(Object.keys(SCENARIO_CONSOLE_EXTRA).sort(), ['g4-control-commands', 'g4-death-report', 'g4-service-reconnect']);
         for (const sc of Object.values(await loadScenarios())) {
             if (sc.id === RECONNECT.id) continue;
