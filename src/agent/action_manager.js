@@ -18,11 +18,13 @@ export class ActionManager {
         return this._executeResume(actionFn, timeout);
     }
 
-    async runAction(actionLabel, actionFn, { timeout, resume = false } = {}) {
+    // keepReplan: an automatic job (the night routine's, the walk away after a respawn), not a
+    // fresh decision: a pending re-plan request is kept (#463 review 1).
+    async runAction(actionLabel, actionFn, { timeout, resume = false, keepReplan = false } = {}) {
         if (resume) {
             return this._executeResume(actionLabel, actionFn, timeout);
         } else {
-            return this._executeAction(actionLabel, actionFn, timeout);
+            return this._executeAction(actionLabel, actionFn, timeout, { keepReplan });
         }
     }
 
@@ -61,7 +63,7 @@ export class ActionManager {
         }
     }
 
-    async _executeAction(actionLabel, actionFn, timeout = 10) {
+    async _executeAction(actionLabel, actionFn, timeout = 10, { keepReplan = false } = {}) {
         let TIMEOUT;
         try {
             if (this.last_action_time > 0) {
@@ -99,7 +101,7 @@ export class ActionManager {
             // reflex re-plan request is stale and must not cause an extra LLM call later
             // (A4b). Reflexes ("mode:") and the NPC subsystem ("npc:", "itemGoal:",
             // "BuildGoal") keep it (A4c, #126 review).
-            if (String(actionLabel).startsWith('action:'))
+            if (String(actionLabel).startsWith('action:') && !keepReplan)
                 clearReplan(this.agent, `a new action started (${actionLabel})`);
 
             this.executing = true;

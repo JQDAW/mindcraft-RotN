@@ -129,7 +129,7 @@ export function relocateTick(agent, { now = Date.now(), clock = Date.now, walk =
     if (agent.self_prompter?.isActive?.()) agent.self_prompter.stop(false);
     agent._agenda_paused = true;
     r.job = Promise.resolve()
-        .then(() => agent.actions.runAction('action:leaveDeathArea', () => walk(bot, target)))
+        .then(() => agent.actions.runAction('action:leaveDeathArea', () => walk(bot, target), { keepReplan: true })) // #463 review 1: the death's re-plan survives the walk
         .catch(err => { log(`[respawn] the walk away failed: ${safeError(err)}`); return null; })
         .then((ret) => {
             r.job = null;

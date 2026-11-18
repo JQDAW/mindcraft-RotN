@@ -152,13 +152,16 @@ function tickState(agent) {
  */
 export function agendaTick(agent, { now = Date.now() } = {}) {
     const agenda = agent.agenda;
-    if (!agenda?.active && !agenda?.finished) return null;
+    // #463 rework (soak 3: stone_axe stuck at 20:12, then no food run for 67 min, food 8 -> 2): an
+    // agenda paused on a stuck step still runs its reserves (the shelter blocks, food), as a
+    // finished one does; the stuck step waits for a giver's !agendaStart.
+    if (!agenda?.active && !agenda?.finished && !agenda?.stuck) return null;
     if (now - (agent._agenda_tick_at ?? -Infinity) < TICK_MS) return null;
     const last = agent._agenda_tick_at;
     agent._agenda_tick_at = now;
     const sp = agent.self_prompter;
-    // "agenda done": only the before-night reserve runs (G3 round 6 B), and otherwise nothing is
-    // touched (the model's own goal, a giver's goal), as before.
+    // "agenda done" (or paused on a stuck step): only the reserves run (G3 round 6 B, G4 #5), and
+    // otherwise nothing is touched (the model's own goal, a giver's goal), as before.
     if (!agenda.active && !agenda.anyReserveWanted(tickState(agent))) {
         if (agenda.isReserveId(agent._agenda_step)) {
             if (sp.isActive() && ownsPrompt(agent)) sp.stop(false);

@@ -8,7 +8,7 @@ import { Vec3 } from 'vec3';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { nightTick, nightState, resetNight, isFullDay, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS, FREE_INTERRUPTS, THREAT_INTERRUPTS, EXPOSED_RETRY_MS, EXPOSED_RETRIES } from './night_routine.js';
+import { nightTick, nightState, resetNight, isFullDay, resumeNightGoal, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS, FREE_INTERRUPTS, THREAT_INTERRUPTS, EXPOSED_RETRY_MS, EXPOSED_RETRIES } from './night_routine.js';
 import settings from './settings.js';
 import { autonomyTick } from './priority.js';
 import { shelterQuiet, SHELTER_QUIET_MODES } from './modes.js';
@@ -1823,3 +1823,55 @@ test('G4 #5: at dusk the night routine logs the food held for the night (6 wante
     assert.equal(nightState(poor).state, 'inside', 'it shelters as usual');
 });
 
+
+// #463 rework (soak 3, rotn-v0.1.5): the lead's rule: after full day the self-prompter runs again if
+// it ran at dusk, agenda or not. The agenda's own goal resumes through agendaTick; the model's own
+// goal had nothing to start it again.
+test('#463 rework: the model\'s own goal stopped at dusk starts again, once, after full day; the agenda\'s is left to agendaTick', async (t) => {
+    quiet(t);
+    const withGoal = (prompt, { owned = false } = {}) => {
+        const agent = fakeAgent({ t: DUSK });
+        const sp = agent.self_prompter;
+        sp.prompt = prompt;
+        sp.starts = [];
+        sp.start = function (p) { this.starts.push(p); this.prompt = p; this.active = true; };
+        if (owned) agent._autonomy_prompt = prompt;
+        return agent;
+    };
+    const night = async (agent) => {
+        const o = ops();
+        nightTick(agent, { now: 1000, ops: o });
+        await settle(agent);
+        assert.equal(nightState(agent).state, 'inside');
+        assert.equal(agent.self_prompter.active, false, 'stopped at dusk');
+        assert.equal(resumeNightGoal(agent), false, 'not while the routine runs');
+        agent.bot.time.timeOfDay = MORNING;
+        nightTick(agent, { now: 2000, ops: o });
+        await settle(agent);
+        assert.equal(nightState(agent).state, 'day');
+    };
+    const model = withGoal('Gather 3 rocks and craft a stone axe');
+    await night(model);
+    assert.equal(resumeNightGoal(model), true);
+    assert.deepEqual(model.self_prompter.starts, ['Gather 3 rocks and craft a stone axe']);
+    model.self_prompter.active = false;
+    assert.equal(resumeNightGoal(model), false, 'once');
+
+    const agenda = withGoal('RotN agenda, step 10 of 11 (stone_axe): ...', { owned: true });
+    await night(agenda);
+    assert.equal(resumeNightGoal(agenda), false, 'the agenda\'s goal: agendaTick restarts it');
+    assert.deepEqual(agenda.self_prompter.starts, []);
+
+    const other = withGoal('Gather 3 rocks');
+    await night(other);
+    other.self_prompter.active = true; // something else drives it already (a task, a giver's goal)
+    assert.equal(resumeNightGoal(other), false);
+    other.self_prompter.active = false;
+    assert.equal(resumeNightGoal(other), false, 'forgotten, not started later');
+
+    // Through the priority stack: after full day, the goal starts again (no task, no agenda).
+    const full = withGoal('Gather 3 rocks');
+    await night(full);
+    assert.equal(autonomyTick(full, { now: 3000 }), 'night-goal');
+    assert.deepEqual(full.self_prompter.starts, ['Gather 3 rocks']);
+});

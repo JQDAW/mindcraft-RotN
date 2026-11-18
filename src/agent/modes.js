@@ -7,7 +7,7 @@ import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
 import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
-import { REPAIR_LABEL, nightPhase, minutesToSunset } from './library/night.js';
+import { REPAIR_LABEL, nightPhase, minutesToSunset, replanHold } from './library/night.js';
 import { RESERVE_LEAD_MIN } from './agenda.js';
 import { huntTarget, knownBases, huntAnimal, skipAnimal, HUNT, tooWeakToHunt } from './library/hunting.js';
 import { forageTarget } from './library/foraging.js';
@@ -575,8 +575,31 @@ const modes_list = [
         wait: 2, // number of seconds to wait after noticing an item to pick it up
         prev_item: null,
         noticed_at: -1,
+        range: 8, // blocks: items farther off are not looked at (nor refused, nor logged)
+        refusedSaid: new Map(), // item entity id -> when its line was said (one line per item)
         update: async function (agent) {
-            let item = world.getNearestEntityWhere(agent.bot, entity => entity.name === 'item', 8);
+            // Soak 3 (rotn-v0.1.5): the reflex walked the bot to its dropped items at the death spot,
+            // beside the player zombie risen there, and it died again. Items near a recent death
+            // spot, or with a hostile or provoked mob near, are left alone (skills.itemPickupRefusal).
+            const bot = agent.bot;
+            const now = Date.now();
+            // #463 review 2: an entry goes when its item is gone, or (a backstop) once older than any
+            // item lives (ITEM_PICKUP.saidKeptMs).
+            for (const [id, at] of this.refusedSaid) {
+                if (!bot.entities?.[id] || now - at > skills.ITEM_PICKUP.saidKeptMs) this.refusedSaid.delete(id);
+            }
+            const allow = (entity) => {
+                const why = skills.itemPickupRefusal(bot, entity, now);
+                if (why && !this.refusedSaid.has(entity.id)) {
+                    this.refusedSaid.set(entity.id, now);
+                    const p = entity.position;
+                    console.log(`[reflex] item pickup: leaving the item at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)} alone: ${why}`);
+                }
+                return !why;
+            };
+            // #463 review 2: the distance first, so a far item is never refused (nor logged).
+            const here = bot.entity.position;
+            let item = bot.nearestEntity(entity => entity.name === 'item' && here.distanceTo(entity.position) < this.range && allow(entity));
             let empty_inv_slots = agent.bot.inventory.emptySlotCount();
             if (item && item !== this.prev_item && await world.isClearPath(agent.bot, item) && empty_inv_slots > 1) {
                 if (this.noticed_at === -1) {
@@ -586,7 +609,7 @@ const modes_list = [
                     say(agent, `Picking up item!`);
                     this.prev_item = item;
                     execute(this, agent, async () => {
-                        await skills.pickupNearbyItems(agent.bot);
+                        await skills.pickupNearbyItems(agent.bot, { allow: (e) => !skills.itemPickupRefusal(agent.bot, e) });
                     });
                     this.noticed_at = -1;
                 }
@@ -792,14 +815,23 @@ let last_replan_prompt_at = 0;
 function maybePromptReplan(controller, now = Date.now()) {
     const agent = _agent;
     if (!agent?.replan) return; // nothing requested (the common case, every tick)
+    const held = replanHold(agent, now);
     const due = replanPromptDue(agent, {
         now,
         idle: agent.isIdle(),
         reflexActive: controller.anyActive(),
         selfPrompting: agent.self_prompter.isActive(),
         lastPromptAt: last_replan_prompt_at,
+        held,
     });
-    if (!due) return;
+    if (!due) {
+        const r = agent.replan;
+        if (held && (r.interrupted || r.due) && !r.heldSaid) {
+            r.heldSaid = true;
+            console.log(`[reflex] re-plan prompt held: ${held}; it goes once at full day`);
+        }
+        return;
+    }
     last_replan_prompt_at = now;
     const note = takeReplanNote(agent);
     console.log(`[reflex] re-plan prompt: ${note}`);
