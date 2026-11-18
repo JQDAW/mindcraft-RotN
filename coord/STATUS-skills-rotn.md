@@ -1,8 +1,41 @@
 # Status: skills-rotn
 
-Updated: 2026-11-09T01:46Z (from `date -u`)
+Updated: 2026-11-18T17:41Z (from `date -u`)
 
-## Development paused (lead, 2026-11-09): open items (2026-11-09T01:46Z by `date -u`)
+## 2026-11-18: after the pause: soak 2 fixes, bulls, review follow-ups (summary, 2026-11-18T17:41Z by `date -u`)
+
+Development resumed on 2026-11-18. The pause list below is done. One fix PR is open, #457 (the #453 nits), plus this STATUS-only one. After that I'm idle until the lead's next task.
+
+### Merged since the resume
+| PR | What |
+| --- | --- |
+| #435 | Stairs up out of a pit shelter, plus the two #431 follow-ups (one dig allowance per position; an older stopper is not this run's). Review changes: exit digs judge rock by rotn-data's dump (`toolRequired`, `harvestLevel` against `toolLevels`) and put the required pickaxe in hand; bedrock counts as unbreakable; a failed stairs plan walks the bot back; a stranded try is not reported as "out of the shelter" |
+| #443 | #432 nits: the emergency foods named in the eating mode and the food prompts (never cloudsbluff); hungry caps for `!goToCoordinates`, `!goToPlayer` and `!collectBlocks` |
+| #444 | #434 nit: a ranged mob near a big slime steers the flee |
+| #445 | CX23 step 0 `windowOpen` timeout: a craft never opens a crafting table out of reach (`TABLE_REACH` 4.5); it places its own when held, else says why |
+| #449 | A task giver's typed command is never hunger-capped (`context.sender`); `avoidEnemies` keeps away from all enemies at once (a 1/d² point) |
+| #453 | G4 #5, soak 2's "gored to death", on rotn-data #448: no hunt near a never-fight animal (bull, polar bear, panda, book wyrm) or of a cow in a calling herd; a provoked animal reacts only to its own hit (a fall or starving never counts: `damage_record.js` `lastDamageCause`); `fightBack` false → flee, true → hit back, never one that may be a player's; the model never `!attack`s a never-fight animal (a giver may, warned; ownership always holds); `avoidEnemies` re-goals after 2 still ticks |
+
+### Open
+- **#457** (`cc3d249c`): the #453 nits. Each provoked animal is judged by its own rule in the search, so no hitter or herd is hidden. The ownership checks moved to `library/ownership.js`, which ends the `threats.js` ↔ `hunting.js` import cycle. A note on the fall detection's live order.
+
+### To check live (none of this has run on a server)
+- **Fall detection** (`damage_record.js`): whether `onGround` and the landing's `health` packet arrive in an order the 1 s window covers.
+- **The bull's anger flag:** rotn-data computed metadata index 20, but it is not used until it is read from a live bull.
+- **The new lines:**
+  - `[night] dig out:` with the stairs-up and "failed part-way" lines;
+  - `Could not get within reach of the crafting table …`;
+  - `Not attacking … it must never be fought`;
+  - the `provoked` and `a herd fights back` flees.
+- **Carried over from before the pause:** the first live forage, `food_floor` and `ate_when_low`.
+
+### Not done
+1. **Polar bears:** one near its cub attacks unprovoked (a note next to `retaliationRisk`; not built).
+2. **#431 review, the lookAt-window nit:** still to do.
+3. **Requests to rotn-data (through the lead):** a size-aware slime entry, and `WEAPON_ATTACK` (in `threats.js`) as a cited table.
+4. **Cosmetic nits** from the 2026-11-08 summary.
+
+## Development paused (lead, 2026-11-09): open items (2026-11-09T01:46Z by `date -u`; done since: see 2026-11-18 above)
 
 Nothing below is in progress. I start nothing new until the lead says so.
 
