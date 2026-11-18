@@ -95,6 +95,18 @@ CPX42 at EUR 0.1381/h, each server billed at least 1 h; the CX23 is already paid
 5. one session with the trusted player: #3, #10 (C) and #11 (agenda and queue across `ctl restart`);
 6. `g4-second-bot`: #12.
 
+**How a step-7 run is started and checked** (`test/runner/lib/g4-accept.mjs`; DRIVER.md, "G4 step 7"; the lead's decisions in the #446 review):
+- **One acceptance GO spans all six runs.** Its id has the form `G4-ACCEPT-<yyyymmdd>[-letter]` (the letter for a second GO the same day). The lead's written GO names the plain `rotn-vX.Y.Z` tag (no pre-release suffix) at which the human confirmed the gate and ctl SHA-256.
+- **Each run uses its own new test server, and nothing else runs on it first.** Only run 5's three scenarios share a server. A rerun of a failed scenario needs a new server.
+- **The command,** per run:
+  `ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed ROTN_G4_ACCEPT=<GO id>:<run>:<tag>:gate-ctl-hashes-confirmed node test/runner/run.mjs --scenario <id> --service <unit> --out ...`
+- **The release** is read only from the bot's `[release] <tag>-<sha12>` line after the unit's start (#447).
+- **Freshness** is read from the test server, never asserted: its usage ledger (every run writes one), its log, its start count (`test-server.sh starts`: exactly one) and the world's age (`time query gametime`: at most 20 ticks a second since the server was created). The gametime bound only catches a world older than its server; the real proof is starts = 1 together with the ledger and the log. The evidence check re-checks the recorded facts.
+- **The verdict:** the result's `g4Acceptance` says whether the run counts and, if not, why. `node test/tools/g4-accept-check.mjs --tree test/evidence --complete <GO id>` is the G4 claim over all six runs.
+
+**Step 7 rehearsal checklist** (on a test server, before the acceptance GO):
+- [ ] Right after `deploy/test-server.sh up`, run `TEST_SERVER_NAME=<name> deploy/test-server.sh starts` and confirm `starts=1` on the live pack. Mod Director could restart the JVM at its first start; **if it is 2, report it to the lead before any change** (to the check or the build).
+
 #8's secret scan runs in CI, and #9 is the document. A failure follows the G3 rule: the remaining runs still run, the failure stays in the evidence, and only the failed scenario reruns after its fix, with the human's approval.
 
 **In all:** about EUR 2.8 plus Primary IPv4-hours, and about USD 0.2 of LLM. Build time for the harness pieces above is about 2-3 agent days, offline, before step 1. **First build (lead's pick, 2026-11-07):** `g4-death-report`, built offline and rehearsed on T.

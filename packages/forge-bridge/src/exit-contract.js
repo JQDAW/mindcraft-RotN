@@ -12,6 +12,13 @@
 //   3  fatal. Not restarted; the main process ends with 3. Also the end of a crash
 //      loop: the same unexplained crash, quickly, several times in a row
 //      (createCrashLoopGuard).
+//      A spawn timeout (agent.js exits 1 when the bot has not spawned within
+//      settings.spawn_timeout; attachSpawnTimeoutReason records it as
+//      spawn_timeout[:<kind>]) is never crash-loop eligible: an outage before
+//      login must be retried. The cost: a deterministic hang before spawn (a
+//      login that never completes for a reason in the bot itself) is retried with
+//      backoff (capped at 5 min) indefinitely, and never ends with 3. Its journal
+//      shows the repeating "has not spawned" lines.
 //   2, 4  reserved for Mindcraft's task framework.
 
 import fs from 'node:fs';
@@ -146,7 +153,12 @@ export const SPAWN_TIMEOUT_CATEGORY = 'spawn_timeout';
  * @param {() => boolean} [o.recorded] true once recordExit ran in this process
  * @param {(err: Error) => {kind: string}} [o.classify] classifyBeforeJoinError
  */
+// The listeners of the newest attachSpawnTimeoutReason per process object: a second
+// initBot in the same process replaces them instead of stacking another set.
+const spawnTimeoutHandles = new WeakMap();
+
 export function attachSpawnTimeoutReason(bot, { spawnTimeoutMs, recorded = () => false, classify = null, proc = process, now = Date.now, writeFile } = {}) {
+    spawnTimeoutHandles.get(proc)?.dispose();
     const createdAt = now();
     let spawned = false;
     let crashed = false;
@@ -165,10 +177,16 @@ export function attachSpawnTimeoutReason(bot, { spawnTimeoutMs, recorded = () =>
     };
     proc.on('uncaughtExceptionMonitor', onCrash);
     proc.on('exit', onExit);
-    return {
+    const handle = {
         get beforeJoinKind() { return beforeJoinKind; },
-        dispose() { proc.removeListener('uncaughtExceptionMonitor', onCrash); proc.removeListener('exit', onExit); },
+        dispose() {
+            proc.removeListener('uncaughtExceptionMonitor', onCrash);
+            proc.removeListener('exit', onExit);
+            if (spawnTimeoutHandles.get(proc) === handle) spawnTimeoutHandles.delete(proc);
+        },
     };
+    spawnTimeoutHandles.set(proc, handle);
+    return handle;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { testforblockVerdict } from './g2.mjs';
 import { parseLine } from './server-log.mjs';
+import { STEP7_SCENARIOS } from './g4-accept.mjs';
 
 // G3 rules the runner enforces for every G3 scenario (coord/STATUS-harness-ops.md, "G3 batches";
 // lead, #101 and #116 review):
@@ -138,13 +139,20 @@ export const SCENARIO_CONSOLE_EXTRA = Object.freeze({
  * these parameters. params: the run's effective parameters (run.mjs: the scenario's defaults under --param);
  * without them, the scenario's defaults.
  */
-export const consoleAllowFor = (scenario, params = scenario?.defaults) => [...G3_CONSOLE_ALLOW, ...(SCENARIO_CONSOLE_EXTRA[scenario?.id]?.(params ?? {}) ?? [])];
+export const consoleAllowFor = (scenario, params = scenario?.defaults) => [...G3_CONSOLE_ALLOW, ...(SCENARIO_CONSOLE_EXTRA[scenario?.id]?.(params ?? {}) ?? []),
+    ...(STEP7_SCENARIOS.includes(scenario?.id) ? STEP7_CONSOLE_EXTRA : [])];
+
+/** G4 step 7 only (#446 review): the world's age for the freshness check (lib/g4-accept.mjs), read-only. */
+export const STEP7_CONSOLE_EXTRA = Object.freeze([/^time query gametime$/]);
 
 /** Why a G4 run with a spawned driver (set-up T) is never G4 evidence (lead, #316 review). */
 export const G4_TEST_SERVER_NOT_GATE = 'a G4 scenario on a test server is a rehearsal: G4 evidence comes only from the CX23 service (test/scenarios/g4/PLAN.md)';
 
 /** Why a G4 run on the CX23 service (set-up S) is not G4 evidence either, until the step-7 runner (lead, #433 review). */
 export const G4_SERVICE_NOT_GATE = 'a G4 run on the CX23 service (set-up S) is not an acceptance run: G4 evidence comes only from the step-7 acceptance runs (test/scenarios/g4/PLAN.md)';
+
+/** Why a G3 scenario run on the CX23 service (a G4 S run, e.g. D on S) is never G3 gate evidence (#389 review). */
+export const G3_ON_SERVICE_NOT_GATE = 'a G4 S run (the CX23 service, --service): never G3 gate evidence';
 
 /**
  * What run.mjs applies to a scenario (#122 review findings 3 and 4):
