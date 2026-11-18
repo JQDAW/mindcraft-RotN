@@ -495,3 +495,60 @@ test('round 5 A rerun: River Cane and bamboo fill the stickWood slots of the cru
     const tools = craftNeeds(invBot([stack('pyrotech:crude_axe', 0, 1), stack('pyrotech:rock', 0, 1), stack('biomesoplenty:bamboo', 0, 1)]), 'contenttweaker:crafting_tools');
     assert.equal(tools?.ready, true, JSON.stringify(tools));
 });
+
+// CX23 step 0 (14:46, net-forge): craftRecipe took a table up to 16 blocks away, its walk did not
+// get there, and it crafted anyway: the server ignored the far right-click, and the window never opened.
+const farPos = new Vec3(12, 64, 0);
+const farTable = { name: 'crafting_table', position: farPos };
+/** A bot whose only table found is 12 blocks away, and whose walk to it gets nowhere. */
+function farTableBot(opts) {
+    const made = craftRecipeBot(opts);
+    Object.assign(made.bot, { findBlocks: () => [farPos], blockAt: (p) => (p.equals(farPos) ? farTable : null) });
+    return made;
+}
+const noWalk = (ops) => Object.assign(ops, { walks: 0, walk: () => { ops.walks++; return Promise.resolve(false); } });
+
+test('CX23 step 0: craftRecipe never opens a table the walk did not reach: it places its own when it has one', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftRecipe } = await import('./skills.js');
+    const { bot, crafts } = farTableBot({ items: pickInputs(), serve: () => [stack('stone_pickaxe', 0, 1)] });
+    const ops = noWalk(tableOps());
+    assert.equal(await craftRecipe(bot, 'stone_pickaxe', 1, ops), true);
+    assert.equal(ops.walks, 1, 'it tried to walk there first');
+    assert.equal(crafts.length, 1);
+    assert.equal(crafts[0].table, tableBlock, 'crafted at its own table, not the far one');
+    assert.deepEqual([ops.placed, ops.picked], [1, 1], 'placed and picked up again');
+    assert.match(bot.output, /Could not get within reach of the crafting table at 12, 64, 0 \(12\.0 blocks away; it opens from 4\.5 at most\); placing your crafting table here instead\./);
+});
+
+test('CX23 step 0: craftRecipe with no table held reports the far table and crafts nothing', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftRecipe } = await import('./skills.js');
+    const { bot, crafts } = farTableBot({ items: pickInputs().filter(i => i.name !== 'crafting_table'), serve: () => assert.fail('no craft') });
+    const ops = noWalk(tableOps());
+    assert.equal(await craftRecipe(bot, 'stone_pickaxe', 1, ops), false);
+    assert.equal(crafts.length, 0, 'the far table is never opened');
+    assert.deepEqual([ops.placed, ops.picked], [0, 0]);
+    assert.match(bot.output, /Could not get within reach of the crafting table at 12, 64, 0 .*so stone_pickaxe was not crafted\. Walk nearer to it, or carry a crafting table\./);
+    // A walk that does get there: crafted at that table.
+    const there = farTableBot({ items: pickInputs(), serve: () => [stack('stone_pickaxe', 0, 1)] });
+    const walkOps = tableOps();
+    walkOps.walk = () => { there.bot.entity.position = new Vec3(9, 64, 0); return Promise.resolve(true); };
+    assert.equal(await craftRecipe(there.bot, 'stone_pickaxe', 1, walkOps), true);
+    assert.equal(there.crafts[0].table, farTable);
+    assert.equal(walkOps.placed, 0);
+});
+
+test('CX23 step 0: craftByFill does not open a table out of reach either', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftByFill } = await import('./skills.js');
+    const { bot, crafts } = fillBot(mixed(), () => assert.fail('no craft'));
+    bot.registry = { ...fillReg, itemsByName: { ...fillReg.itemsByName, ...modReg.itemsByName } };
+    Object.assign(bot, { findBlocks: () => [farPos], blockAt: (p) => (p.equals(farPos) ? farTable : null) });
+    const ops = noWalk(tableOps());
+    const needs = craftNeeds(bot, 'stone_pickaxe');
+    assert.equal(await craftByFill(bot, 'stone_pickaxe', 1, needs, farTable, false, ops), false);
+    assert.equal(crafts.length, 0);
+    assert.equal(ops.walks, 1);
+    assert.match(bot.output, /Could not get within reach of the crafting table at 12, 64, 0/);
+});

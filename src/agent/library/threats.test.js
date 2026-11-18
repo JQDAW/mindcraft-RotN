@@ -296,3 +296,19 @@ test('#434 review: a crude axe or a stone sword is no real weapon for a big slim
     assert.equal(isBigSlime({ name: 'magma_cube', metadata: { 12: 3 } }), true);
     assert.equal(isBigSlime({ name: 'magma_cube', metadata: { 12: 1 } }), false);
 });
+
+test('#434 nit: a ranged mob near a big slime steers the flee, and the walk keeps away from the slime too', () => {
+    const slime = { id: 1, name: 'slime', type: 'mob', position: new Vec3(3, 64, 0), metadata: { 12: 4 } };
+    const skeleton = { id: 2, name: 'skeleton', type: 'mob', position: new Vec3(-10, 64, 0) };
+    const plan = (items) => threatPlan(fakeBot([slime, skeleton], { health: 20, inventory: { items: () => items, slots: [] } }));
+    const bare = plan([]);
+    assert.equal(bare.why, 'ranged');
+    assert.equal(bare.from, skeleton);
+    assert.equal(bare.away, RANGES['take-cover'].away);
+    assert.equal(bare.isEnemy(skeleton), true);
+    assert.equal(bare.isEnemy(slime), true, 'the slime is kept away from as well');
+    // With a real weapon the slime is no reason to flee: the ranged mob alone.
+    const armed = plan([{ name: 'iron_sword' }]);
+    assert.equal(armed.why, 'ranged');
+    assert.equal(armed.isEnemy(slime), false);
+});

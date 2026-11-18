@@ -307,7 +307,8 @@ const modes_list = [
         // first; it is off, agent.js). Before cowardice and self_defense in this list, so the bot
         // can eat at food 6 or lower in a fight: the loop stops at the first active mode (#206 review 4).
         name: 'eating',
-        description: 'Eat at food 12 or lower when idle and no threat is near, and at 6 or lower always, in a fight too. Never hawthorn berries or cloudsbluff, except at food 5 or lower with nothing else (food 0 kills on this pack); bread only when nothing else is left.',
+        // #432 nit: the emergency foods are named from food.EMERGENCY_FOODS; cloudsbluff is never eaten.
+        description: `Eat at food 12 or lower when idle and no threat is near, and at 6 or lower always, in a fight too. At food ${food.EMERGENCY_FOOD} or lower with nothing else (food 0 kills on this pack): ${food.emergencyFoodText()}, in that order; never ${food.NEVER_EAT_TEXT.replace(' or any other food', '')}. Bread only when nothing else is left.`,
         interrupts: ['all'],
         on: true,
         active: false,
@@ -550,6 +551,8 @@ const modes_list = [
             this.skipped_said = said;
             if (!target || !await world.isClearPath(bot, target)) return;
             execute(this, agent, async () => {
+                // #431 review 7: only a stop of this hunt counts below, not an older hunt's.
+                if (agent.rotnLastInterrupt?.of === `mode:${this.name}`) agent.rotnLastInterrupt = null;
                 say(agent, `Hunting ${target.name} for food!`);
                 // #422 review 1: bounded (HUNT.maxMs), and over once the day is (dusk) or a threat comes.
                 const end = await huntAnimal(bot, target, { keepGoing: keepHunting, equip: (b) => skills.equipHighestAttack(b) });

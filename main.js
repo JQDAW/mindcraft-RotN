@@ -3,6 +3,7 @@ import settings from './settings.js';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { readFileSync } from 'fs';
+import { releaseLineFor } from './src/mindcraft/release_line.js';
 
 function parseArguments() {
     return yargs(hideBin(process.argv))
@@ -73,6 +74,8 @@ if (process.env.SETTINGS_JSON) {
 console.log(`[settings] effective allow_insecure_coding=${JSON.stringify(settings.allow_insecure_coding)}`);
 // RotN (G4 #10, D on the CX23 service): who may give tasks, after all overrides, so a scenario reads it from the journal.
 console.log(`[settings] effective task_givers=${JSON.stringify(settings.task_givers)} allow_server_task_giver=${JSON.stringify(settings.allow_server_task_giver)}`);
+// RotN (G4 step 7, condition (c)): the release this process runs from, read from its own directory.
+console.log(releaseLineFor(import.meta.url));
 
 
 Mindcraft.init(false, settings.mindserver_port, settings.auto_open_ui);
