@@ -40,6 +40,7 @@ Need a change in a file you do not own? Write it in your `coord/STATUS-<agent>.m
 - Every PR states which brief item or gate it serves and how it was tested. The `independent-reviewer` subagent reviews it before the lead merges.
 - Keep `coord/STATUS-<agent>.md` current: done, doing, blocked, requests. Update it at least whenever you open a PR or get blocked.
 - Anything that needs the human (logins, keys, payments, server admin actions, decisions) goes into `coord/NEEDS-HUMAN.md`. Do not wait silently.
+- Questions for the lead go as plain text in your reply; then wait for the lead's message. Never put a question for the lead in a multiple-choice dialog: auto mode does not let the lead answer one, so it stalls until the human comes (the human's rule, 2026-11-18). Keep dialogs for decisions that belong to the human (paid-run GOs, logins, keys, live-server actions).
 - Decisions that change the plan get an ADR in `docs/adr/` (copy `0000-template.md`).
 - Prefer small, test-backed changes. Mindcraft upstream code stays recognizable, so upstream fixes can still be merged from the `upstream` remote.
 
