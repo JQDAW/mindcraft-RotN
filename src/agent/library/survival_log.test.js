@@ -220,7 +220,7 @@ test('soak 2: a hurt line when health falls by 4 or more within 2 s, with the li
     const lines = [];
     t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
     assert.equal(hurtLine(6, 20, 14, 'zombie'), '[survival] hurt 6 health 20->14 (by zombie)');
-    assert.deepEqual(HURT, { minDrop: 4, windowMs: 2000, mobRange: 5 });
+    assert.deepEqual(HURT, { minDrop: 4, windowMs: 2000, mobRange: 5, swingMs: 1000 });
     const here = new Vec3(0, 64, 0);
     const bot = { health: 20, food: 12, entity: { position: here, velocity: { y: 0 } }, entities: {} };
     const state = {};
@@ -256,4 +256,72 @@ test('#432 review 1: a single hit, a fall or starving after a quiet spell is cau
     assert.equal(hurtCheck(state, bot, 60_000), null, 'no damage yet');
     bot.health = 0;
     assert.equal(hurtCheck(state, bot, 64_000), '[survival] hurt 16 health 16->0 (by starving)');
+});
+
+// Soak 3 (rotn-v0.1.5): hurt lines named zombieawareness:entityscent (the invisible scent marker on
+// the bot's own trail) and randomthings:playersoul (a death spot's soul) while zombies hit.
+test('soak 3: the hurt source is an entity that can hurt; scent markers and souls never are', async (t) => {
+    const { hurtSource, mayHurt } = await import('./survival_log.js');
+    t.mock.method(console, 'log', () => {});
+    const here = new Vec3(0, 64, 0);
+    const scent = { id: 1, type: 'mob', name: 'zombieawareness:entityscent', position: here.offset(0.2, 0, 0) };
+    const soul = { id: 2, type: 'mob', name: 'randomthings:playersoul', position: here.offset(0.5, 0, 0) };
+    const zombie = { id: 3, type: 'mob', name: 'zombie', position: here.offset(2, 0, 0) };
+    const bot = (...es) => ({ health: 14, food: 12, entity: { position: here, velocity: { y: 0 } }, entities: Object.fromEntries(es.map(e => [e.id, e])) });
+    assert.equal(mayHurt(scent), false);
+    assert.equal(mayHurt(soul), false);
+    assert.equal(mayHurt(zombie), true);
+    assert.equal(mayHurt({ id: 9, type: 'player', name: 'player' }), true, 'a player can');
+    assert.equal(mayHurt({ id: 9, type: 'mob', name: 'animania:bull_holstein' }), true, 'a bull fights back when provoked (rotn-data #448)');
+    assert.equal(mayHurt({ id: 9, type: 'mob', name: 'animania:cow_holstein' }), true, 'and so does a Holstein cow');
+    assert.equal(mayHurt({ id: 9, type: 'mob', name: 'sheep' }), false, 'a sheep never hurts');
+    assert.equal(mayHurt({ id: 9, type: 'object', name: 'arrow' }), false);
+    assert.equal(hurtSource(bot(scent, soul, zombie)), 'zombie', 'the zombie, though the marker and the soul are nearer');
+    assert.equal(hurtSource(bot(scent, soul)), 'unknown', 'markers alone: unknown, not a marker');
+    const falling = bot(scent, soul);
+    falling.entity.velocity.y = -1;
+    assert.equal(hurtSource(falling), 'fall');
+});
+
+test('soak 3: the entity that swung in the last HURT.swingMs is named first, else the nearest hostile, else the nearest that can hurt', async (t) => {
+    const { hurtSource, noteSwing, HURT } = await import('./survival_log.js');
+    t.mock.method(console, 'log', () => {});
+    const here = new Vec3(0, 64, 0);
+    const zombie = { id: 3, type: 'mob', name: 'zombie', position: here.offset(2, 0, 0) };
+    const zp = { id: 4, type: 'mob', name: 'zombie_players:zombie_player', position: here.offset(0, 0, 4) };
+    const player = { id: 5, type: 'player', name: 'player', username: 'Someone', position: here.offset(1, 0, 0) };
+    const bull = { id: 6, type: 'mob', name: 'animania:bull_holstein', position: here.offset(1, 0, 1) };
+    const bot = (...es) => ({ health: 14, food: 12, entity: { position: here, velocity: { y: 0 } }, entities: Object.fromEntries(es.map(e => [e.id, e])) });
+    const swings = new Map();
+    noteSwing(swings, zp, 10_000);
+    assert.equal(hurtSource(bot(zombie, zp), { swings, now: 10_300 }), 'zombie_players:zombie_player', 'it swung 0.3 s ago; the nearer zombie did not');
+    assert.equal(hurtSource(bot(zombie, zp), { swings, now: 10_000 + HURT.swingMs + 1 }), 'zombie', 'a swing older than swingMs: the nearest hostile');
+    assert.equal(hurtSource(bot(player, zombie)), 'zombie', 'a hostile mob before a nearer player that did not swing');
+    noteSwing(swings, player, 20_000);
+    assert.equal(hurtSource(bot(player, zombie), { swings, now: 20_100 }), 'player', 'a player that swung (never its name)');
+    assert.equal(hurtSource(bot(bull)), 'animania:bull_holstein', 'only a provoked-fighter near: it');
+    const far = { ...zp, id: 7, position: here.offset(HURT.mobRange + 1, 0, 0) };
+    noteSwing(swings, far, 30_000);
+    assert.equal(hurtSource(bot(far), { swings, now: 30_100 }), 'unknown', 'a swing beyond mobRange does not count');
+    // The swing map stays small: old swings go once it holds more than 64.
+    const many = new Map();
+    for (let i = 0; i < 70; i++) noteSwing(many, { id: 100 + i }, i);
+    noteSwing(many, { id: 1 }, 50_000);
+    assert.deepEqual([...many.keys()], [1]);
+});
+
+test('soak 3: bindSurvivalLog notes arm swings, and the hurt line names the swinger', async (t) => {
+    const { EventEmitter } = await import('node:events');
+    const logs = capture(t);
+    const here = new Vec3(0, 64, 0);
+    const scent = { id: 1, type: 'mob', name: 'zombieawareness:entityscent', position: here.offset(0.1, 0, 0) };
+    const zombie = { id: 3, type: 'mob', name: 'zombie', position: here.offset(1, 0, 0) };
+    const zp = { id: 4, type: 'mob', name: 'zombie_players:zombie_player', position: here.offset(0, 0, 2) };
+    const bot = Object.assign(new EventEmitter(), { health: 20, food: 12, entity: { position: here, velocity: { y: 0 } }, entities: { 1: scent, 3: zombie, 4: zp } });
+    bindSurvivalLog(bot, { eatAt: 12 });
+    bot.emit('health');
+    bot.emit('entitySwingArm', zp);
+    bot.health = 14;
+    bot.emit('health');
+    assert.ok(logs.includes('[survival] hurt 6 health 20->14 (by zombie_players:zombie_player)'), logs.join('\n'));
 });
