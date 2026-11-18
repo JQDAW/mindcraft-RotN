@@ -33,6 +33,7 @@
 // A failed check in a valid acceptance run is still evidence: the failure stays in the evidence (the G3 rule), so
 // "valid" says whether the run counts, and pass says how it went.
 import { goMarker, HOST, linesFromStart } from './service.mjs';
+import { LOG_SINCE_START_MAX } from './adapters.mjs';
 
 /** The six step-7 runs and the scenarios each may run (PLAN.md step 7; run 5 is one session with the trusted player). */
 export const STEP7_RUNS = Object.freeze({
@@ -110,13 +111,14 @@ export function gametimeBound(createdMs, atMs) {
 /**
  * Is the test server fresh for this step-7 run? Never self-asserted (lead, #446 review):
  *   usage: the parsed usage.jsonl entries ({runId, scenario, goId, run, ...}) of EVERY earlier run on the server;
- *   logLines: the server log (null if it could not be read); starts: {starts, files} from `rotn-test starts` (null if
+ *   logLines: the server log from its last start line on (null if it could not be read; logWhy then says why, if
+ *   known); starts: {starts, files} from `rotn-test starts` (null if
  *   not read); gametime: the world's age in ticks (`time query gametime`; null if not read); createdMs: the test
  *   server's creation time (ms; null if unknown); nowMs: now.
  * An earlier run, or a scenario marker since the server's start, is allowed only from the same GO and run AND another
  * scenario (run 5 is the only legitimate sharing). -> {ok, why}
  */
-export function freshServer({ server, stateDir, usage, logLines, goId, run, scenarioId, starts, gametime, createdMs, nowMs }) {
+export function freshServer({ server, stateDir, usage, logLines, logWhy = null, goId, run, scenarioId, starts, gametime, createdMs, nowMs }) {
     if (!server) return { ok: false, why: 'no TEST_SERVER_NAME: not a test server from deploy/test-server.sh' };
     if (!stateDir) return { ok: false, why: 'no TEST_SERVER_STATE_DIR: the test server\'s usage ledger cannot be read' };
     if (!Array.isArray(usage)) return { ok: false, why: 'the test server\'s usage ledger cannot be read' };
@@ -125,7 +127,7 @@ export function freshServer({ server, stateDir, usage, logLines, goId, run, scen
     if (repeat) return { ok: false, why: `not fresh: ${scenarioId} already ran on this server (run ${repeat.runId ?? '?'}); a repeated scenario needs a new server` };
     const other = usage.find((e) => !sharing(e));
     if (other) return { ok: false, why: `not fresh: an earlier run used this server (${other?.scenario ?? '?'}, ${other?.goId ? `GO ${other.goId} run ${other.run}` : 'not an acceptance run'})` };
-    if (!Array.isArray(logLines)) return { ok: false, why: 'the test server\'s log could not be read' };
+    if (!Array.isArray(logLines)) return { ok: false, why: logWhy ?? 'the test server\'s log could not be read' };
     let start = -1;
     logLines.forEach((l, i) => { if (SERVER_START_RE.test(l)) start = i; });
     if (start < 0) return { ok: false, why: 'the server\'s start line is not in the fetched log, so its history cannot be checked' };
@@ -338,12 +340,13 @@ export function serverCreatedMs(stateDir, fsImpl, pathImpl) {
 }
 
 /**
- * Before a step-7 scenario starts (run.mjs): is the test server fresh? Reads the usage ledger, the server log since
- * its start, the server's starts on the box (server.starts(), `rotn-test starts`), the world's age (`time query
+ * Before a step-7 scenario starts (run.mjs): is the test server fresh? Reads the usage ledger, the server log from
+ * its last start line on (server.logSinceStart: not a fixed tail, since RotN's startup alone writes over 20,000 lines;
+ * bounded at logMax lines, and past the bound the check fails closed), the server's starts on the box (server.starts(), `rotn-test starts`), the world's age (`time query
  * gametime` through the guarded console) and the server's creation time. Writes nothing: recordUsage does, for every
  * run, after this. -> {fresh: {ok, why}, facts: {starts, gametime, createdAt}}
  */
-export function startAcceptance({ server, env, scenarioId, logTail = 20000, consoleWaitS = 1, nowMs = Date.now(), fsImpl, pathImpl, timeQuery }) {
+export function startAcceptance({ server, env, scenarioId, logMax = LOG_SINCE_START_MAX, consoleWaitS = 1, nowMs = Date.now(), fsImpl, pathImpl, timeQuery }) {
     const mk = acceptMarker(env);
     const stateDir = env?.TEST_SERVER_STATE_DIR || null;
     let usage = null;
@@ -355,11 +358,15 @@ export function startAcceptance({ server, env, scenarioId, logTail = 20000, cons
             usage = null;
         }
     }
+    // The newest daily rolled-over file plus latest.log (log4j rolls latest.log at 00:00 UTC), from the last start line
+    // on. Fails closed: no answer, no start line (lines [] -> freshServer: not in the fetched log) or past the bound.
     let logLines = null;
+    let logWhy = null;
     try {
-        logLines = server.log(logTail);
-        // log4j rolls latest.log over at 00:00 UTC: then the server's start line is in the newest rolled-over file.
-        if (!logLines.some((l) => SERVER_START_RE.test(l)) && typeof server.logRotated === 'function') logLines = server.logRotated(logTail)?.lines ?? logLines;
+        const got = typeof server.logSinceStart === 'function' ? server.logSinceStart(logMax) : null;
+        if (!got) logWhy = 'the test server\'s log from its start line could not be read';
+        else if (got.over) logWhy = `the test server's log from its start line is ${got.count} lines, over the ${logMax}-line (or byte) bound, so its history cannot be checked`;
+        else logLines = got.lines;
     } catch {
         logLines = null;
     }
@@ -376,7 +383,7 @@ export function startAcceptance({ server, env, scenarioId, logTail = 20000, cons
         gametime = null;
     }
     const createdMs = stateDir ? serverCreatedMs(stateDir, fsImpl, pathImpl) : null;
-    const fresh = freshServer({ server: env?.TEST_SERVER_NAME || null, stateDir, usage, logLines, goId: mk.ok ? mk.goId : null, run: mk.ok ? mk.run : null,
+    const fresh = freshServer({ server: env?.TEST_SERVER_NAME || null, stateDir, usage, logLines, logWhy, goId: mk.ok ? mk.goId : null, run: mk.ok ? mk.run : null,
         scenarioId, starts, gametime, createdMs, nowMs });
     return { fresh, facts: { starts, gametime, createdAt: Number.isFinite(createdMs) ? new Date(createdMs).toISOString() : null, readAt: new Date(nowMs).toISOString() } };
 }

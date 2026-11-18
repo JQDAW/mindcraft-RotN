@@ -9,6 +9,11 @@
 #   rotn-test log N rotated              the same over the newest daily logs/YYYY-MM-DD-N.log.gz plus latest.log (log4j
 #                                        rolls latest.log daily at 00:00 UTC); the first line names the files:
 #                                        "##rotn-test files: <a.log.gz>,latest.log"
+#   rotn-test log N since-start          G4 step 7 (freshness): the same files, from the LAST "Starting minecraft
+#                                        server version" line on (not a fixed tail: RotN's startup alone writes over
+#                                        20,000 lines). N bounds the lines, ROTN_TEST_LOG_MAX_BYTES (48 MiB) the bytes.
+#                                        First line: "##rotn-test since-start files=<..> found=<0|1> lines=<n>
+#                                        over=<0|1>"; the lines follow only if found=1 and over=0 (else none)
 #   rotn-test build-log [N]              tail the first-boot build log
 #   rotn-test verify                     key=value facts for the G0 checks
 #   rotn-test restart [--timeout S]      restart the Minecraft server (G4 #1, server restart; test server only):
@@ -27,7 +32,7 @@
 set -euo pipefail
 
 # The overrides (ROTN_TEST_SERVER_DIR, ROTN_TEST_REMOTE_STATE_DIR, ROTN_TEST_SYSTEMCTL, ROTN_TEST_CONSOLE_SEND,
-# ROTN_TEST_POLL_S, ROTN_TEST_GZ_RETRY_S) are for the offline tests only.
+# ROTN_TEST_POLL_S, ROTN_TEST_GZ_RETRY_S, ROTN_TEST_LOG_MAX_BYTES) are for the offline tests only.
 # (REMOTE: never the PC's own ROTN_TEST_STATE_DIR, which test-server.sh uses for its local state; #324 review.)
 STATE=${ROTN_TEST_REMOTE_STATE_DIR:-/var/lib/rotn-test}
 SERVER=${ROTN_TEST_SERVER_DIR:-/opt/rotn/server}
@@ -147,8 +152,8 @@ case $cmd in
     ;;
   log)
     n=${1:-100}
-    [[ $n =~ ^[0-9]+$ ]] || { echo "usage: rotn-test log [N] [rotated]" >&2; exit 2; }
-    if [[ ${2:-} == rotated ]]; then
+    [[ $n =~ ^[0-9]+$ && ( -z ${2:-} || ${2:-} == rotated || ${2:-} == since-start ) ]] || { echo "usage: rotn-test log [N] [rotated|since-start]" >&2; exit 2; }
+    if [[ -n ${2:-} ]]; then
       # The newest DAILY rolled-over file (YYYY-MM-DD-N.log.gz; never Forge's debug-N.log.gz), by modification
       # time, then latest.log; one file name per entry.
       rot=$(ls -t "$SERVER"/logs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.log.gz 2>/dev/null | head -n 1 || true)
@@ -160,8 +165,21 @@ case $cmd in
           old=$(gzip -dc "$rot" 2>/dev/null) || { echo "rotn-test: cannot read $(basename "$rot") (gzip failed twice)" >&2; exit 3; }
         fi
       fi
-      echo "##rotn-test files: ${rot:+$(basename "$rot"),}latest.log"
-      { [[ -n $old ]] && printf '%s\n' "$old"; [[ -f $LOG ]] && cat "$LOG"; } | tail -n "$n"
+      files="${rot:+$(basename "$rot"),}latest.log"
+      if [[ $2 == rotated ]]; then
+        echo "##rotn-test files: $files"
+        { [[ -n $old ]] && printf '%s\n' "$old"; [[ -f $LOG ]] && cat "$LOG"; } | tail -n "$n"
+      else
+        # One pass, holding at most N lines: each start line starts over; past N lines or the byte bound, "over".
+        { [[ -n $old ]] && printf '%s\n' "$old"; [[ -f $LOG ]] && cat "$LOG"; } |
+          LC_ALL=C awk -v max="$n" -v maxb="${ROTN_TEST_LOG_MAX_BYTES:-50331648}" -v files="$files" '
+            index($0, "Starting minecraft server version ") { found = 1; c = 0; b = 0; over = 0; split("", buf) }
+            found { c++; b += length($0) + 1; if (c > max || b > maxb) over = 1; else buf[c] = $0 }
+            END {
+              printf "##rotn-test since-start files=%s found=%d lines=%d over=%d\n", files, found, c, over
+              if (found && !over) for (i = 1; i <= c; i++) print buf[i]
+            }'
+      fi
     else
       tail -n "$n" "$LOG"
     fi

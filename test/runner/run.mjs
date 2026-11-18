@@ -268,7 +268,7 @@ async function main(argv) {
     // starts, the world's age) before anything else; then EVERY run on a test server writes its usage line, marked or
     // not, so a later acceptance run sees it. A usage line that cannot be written makes an acceptance run not fresh.
     if (acceptanceApplies(scenario, bot, process.env)) {
-        const a = startAcceptance({ server: scenarioServer, env: process.env, scenarioId: scenario.id, logTail: effective.logTail ?? 20000,
+        const a = startAcceptance({ server: scenarioServer, env: process.env, scenarioId: scenario.id,
             consoleWaitS: effective.consoleWaitS ?? 1, fsImpl: fs, pathImpl: path, timeQuery });
         accept = { fresh: { ...a.fresh, facts: a.facts } };
     }
