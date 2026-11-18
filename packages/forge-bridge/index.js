@@ -19,7 +19,7 @@ export { forgeOptionsFromEnv, placeBlockTimeout } from './src/env.js';
 export { assertMicrosoftAuthSafe, quietMsaCodeHandler, debugValueEnables, patternMayEnablePrefix, PRISMARINE_AUTH_DEBUG_NAMESPACE } from './src/auth-guard.js';
 export { instrumentProfileFetch, describeProfileFetchError, formatProfileFetchFailure, lastProfileFetchFailure, classifyBeforeJoinError, formatBeforeJoinError, PERMANENT_AUTH_STATUSES, PERMANENT_XSTS_XERRS, attachBotErrorLogger } from './src/auth-diagnostics.js';
 export { assertOutsideGitWorkTrees, prepareSecretFolder, findGitWorkTree, realLocation } from './src/secret-folder.js';
-export { decideAgentExit, readExitReason, writeExitReason, recordAgentExit, createRequestedRestartGuard, createCrashLoopGuard, crashSignature, REQUESTED_RESTART } from './src/exit-contract.js';
+export { decideAgentExit, readExitReason, writeExitReason, recordAgentExit, createRequestedRestartGuard, createCrashLoopGuard, crashSignature, attachSpawnTimeoutReason, SPAWN_TIMEOUT_CATEGORY, REQUESTED_RESTART } from './src/exit-contract.js';
 export { extendRegistry, applyProperties } from './src/registry-extension.js';
 export { applyCollisionShapes, dumpShapesByMeta, validateCollisionOverrides, loadCollisionOverrides, hazardBlockIds, partialHazardBlockIds, liquidBlockIds, stateHazard, DYNAMIC_LEAVES_BOX, HAZARD_KINDS } from './src/collision.js';
 export { HORDES_CHANNEL, HORDES_DISC, HORDE_START_KEY, HORDE_END_KEY, decodeHordes, hordeEvent, attachHordeEvents } from './src/hordes.js';

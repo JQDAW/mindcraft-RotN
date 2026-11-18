@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { AgentProcess, decideAgentExit, readExitReason } from '../../../src/process/agent_process.js';
-import { createRestartPolicy, createCrashLoopGuard, crashSignature, classifyKick, EXIT } from '../index.js';
+import { createRestartPolicy, createCrashLoopGuard, crashSignature, attachSpawnTimeoutReason, classifyBeforeJoinError, writeExitReason, classifyKick, EXIT } from '../index.js';
 import { assertMicrosoftAuthSafe } from '../src/auth-guard.js';
 
 const MIN = 60_000;
@@ -422,4 +422,120 @@ test('AgentProcess: a deterministic startup crash restarts 4 times with backoff,
     assert.deepEqual(h.timers.map(t => t.ms), [10_000, 20_000, 40_000, 80_000]);
     assert.deepEqual(h.exits, [3]);
     assert.ok(h.lines.some(l => /^\[agent_process\] FRCFLD: FATAL \(crash_loop: exit 1 without a reason, 5 times in a row, each within 5 min of the start\)\. Not restarting; a human must act/.test(l)), h.lines.join('\n'));
+});
+
+test('decideAgentExit: exit 0, task codes and codes above 3 also start the crash count again (#441 review 3)', () => {
+    for (const other of [0, 2, 4, 7]) {
+        const policy = createRestartPolicy();
+        const crashGuard = createCrashLoopGuard();
+        const seq = [1, 1, 1, 1, other, 1, 1, 1, 1].map(code => decideAgentExit({ code, connectedMs: 20_000 }, policy, null, crashGuard));
+        assert.ok(!seq.some(d => d.code === 3), `exit ${other} between crashes: ${JSON.stringify(seq.map(d => d.code ?? d.action))}`);
+    }
+    // A requested stop resets it too.
+    const policy = createRestartPolicy();
+    const crashGuard = createCrashLoopGuard();
+    const seq = [{ code: 1 }, { code: 1 }, { code: 1 }, { code: 1 }, { code: 1, requestedStop: true }, { code: 1 }, { code: 1 }, { code: 1 }, { code: 1 }]
+        .map(e => decideAgentExit({ connectedMs: 20_000, ...e }, policy, null, crashGuard));
+    assert.ok(!seq.some(d => d.code === 3));
+});
+
+function spawnTimeoutRig({ spawnTimeoutMs = 30_000 } = {}) {
+    const proc = new EventEmitter();
+    proc.env = { MINDCRAFT_EXIT_REASON_FILE: '/reason.json' };
+    const bot = new EventEmitter();
+    const writes = [];
+    let t = 1_000_000;
+    let recorded = false;
+    const handle = attachSpawnTimeoutReason(bot, {
+        spawnTimeoutMs, proc, now: () => t, classify: classifyBeforeJoinError, recorded: () => recorded,
+        writeFile: (file, body) => writes.push([file, JSON.parse(body)]),
+    });
+    return { proc, bot, writes, handle, advance: (ms) => { t += ms; }, record: () => { recorded = true; } };
+}
+
+test('attachSpawnTimeoutReason: the spawn-timeout exit(1) gets spawn_timeout[:kind]; crashes, early exits, a spawn or a recorded reason do not (#441 review 1)', () => {
+    const plain = spawnTimeoutRig();
+    plain.advance(30_000);
+    plain.proc.emit('exit', 1);
+    assert.deepEqual(plain.writes, [['/reason.json', { category: 'spawn_timeout', exitCode: 1 }]]);
+
+    const dns = spawnTimeoutRig();
+    dns.bot.emit('error', Object.assign(new Error('getaddrinfo ENOTFOUND sessionserver.mojang.com'), { code: 'ENOTFOUND' }));
+    dns.advance(30_500);
+    dns.proc.emit('exit', 1);
+    assert.deepEqual(dns.writes.map(w => w[1]), [{ category: 'spawn_timeout:network', exitCode: 1 }]);
+
+    const http = spawnTimeoutRig();
+    http.bot.emit('error', new Error('503 Service Unavailable'));
+    http.advance(31_000);
+    http.proc.emit('exit', 1);
+    assert.equal(http.writes[0]?.[1].category, 'spawn_timeout:http-5xx');
+
+    const cases = {
+        spawned: (r) => { r.bot.emit('spawn'); r.advance(30_000); r.proc.emit('exit', 1); },
+        uncaught: (r) => { r.advance(30_000); r.proc.emit('uncaughtExceptionMonitor', new Error('ENOENT'), 'uncaughtException'); r.proc.emit('exit', 1); },
+        rejection: (r) => { r.advance(30_000); r.proc.emit('uncaughtExceptionMonitor', new Error('x'), 'unhandledRejection'); r.proc.emit('exit', 1); },
+        recorded: (r) => { r.record(); r.advance(30_000); r.proc.emit('exit', 1); },
+        early: (r) => { r.advance(5_000); r.proc.emit('exit', 1); },
+        exit3: (r) => { r.advance(30_000); r.proc.emit('exit', 3); },
+        exit0: (r) => { r.advance(30_000); r.proc.emit('exit', 0); },
+    };
+    for (const [name, run] of Object.entries(cases)) {
+        const r = spawnTimeoutRig();
+        run(r);
+        assert.deepEqual(r.writes, [], name);
+    }
+    const disposed = spawnTimeoutRig();
+    disposed.handle.dispose();
+    assert.equal(disposed.proc.listenerCount('exit'), 0);
+    assert.equal(disposed.proc.listenerCount('uncaughtExceptionMonitor'), 0);
+});
+
+test('AgentProcess: 30 spawn timeouts in a row (an outage before login) are retried with backoff and never end with 3 (#441 review 1)', () => {
+    const h = harness({ MINDCRAFT_SINGLE_BOT_SERVICE: '1' });
+    const ap = new AgentProcess('FRCFLD', 8080, h.deps);
+    ap.start();
+    const kinds = [null, 'network', 'http-5xx', 'xsts-other'];
+    for (let i = 0; i < 30; i++) {
+        const child = h.children[i];
+        const kind = kinds[i % kinds.length];
+        writeExitReason({ category: kind ? `spawn_timeout:${kind}` : 'spawn_timeout', exitCode: 1 }, { env: child.opts.env });
+        h.advance(30_000);
+        child.emit('exit', 1, null);
+        assert.deepEqual(h.exits, [], `spawn timeout ${i + 1}`);
+        assert.equal(h.timers.length, i + 1);
+        h.timers[i].fn();
+    }
+    assert.equal(h.children.length, 31);
+    assert.equal(h.timers.at(-1).ms, 300_000, 'the backoff reached its cap');
+});
+
+test('end to end in real children: a spawn-timeout exit(1) writes spawn_timeout:network; an uncaught throw or rejection before spawn writes nothing', async () => {
+    const contract = new URL('../src/exit-contract.js', import.meta.url).href;
+    const diag = new URL('../src/auth-diagnostics.js', import.meta.url).href;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spawn-timeout-'));
+    const run = async (name, ending) => {
+        const file = path.join(dir, `${name}.json`);
+        const child = [
+            `import { EventEmitter } from 'node:events';`,
+            `import { attachSpawnTimeoutReason } from ${JSON.stringify(contract)};`,
+            `import { classifyBeforeJoinError } from ${JSON.stringify(diag)};`,
+            `const bot = new EventEmitter();`,
+            `bot.on('error', () => {});`,
+            `attachSpawnTimeoutReason(bot, { spawnTimeoutMs: 1000, classify: classifyBeforeJoinError });`,
+            `bot.emit('error', Object.assign(new Error('getaddrinfo ENOTFOUND example.invalid'), { code: 'ENOTFOUND' }));`,
+            `setTimeout(() => { ${ending} }, 300);`,
+        ].join('\n');
+        const code = await new Promise((resolve) => {
+            realSpawn(process.execPath, ['--input-type=module', '-e', child], {
+                env: { PATH: process.env.PATH, SYSTEMROOT: process.env.SYSTEMROOT, MINDCRAFT_EXIT_REASON_FILE: file }, stdio: 'ignore',
+            }).on('exit', resolve);
+        });
+        return { code, reason: readExitReason(file) };
+    };
+    try {
+        assert.deepEqual(await run('timeout', 'process.exit(1);'), { code: 1, reason: { category: 'spawn_timeout:network', exitCode: 1, fatal: false } });
+        assert.deepEqual(await run('throw', "throw new Error('ENOENT: no such file');"), { code: 1, reason: null });
+        assert.deepEqual(await run('reject', "Promise.reject(new Error('ENOENT'));"), { code: 1, reason: null });
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
