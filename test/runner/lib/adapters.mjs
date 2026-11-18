@@ -100,6 +100,9 @@ export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries 
         // The tail over the newest daily rolled-over logs/YYYY-MM-DD-N.log.gz plus latest.log (log4j rolls latest.log at 00:00 UTC):
         // {files, lines}. rotn-test's first line names the files ("##rotn-test files: a.log.gz,latest.log").
         logRotated: (n = 20000) => parseRotatedLog(call(['log', String(n), 'rotated'])),
+        // G4 step 7 (freshness): the same files from the server's last start line on, not a fixed tail (RotN's startup
+        // alone writes over 20,000 lines; soak 3): {files, found, count, over, lines} or null (parseSinceStartLog).
+        logSinceStart: (max = LOG_SINCE_START_MAX) => parseSinceStartLog(call(['log', String(max), 'since-start'])),
         // G4 #1: restart the Minecraft server (test-server.sh restart: console stop, wait for the exit, start, wait for a
         // new Done line). Never re-sent after an ordinary failure (a second restart is not harmless); only a bash that
         // never started (nothing ran) is retried. Up to timeoutS for each of the stop and the start, plus a margin.
@@ -113,6 +116,23 @@ export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries 
 export function parseStarts(lines) {
     const m = (lines ?? []).map((l) => /^starts=(\d+) files=(\d+)$/.exec(l)).find(Boolean);
     return m ? { starts: Number(m[1]), files: Number(m[2]) } : null;
+}
+
+/** The most lines `logSinceStart` fetches (rotn-test also bounds the bytes, 48 MiB): a fresh test server's log from
+ * its start line is about 21,000 lines after the start (soak 3, 2026-11-18), plus the scenarios' own lines. */
+export const LOG_SINCE_START_MAX = 200000;
+
+/**
+ * `rotn-test log N since-start` output -> {files, found, count, over, lines}; null without its header line (fail
+ * closed). lines is the log from the last start line on, [] when the start line was not found or the bound was hit.
+ */
+export function parseSinceStartLog(out) {
+    const m = /^##rotn-test since-start files=(\S*) found=([01]) lines=(\d+) over=([01])$/.exec(out?.[0] ?? '');
+    if (!m) return null;
+    const found = m[2] === '1';
+    const over = m[4] === '1';
+    const lines = found && !over ? out.slice(1) : [];
+    return { files: m[1].split(',').filter(Boolean), found, count: Number(m[3]), over, lines };
 }
 
 /** `rotn-test log N rotated` output -> {files, lines}; files is [] when the header line is missing. */
