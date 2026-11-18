@@ -9,13 +9,14 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
     ACCEPT_GO_RE, STEP7_RUNS, STEP7_SCENARIOS, USAGE_FILE, acceptMarker, checkAcceptanceResults, evaluateAcceptance, freshServer, notAcceptanceReason,
     parseLedger, recordUsage, releaseFromJournal, runOf, serverCreatedMs, startAcceptance,
 } from '../runner/lib/g4-accept.mjs';
 import { timeQuery } from '../runner/lib/s1.mjs';
 import { parseStarts } from '../runner/lib/adapters.mjs';
+import { releaseLine, releaseLineFor } from '../../src/mindcraft/release_line.js';
 import { G3_ON_SERVICE_NOT_GATE, G4_SERVICE_NOT_GATE } from '../runner/lib/g3.mjs';
 import { acceptanceApplies, policyReasonApplies, resolveTag } from '../runner/run.mjs';
 import { G2_WORLD_SEED } from '../runner/lib/g2.mjs';
@@ -90,6 +91,19 @@ describe('the release, read from the journal (c): only the [release] line, after
         assert.match(releaseFromJournal([j(rel)], 'frcfld').why, /does not include the unit's start/);
         assert.match(releaseFromJournal([unitStart('bottwo'), j(rel)], 'frcfld').why, /does not include the unit's start/);
         assert.match(releaseFromJournal([j(rel), unitStart(), j('[state] FRCFLD at start: tasks=absent')], 'frcfld').why, /no "\[release\] <tag>-<sha12>" line after the unit's start/);
+    });
+    test('the contract with main.js\'s producer (#447): what it prints for a release directory is what (c) reads', () => {
+        const name = `${TAG}-${SHA.slice(0, 12)}`;
+        assert.equal(releaseLine(name), `[release] ${name}`);
+        assert.deepEqual(releaseFromJournal([unitStart(), j(releaseLine(name))], 'frcfld'), { tag: TAG, sha12: SHA.slice(0, 12), source: 'release line', seen: name });
+        // The unit runs /opt/mindcraft-rotn/current/main.js; Node resolves the symlink, so main.js sees the release directory.
+        assert.equal(releaseLineFor(`file:///opt/mindcraft-rotn/releases/${name}/main.js`), `[release] ${name}`);
+        // A dev checkout prints "[release] none": (c) fails.
+        assert.match(releaseFromJournal([unitStart(), j(releaseLineFor(pathToFileURL(path.join(repo, 'main.js')).href))], 'frcfld').why, /printed "\[release\] none"/);
+        // The producer accepts a pre-release suffix (deploy.sh's TAG_RE); step 7 does not (a plain tag only, #446 review).
+        const rc = `rotn-v0.1.5-rc.1-${SHA.slice(0, 12)}`;
+        assert.equal(releaseLine(rc), `[release] ${rc}`);
+        assert.match(releaseFromJournal([unitStart(), j(releaseLine(rc))], 'frcfld').why, /step 7 uses a plain tag/);
     });
     test('no fallback to release paths; "[release] none", a suffixed or malformed tag, two releases: no release, with the reason', () => {
         const path = j('    at goToGoal (file:///opt/mindcraft-rotn/releases/rotn-v0.1.4-f6107fc4b3b6/src/agent/library/skills.js:2617:41)');
