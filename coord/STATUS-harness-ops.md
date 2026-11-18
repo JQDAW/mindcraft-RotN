@@ -1,8 +1,24 @@
 # Status: harness-ops
 
-Updated: 2026-11-09 (01:57 UTC, from `date -u`)
+Updated: 2026-11-18 (16:57 UTC, from `date -u`)
 
-## Now: development paused (lead, 2026-11-09). harness-ops has stopped; no paid run, no ssh, no new work.
+## Now: the G4 step-7 runner is merged (#446); its review nits are PR #454. Offline only: no paid run, no ssh.
+
+- **#446 (merged): the step-7 acceptance runner** (`test/runner/lib/g4-accept.mjs`; PLAN.md step 7; DRIVER.md "G4 step 7").
+  - **The rule:** one acceptance GO for all six runs, id `G4-ACCEPT-<yyyymmdd>[-letter]`. `ROTN_G4_ACCEPT=<GO>:<run 1-6>:<plain rotn-vX.Y.Z>:gate-ctl-hashes-confirmed` next to `ROTN_SERVICE_GO`. A run counts only if (a)-(e) hold, and `result.json` records each (`g4Acceptance`); any missing one makes the run not-gate, with the reason.
+  - **(c)** is read only from the bot's `[release] <tag>-<sha12>` line (lead's #447) after the unit's systemd start; `[release] none` and suffixed tags fail. A contract test ties the parser to #447's producer.
+  - **(e)** is read from the server, never asserted: the usage ledger (`usage.jsonl`; every run on a test server writes one), the log, `test-server.sh starts` (new `rotn-test starts`: exactly 1) and `time query gametime` (at most 20 ticks a second since the server was created). Only run 5's scenarios share a server; a repeated scenario fails.
+  - **The evidence check:** `g4-accept-check.mjs --tree [--complete <GO>]`; `g3-batch-check --tree` runs it in CI.
+  - **Also:** a G3 scenario on S no longer gets G3's spend-stop reason (it is about the runner's own key).
+- **#454 (open): the #446 nits.** The set check re-checks the recorded facts (starts = 1, gametime within the bound at `readAt`), not `fresh.ok` alone. `time query gametime` is a step-7-only console entry. The docs say the bound only catches a world older than its server (the proof is starts = 1 + ledger + log). PLAN step 7 gets a rehearsal checklist: `test-server.sh starts` right after `up` must be 1 on the live pack; **if it is 2, report it to the lead before any change.**
+- **Before the acceptance runs:**
+  - a deployed release with the `[release]` line (`rotn-v0.1.5` or later);
+  - `git fetch --tags` on the CX33 checkout used;
+  - the rehearsal checklist above;
+  - and the open question whether `g3-task-preempts-agenda` (C, run 5) works on S with the trusted player.
+- **Questions to the lead go as plain text in my reply** (the human's rule, 2026-11-18, now in CLAUDE.md).
+
+## Earlier: development paused (lead, 2026-11-09). harness-ops had stopped; no paid run, no ssh, no new work.
 
 **Nothing is running or billing:** 0 servers, 0 Primary IPs, 0 labelled keys (counted with `grep -c .`, 01:57 UTC). The last read of the CX23 unit (`frcfld`, 00:39 UTC) was `inactive`, `NRestarts=0`.
 
@@ -17,7 +33,7 @@ Updated: 2026-11-09 (01:57 UTC, from `date -u`)
 
 **Open items, when work resumes:**
 - **G4 is not passed.** Another soak needs a new written GO.
-- **The step-7 runner is not started.** It gets its own PR for the lead's G4 evidence rule (below).
+- **The step-7 runner was not started then** (built since: #446, 2026-11-18).
 - **No committed evidence yet** for `g4-control-commands`, `g4-second-bot`, `g4-restart-persistence`, `g4-service-reconnect` or D on S. `test/evidence/g4/` holds only the death rehearsal and the two soaks.
 - **Nits, for a later PR:**
   - `TRY_IT.md`, at step 7: the death go-back rule needs "unless it died within 32 blocks of its bed"; every public chat line the bot reads is a model call; the go-back rule is a model instruction, not enforced. The hourly cost comes from the soak.
