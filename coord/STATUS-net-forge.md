@@ -1,8 +1,37 @@
 # Status: net-forge
 
-Updated: 2026-11-07T00:30Z
+Updated: 2026-11-18T16:28Z
 
 Worktree `/home/mindcraft-RotN-worktrees/net-forge` on the CX33 dev server (was `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`).
+
+## Report to the lead: the three CX23 tasks, 2026-11-18T16:28Z
+
+- **State:** idle, waiting for a task. Open: #450 (follow-ups) and this STATUS-only PR.
+- **Done (merged):**
+  - **#441 crash loop:**
+    - The same unexplained crash 5 times in a row, each within 5 min of the spawn, ends the main process with 3 (`FATAL (crash_loop: …)`). The unit does not restart exit 3. With exit 1, systemd's start limit would never be reached.
+    - Review fix: a spawn timeout is never a crash. initBot's `attachSpawnTimeoutReason` records agent.js's spawn-timeout `exit(1)` as `spawn_timeout[:<before-join kind>]`, so an outage before login retries with backoff indefinitely. Every exit that is not a crash resets the count.
+  - **#442 graceful stop:**
+    - On SIGTERM/SIGINT the agent calls `bot.quit` and exits 0 within 3 s (`graceful-quit.js`, from initBot).
+    - The main process forwards the signal, waits, kills an agent still running after 5 s, and exits 0. No main.js change was needed.
+    - Still to confirm on the next CX23 run under a GO: the server should log a normal disconnect after a ctl stop, not `Connection reset by peer`.
+- **Open:** #450, the lead's nits on #441/#442:
+  - the spawn-timeout doc;
+  - one set of spawn-timeout listeners per process;
+  - exactly one `exit(0)` on a stop;
+  - the forceRestart comment.
+- **windowOpen timeout at 14:46 (CX23 step 0): not forge-bridge, not the pack. No PR.**
+  - Table crafts through FastWorkbench's OpenGui worked in all three CX23 runs (step 0 at 14:39, M1 twice, soak 2).
+  - The soak journals have no `windowOpen` timeout and no forge-bridge window error.
+  - Likely cause, in skills (`src/agent/library/skills.js`):
+    - `craftRecipe` and `craftByFill` pick a table up to 16 blocks away, ignore `goToNearestBlock`'s `false`, and craft anyway.
+    - The server ignores a use more than 8 blocks away. That is my understanding of Forge 1.12.2's reach check, not verified against the jar.
+    - So no window opens, and mineflayer waits 20 s.
+    - The bot's 14:46:07 line and its shelter 13 blocks from the table at 14:49 fit this. That is an inference: the step-0 journal is not committed.
+- **Open requests:**
+  - **Skills side: resolved by #445** (skills-rotn, merged 2026-11-18 15:55Z: `tableInReach`, `TABLE_REACH` 4.5, "Could not get within reach", in `craftRecipe` and `craftByFill`). No open request.
+  - **For the lead (optional):** grep the step-0 journal for `synthetic open_window` or `no vanilla window known`. If neither appears, forge-bridge is ruled out for that timeout.
+  - **Decision, if wanted:** a permanent auth failure before login (`spawn_timeout:auth-permanent`) still retries forever. Making it fatal after 3 in a row, like the `auth` kick's `retryCap`, is a one-line change.
 
 ## Report to the lead: session start on the CX33, 2026-11-07T00:30Z
 
