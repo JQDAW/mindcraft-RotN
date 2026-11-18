@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { setImmediate } from 'node:timers';
 import { AgentProcess, decideAgentExit, readExitReason } from '../../../src/process/agent_process.js';
 import { createRestartPolicy, classifyKick, EXIT } from '../index.js';
 import { assertMicrosoftAuthSafe } from '../src/auth-guard.js';
@@ -83,6 +84,7 @@ function harness(env = {}, { killEmits = true } = {}) {
         log: { log: (...a) => lines.push(a.join(' ')), error: (...a) => lines.push(a.join(' ')) },
         logout: () => {},
         reasonBase,
+        signals: new EventEmitter(), // never the test runner's own process
     };
     return { deps, children, timers, exits, lines, advance: (ms) => { t += ms; } };
 }
@@ -349,10 +351,84 @@ test('end to end: a ban in a real agent child -> recordAgentExit -> reason file 
             log: { log: (...a) => lines.push(a.join(' ')), error: (...a) => lines.push(a.join(' ')) },
             logout: () => {},
             env: { PATH: process.env.PATH, SYSTEMROOT: process.env.SYSTEMROOT },
+            signals: new EventEmitter(),
         });
         ap.start();
     });
     assert.equal(await exited, 3);
     assert.ok(lines.some(l => /exited with code 3/.test(l)), 'the child itself exited 3');
     assert.ok(lines.some(l => /FRCFLD: FATAL \(banned\)/.test(l)), 'the main process read the reason file');
+});
+
+const tick = () => new Promise((r) => setImmediate(r));
+
+test('SIGTERM on the main process: the agent gets it, nothing restarts, the main process exits 0 once the agent has exited', async () => {
+    const h = harness({ MINDCRAFT_SINGLE_BOT_SERVICE: '1' }, { killEmits: false });
+    const kills = [];
+    const ap = new AgentProcess('FRCFLD', 8080, h.deps);
+    ap.start();
+    h.children[0].kill = (sig) => kills.push(sig);
+    h.deps.signals.emit('SIGTERM', 'SIGTERM');
+    assert.deepEqual(kills, ['SIGTERM']);
+    assert.deepEqual(h.exits, [], 'waits for the agent');
+    assert.equal(h.timers.length, 1);
+    assert.equal(h.timers[0].ms, 5000, 'the deadline');
+    h.children[0].emit('exit', 0, null); // graceful-quit.js: quit, then exit 0
+    await tick();
+    assert.ok(h.exits.length >= 1 && h.exits.every(c => c === 0), String(h.exits));
+    assert.equal(h.timers[0].cleared, true, 'the deadline is cleared');
+    assert.equal(h.timers.length, 1, 'no restart scheduled');
+    assert.equal(h.children.length, 1);
+    assert.ok(h.lines.some(l => /^\[agent_process\] SIGTERM: stopping 1 agent\(s\), exiting within 5 s\.$/.test(l)));
+});
+
+test('SIGINT with several agents (multi-bot main process): every agent is stopped, then one exit 0', async () => {
+    const h = harness({}, { killEmits: false });
+    const a = new AgentProcess('A1', 8080, h.deps);
+    const b = new AgentProcess('B2', 8080, h.deps);
+    a.start(); b.start();
+    const kills = [];
+    for (const c of h.children) c.kill = (sig) => kills.push(sig);
+    h.deps.signals.emit('SIGINT', 'SIGINT');
+    assert.deepEqual(kills, ['SIGINT', 'SIGINT']);
+    h.children[0].emit('exit', 0, null);
+    await tick();
+    assert.deepEqual(h.exits, [], 'B2 is still running');
+    h.children[1].emit('exit', null, 'SIGINT'); // an agent without the handler still counts as stopped
+    await tick();
+    assert.deepEqual(h.exits, [0]);
+    assert.equal(h.children.length, 2, 'nothing restarted');
+});
+
+test('SIGTERM: an agent that does not exit is killed at the deadline; a pending restart is cancelled; a second signal exits at once', async () => {
+    const stuck = harness({ MINDCRAFT_SINGLE_BOT_SERVICE: '1' }, { killEmits: false });
+    const ap = new AgentProcess('FRCFLD', 8080, stuck.deps);
+    ap.start();
+    const kills = [];
+    stuck.children[0].kill = (sig) => kills.push(sig);
+    stuck.deps.signals.emit('SIGTERM', 'SIGTERM');
+    stuck.timers[0].fn();
+    assert.deepEqual(kills, ['SIGTERM', 'SIGKILL']);
+    assert.deepEqual(stuck.exits, [0]);
+
+    const backoff = harness({ MINDCRAFT_SINGLE_BOT_SERVICE: '1' });
+    const bp = new AgentProcess('FRCFLD', 8080, backoff.deps);
+    bp.start();
+    backoff.children[0].emit('exit', 1, null);
+    assert.equal(backoff.timers.length, 1, 'restart pending');
+    backoff.deps.signals.emit('SIGTERM', 'SIGTERM');
+    assert.equal(backoff.timers[0].cleared, true, 'the pending restart is cancelled');
+    await tick();
+    assert.deepEqual(backoff.exits, [0]);
+    bp.start(true, 'Agent process restarted.', 0); // a forceRestart's late once('exit') path
+    assert.equal(backoff.children.length, 1, 'nothing starts after a stop signal');
+
+    const twice = harness({}, { killEmits: false });
+    new AgentProcess('FRCFLD', 8080, twice.deps).start();
+    twice.children[0].kill = () => {};
+    twice.deps.signals.emit('SIGINT', 'SIGINT');
+    assert.deepEqual(twice.exits, []);
+    twice.deps.signals.emit('SIGINT', 'SIGINT');
+    assert.deepEqual(twice.exits, [0]);
+    assert.ok(twice.lines.some(l => /SIGINT again: exiting now/.test(l)));
 });
