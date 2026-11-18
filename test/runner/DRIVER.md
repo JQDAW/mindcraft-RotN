@@ -336,7 +336,7 @@ The real agent plays its early-game agenda from a fresh spawn, and the runner wh
 - **No `tp` in G3 at all** (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12 (it dismounts, zeroes motionY, sets onGround and forces a position packet). `G3_CONSOLE_ALLOW` has no `tp`, and life evidence comes from `stat.deaths` and the log. G2 keeps its own `tp`.
 - **The end** comes at the first of:
   - both stone tools have a craft stat, and the agent says `agenda step cobblestone done` or `agenda done`;
-  - the agent says `agenda step <id> stuck: ...`;
+  - the agent gives a step up: `agenda step <id> stuck: <why>; given up after 3 retries; ...`. Since skills-rotn #468, a plain `agenda step <id> stuck: <why>; retry <n> of 3 ...` line no longer pauses the agenda (the step is retried and the other steps go on), so it no longer ends the run;
   - the bot leaves or its driver exits;
   - `maxMinutes` (25, compared 'equal').
 - **Checks** (the final counts and scores):
@@ -409,7 +409,7 @@ A task from the test-only giver `Server` interrupts the real agent's agenda. The
   - **The task is sent only while the agenda is active** (lead, after smoke round 2, where the agenda had paused itself as stuck 13 s before the task, so there was no preemption to see).
     - The agenda's state comes from its own chat (`agendaActive`), and the last relevant line wins.
     - Active after `agenda step <id> started: ...`, `agenda resumed: <id>` or `agenda started`.
-    - Not active after `agenda step <id> stuck: ...; agenda paused`, `agenda paused for task <id>`, `agenda done` or `agenda stopped`.
+    - Not active after `agenda step <id> stuck: ...; agenda paused` (the form before skills-rotn #468), `agenda paused for task <id>`, `agenda done` or `agenda stopped`. Since #468 a stuck line (`...; retry <n> of 3 ...` or `...; given up after 3 retries; ...`) leaves the agenda active: it goes on with the steps that do not need the stuck one.
     - **The task goes out while the agenda still runs** (lead, after G3 gate C, 2026-11-07):
       - The old design was a fixed 5-min warm-up. There, an agenda that took 4.8 min ended before the task, so no task was sent and the three task checks failed as "not reached".
       - Now the agent plays for at least `minWarmMinutes` (2). Then the marker is placed, and the task is whispered at the **first** moment the agenda is active **and** the server's counter has risen.

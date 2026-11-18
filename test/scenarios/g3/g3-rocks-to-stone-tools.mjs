@@ -18,9 +18,11 @@
 //      rockRecipes; RotN's rocks make different cobbles, so no name is hard-coded).
 //   4. Every milestonePollMs (60 s): `scoreboard players list <bot>` (milestones: the minute each craft
 //      stat first reaches 1; deaths). No tp of any form (lead, #201 review). The run ends when both stone tools
-//      have a craft stat and the agent says "agenda step cobblestone done" or "agenda done", when it says
-//      "agenda step <id> stuck" (its agenda pauses; nothing more would happen), when the bot leaves or its
-//      driver exits, or at maxMinutes (25, 'equal': a longer limit would be a weaker run).
+//      have a craft stat and the agent says "agenda step cobblestone done" or "agenda done", when it says a
+//      step is given up ("agenda step <id> stuck: <why>; given up after 3 retries; ..."), when the bot leaves or
+//      its driver exits, or at maxMinutes (25, 'equal': a longer limit would be a weaker run). Since skills-rotn
+//      #468 a plain "agenda step <id> stuck: <why>; retry <n> of 3 ..." line no longer pauses the agenda: the step
+//      is retried and the other steps go on, so the run goes on too (the lines are kept in notes.agendaChat).
 //   5. The final counts (count-only clear) and the final scores, then the objectives are removed.
 // Checks:
 //   stone_tools     at least 1 stone pickaxe and 1 stone axe held;
@@ -115,7 +117,9 @@ export function tablePlacements(lines) {
     return cells.slice(-MAX_TABLE_CLAIMS);
 }
 const ENDS = (t) => /^agenda (step cobblestone done|done)$/.test(t);
-const STUCK = /^agenda step (\S+) stuck: (.*)$/;
+// skills-rotn #468 (src/agent/agenda.js markStuck): "agenda step <id> stuck: <why>; retry <n> of 3 in 20 min or at
+// the next full day; ..." is retried (the run goes on); only "...; given up after <n> retries; ..." ends it.
+const GIVEN_UP = /^agenda step (\S+) stuck: (.*); given up after (\d+) retries\b/;
 
 export default {
     id: 'g3-rocks-to-stone-tools',
@@ -211,12 +215,12 @@ export default {
             ctx.note('milestonesMin', milestones);
             ctx.note('track', track);
             const said = agendaLines();
-            const stuck = said.map((t) => STUCK.exec(t)).find(Boolean);
+            const givenUp = said.map((t) => GIVEN_UP.exec(t)).find(Boolean);
             const gone = s.events().find(s.gone);
             if (gone) end = `the bot is gone: ${gone.type}${gone.reason ? ` (${gone.reason})` : ''}`;
             else if (!bot.alive()) end = exitedText(bot);
             else if (score(sc, 'g3a_c_spick') >= 1 && score(sc, 'g3a_c_saxe') >= 1 && said.some(ENDS)) end = 'done: both stone tools crafted and the agent reports its cobblestone step done';
-            else if (stuck) end = `the agenda is stuck at step ${stuck[1]}: ${stuck[2]}`;
+            else if (givenUp) end = `the agenda gave up step ${givenUp[1]} after ${givenUp[3]} retries: ${givenUp[2]}`;
             else if (clock.now() - joinedAt >= p.maxMinutes * 60 * MS) end = `maxMinutes (${p.maxMinutes}) reached`;
             else await clock.sleep(Math.min(p.milestonePollMs, Math.max(MS, joinedAt + p.maxMinutes * 60 * MS - clock.now())));
         }

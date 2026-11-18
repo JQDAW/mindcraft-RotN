@@ -270,6 +270,9 @@ describe('g3-task-preempts-agenda: the task only while the agenda is active (lea
         assert.equal(a(['agenda step rocks started: collect 6 rocks']), true);
         assert.equal(a(['agenda step rocks started: x', 'agenda step rocks done']), true, 'a done step changes nothing');
         assert.equal(a(['agenda step rocks started: x', 'agenda step rocks stuck: 5 min of self-prompting; agenda paused']), false);
+        // skills-rotn #468: a stuck step is retried (or given up) while the agenda goes on with the other steps: still active.
+        assert.equal(a(['agenda step rocks started: x', 'agenda step rocks stuck: 5 min of self-prompting; retry 1 of 3 in 20 min or at the next full day; going on with the steps that do not need it']), true);
+        assert.equal(a(['agenda step rocks started: x', 'agenda step rocks stuck: 5 min of self-prompting; given up after 3 retries; going on with the steps that do not need it']), true);
         assert.equal(a(['agenda step rocks started: x', 'agenda paused for task t1']), false);
         assert.equal(a(['agenda paused for task t1', 'agenda resumed: logs']), true);
         assert.equal(a(['agenda started']), true);

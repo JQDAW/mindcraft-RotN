@@ -307,10 +307,14 @@ describe('g3-rocks-to-stone-tools on a simulated server', () => {
         assert.equal(c.no_cheat.pass, true);
     });
 
-    test('a stuck agenda ends the run early; a kick ends it with the reason', async () => {
-        const stuck = await run(sim({ play: [[7, { say: 'agenda step logs stuck: no tree found' }]] }));
-        assert.match(stuck.notes.end.reason, /^the agenda is stuck at step logs: no tree found/);
-        assert.ok(stuck.notes.end.minutes < 9);
+    test('skills-rotn #468: a stuck step is retried, so the run goes on; only a given-up step ends it early; a kick ends it with the reason', async () => {
+        const retried = await run(sim({ play: [[7, { say: 'agenda step logs stuck: 5 min of self-prompting; retry 1 of 3 in 20 min or at the next full day; going on with the steps that do not need it' }],
+            [8, { say: 'agenda step logs retried (1 of 3): a fresh budget' }]] }));
+        assert.match(retried.notes.end.reason, /^maxMinutes \(25\) reached/);
+        assert.ok(retried.notes.agendaChat.some((t) => /^agenda step logs stuck: .*retry 1 of 3/.test(t)), 'the stuck line is kept in the notes');
+        const gaveUp = await run(sim({ play: [[7, { say: 'agenda step logs stuck: 5 min of self-prompting; given up after 3 retries; going on with the steps that do not need it' }]] }));
+        assert.match(gaveUp.notes.end.reason, /^the agenda gave up step logs after 3 retries: 5 min of self-prompting/);
+        assert.ok(gaveUp.notes.end.minutes < 9);
         const kicked = await run(sim({ kickAt: 10 }));
         assert.match(kicked.notes.end.reason, /^the bot is gone: lost \(Kicked by an operator\)/);
         assert.equal(byName(kicked).stone_tools.pass, false);
