@@ -27,6 +27,8 @@
 #   console CMD   Type CMD into the server console and print the new log lines (--wait S).
 #   fetch PATH    Copy PATH (relative to the server dir, e.g. logs) into --out DIR.
 #   verify        Print the on-server G0 facts (key=value).
+#   starts        Count the Minecraft server's starts on the box over every rolled-over log ("starts=N files=K";
+#                 G4 step 7's freshness check).
 #   restart [TIMEOUT_S]  Restart the Minecraft server (G4 #1): console stop, wait for the exit, start, wait for a
 #                 new Done line (each step up to TIMEOUT_S, 30..900, default 300). Exit 4: no stop; 5: no Done;
 #                 6: the start failed; 125: after the new Done, Mod Director's downloads fail the pinned check
@@ -1164,6 +1166,10 @@ main() {
       done
       echo "$out" ;;
     verify) load_meta; rssh 'rotn-test verify' | tr -d '\r' ;;
+    starts)
+      # G4 step 7 (freshness): how often the Minecraft server started on this box, over every rolled-over log.
+      (( ${#ARGS[@]} == 0 )) || die "usage: starts"
+      load_meta; rssh 'rotn-test starts' | tr -d '\r' ;;
     restart)
       # G4 #1 (a server restart): console stop, wait for the exit, start, wait for a new Done line (rotn-test restart).
       # Test server only, like every verb here: it reaches only the labelled servers this script created.

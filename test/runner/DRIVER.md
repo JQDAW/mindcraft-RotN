@@ -537,29 +537,31 @@ A short session of the real agent with the **production** task-giver list. `Serv
 
 ### G4 step 7: the acceptance runs (`lib/g4-accept.mjs`, offline-built, not yet run)
 
-**A run counts as G4 evidence only if all five conditions hold** (the lead's rule of 2026-11-08). run.mjs checks each one and records it in `result.json` as `g4Acceptance` (`conditions.a`-`e`, `valid`, `reasons`). Any missing condition makes the run not-gate: `weakenedParams` gets `not a G4 acceptance run: (x) <why>; ...`. A valid run of a G4 scenario gets no `G4_SERVICE_NOT_GATE`, so its verdict can be `PASS`. A G3 scenario run on S (D, and C in run 5) keeps "never G3 gate evidence" and counts for G4 through `g4Acceptance`.
-- **(a) The marker:** `ROTN_G4_ACCEPT=<GO id>:<run 1-6>:<rotn-v tag>:gate-ctl-hashes-confirmed`, set next to `ROTN_SERVICE_GO` only under the lead's written GO naming the run as acceptance.
-  - The GO id must say `ACCEPT` and be the same GO as `ROTN_SERVICE_GO`'s.
-  - The scenario must belong to that run: 1 `g4-soak-2h`; 2 `g4-service-reconnect`; 3 `g4-death-report`; 4 `g3-untrusted-refused`; 5 `g4-control-commands`, `g3-task-preempts-agenda` and `g4-restart-persistence`, in one session; 6 `g4-second-bot`.
+**One acceptance GO spans all six step-7 runs**, and its id has the form `G4-ACCEPT-<yyyymmdd>[-letter]` (lead, #446 review). **A run counts as G4 evidence only if all five conditions hold** (the lead's rule of 2026-11-08). run.mjs checks each one and records it in `result.json` as `g4Acceptance` (`conditions.a`-`e`, `valid`, `reasons`). Any missing condition makes the run not-gate: `weakenedParams` gets `not a G4 acceptance run: (x) <why>; ...`. A valid run of a G4 scenario gets no `G4_SERVICE_NOT_GATE`, so its verdict can be `PASS`. A G3 scenario run on S (D, and C in run 5) keeps "never G3 gate evidence" and counts for G4 through `g4Acceptance`; on S it no longer also gets G3's spend-stop reason (`policyReasonApplies`), which is about the runner's own key.
+- **(a) The marker:** `ROTN_G4_ACCEPT=<GO id>:<run 1-6>:<rotn-v tag>:gate-ctl-hashes-confirmed`, set next to `ROTN_SERVICE_GO` only under the lead's written acceptance GO.
+  - The GO id has the acceptance form and is the same GO as `ROTN_SERVICE_GO`'s.
+  - The scenario belongs to that run: 1 `g4-soak-2h`; 2 `g4-service-reconnect`; 3 `g4-death-report`; 4 `g3-untrusted-refused`; 5 `g4-control-commands`, `g3-task-preempts-agenda` and `g4-restart-persistence`, in one session; 6 `g4-second-bot`.
 - **(b) The bot side:** the S service through `cx23-ctl` (`--service`), never a spawned driver.
-- **(c) The release:** read from the unit's journal for this run (`driver.log`), never assumed.
-  - It is read from the bot's `[release] <tag>-<sha12>` start line, or else from release paths `/opt/mindcraft-rotn/releases/<tag>-<sha12>/` in any journal line. `ctl status` shows only the `current` symlink.
-  - Two releases in one run, or none, fail.
+- **(c) The release:** read only from the bot's `[release] <tag>-<sha12>` line (`main.js`, #447: the release directory the process runs from) in the unit's journal for this run (`driver.log`), never assumed.
+  - main.js prints the line once, at the main process's start (not after an in-process agent restart), so only lines after the unit's systemd start line count. A window without the unit start fails.
+  - No line, `[release] none`, a tag with a suffix (step 7 uses a plain `rotn-vX.Y.Z`), or two different releases fail.
   - The tag must resolve in this checkout (`git fetch --tags`) to a commit that starts with that sha12.
   - The evidence check requires one commit for all runs of a GO.
 - **(d) The gate and ctl hashes:** the human confirms them at that tag, and the lead records it in STATUS. The runner cannot verify hashes, so it takes the marker's attestation, whose tag must be the one read in (c).
-- **(e) Host and freshness:** the host is confirmed for this run by `ROTN_SERVICE_GO`. The server must also be fresh, checked before the scenario starts:
-  - the test server's ledger `$TEST_SERVER_STATE_DIR/g4-accept.jsonl` (one line per acceptance start, written before the scenario) names no other GO or run;
-  - in the server log since its last `Starting minecraft server` line, nobody joined and no scenario began, except earlier scenarios of this same run.
+- **(e) Host and freshness:** the host is confirmed for this run by `ROTN_SERVICE_GO`. Freshness is never self-asserted; it is read before the scenario starts:
+  - **the usage ledger** `$TEST_SERVER_STATE_DIR/usage.jsonl`: **every** run.mjs run on a test server writes one line before its scenario, marked or not. An earlier line is allowed only from the same GO and run AND another scenario (run 5's session is the only legitimate sharing); the same scenario again (a rerun on the same server) fails;
+  - **the server log** since its last `Starting minecraft server` line: every scenario marker must be such an allowed run, and nobody joined before one began;
+  - **two server-side facts:** the Minecraft server started exactly once on the box (`test-server.sh starts`, `rotn-test starts`, over every daily rolled-over log plus `latest.log`; the build starts it once and nothing restarts it before an acceptance run), and the world's age (`time query gametime`, on the console allowlist) is at most 20 ticks a second since the test server was created (Hetzner's `created` in `server-create.json`).
+  - The facts are recorded in `g4Acceptance.fresh.facts`.
   - Run each step-7 run on its own new test server, and run nothing else on it first.
 - **A failed check in a valid run is evidence too** (the G3 rule): `valid` says the run counts, `pass` says how it went.
 - **The evidence check:** `node test/tools/g4-accept-check.mjs --tree test/evidence [--complete <GO id>]`, and `g3-batch-check.mjs --tree` in CI runs the same check.
   - Every G4 pass must be a valid acceptance run, and every record must follow its conditions.
-  - A valid record must show its marker, unit, GO, release, fresh server and test server.
-  - Per GO: one tag and one commit, and no test server serves two runs.
-  - `--complete` is the G4 claim: every step-7 scenario has a valid result in that GO that passed.
+  - A valid record must show its marker (GO in the acceptance form), unit, GO, release, fresh server and test server.
+  - Per GO: one tag and one commit; no test server serves two runs; no scenario runs twice on one server.
+  - `--complete` is the G4 claim: every step-7 scenario has a valid result in that GO that passed (a failed run rerun on a new server and passing counts).
   - A step-7 G3 scenario on S needs no `batch.json` (`isG3AcceptanceOnService`); the step-7 check covers it.
-- **Tests:** `test/unit/g4-accept.test.js` covers each condition missing alone, a complete set, the set checks, the trees, and run.mjs end to end on the service path (`fixtures/fake-cx23-ssh.mjs`).
+- **Tests:** `test/unit/g4-accept.test.js` covers each condition missing alone, a complete set, the release line, freshness (ledger, reruns, server starts, gametime bound), the set checks, the trees, and run.mjs end to end on the service path (`fixtures/fake-cx23-ssh.mjs`). `rotn-test starts` is tested in `test-server.test.js`.
 
 ### G4 #3: `g4-control-commands` (offline-built, not yet run)
 

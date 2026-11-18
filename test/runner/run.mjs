@@ -34,7 +34,8 @@ import { HOST, serviceBot } from './lib/service.mjs';
 import { linesAfter } from './lib/server-log.mjs';
 import { consoleAllowFor, guardConsole, g3Policy, G3_ON_SERVICE_NOT_GATE, LLM_MODEL } from './lib/g3.mjs';
 import { keyFetch, llmRecord, providerSummary, readKeyUsage } from './lib/llm-spend.mjs';
-import { STEP7_SCENARIOS, evaluateAcceptance, notAcceptanceReason, releaseFromJournal, startAcceptance } from './lib/g4-accept.mjs';
+import { STEP7_SCENARIOS, evaluateAcceptance, notAcceptanceReason, recordUsage, releaseFromJournal, startAcceptance } from './lib/g4-accept.mjs';
+import { timeQuery } from './lib/s1.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -132,7 +133,7 @@ export const policyReasonApplies = (scenario, bot, acceptance) => !(scenario.gat
 export function acceptanceRecord({ env, scenario, bot, driverName, fresh, journalLines, resolve = resolveTag, release = null }) {
     return evaluateAcceptance({
         env, scenarioId: scenario.id, botKind: bot.kind, unit: bot.kind === 'service' ? bot.bot : null, driver: driverName,
-        release: release ?? releaseFromJournal(journalLines), fresh, resolveTag: resolve,
+        release: release ?? releaseFromJournal(journalLines, bot.bot), fresh, resolveTag: resolve,
     });
 }
 
@@ -221,12 +222,9 @@ async function main(argv) {
     // Every record, the progress and killed ones too, carries the LLM calls so far (#122 review nit): a run
     // that never finishes still shows what it used. The after-reading exists only in the final result.
     const svc = serviceRunPolicy(scenario, bot);
-    // G4 step 7: the freshness check and the ledger entry come before the scenario (lib/g4-accept.mjs).
-    const effective = { ...scenario.defaults, ...o.params };
-    const accept = acceptanceApplies(scenario, bot, process.env)
-        ? startAcceptance({ server, env: process.env, scenarioId: scenario.id, runId, logTail: effective.logTail ?? 20000, fsImpl: fs, pathImpl: path })
-        : null;
-    if (accept) log(`G4 step 7: ${process.env.ROTN_G4_ACCEPT ? 'an acceptance start' : 'no ROTN_G4_ACCEPT marker'}; ${accept.fresh.why}`);
+    // G4 step 7: the freshness check, then the usage line every run writes, both before the scenario (below, once the
+    // guarded console exists; lib/g4-accept.mjs).
+    let accept = null;
     // A record that is not final (progress, killed) says why it does not count: the release is read at the end.
     const unfinished = () => acceptanceRecord({ env: process.env, scenario, bot, driverName, fresh: accept.fresh,
         release: { tag: null, why: 'the run did not finish (the release is read from the journal at the end)' } });
@@ -264,7 +262,22 @@ async function main(argv) {
     // runs the real agent (llm: true) records its LLM calls and cost.
     // The scenario's own console additions are built from the run's effective parameters (#320 review: `kill` only
     // for this run's bot).
-    const scenarioServer = policy.guard ? guardConsole(server, consoleAllowFor(scenario, { ...scenario.defaults, ...o.params })) : server;
+    const effective = { ...scenario.defaults, ...o.params };
+    const scenarioServer = policy.guard ? guardConsole(server, consoleAllowFor(scenario, effective)) : server;
+    // G4 step 7 (#446 review): an acceptance run's freshness is read from the server (its usage ledger, its log, its
+    // starts, the world's age) before anything else; then EVERY run on a test server writes its usage line, marked or
+    // not, so a later acceptance run sees it. A usage line that cannot be written makes an acceptance run not fresh.
+    if (acceptanceApplies(scenario, bot, process.env)) {
+        const a = startAcceptance({ server: scenarioServer, env: process.env, scenarioId: scenario.id, logTail: effective.logTail ?? 20000,
+            consoleWaitS: effective.consoleWaitS ?? 1, fsImpl: fs, pathImpl: path, timeQuery });
+        accept = { fresh: { ...a.fresh, facts: a.facts } };
+    }
+    if (process.env.TEST_SERVER_STATE_DIR) {
+        const u = recordUsage({ env: process.env, scenarioId: scenario.id, runId, botKind: bot.kind ?? 'driver', fsImpl: fs, pathImpl: path });
+        if (!u.ok) log(`usage ledger: ${u.why}`);
+        if (accept && !u.ok && accept.fresh.ok) accept.fresh = { ...accept.fresh, ok: false, why: u.why };
+    }
+    if (accept) log(`G4 step 7: ${process.env.ROTN_G4_ACCEPT ? 'an acceptance start' : 'no ROTN_G4_ACCEPT marker'}; ${accept.fresh.why}`);
     const readUsage = () => readKeyUsage({ key: process.env.OPENROUTER_API_KEY, fetchImpl: keyFetch(process.env) });
     if (svc.llmOn) usageBefore = await readUsage();
     const result = stamp(await runScenario(scenario, { server: scenarioServer, bot, clock: wallClock, params: o.params, runId, log, onProgress, control }));

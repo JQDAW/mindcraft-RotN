@@ -91,6 +91,7 @@ export const G3_CONSOLE_ALLOW = [
     /^scoreboard objectives remove [A-Za-z0-9_]{1,16}$/,
     new RegExp(`^scoreboard players list ${NAME}$`),
     /^time query daytime$/,
+    /^time query gametime$/,                                               // read-only: the world's age (G4 step 7 freshness)
     /^gamerule [A-Za-z]+$/,                                                // read-only: the query form only, never a value
     new RegExp(`^setblock (${markerCells}) minecraft:gold_block$`),        // the pinned task markers only (#208 review, G3_MARKERS)
 ];

@@ -11,9 +11,11 @@ import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-    STEP7_RUNS, STEP7_SCENARIOS, acceptMarker, checkAcceptanceResults, evaluateAcceptance, freshServer, notAcceptanceReason, parseLedger,
-    releaseFromJournal, runOf, startAcceptance,
+    ACCEPT_GO_RE, STEP7_RUNS, STEP7_SCENARIOS, USAGE_FILE, acceptMarker, checkAcceptanceResults, evaluateAcceptance, freshServer, notAcceptanceReason,
+    parseLedger, recordUsage, releaseFromJournal, runOf, serverCreatedMs, startAcceptance,
 } from '../runner/lib/g4-accept.mjs';
+import { timeQuery } from '../runner/lib/s1.mjs';
+import { parseStarts } from '../runner/lib/adapters.mjs';
 import { G3_ON_SERVICE_NOT_GATE, G4_SERVICE_NOT_GATE } from '../runner/lib/g3.mjs';
 import { acceptanceApplies, policyReasonApplies, resolveTag } from '../runner/run.mjs';
 import { G2_WORLD_SEED } from '../runner/lib/g2.mjs';
@@ -61,88 +63,149 @@ describe('ROTN_G4_ACCEPT', () => {
         assert.equal(acceptMarker({}).present, false);
         assert.match(acceptMarker({}).why, /no ROTN_G4_ACCEPT marker/);
         for (const bad of [`${GO}`, `${GO}:7:${TAG}:gate-ctl-hashes-confirmed`, `${GO}:1:v0.1.5:gate-ctl-hashes-confirmed`,
+            `${GO}:1:rotn-v0.1.5-rc.1:gate-ctl-hashes-confirmed`,
             `${GO}:1:${TAG}`, `${GO}:1:${TAG}:hashes`, `${GO}:1:${TAG}:gate-ctl-hashes-confirmed `, `x:1:${TAG}:gate-ctl-hashes-confirmed`]) {
             const m = acceptMarker({ ROTN_G4_ACCEPT: bad });
             assert.equal(m.ok, false, bad);
             assert.equal(m.present, true, bad);
         }
     });
+    test('an acceptance GO id is G4-ACCEPT-<yyyymmdd>[-letter], nothing else (one GO spans all six runs)', () => {
+        for (const ok of ['G4-ACCEPT-20261120', 'G4-ACCEPT-20261120-b']) assert.ok(ACCEPT_GO_RE.test(ok), ok);
+        for (const bad of ['G4-ACCEPT-2026112', 'G4-ACCEPT-20261120-B', 'G4-ACCEPT-20261120-bb', 'X-G4-ACCEPT-20261120', 'G4-ACCEPTED-20261120',
+            'G4-SOAK-ACCEPT-20261120', 'g4-accept-20261120']) assert.equal(ACCEPT_GO_RE.test(bad), false, bad);
+    });
 });
 
-describe('the release, read from the journal (c)', () => {
-    const j = (msg) => `2026-11-18T12:00:00+00:00 node[1]: ${msg}`;
-    test('the "[release] <tag>-<sha12>" start line, or the release paths in any line', () => {
-        assert.deepEqual(releaseFromJournal([j('[settings] x'), j(`[release] ${TAG}-${SHA.slice(0, 12)}`)]),
+describe('the release, read from the journal (c): only the [release] line, after the unit start (#447)', () => {
+    const j = (msg, ident = 'node[1]') => `2026-11-18T12:00:00+00:00 ${ident}: ${msg}`;
+    const unitStart = (u = 'frcfld') => j(`Starting mindcraft-rotn@${u}.service - Mindcraft-RotN bot ${u}...`, 'systemd[1]');
+    const rel = `[release] ${TAG}-${SHA.slice(0, 12)}`;
+    test('the "[release] <tag>-<sha12>" line after the unit start', () => {
+        assert.deepEqual(releaseFromJournal([unitStart(), j('[settings] x'), j(rel)], 'frcfld'),
             { tag: TAG, sha12: SHA.slice(0, 12), source: 'release line', seen: `${TAG}-${SHA.slice(0, 12)}` });
-        const p = releaseFromJournal([j(`    at goToGoal (file:///opt/mindcraft-rotn/releases/rotn-v0.1.4-f6107fc4b3b6/src/agent/library/skills.js:2617:41)`)]);
-        assert.deepEqual([p.tag, p.sha12, p.source], ['rotn-v0.1.4', 'f6107fc4b3b6', 'release paths']);
-        assert.equal(releaseFromJournal([`[release] ${TAG}-${SHA.slice(0, 12)}`]).tag, TAG, 'a bare message line too');
+        assert.equal(releaseFromJournal([unitStart(), j(rel), unitStart(), j(rel)], 'frcfld').tag, TAG, 'a ctl restart inside the run: the same release twice');
     });
-    test('none, or two different releases in one run: no release, with the reason', () => {
-        assert.match(releaseFromJournal([j('[state] FRCFLD at start: tasks=absent')]).why, /no release in the journal/);
-        assert.equal(releaseFromJournal([]).tag, null);
-        const two = releaseFromJournal([j(`[release] ${TAG}-${SHA.slice(0, 12)}`), j('at x (/opt/mindcraft-rotn/releases/rotn-v0.1.4-f6107fc4b3b6/main.js:1:1)')]);
+    test('the window must include the unit start; a line before it, or for another unit, does not count', () => {
+        assert.match(releaseFromJournal([j(rel)], 'frcfld').why, /does not include the unit's start/);
+        assert.match(releaseFromJournal([unitStart('bottwo'), j(rel)], 'frcfld').why, /does not include the unit's start/);
+        assert.match(releaseFromJournal([j(rel), unitStart(), j('[state] FRCFLD at start: tasks=absent')], 'frcfld').why, /no "\[release\] <tag>-<sha12>" line after the unit's start/);
+    });
+    test('no fallback to release paths; "[release] none", a suffixed or malformed tag, two releases: no release, with the reason', () => {
+        const path = j('    at goToGoal (file:///opt/mindcraft-rotn/releases/rotn-v0.1.4-f6107fc4b3b6/src/agent/library/skills.js:2617:41)');
+        assert.match(releaseFromJournal([unitStart(), path], 'frcfld').why, /no "\[release\]/, 'stack-trace paths are not read any more');
+        assert.match(releaseFromJournal([unitStart(), j('[release] none')], 'frcfld').why, /printed "\[release\] none"/);
+        assert.match(releaseFromJournal([unitStart(), j(`[release] rotn-v0.1.5-rc.1-${SHA.slice(0, 12)}`)], 'frcfld').why, /not rotn-vX\.Y\.Z-<sha12> \(step 7 uses a plain tag\)/);
+        assert.match(releaseFromJournal([unitStart(), j('[release] v0.1.0-abcdefabcdef')], 'frcfld').why, /not rotn-vX\.Y\.Z/);
+        const two = releaseFromJournal([unitStart(), j(rel), unitStart(), j('[release] rotn-v0.1.4-f6107fc4b3b6')], 'frcfld');
         assert.equal(two.tag, null);
         assert.match(two.why, /more than one release/);
-        assert.equal(releaseFromJournal([j('[release] v0.1.0-abcdefabcdef'), j('/opt/mindcraft-rotn/current/main.js')]).tag, null, 'not a rotn-v release; current is a symlink');
+        assert.equal(releaseFromJournal([], 'frcfld').tag, null);
     });
 });
 
-describe('a fresh test server (e)', () => {
+describe('a fresh test server (e): the usage ledger, the log, and two server-side facts', () => {
     const start = '[10:00:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Starting minecraft server version 1.12.2';
     const say = (id) => `[10:05:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [Server] scenario-${id}-begin`;
     const join = (n) => `[10:06:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: ${n} joined the game`;
-    const base = { server: 'mcr-test-20261118-100000', stateDir: '/s', goId: GO, run: 5 };
-    test('fresh: no join and no scenario since the start; or only earlier scenarios of this same GO and run', () => {
-        assert.equal(freshServer({ ...base, ledger: [], logLines: [start, 'Done (20.1s)!'] }).ok, true);
-        const ledger = [{ goId: GO, run: 5, runId: '20261118t100500-abc123', scenario: 'g4-control-commands' }];
-        assert.equal(freshServer({ ...base, ledger, logLines: [start, say('20261118t100500-abc123'), join('JQDAW'), join('FRCFLD')] }).ok, true);
+    const created = Date.parse('2026-11-18T10:00:00Z');
+    const base = { server: 'mcr-test-20261118-100000', stateDir: '/s', goId: GO, run: 5, scenarioId: 'g4-restart-persistence',
+        usage: [], logLines: [start, 'Done (20.1s)!'], starts: { starts: 1, files: 1 }, gametime: 6000, createdMs: created, nowMs: created + 600000 };
+    const run5 = (scenario, runId) => ({ goId: GO, run: 5, runId, scenario });
+    test('fresh: nothing earlier; or only OTHER scenarios of this same GO and run (run 5\'s session)', () => {
+        assert.equal(freshServer(base).ok, true, freshServer(base).why);
+        const usage = [run5('g4-control-commands', '20261118t100500-abc123'), run5('g3-task-preempts-agenda', '20261118t102000-abc124')];
+        const r = freshServer({ ...base, usage, logLines: [start, say('20261118t100500-abc123'), join('JQDAW'), join('FRCFLD'), say('20261118t102000-abc124')] });
+        assert.equal(r.ok, true, r.why);
+        assert.match(r.why, /only other scenarios of this run used it \(2\)/);
     });
-    test('not fresh: another run in the ledger; a scenario outside it; a join before; no start line; nothing to read', () => {
-        const other = freshServer({ ...base, ledger: [{ goId: GO, run: 4, runId: 'x', scenario: 'g3-untrusted-refused' }], logLines: [start] });
-        assert.match(other.why, /another run/);
-        assert.match(freshServer({ ...base, ledger: [{ goId: 'G4-ACCEPT-OTHER', run: 5, runId: 'x' }], logLines: [start] }).why, /another run/);
-        assert.match(freshServer({ ...base, ledger: [], logLines: [start, say('20261118t090000-def456')] }).why, /outside this acceptance run/);
-        assert.match(freshServer({ ...base, ledger: [], logLines: [start, join('JQDAW')] }).why, /JQDAW joined before/);
-        assert.match(freshServer({ ...base, ledger: [], logLines: ['Done'] }).why, /start line is not in the fetched log/);
-        assert.match(freshServer({ ...base, ledger: [], logLines: null }).why, /could not be read/);
-        assert.match(freshServer({ ...base, ledger: null, logLines: [start] }).why, /ledger cannot be read/);
-        assert.match(freshServer({ ...base, server: null, ledger: [], logLines: [start] }).why, /no TEST_SERVER_NAME/);
-        assert.match(freshServer({ ...base, stateDir: null, ledger: [], logLines: [start] }).why, /no TEST_SERVER_STATE_DIR/);
-        // Only the life since the LAST start counts: an earlier life is in a rolled-over file the check does not trust.
-        assert.equal(freshServer({ ...base, ledger: [], logLines: [start, join('JQDAW'), start] }).ok, true);
+    test('not fresh: the same scenario again on this server (a rerun), even under the same GO and run', () => {
+        const rerun = { ...base, run: 2, scenarioId: 'g4-service-reconnect', usage: [{ goId: GO, run: 2, runId: '20261118t100500-abc123', scenario: 'g4-service-reconnect' }],
+            logLines: [start, say('20261118t100500-abc123'), join('FRCFLD')] };
+        assert.match(freshServer(rerun).why, /g4-service-reconnect already ran on this server .*needs a new server/);
+        assert.match(freshServer({ ...base, usage: [run5('g4-restart-persistence', 'x')] }).why, /already ran on this server/);
     });
-    test('a ledger line that is not JSON makes the ledger unreadable (fail closed)', () => {
+    test('not fresh: another GO or run, a run without a marker, a scenario the ledger does not show, a join before', () => {
+        assert.match(freshServer({ ...base, usage: [{ goId: GO, run: 4, runId: 'x', scenario: 'g3-untrusted-refused' }] }).why, /an earlier run used this server \(g3-untrusted-refused, GO G4-ACCEPT-20261118 run 4\)/);
+        assert.match(freshServer({ ...base, usage: [{ goId: 'G4-ACCEPT-20261117', run: 5, runId: 'x', scenario: 'g4-control-commands' }] }).why, /an earlier run used this server/);
+        assert.match(freshServer({ ...base, usage: [{ goId: null, run: null, runId: 'x', scenario: 'g4-soak-2h' }] }).why, /not an acceptance run/);
+        assert.match(freshServer({ ...base, goId: null, run: null, usage: [{ goId: null, run: null, runId: 'x', scenario: 'g4-control-commands' }] }).why, /an earlier run used/, 'no marker: no sharing at all');
+        assert.match(freshServer({ ...base, logLines: [start, say('20261118t090000-def456')] }).why, /that its usage ledger does not show/);
+        assert.match(freshServer({ ...base, logLines: [start, join('JQDAW')] }).why, /JQDAW joined before/);
+    });
+    test('the server started more than once, or its starts cannot be counted: not fresh', () => {
+        assert.match(freshServer({ ...base, starts: { starts: 2, files: 2 } }).why, /started 2 times on this box \(over 2 log file\(s\)\)/);
+        assert.match(freshServer({ ...base, starts: { starts: 0, files: 1 } }).why, /started 0 times/);
+        assert.match(freshServer({ ...base, starts: null }).why, /starts could not be counted/);
+        // Only the life since the LAST start is read for joins; the starts count catches an earlier life.
+        assert.match(freshServer({ ...base, logLines: [start, join('JQDAW'), start], starts: { starts: 2, files: 2 } }).why, /started 2 times/);
+    });
+    test('the world older than the server (more than 20 ticks a second since it was created), or not read: not fresh', () => {
+        assert.equal(freshServer({ ...base, gametime: 12000 }).ok, true, 'exactly 20 ticks a second for 600 s');
+        assert.match(freshServer({ ...base, gametime: 12001 }).why, /world is 12001 ticks old, more than the 12000 ticks/);
+        assert.match(freshServer({ ...base, gametime: 5000000 }).why, /older|more than/);
+        assert.match(freshServer({ ...base, gametime: null }).why, /world's age could not be read/);
+        assert.match(freshServer({ ...base, createdMs: null }).why, /creation time is unknown/);
+        assert.equal(freshServer({ ...base, gametime: 0, nowMs: created - 5000 }).ok, true, 'a clock behind the creation time: bound 0, a new world 0');
+        assert.match(freshServer({ ...base, gametime: 1, nowMs: created - 5000 }).why, /more than the 0 ticks/);
+    });
+    test('missing inputs fail closed', () => {
+        assert.match(freshServer({ ...base, logLines: ['Done'] }).why, /start line is not in the fetched log/);
+        assert.match(freshServer({ ...base, logLines: null }).why, /could not be read/);
+        assert.match(freshServer({ ...base, usage: null }).why, /usage ledger cannot be read/);
+        assert.match(freshServer({ ...base, server: null }).why, /no TEST_SERVER_NAME/);
+        assert.match(freshServer({ ...base, stateDir: null }).why, /no TEST_SERVER_STATE_DIR/);
         assert.deepEqual(parseLedger('{"goId":"a","run":1}\n\n'), [{ goId: 'a', run: 1 }]);
         assert.equal(parseLedger('{"goId":"a"}\nnot json\n'), null);
     });
 
-    test('startAcceptance: the ledger entry is written before the run, only under a well-formed marker; rotated log; write failure', () => {
+    test('startAcceptance reads the ledger, the log, rotn-test starts, the gametime (through the console) and server-create.json; writes nothing', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g4-accept-'));
-        const server = { log: () => [start, 'Done'], logRotated: () => { throw new Error('not needed'); } };
+        fs.writeFileSync(path.join(dir, 'server-create.json'), JSON.stringify({ server: { created: '2026-11-18T10:00:00Z' } }));
+        const sent = [];
+        const server = {
+            log: () => [start, 'Done'],
+            logRotated: () => { throw new Error('not needed'); },
+            starts: () => parseStarts(['starts=1 files=1']),
+            console: (cmd) => { sent.push(cmd); return ['[10:10:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 6000']; },
+        };
         const env = { ...envFor({ run: 5 }), TEST_SERVER_NAME: 'mcr-test-x', TEST_SERVER_STATE_DIR: dir };
-        const a = startAcceptance({ server, env, scenarioId: 'g4-control-commands', runId: 'r1', fsImpl: fs, pathImpl: path, now: () => new Date('2026-11-18T10:00:00Z') });
+        const a = startAcceptance({ server, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 });
         assert.equal(a.fresh.ok, true, a.fresh.why);
-        assert.deepEqual(parseLedger(fs.readFileSync(path.join(dir, 'g4-accept.jsonl'), 'utf8')),
-            [{ goId: GO, run: 5, runId: 'r1', scenario: 'g4-control-commands', at: '2026-11-18T10:00:00.000Z' }]);
-        // The same run's next scenario: still fresh. Another run, or no marker: not fresh, and no line is added without one.
-        assert.equal(startAcceptance({ server, env, scenarioId: 'g4-restart-persistence', runId: 'r2', fsImpl: fs, pathImpl: path }).fresh.ok, true);
-        const env6 = { ...envFor({ run: 6, unit: 'bottwo' }), TEST_SERVER_NAME: 'mcr-test-x', TEST_SERVER_STATE_DIR: dir };
-        assert.match(startAcceptance({ server, env: env6, scenarioId: 'g4-second-bot', runId: 'r3', fsImpl: fs, pathImpl: path }).fresh.why, /another run/);
-        const noMarker = { TEST_SERVER_NAME: 'mcr-test-x', TEST_SERVER_STATE_DIR: dir, ROTN_SERVICE_GO: envFor().ROTN_SERVICE_GO };
-        assert.equal(startAcceptance({ server, env: noMarker, scenarioId: 'g4-soak-2h', runId: 'r4', fsImpl: fs, pathImpl: path }).fresh.ok, false);
-        assert.equal(parseLedger(fs.readFileSync(path.join(dir, 'g4-accept.jsonl'), 'utf8')).length, 3, 'r1, r2 and r3 (r3 is marked even though it was refused)');
+        assert.deepEqual(a.facts, { starts: { starts: 1, files: 1 }, gametime: 6000, createdAt: '2026-11-18T10:00:00.000Z' });
+        assert.deepEqual(sent, ['time query gametime']);
+        assert.equal(fs.existsSync(path.join(dir, USAGE_FILE)), false, 'the check writes nothing');
+        assert.equal(serverCreatedMs(dir, fs, path), created);
         // After 00:00 UTC the start line is in the rolled-over file.
-        const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'g4-accept-'));
-        const rolled = { log: () => ['[00:00:01] Done'], logRotated: () => ({ files: ['2026-11-18-1.log.gz', 'latest.log'], lines: [start, '[00:00:01] Done'] }) };
-        assert.equal(startAcceptance({ server: rolled, env: { ...env, TEST_SERVER_STATE_DIR: dir2 }, scenarioId: 'g4-control-commands', runId: 'r5', fsImpl: fs, pathImpl: path }).fresh.ok, true);
-        // A ledger that cannot be written: not fresh.
+        const rolled = { ...server, log: () => ['[00:00:01] Done'], logRotated: () => ({ files: ['2026-11-18-1.log.gz', 'latest.log'], lines: [start, '[00:00:01] Done'] }) };
+        assert.equal(startAcceptance({ server: rolled, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.ok, true);
+        // A server without the starts read, a console that refuses, an unreadable log, no server-create.json: not fresh.
+        const { starts, ...noStarts } = server;
+        void starts;
+        assert.match(startAcceptance({ server: noStarts, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.why, /starts could not be counted/);
+        assert.match(startAcceptance({ server: { ...server, console: () => { throw new Error('refused'); } }, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.why, /world's age could not be read/);
+        assert.match(startAcceptance({ server: { ...server, log: () => { throw new Error('ssh'); } }, env, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.why, /log could not be read/);
+        const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'g4-accept-'));
+        assert.match(startAcceptance({ server, env: { ...env, TEST_SERVER_STATE_DIR: bare }, scenarioId: 'g4-control-commands', fsImpl: fs, pathImpl: path, timeQuery, nowMs: created + 600000 }).fresh.why, /creation time is unknown/);
+    });
+
+    test('recordUsage: EVERY run on a test server writes a line, marked or not; a failed write is reported', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g4-usage-'));
+        const at = () => new Date('2026-11-18T10:00:00Z');
+        assert.equal(recordUsage({ env: { TEST_SERVER_STATE_DIR: dir }, scenarioId: 'g3-first-night', runId: 'r1', botKind: 'driver', fsImpl: fs, pathImpl: path, now: at }).ok, true);
+        assert.equal(recordUsage({ env: { ...envFor({ run: 1 }), TEST_SERVER_STATE_DIR: dir }, scenarioId: 'g4-soak-2h', runId: 'r2', botKind: 'service', fsImpl: fs, pathImpl: path, now: at }).ok, true);
+        assert.deepEqual(parseLedger(fs.readFileSync(path.join(dir, USAGE_FILE), 'utf8')), [
+            { runId: 'r1', scenario: 'g3-first-night', goId: null, run: null, bot: 'driver', at: '2026-11-18T10:00:00.000Z' },
+            { runId: 'r2', scenario: 'g4-soak-2h', goId: GO, run: 1, bot: 'service', at: '2026-11-18T10:00:00.000Z' },
+        ]);
         const ro = { ...fs, appendFileSync: () => { throw Object.assign(new Error('EROFS'), { code: 'EROFS' }); } };
-        const dir3 = fs.mkdtempSync(path.join(os.tmpdir(), 'g4-accept-'));
-        assert.match(startAcceptance({ server, env: { ...env, TEST_SERVER_STATE_DIR: dir3 }, scenarioId: 'g4-control-commands', runId: 'r6', fsImpl: ro, pathImpl: path }).fresh.why, /could not be written \(EROFS\)/);
-        // The server log cannot be read: not fresh.
-        assert.match(startAcceptance({ server: { log: () => { throw new Error('ssh'); } }, env: { ...env, TEST_SERVER_STATE_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'g4-accept-')) },
-            scenarioId: 'g4-control-commands', runId: 'r7', fsImpl: fs, pathImpl: path }).fresh.why, /log could not be read/);
+        assert.match(recordUsage({ env: { TEST_SERVER_STATE_DIR: dir }, scenarioId: 'x', runId: 'r3', fsImpl: ro, pathImpl: path }).why, /could not be written \(EROFS\)/);
+        assert.equal(recordUsage({ env: {}, scenarioId: 'x', runId: 'r4', fsImpl: fs, pathImpl: path }).ok, false, 'not a test-server run: nothing written');
+    });
+    test('parseStarts: "starts=N files=K", else null', () => {
+        assert.deepEqual(parseStarts(['starts=1 files=3']), { starts: 1, files: 3 });
+        assert.equal(parseStarts(['starts=x files=1']), null);
+        assert.equal(parseStarts([]), null);
     });
 });
 
@@ -163,7 +226,8 @@ describe('the rule: each missing condition gives not-gate with its reason; a com
         assert.match(noMarker.reasons[0], /^\(a\) no ROTN_G4_ACCEPT marker/);
         assert.equal(failing(evalWith({ env: { ...envFor(), ROTN_G4_ACCEPT: `${GO}:1:${TAG}` } })), 'ad');
         assert.equal(failing(evalWith({ env: envFor({ go: 'G4-SOAK-3-20261118' }) })), 'a');
-        assert.match(evalWith({ env: envFor({ go: 'G4-SOAK-3-20261118' }) }).conditions.a.why, /not named as acceptance/);
+        assert.match(evalWith({ env: envFor({ go: 'G4-SOAK-3-20261118' }) }).conditions.a.why, /not an acceptance GO \(G4-ACCEPT-<yyyymmdd>\[-letter\]\)/);
+        assert.equal(failing(evalWith({ env: envFor({ go: 'G4-ACCEPT-OTHER' }) })), 'a', 'ACCEPT alone is not the form');
         assert.equal(failing(evalWith({ env: envFor({ run: 2 }) })), 'a');
         assert.match(evalWith({ env: envFor({ run: 2 }) }).conditions.a.why, /not one of step-7 run 2's scenarios/);
         assert.equal(failing(evalWith({ env: envFor({ svcGo: 'G4-ACCEPT-OTHER' }) })), 'a');
@@ -274,6 +338,16 @@ describe('the step-7 evidence check over a set of results', () => {
         assert.deepEqual(check(sixRuns()).problems, [], 'run 5: three scenarios, one server');
     });
 
+    test('(e) over the set: a failed run 2 rerun on the SAME server is a problem; on a new server it is fine', () => {
+        const failed = accResult({ scenario: 'g4-service-reconnect', passed: false });
+        const sameServer = accResult({ scenario: 'g4-service-reconnect', runId: '20261119t100000-b00002' });
+        const runs = [...sixRuns().filter((x) => x.result.scenario !== 'g4-service-reconnect'), { file: 'r2a/result.json', result: failed }, { file: 'r2b/result.json', result: sameServer }];
+        assert.match(check(runs).problems.join('\n'), /g4-service-reconnect ran twice on the test server mcr-test-run2 \(r2a\/result\.json, r2b\/result\.json\); a rerun needs a fresh server/);
+        const newServer = accResult({ scenario: 'g4-service-reconnect', runId: '20261119t100000-b00002', server: 'mcr-test-run2b' });
+        const ok = [...sixRuns().filter((x) => x.result.scenario !== 'g4-service-reconnect'), { file: 'r2a/result.json', result: failed }, { file: 'r2b/result.json', result: newServer }];
+        assert.deepEqual(check(ok, { complete: GO }).problems, []);
+    });
+
     test('--complete: a missing scenario, or one that never passed, is a problem; a failed run that is rerun and passes is not', () => {
         const runs = sixRuns().filter((x) => x.result.scenario !== 'g4-second-bot');
         assert.match(check(runs, { complete: GO }).problems.join('\n'), /run 6 has no valid acceptance result for g4-second-bot/);
@@ -353,7 +427,7 @@ describe('the evidence trees: g3-batch-check --tree runs the step-7 check; g4-ac
 });
 
 describe('run.mjs end to end on the service path (fake ssh gate, fake test server, fake tag): g4-second-bot as step-7 run 6', () => {
-    test('a complete set: g4Acceptance valid, no "not an acceptance run" reason, the ledger written; then without the marker: not-gate with (a), (d), (e)', () => {
+    test('a complete set: g4Acceptance valid, the server facts read, no "not an acceptance run" reason; then without the marker on the same server: not-gate with (a), (d), (e), and both usage lines', () => {
         const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'g4-e2e-'));
         const fwd = (p) => p.replace(/\\/g, '/');
         const bin = path.join(tmp, 'bin');
@@ -366,13 +440,15 @@ describe('run.mjs end to end on the service path (fake ssh gate, fake test serve
         fs.writeFileSync(path.join(bin, 'ssh'), `#!/usr/bin/env bash\nexec "${fwd(process.execPath)}" "${fwd(path.join(repo, 'test/unit/fixtures/fake-cx23-ssh.mjs'))}" "$@"\n`, { mode: 0o755 });
         const ctl = path.join(tmp, 'ctl.sh');
         fs.writeFileSync(ctl, `#!/usr/bin/env bash\nexec "${fwd(process.execPath)}" "${fwd(path.join(repo, 'test/unit/fixtures/fake-ctl.mjs'))}" "$@"\n`, { mode: 0o755 });
+        // The test server was created 10 minutes ago; its world is 3 minutes old (3600 ticks).
+        fs.writeFileSync(path.join(state, 'server-create.json'), JSON.stringify({ server: { created: new Date(Date.now() - 600000).toISOString() } }));
         fs.writeFileSync(path.join(tmp, 'server.log'), '[10:00:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Starting minecraft server version 1.12.2\n'
             + '[10:00:20] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Done (20.1s)! For help, type "help" or "?"\n');
         const run = (out, extraEnv) => {
             const env = {
                 PATH: `${bin}${path.delimiter}${process.env.PATH}`, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR,
                 TEST_SERVER_CTL: fwd(ctl), FAKE_CTL_DIR: tmp, TEST_SERVER_NAME: 'mcr-test-20261118-100000', TEST_SERVER_STATE_DIR: state,
-                FAKE_CTL_SEED: String(G2_WORLD_SEED), FAKE_SSH_ACCOUNT: 'BOTTWO', FAKE_SSH_RELEASE: `${TAG}-${SHA.slice(0, 12)}`, ROTN_SERVICE_GO: `${GO}:bottwo:test-server-host-confirmed`, ...extraEnv,
+                FAKE_CTL_SEED: String(G2_WORLD_SEED), FAKE_CTL_GAMETIME: '3600', FAKE_SSH_ACCOUNT: 'BOTTWO', FAKE_SSH_RELEASE: `${TAG}-${SHA.slice(0, 12)}`, ROTN_SERVICE_GO: `${GO}:bottwo:test-server-host-confirmed`, ...extraEnv,
             };
             for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
             const r = spawnSync(process.execPath, [path.join(repo, 'test/runner/run.mjs'), '--scenario', 'g4-second-bot', '--service', 'bottwo',
@@ -389,14 +465,18 @@ describe('run.mjs end to end on the service path (fake ssh gate, fake test serve
         assert.match(a.res.weakenedParams[0], /^stayS=1/, 'only the shortened stay: no acceptance or "not an acceptance run" reason');
         assert.equal(a.r.status, 4);
         assert.match(a.r.stderr, /G4 step 7: a valid acceptance run \(run 6, GO G4-ACCEPT-20261118, rotn-v0\.1\.5\)/);
-        assert.deepEqual(parseLedger(fs.readFileSync(path.join(state, 'g4-accept.jsonl'), 'utf8')).map((e) => [e.goId, e.run, e.scenario, e.runId]),
-            [[GO, 6, 'g4-second-bot', a.res.runId]]);
+        assert.deepEqual(a.res.g4Acceptance.fresh.facts.starts, { starts: 1, files: 1 });
+        assert.equal(a.res.g4Acceptance.fresh.facts.gametime, 3600);
+        assert.match(a.res.g4Acceptance.fresh.why, /^fresh: no earlier run, join or scenario; started once; world 3600 of at most \d+ ticks$/);
         assert.deepEqual(check([{ file: 'out1/result.json', result: a.res }]).problems, []);
 
         const b = run(path.join(tmp, 'out2'), {});
         assert.equal(b.res.g4Acceptance.valid, false);
         assert.equal(failing(b.res.g4Acceptance), 'ade');
-        assert.match(b.res.g4Acceptance.conditions.e.why, /another run|outside this acceptance run/);
+        assert.match(b.res.g4Acceptance.conditions.e.why, /g4-second-bot already ran on this server/);
+        // Every run on the test server wrote its usage line, the marked one and the unmarked one.
+        assert.deepEqual(parseLedger(fs.readFileSync(path.join(state, USAGE_FILE), 'utf8')).map((e) => [e.goId, e.run, e.scenario, e.runId, e.bot]),
+            [[GO, 6, 'g4-second-bot', a.res.runId, 'service'], [null, null, 'g4-second-bot', b.res.runId, 'service']]);
         assert.ok(b.res.weakenedParams.includes(G4_SERVICE_NOT_GATE));
         assert.ok(b.res.weakenedParams.some((w) => /^not a G4 acceptance run: \(a\) no ROTN_G4_ACCEPT marker/.test(w)));
         assert.equal(b.res.gateValid, false);

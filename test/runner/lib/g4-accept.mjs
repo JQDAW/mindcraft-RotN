@@ -1,29 +1,36 @@
-// G4 step 7: when a run counts as G4 evidence (the lead's rule of 2026-11-08; test/scenarios/g4/PLAN.md, step 7).
+// G4 step 7: when a run counts as G4 evidence (the lead's rule of 2026-11-08 and the #446 review decisions;
+// test/scenarios/g4/PLAN.md, step 7).
 //
+// ONE acceptance GO spans all six step-7 runs; its id has the form G4-ACCEPT-<yyyymmdd>[-letter] (lead, #446 review).
 // A run is a G4 acceptance run only if ALL of these hold. run.mjs checks each one and records it in result.json under
 // g4Acceptance; any missing one makes the run not-gate, with the reason:
-//   (a) it is one of the six step-7 runs, started under a written lead GO named as acceptance. That GO is passed as a
-//       per-run marker next to ROTN_SERVICE_GO:
+//   (a) it is one of the six step-7 runs under that GO, passed as a per-run marker next to ROTN_SERVICE_GO:
 //         ROTN_G4_ACCEPT=<GO id>:<run 1-6>:<rotn-v tag>:gate-ctl-hashes-confirmed
-//       The GO id must say ACCEPT and be the same GO as ROTN_SERVICE_GO's, and the scenario must belong to that run
+//       The GO id has the acceptance form and is the same GO as ROTN_SERVICE_GO's, and the scenario belongs to that run
 //       (STEP7_RUNS).
 //   (b) the bot is the S service through cx23-ctl (run.mjs --service), never a spawned driver (T).
-//   (c) the CX23 runs a rotn-v release: the tag and its commit are READ from the unit's journal for this run (the
-//       bot's "[release] <tag>-<sha12>" start line, or the release paths in its journal lines), never assumed; the
-//       tag must resolve to a commit in this repo that starts with the sha12 it shows. That all six runs share one
-//       commit is checked over the set (checkAcceptanceResults).
+//   (c) the CX23 runs a rotn-v release. The tag and its commit are READ from the unit's journal for this run, only from
+//       the bot's "[release] <tag>-<sha12>" start line (main.js, #447: the release directory the process runs from),
+//       never assumed. The tag must resolve to a commit in this repo that starts with that sha12. That all runs of
+//       the GO share one commit is checked over the set (checkAcceptanceResults).
 //   (d) the human confirmed that the installed gate and ctl SHA-256 match the repo at that tag, which the lead
 //       records in STATUS. The runner cannot verify hashes: it takes the marker's attestation, and the marker's tag
 //       must be the tag read in (c).
-//   (e) the test server is fresh and its host confirmed for this run. Host: ROTN_SERVICE_GO's
-//       test-server-host-confirmed for this unit. Fresh: no other run used it. The test server's ledger
-//       (<TEST_SERVER_STATE_DIR>/g4-accept.jsonl, one line per acceptance start) names no other GO or run. In its
-//       log since its last start, nobody joined and no scenario began, except earlier scenarios of this same step-7
-//       run (run 5 is three scenarios in one session).
+//   (e) the env host is confirmed for this run (ROTN_SERVICE_GO's test-server-host-confirmed for this unit), and the
+//       test server is fresh. Freshness is never self-asserted; it is checked before the scenario starts:
+//       - the server's usage ledger (<TEST_SERVER_STATE_DIR>/usage.jsonl; run.mjs writes an entry for EVERY run on a
+//         test server, marked or not) and the scenario markers in its log since its last start show only earlier
+//         scenarios of this same GO and run, and never this scenario again (run 5's three scenarios are the only
+//         legitimate sharing; a repeated scenario, such as a rerun on the same server, fails);
+//       - nobody joined before such an earlier scenario began;
+//       - two server-side facts: the Minecraft server started exactly once on the box (`rotn-test starts`, over every
+//         rolled-over log; the build starts it once and nothing restarts it before an acceptance run), and the world's
+//         age (`time query gametime`) is at most 20 ticks a second since the test server was created (Hetzner's
+//         creation time in <TEST_SERVER_STATE_DIR>/server-create.json), so the world is no older than the server.
 //
 // A failed check in a valid acceptance run is still evidence: the failure stays in the evidence (the G3 rule), so
 // "valid" says whether the run counts, and pass says how it went.
-import { goMarker, HOST, parseJournalLine } from './service.mjs';
+import { goMarker, HOST, linesFromStart } from './service.mjs';
 
 /** The six step-7 runs and the scenarios each may run (PLAN.md step 7; run 5 is one session with the trusted player). */
 export const STEP7_RUNS = Object.freeze({
@@ -38,78 +45,99 @@ export const STEP7_SCENARIOS = Object.freeze(Object.values(STEP7_RUNS).flat());
 /** The run a step-7 scenario belongs to (each scenario is in exactly one run). */
 export const runOf = (scenarioId) => Number(Object.keys(STEP7_RUNS).find((k) => STEP7_RUNS[k].includes(scenarioId)) ?? NaN);
 
-export const ACCEPT_RE = /^([A-Za-z0-9][A-Za-z0-9._-]{2,63}):([1-6]):(rotn-v\d+\.\d+\.\d+):gate-ctl-hashes-confirmed$/;
-/** A GO named as acceptance: its id says ACCEPT (e.g. G4-ACCEPT-20261120). */
-export const ACCEPT_GO_RE = /ACCEPT/;
+/** A step-7 release tag: a plain rotn-vX.Y.Z, no pre-release suffix (lead, #446 review; PLAN.md step 7). Strict. */
+export const TAG_SRC = 'rotn-v[0-9]+\\.[0-9]+\\.[0-9]+';
+export const TAG_RE = new RegExp(`^${TAG_SRC}$`);
+export const ACCEPT_RE = new RegExp(`^([A-Za-z0-9][A-Za-z0-9._-]{2,63}):([1-6]):(${TAG_SRC}):gate-ctl-hashes-confirmed$`);
+/** An acceptance GO id (lead, #446 review): G4-ACCEPT-<yyyymmdd>, optionally -<letter> for a second GO that day. */
+export const ACCEPT_GO_RE = /^G4-ACCEPT-\d{8}(?:-[a-z])?$/;
 export const SERVICE_DRIVER_RE = /^service ([a-z0-9][a-z0-9-]{0,31}) via cx23-ctl$/;
 
 /** ROTN_G4_ACCEPT -> {ok, goId, run, tag} or {ok: false, why}. Pure: reads only env. */
 export function acceptMarker(env) {
     const raw = env?.ROTN_G4_ACCEPT;
-    if (raw === undefined || raw === '') return { ok: false, present: false, why: 'no ROTN_G4_ACCEPT marker (only the six step-7 runs, under a written lead GO named as acceptance, set it)' };
+    if (raw === undefined || raw === '') return { ok: false, present: false, why: 'no ROTN_G4_ACCEPT marker (only the six step-7 runs, under the lead\'s written acceptance GO, set it)' };
     const m = ACCEPT_RE.exec(String(raw));
     if (!m) return { ok: false, present: true, why: 'ROTN_G4_ACCEPT is not <GO id>:<run 1-6>:<rotn-v tag>:gate-ctl-hashes-confirmed' };
     return { ok: true, present: true, goId: m[1], run: Number(m[2]), tag: m[3] };
 }
 
-// The release a unit runs: deploy.sh names each release releases/<tag>-<sha12> (deploy/cx23/deploy.sh).
-const RELEASE_LINE_RE = /^\[release\] (rotn-v\d+\.\d+\.\d+)-([0-9a-f]{12})$/;
-const RELEASE_PATH_RE = /\/opt\/mindcraft-rotn\/releases\/(rotn-v\d+\.\d+\.\d+)-([0-9a-f]{12})\//g;
+const RELEASE_LINE_RE = /^\[release\] (\S+)$/;
+const RELEASE_NAME_RE = new RegExp(`^(${TAG_SRC})-([0-9a-f]{12})$`);
 
 /**
- * The release the unit ran, read from its journal for this run (raw journal lines, or their messages):
- * {tag, sha12, source: 'release line' | 'release paths', seen} or {tag: null, why}. The bot's "[release]" start line is
- * preferred; otherwise the release paths in any line (stack traces). Two different releases in one run: none (why).
+ * The release the unit ran, read from its journal for this run (the raw journal lines, driver.log), only from the
+ * bot's "[release] <tag>-<sha12>" line (#447). main.js prints it once at the main process's start, never after an
+ * in-process agent restart, so the window must include the unit's start (systemd's "Starting mindcraft-rotn@<unit>
+ * .service" line); only lines from there on count. -> {tag, sha12, source: 'release line', seen} or {tag: null, why}.
+ * No unit start, no line, "[release] none" (not run from a release directory), a tag with a suffix or anything else,
+ * or two different releases (a ctl restart inside the run): none (why).
  */
-export function releaseFromJournal(lines) {
-    const fromLine = new Set();
-    const fromPaths = new Set();
-    for (const l of lines ?? []) {
-        const msg = parseJournalLine(l)?.msg ?? String(l);
+export function releaseFromJournal(lines, unit) {
+    const fromStart = linesFromStart((lines ?? []).map(String), unit);
+    if (!fromStart.length) return { tag: null, why: `the journal window does not include the unit's start (systemd's "Starting mindcraft-rotn@${unit}.service" line), where the release line is printed` };
+    const seen = new Set();
+    for (const { msg } of fromStart) {
         const m = RELEASE_LINE_RE.exec(msg);
-        if (m) fromLine.add(`${m[1]}-${m[2]}`);
-        for (const p of String(l).matchAll(RELEASE_PATH_RE)) fromPaths.add(`${p[1]}-${p[2]}`);
+        if (m) seen.add(m[1]);
     }
-    const all = new Set([...fromLine, ...fromPaths]);
-    if (all.size > 1) return { tag: null, why: `the journal shows more than one release: ${[...all].sort().join(', ')}` };
-    if (!all.size) return { tag: null, why: 'no release in the journal (no "[release] <tag>-<sha12>" line and no release path)' };
-    const [name] = all;
-    const i = name.lastIndexOf('-');
-    return { tag: name.slice(0, i), sha12: name.slice(i + 1), source: fromLine.size ? 'release line' : 'release paths', seen: name };
+    if (!seen.size) return { tag: null, why: 'no "[release] <tag>-<sha12>" line after the unit\'s start (a release from before #447?)' };
+    if (seen.size > 1) return { tag: null, why: `the journal names more than one release: ${[...seen].sort().join(', ')}` };
+    const [name] = seen;
+    if (name === 'none') return { tag: null, why: 'the bot printed "[release] none": it does not run from a release directory' };
+    const m = RELEASE_NAME_RE.exec(name);
+    if (!m) return { tag: null, why: `the release line names "${name}", not rotn-vX.Y.Z-<sha12> (step 7 uses a plain tag)` };
+    return { tag: m[1], sha12: m[2], source: 'release line', seen: name };
 }
 
 const SERVER_START_RE = /Starting minecraft server version /;
 const MARKER_RE = /scenario-([0-9a-z]+-[0-9a-f]{6})-begin/;
 const JOIN_RE = /\]: (\S+) joined the game$/;
+/** Ticks per second: the most a Minecraft server's game time can advance (it never runs ahead of the clock). */
+export const TICKS_PER_S = 20;
 
 /**
- * Is the test server fresh for this step-7 run? ledger: the parsed g4-accept.jsonl entries ({goId, run, runId, ...});
- * logLines: the server log (null if it could not be read). Earlier entries, markers and joins are allowed only from
- * this same GO and run. -> {ok, why}
+ * Is the test server fresh for this step-7 run? Never self-asserted (lead, #446 review):
+ *   usage: the parsed usage.jsonl entries ({runId, scenario, goId, run, ...}) of EVERY earlier run on the server;
+ *   logLines: the server log (null if it could not be read); starts: {starts, files} from `rotn-test starts` (null if
+ *   not read); gametime: the world's age in ticks (`time query gametime`; null if not read); createdMs: the test
+ *   server's creation time (ms; null if unknown); nowMs: now.
+ * An earlier run, or a scenario marker since the server's start, is allowed only from the same GO and run AND another
+ * scenario (run 5 is the only legitimate sharing). -> {ok, why}
  */
-export function freshServer({ server, stateDir, ledger, logLines, goId, run }) {
+export function freshServer({ server, stateDir, usage, logLines, goId, run, scenarioId, starts, gametime, createdMs, nowMs }) {
     if (!server) return { ok: false, why: 'no TEST_SERVER_NAME: not a test server from deploy/test-server.sh' };
-    if (!stateDir) return { ok: false, why: 'no TEST_SERVER_STATE_DIR: the test server\'s ledger cannot be read' };
-    if (!Array.isArray(ledger)) return { ok: false, why: 'the test server\'s ledger cannot be read' };
-    const other = ledger.find((e) => e?.goId !== goId || e?.run !== run);
-    if (other) return { ok: false, why: `not fresh: the ledger shows an earlier acceptance start of another run (${other?.goId ?? '?'} run ${other?.run ?? '?'}, ${other?.scenario ?? '?'})` };
+    if (!stateDir) return { ok: false, why: 'no TEST_SERVER_STATE_DIR: the test server\'s usage ledger cannot be read' };
+    if (!Array.isArray(usage)) return { ok: false, why: 'the test server\'s usage ledger cannot be read' };
+    const sharing = (e) => goId !== null && e?.goId === goId && e?.run === run && e?.scenario !== scenarioId;
+    const repeat = usage.find((e) => e?.scenario === scenarioId);
+    if (repeat) return { ok: false, why: `not fresh: ${scenarioId} already ran on this server (run ${repeat.runId ?? '?'}); a repeated scenario needs a new server` };
+    const other = usage.find((e) => !sharing(e));
+    if (other) return { ok: false, why: `not fresh: an earlier run used this server (${other?.scenario ?? '?'}, ${other?.goId ? `GO ${other.goId} run ${other.run}` : 'not an acceptance run'})` };
     if (!Array.isArray(logLines)) return { ok: false, why: 'the test server\'s log could not be read' };
     let start = -1;
     logLines.forEach((l, i) => { if (SERVER_START_RE.test(l)) start = i; });
     if (start < 0) return { ok: false, why: 'the server\'s start line is not in the fetched log, so its history cannot be checked' };
-    const sameRun = new Set(ledger.map((e) => e.runId));
+    const allowed = new Set(usage.map((e) => e.runId));
     let opened = false;   // an earlier scenario of this same run began: joins after it are that scenario's
     for (const l of logLines.slice(start + 1)) {
         const mk = MARKER_RE.exec(l);
         if (mk) {
-            if (!sameRun.has(mk[1])) return { ok: false, why: `not fresh: an earlier scenario (${mk[1]}) ran on this server outside this acceptance run` };
+            if (!allowed.has(mk[1])) return { ok: false, why: `not fresh: a scenario (${mk[1]}) ran on this server that its usage ledger does not show` };
             opened = true;
             continue;
         }
         const j = JOIN_RE.exec(l);
         if (j && !opened) return { ok: false, why: `not fresh: ${j[1]} joined before this acceptance run began` };
     }
-    return { ok: true, why: ledger.length ? `fresh: only earlier scenarios of this run (${ledger.length}) used it` : 'fresh: no join and no scenario since the server started' };
+    if (!Number.isInteger(starts?.starts)) return { ok: false, why: 'the server\'s starts could not be counted (rotn-test starts)' };
+    if (starts.starts !== 1) return { ok: false, why: `not fresh: the Minecraft server started ${starts.starts} times on this box (over ${starts.files} log file(s)); a fresh test server has started once` };
+    if (!Number.isFinite(createdMs)) return { ok: false, why: 'the test server\'s creation time is unknown (server-create.json)' };
+    if (!Number.isInteger(gametime)) return { ok: false, why: 'the world\'s age could not be read (time query gametime)' };
+    const bound = Math.ceil(Math.max(0, nowMs - createdMs) / 1000 * TICKS_PER_S);
+    if (gametime > bound) return { ok: false, why: `not fresh: the world is ${gametime} ticks old, more than the ${bound} ticks (20 a second) since the test server was created` };
+    const facts = `started once; world ${gametime} of at most ${bound} ticks`;
+    return { ok: true, why: usage.length ? `fresh: only other scenarios of this run used it (${usage.length}); ${facts}` : `fresh: no earlier run, join or scenario; ${facts}` };
 }
 
 /** Each line of a ledger file -> its entry; null if any line is not JSON (fail closed). */
@@ -133,7 +161,7 @@ export function evaluateAcceptance({ env, scenarioId, botKind, unit, driver, rel
         const why = [];
         if (!mk.ok) why.push(mk.why);
         else {
-            if (!ACCEPT_GO_RE.test(mk.goId)) why.push(`the GO id ${mk.goId} is not named as acceptance (it must say ACCEPT)`);
+            if (!ACCEPT_GO_RE.test(mk.goId)) why.push(`the GO id ${mk.goId} is not an acceptance GO (G4-ACCEPT-<yyyymmdd>[-letter])`);
             if (!STEP7_RUNS[mk.run]?.includes(scenarioId)) why.push(`${scenarioId} is not one of step-7 run ${mk.run}'s scenarios (${STEP7_RUNS[mk.run]?.join(', ')})`);
             if (svc.ok && svc.goId !== mk.goId) why.push(`ROTN_SERVICE_GO is GO ${svc.goId}, not the acceptance GO ${mk.goId}`);
         }
@@ -249,6 +277,13 @@ export function checkAcceptanceResults(results, { complete = null, g3OnServiceRe
         if (tags.size > 1) problems.push(`GO ${goId}: the acceptance runs are on more than one tag (${[...tags].join(', ')})`);
         const serverRuns = new Map();
         for (const x of runs) serverRuns.set(x.r.server, new Set([...(serverRuns.get(x.r.server) ?? []), x.run]));
+        // Run 5's three scenarios may share a server; the same scenario twice on one server (a rerun) may not.
+        const onServer = new Map();
+        for (const x of runs) {
+            const k = `${x.r.server}\t${x.r.scenario}`;
+            if (onServer.has(k)) problems.push(`GO ${goId}: ${x.r.scenario} ran twice on the test server ${x.r.server} (${onServer.get(k)}, ${x.file}); a rerun needs a fresh server`);
+            else onServer.set(k, x.file);
+        }
         for (const [s, ks] of serverRuns) if (ks.size > 1) problems.push(`GO ${goId}: the test server ${s} was used by step-7 runs ${[...ks].sort().join(' and ')}; each run needs a fresh server`);
         const seen = STEP7_SCENARIOS.map((id) => {
             const of = runs.filter((x) => x.r.scenario === id);
@@ -267,22 +302,35 @@ export function checkAcceptanceResults(results, { complete = null, g3OnServiceRe
     return { problems, summary };
 }
 
+/** The usage ledger in the test server's state dir: one line per run on that server, marked or not (#446 review). */
+export const USAGE_FILE = 'usage.jsonl';
+
+/** The test server's creation time (ms), from test-server.sh's server-create.json (Hetzner's create response); null. */
+export function serverCreatedMs(stateDir, fsImpl, pathImpl) {
+    try {
+        const t = Date.parse(JSON.parse(fsImpl.readFileSync(pathImpl.join(stateDir, 'server-create.json'), 'utf8'))?.server?.created);
+        return Number.isFinite(t) ? t : null;
+    } catch {
+        return null;
+    }
+}
+
 /**
- * Before a step-7 scenario starts (run.mjs): is the test server fresh, and, under a well-formed marker, the ledger
- * entry for this start. server: the ctl adapter (log, logRotated); env: TEST_SERVER_NAME, TEST_SERVER_STATE_DIR,
- * ROTN_G4_ACCEPT. The entry is written before the scenario runs, so a killed run still marks the server used.
- * -> {fresh: {ok, why}, ledgerFile}
+ * Before a step-7 scenario starts (run.mjs): is the test server fresh? Reads the usage ledger, the server log since
+ * its start, the server's starts on the box (server.starts(), `rotn-test starts`), the world's age (`time query
+ * gametime` through the guarded console) and the server's creation time. Writes nothing: recordUsage does, for every
+ * run, after this. -> {fresh: {ok, why}, facts: {starts, gametime, createdAt}}
  */
-export function startAcceptance({ server, env, scenarioId, runId, logTail = 20000, now = () => new Date(), fsImpl, pathImpl }) {
+export function startAcceptance({ server, env, scenarioId, logTail = 20000, consoleWaitS = 1, nowMs = Date.now(), fsImpl, pathImpl, timeQuery }) {
     const mk = acceptMarker(env);
     const stateDir = env?.TEST_SERVER_STATE_DIR || null;
-    const ledgerFile = stateDir ? pathImpl.join(stateDir, 'g4-accept.jsonl') : null;
-    let ledger = null;
-    if (ledgerFile) {
+    let usage = null;
+    if (stateDir) {
+        const f = pathImpl.join(stateDir, USAGE_FILE);
         try {
-            ledger = fsImpl.existsSync(ledgerFile) ? parseLedger(fsImpl.readFileSync(ledgerFile, 'utf8')) : [];
+            usage = fsImpl.existsSync(f) ? parseLedger(fsImpl.readFileSync(f, 'utf8')) : [];
         } catch {
-            ledger = null;
+            usage = null;
         }
     }
     let logLines = null;
@@ -293,13 +341,37 @@ export function startAcceptance({ server, env, scenarioId, runId, logTail = 2000
     } catch {
         logLines = null;
     }
-    let fresh = freshServer({ server: env?.TEST_SERVER_NAME || null, stateDir, ledger, logLines, goId: mk.goId ?? null, run: mk.run ?? null });
-    if (mk.ok && ledgerFile && ledger) {
-        try {
-            fsImpl.appendFileSync(ledgerFile, JSON.stringify({ goId: mk.goId, run: mk.run, runId, scenario: scenarioId, at: now().toISOString() }) + '\n');
-        } catch (e) {
-            fresh = { ok: false, why: `the test server's ledger could not be written (${e.code ?? e.message})` };
-        }
+    let starts = null;
+    try {
+        starts = typeof server.starts === 'function' ? server.starts() : null;
+    } catch {
+        starts = null;
     }
-    return { fresh, ledgerFile };
+    let gametime = null;
+    try {
+        gametime = timeQuery(server.console('time query gametime', consoleWaitS));
+    } catch {
+        gametime = null;
+    }
+    const createdMs = stateDir ? serverCreatedMs(stateDir, fsImpl, pathImpl) : null;
+    const fresh = freshServer({ server: env?.TEST_SERVER_NAME || null, stateDir, usage, logLines, goId: mk.ok ? mk.goId : null, run: mk.ok ? mk.run : null,
+        scenarioId, starts, gametime, createdMs, nowMs });
+    return { fresh, facts: { starts, gametime, createdAt: Number.isFinite(createdMs) ? new Date(createdMs).toISOString() : null } };
+}
+
+/**
+ * Every run on a test server writes one usage line before its scenario, marked or not (lead, #446 review), so a later
+ * acceptance run sees it. -> {ok, why}; nothing is written without TEST_SERVER_STATE_DIR (not a test server run).
+ */
+export function recordUsage({ env, scenarioId, runId, botKind, now = () => new Date(), fsImpl, pathImpl }) {
+    const stateDir = env?.TEST_SERVER_STATE_DIR || null;
+    if (!stateDir) return { ok: false, why: 'no TEST_SERVER_STATE_DIR: no usage ledger' };
+    const mk = acceptMarker(env);
+    try {
+        fsImpl.appendFileSync(pathImpl.join(stateDir, USAGE_FILE), JSON.stringify({ runId, scenario: scenarioId, goId: mk.ok ? mk.goId : null,
+            run: mk.ok ? mk.run : null, bot: botKind ?? null, at: now().toISOString() }) + '\n');
+        return { ok: true, why: 'recorded' };
+    } catch (e) {
+        return { ok: false, why: `the test server's usage ledger could not be written (${e.code ?? e.message})` };
+    }
 }
