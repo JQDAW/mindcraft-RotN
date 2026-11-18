@@ -694,3 +694,28 @@ test('#422 nit: the day\'s last food run is not stopped as it starts: it runs un
     assert.equal(agent._agenda_step, null);
 });
 
+
+// #463 rework (soak 3, rotn-v0.1.5): stone_axe was stuck at 20:12 ("agenda paused"), and agendaTick
+// returned at once for a paused agenda: no food run for the last 67 min, food 8 -> 2, nothing held.
+test('#463 rework: an agenda paused on a stuck step still runs the food reserve; the stuck step itself waits for a giver', (t) => {
+    const agent = foodAgent(t, [], { food: 12, finished: false });
+    agent.agenda.markStuck('rocks', '5 min of self-prompting');
+    assert.equal(agent.agenda.active, false);
+    assert.equal(agendaTick(agent, { now: 0 }), 'food');
+    assert.equal(agent.said.at(-1), 'agenda step food started: keep food for the day and the night');
+    assert.match(agent.self_prompter.prompt, /^RotN agenda, step food \(food\): /);
+    // Fed: the reserve's run stops, and the stuck step is not driven.
+    agent.bot.inventory = { items: () => [stack('bread', 0, 4)], slots: [] };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), null);
+    assert.equal(agent.self_prompter.prompt.startsWith('RotN agenda, step 1 '), false, 'never the stuck step');
+    assert.equal(agent.agenda.stuck.id, 'rocks', 'still paused on it');
+    // Fed and stuck from the start: nothing runs.
+    const idle = foodAgent(t, [stack('bread', 0, 4)], { food: 18, finished: false });
+    idle.agenda.markStuck('rocks', '5 min of self-prompting');
+    assert.equal(agendaTick(idle, { now: 0 }), null);
+    assert.equal(idle.self_prompter.starts.length, 0);
+    // A stopped agenda (not stuck) runs nothing, as before.
+    const stopped = foodAgent(t, [], { food: 12, finished: false });
+    stopped.agenda.stop();
+    assert.equal(agendaTick(stopped, { now: 0 }), null);
+});

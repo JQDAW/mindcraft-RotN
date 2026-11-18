@@ -14,7 +14,7 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, shelterShell, dumpState } from './library/night.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, shelterShell, dumpState, isFullDay } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE } from './library/shelter.js';
 import { goToGoal, descendFromTree } from './library/skills.js';
 import { stowCarried, toolAllows, allowedTool } from './library/rotn_sources.js';
@@ -22,7 +22,7 @@ import { digPit, pitOut, moveAwayFrom, PIT, quickByHand, digWithin, digBudget } 
 import { hasWeapon, shelterEnemy } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
-import { say, isGiverGoal } from './agenda_driver.js';
+import { say, isGiverGoal, ownsPrompt } from './agenda_driver.js';
 import settings from './settings.js';
 import { heldFoodHunger, FOOD_TARGET } from './library/food.js';
 
@@ -83,8 +83,8 @@ const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), ne
 const at = (p) => `${p.x}, ${p.y}, ${p.z}`;
 const hot = (b) => isLiquid(b) || /fire/.test(b?.name ?? '');
 
-/** Full daylight: the day phase, and the sun no longer rising (the rise ends at time 0). */
-export const isFullDay = (t) => t >= 0 && t < NIGHT_START && nightPhase(t) === 'day';
+// Full daylight (night.js, where the re-plan hold reads it too).
+export { isFullDay };
 
 /** The night state of an agent, made on first use. */
 export function nightState(agent) {
@@ -153,13 +153,37 @@ export function leaveShelterFor(agent, why) {
     return true;
 }
 
-/** Stop autonomy at its checkpoint; what ran keeps its place and resumes without a new run. */
+/**
+ * Stop autonomy at its checkpoint; what ran keeps its place and resumes without a new run. The
+ * agenda's and a task's own goals resume through their drivers; any other goal running here (the
+ * model's own) is kept for resumeNightGoal (#463 rework: after full day the self-prompter runs again
+ * if it ran at dusk). A giver's typed goal is never stopped here (the routine yields to it).
+ */
 function holdAutonomy(agent) {
     const sp = agent.self_prompter;
-    if (sp.isActive()) sp.stop(false);
+    if (sp.isActive()) {
+        if (!ownsPrompt(agent) && sp.prompt) agent._night_goal = sp.prompt;
+        sp.stop(false);
+    }
     agent._agenda_paused = true;
     if (agent._task_id) agent._task_paused = true;
     agent._task_tick_at = undefined; // no task LLM time while sheltering
+}
+
+/**
+ * After the night (the routine back to 'day'): the goal holdAutonomy stopped, other than the
+ * agenda's or a task's, starts again, once; not when the self-prompter already runs another goal.
+ * Called by the priority stack after tasks and the walk away after a respawn. Returns whether it did.
+ */
+export function resumeNightGoal(agent) {
+    const goal = agent._night_goal;
+    if (!goal || (agent._night && agent._night.state !== 'day')) return false;
+    agent._night_goal = null;
+    const sp = agent.self_prompter;
+    if (sp.isActive() || sp.loop_active) return false;
+    console.log('[night] morning: the goal that ran at dusk resumes');
+    sp.start(goal);
+    return true;
 }
 
 /**
@@ -173,7 +197,9 @@ function startJob(agent, n, label, fn, then) {
         .then(() => {
             // #431 review 2: only a stop of this run is attributed to its stopper, not an older one.
             if (agent.rotnLastInterrupt?.of === label) agent.rotnLastInterrupt = null;
-            return agent.actions.runAction(label, async () => { result = await fn(); });
+            // #463 review 1: the routine's own jobs are no fresh decision: a held re-plan (a death's)
+            // survives them and goes once at full day.
+            return agent.actions.runAction(label, async () => { result = await fn(); }, { keepReplan: true });
         })
         .then(r => { ret = r ?? null; })
         .catch(err => console.warn(`[night] ${label} failed: ${err?.message ?? err}`))

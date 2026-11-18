@@ -28,7 +28,7 @@
 import settings from './settings.js';
 import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
 import { quoteData, isTaskGiver } from './task_queue.js';
-import { nightTick, leaveShelterFor } from './night_routine.js';
+import { nightTick, leaveShelterFor, resumeNightGoal } from './night_routine.js';
 import { relocateTick } from './respawn_relocate.js';
 import { parseStandOn, standCheck, describeTarget } from './library/stand_on.js';
 
@@ -161,7 +161,8 @@ function typedResumePending(agent, now) {
  * One tick of the priority stack. Returns what it did, for tests and logs:
  * 'held:<kind>' (a control hold), 'task:<id>' or 'task:<id>:waiting' (a task runs or waits for
  * the checkpoint), 'task:<id>:yield' (a paused conversation or a giver's !goal), 'task:<id>:failed',
- * or agendaTick's result (null, 'paused', 'yield', 'done', 'stuck', a step id).
+ * 'relocating', 'night-goal' (the model's goal the night stopped started again), or agendaTick's
+ * result (null, 'paused', 'yield', 'done', 'stuck', a step id).
  */
 export function autonomyTick(agent, { now = Date.now() } = {}) {
     const sp = agent.self_prompter;
@@ -201,6 +202,10 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
     // recent death spots first; the agenda and the model's goal wait. A giver's task above does not.
     const away = relocateTick(agent, { now });
     if (away) return away;
+
+    // 3c. #463 rework (soak 3): the model's own goal the night stopped runs again (the agenda's
+    // resumes below, through agendaTick).
+    if (resumeNightGoal(agent)) return 'night-goal';
 
     // 4. The agenda.
     const res = agendaTick(agent, { now });

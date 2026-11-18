@@ -6,7 +6,7 @@ import convoManager from '../conversation.js';
 import { addTask, cancelTask } from '../task_queue.js';
 import { finishTask } from '../priority.js';
 import { hasAutonomyPrefix } from '../agenda_driver.js';
-import { nightPhase } from '../library/night.js';
+import { nightPhase, nightRoutineActive } from '../library/night.js';
 import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
 import { threatFor, hurtBy } from '../library/threats.js';
@@ -73,6 +73,24 @@ function phaseNow(agent, now = Date.now()) {
     return phase ?? (typeof t === 'number' ? nightPhase(t) : null);
 }
 
+/**
+ * Why the model's !buildShelter is refused, or null (a task giver's typed one is always obeyed).
+ * G3 round 2 B: by day it only spends blocks; the night routine builds at dusk. Soak 3 (rotn-v0.1.5):
+ * while the routine runs (dusk to full day, the dawn gap included, where the clock already says
+ * day) it would cut into the routine's own build or hole, which it did three times in a second.
+ * Checked before the action starts, so the running action is not interrupted.
+ */
+export function shelterCommandRefusal(agent) {
+    if (agent.control?.typed > 0) return null;
+    if (nightRoutineActive(agent)) {
+        return `Not building a shelter now: the night routine is seeing to it (${agent._night.state}) until full day, and this would interrupt it. Stay where you are.`;
+    }
+    if (phaseNow(agent) === 'day') return 'Not building a shelter by day: the night routine builds one at dusk. Keep your cobblestone for it.';
+    return null;
+}
+
+const buildShelterAction = runAsAction(async (agent) => { await buildShelter(agent.bot); }, false, -1, 'buildShelter');
+
 /** False (with a log line) when the walk would lead back to the death spot too soon (G3 round 2). */
 function deathSpotOk(agent, x, y, z) {
     const why = deathSpotBlocked(agent, { x, y, z });
@@ -132,8 +150,8 @@ export async function withinLimit(agent, name, fn, ms) {
     skills.log(agent.bot, `!${name} failed: time limit of ${limitText(ms)} reached; stopped.`);
 }
 
-function runAsAction (actionFn, resume = false, timeout = -1) {
-    let actionLabel = null;  // Will be set on first use
+function runAsAction (actionFn, resume = false, timeout = -1, label = null) {
+    let actionLabel = label;  // Will be set on first use (given when a perform checks first, then runs this)
     
     const wrappedAction = async function (agent, ...args) {
         // Set actionLabel only once, when the action is first created
@@ -529,16 +547,14 @@ export const actionsList = [
         name: '!buildShelter',
         description: 'Build a closed 1x2 night shelter of cobblestone or stone around yourself, from inside (up to 10 blocks; walls you stand next to that are already rock are kept). Run it again inside the shelter to repair an open wall.',
         params: { },
-        perform: runAsAction(async (agent) => {
-            // By day the model's own !buildShelter only spends blocks: the night routine builds the
-            // shelter at dusk (G3 round 2 B: it used 9 of the 10 cobblestone the agenda's step needs).
-            // A task giver who types it is obeyed.
-            if (phaseNow(agent) === 'day' && !(agent.control?.typed > 0)) {
-                skills.log(agent.bot, 'Not building a shelter by day: the night routine builds one at dusk. Keep your cobblestone for it.');
-                return;
-            }
-            await buildShelter(agent.bot);
-        })
+        perform: function (agent) {
+            // The model's own !buildShelter: refused by day and while the night routine runs
+            // (shelterCommandRefusal), before anything running is interrupted. A task giver who
+            // types it is obeyed.
+            const refusal = shelterCommandRefusal(agent);
+            if (refusal) return Promise.resolve(refusal);
+            return buildShelterAction(agent);
+        }
     },
     {
         name: '!attack',
