@@ -222,6 +222,37 @@ test('soak 2: below food 8 the model\'s !moveAway and searches go 32 blocks at m
     assert.doesNotMatch(await run(7, '!moveAway(20)'), /at most at food/, 'a short walk is not capped');
 });
 
+test('#432 nit: below food 8, !goToCoordinates and !goToPlayer walk 32 blocks at most toward a far target, and !collectBlocks looks 32 blocks out; at food 8 as asked', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { hungryCloseness } = await import('./commands/actions.js');
+    const run = async (food, cmd, setup = () => {}) => {
+        const agent = huntAgent({ food, blocks: { '40,64,0': 'dirt' } });
+        setup(agent);
+        agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }), () => ({ message: agent.bot.output, interrupted: false }));
+        await executeCommand(agent, cmd);
+        return agent.bot.output;
+    };
+    assert.match(await run(7, '!goToCoordinates(100.5, 64, 0.5, 2)'), /Walking 32 blocks at most toward 100\.5, 64, 0\.5 at food 7, not 100: walking costs hunger, and food 0 kills you at once on this pack\. Eat or !forage first\./);
+    assert.doesNotMatch(await run(8, '!goToCoordinates(100.5, 64, 0.5, 2)'), /at most/);
+    assert.doesNotMatch(await run(7, '!goToCoordinates(20.5, 64, 0.5, 2)'), /at most/, 'a short walk is not capped');
+    const player = (agent) => { agent.bot.players = { JQDAW: { username: 'JQDAW', entity: { id: 5, type: 'player', username: 'JQDAW', position: new Vec3(60.5, 64, 0.5), height: 1.8 } } }; };
+    assert.match(await run(7, '!goToPlayer("JQDAW", 3)', player), /Walking 32 blocks at most toward JQDAW at food 7, not 60/);
+    assert.doesNotMatch(await run(9, '!goToPlayer("JQDAW", 3)', player), /at most/);
+    const hungryCollect = await run(7, '!collectBlocks("dirt", 1)');
+    assert.match(hungryCollect, /Collecting within 32 blocks at most at food 7, not 64/);
+    assert.doesNotMatch(await run(8, '!collectBlocks("dirt", 1)'), /at most/);
+    // The closeness left after the capped walk: the target 100 away, so the goal is met 68 from it.
+    const agent = huntAgent({ food: 7 });
+    assert.equal(hungryCloseness(agent, 'there', new Vec3(100.5, 64, 0.5), 2), 68);
+    assert.equal(hungryCloseness(agent, 'there', new Vec3(30.5, 64, 0.5), 2), 2, 'within 32: unchanged');
+});
+
+test('#432 nit: the eating mode names the emergency foods and never cloudsbluff as allowed', () => {
+    const d = __modeForTest('eating').description;
+    assert.match(d, /At food 5 or lower with nothing else \(food 0 kills on this pack\): a golden apple, raw venison, raw tofenison, raw chicken, rotten flesh, then hawthorn berries, in that order; never cloudsbluff, chorus fruit, pufferfish, raw eggs\./);
+    assert.doesNotMatch(d, /except/);
+});
+
 test('#422 review 1: a hunt running when dusk falls ends (the night routine is not held up), and pvp stops', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
