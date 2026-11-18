@@ -16,8 +16,9 @@ export const EAT_NOW_AT = 6;
 /**
  * Soak 2 (rotn-v0.1.4): on this pack food 0 is instant death (Hunger Overhaul damageOnStarve=200,
  * config/hungeroverhaul/HungerOverhaul.cfg), and at 4 or lower weakness, slowness and mining
- * slowdown set in. At this level or lower anything edible is eaten, avoided food too (its poison or
- * hunger effect does not kill), before the bot starves.
+ * slowdown set in. At this level or lower, with no other food, the EMERGENCY_FOODS below are eaten
+ * too, least harm first (their poison or hunger effect does not kill), before the bot starves;
+ * never the other avoided foods (#432 review 2).
  */
 export const EMERGENCY_FOOD = 5;
 /**
