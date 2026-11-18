@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { AgentProcess, decideAgentExit, readExitReason } from '../../../src/process/agent_process.js';
-import { createRestartPolicy, classifyKick, EXIT } from '../index.js';
+import { createRestartPolicy, createCrashLoopGuard, crashSignature, classifyKick, EXIT } from '../index.js';
 import { assertMicrosoftAuthSafe } from '../src/auth-guard.js';
 
 const MIN = 60_000;
@@ -355,4 +355,71 @@ test('end to end: a ban in a real agent child -> recordAgentExit -> reason file 
     assert.equal(await exited, 3);
     assert.ok(lines.some(l => /exited with code 3/.test(l)), 'the child itself exited 3');
     assert.ok(lines.some(l => /FRCFLD: FATAL \(banned\)/.test(l)), 'the main process read the reason file');
+});
+
+test('crashSignature: unexplained exit 1, a recorded startup error and foreign signals are crashes; kicks are not', () => {
+    assert.equal(crashSignature({ code: 1 }), 'exit 1 without a reason');
+    assert.equal(crashSignature({ code: 1, reason: { category: 'error', exitCode: 1, fatal: false } }), 'startup error');
+    assert.equal(crashSignature({ code: null, signal: 'SIGABRT' }), 'signal SIGABRT');
+    assert.equal(crashSignature({ code: null, signal: 'SIGKILL' }), 'signal SIGKILL');
+    for (const category of ['disconnect', 'network', 'timeout', 'server_stopping', 'auth', 'requested_restart']) {
+        assert.equal(crashSignature({ code: 1, reason: { category, exitCode: 1, fatal: false } }), null, category);
+    }
+    for (const signal of ['SIGINT', 'SIGTERM']) assert.equal(crashSignature({ code: null, signal }), null, signal);
+    for (const code of [0, 2, 3, 4]) assert.equal(crashSignature({ code }), null, `exit ${code}`);
+});
+
+test('decideAgentExit: the 5th quick identical crash in a row ends with 3; a long session, another crash or a disconnect starts the count again', () => {
+    const run = (exits) => {
+        const policy = createRestartPolicy();
+        const crashGuard = createCrashLoopGuard();
+        return exits.map(e => decideAgentExit({ connectedMs: 20_000, ...e }, policy, null, crashGuard));
+    };
+    const five = run(Array.from({ length: 5 }, () => ({ code: 1 })));
+    assert.deepEqual(five.slice(0, 4).map(d => d.action), ['restart', 'restart', 'restart', 'restart']);
+    assert.deepEqual(five.slice(0, 4).map(d => d.delayMs), [10_000, 20_000, 40_000, 80_000], 'the backoff is unchanged');
+    assert.deepEqual(five[4], { action: 'exit', code: 3, reason: 'crash_loop: exit 1 without a reason, 5 times in a row, each within 5 min of the start' });
+
+    const startup = run(Array.from({ length: 5 }, () => ({ code: 1, reason: { category: 'error', exitCode: 1, fatal: false } })));
+    assert.equal(startup[4].code, 3);
+    assert.match(startup[4].reason, /^crash_loop: startup error, 5 times/);
+
+    const long = run([{ code: 1 }, { code: 1 }, { code: 1 }, { code: 1, connectedMs: 5 * MIN }, { code: 1 }, { code: 1 }]);
+    assert.ok(long.every(d => d.action === 'restart'), 'a 5-minute session is not a quick crash');
+
+    const mixed = run([{ code: 1 }, { code: 1 }, { code: 1 }, { code: 1 }, { code: null, signal: 'SIGABRT' }, { code: 1 }]);
+    assert.ok(mixed.every(d => d.action === 'restart'), 'a different crash starts the count again');
+
+    const disconnect = { category: 'disconnect', exitCode: 1, fatal: false };
+    const flap = run([{ code: 1 }, { code: 1 }, { code: 1 }, { code: 1 }, { code: 1, reason: disconnect }, { code: 1 }, { code: 1 }]);
+    assert.ok(flap.every(d => d.action === 'restart'), 'a disconnect between crashes starts the count again');
+
+    const restartReq = { category: 'requested_restart', exitCode: 1, fatal: false };
+    const req = run([{ code: 1 }, { code: 1 }, { code: 1 }, { code: 1 }, { code: 1, reason: restartReq }, { code: 1 }]);
+    assert.ok(req.every(d => d.action === 'restart'), 'a requested restart starts the count again');
+});
+
+test('decideAgentExit: a server that stays down is retried for as long as it takes, never a crash loop', () => {
+    const policy = createRestartPolicy();
+    const crashGuard = createCrashLoopGuard();
+    const network = { category: 'network', exitCode: 1, fatal: false };
+    for (let i = 0; i < 30; i++) {
+        const d = decideAgentExit({ code: 1, reason: i % 2 ? network : { ...network, category: 'disconnect' }, connectedMs: 3_000 }, policy, null, crashGuard);
+        assert.equal(d.action, 'restart', `exit ${i}`);
+    }
+});
+
+test('AgentProcess: a deterministic startup crash restarts 4 times with backoff, then ends the main process with 3 (CX23 step 0)', () => {
+    const h = harness({ MINDCRAFT_SINGLE_BOT_SERVICE: '1' });
+    const ap = new AgentProcess('FRCFLD', 8080, h.deps);
+    ap.start();
+    for (let i = 0; i < 5; i++) {
+        h.advance(20_000);
+        h.children[i].emit('exit', 1, null); // uncaught ENOENT: exit 1, no reason file
+        if (i < 4) h.timers[i].fn();
+    }
+    assert.equal(h.children.length, 5);
+    assert.deepEqual(h.timers.map(t => t.ms), [10_000, 20_000, 40_000, 80_000]);
+    assert.deepEqual(h.exits, [3]);
+    assert.ok(h.lines.some(l => /^\[agent_process\] FRCFLD: FATAL \(crash_loop: exit 1 without a reason, 5 times in a row, each within 5 min of the start\)\. Not restarting; a human must act/.test(l)), h.lines.join('\n'));
 });

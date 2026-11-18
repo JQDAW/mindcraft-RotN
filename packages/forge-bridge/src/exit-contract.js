@@ -9,7 +9,9 @@
 //   1  transient. Restarted with backoff (createRestartPolicy). A deliberate restart
 //      (category requested_restart: !restart, the stuck mode, mindserver restart-agent)
 //      restarts at once without touching the backoff streak.
-//   3  fatal. Not restarted; the main process ends with 3.
+//   3  fatal. Not restarted; the main process ends with 3. Also the end of a crash
+//      loop: the same unexplained crash, quickly, several times in a row
+//      (createCrashLoopGuard).
 //   2, 4  reserved for Mindcraft's task framework.
 
 import fs from 'node:fs';
@@ -95,6 +97,48 @@ export function createRequestedRestartGuard({ max = 5, windowMs = 600_000 } = {}
 }
 
 /**
+ * What kind of crash an agent exit was, or null if it was not a crash.
+ * A crash is an exit 1 the agent gave no reason for (an uncaught exception, a
+ * rejected promise, init_agent.js's startup catch), a startup error the agent
+ * recorded as category 'error', or a signal the main process did not send
+ * (SIGABRT from a V8 heap limit, SIGSEGV, an OOM kill). Kicks and disconnects
+ * carry their own category and are never crashes: a server that is down or
+ * restarting is retried with backoff for as long as it takes (G4 #1).
+ */
+export function crashSignature({ code, signal = null, reason = null } = {}) {
+    if (reason) return reason.category === 'error' && !reason.fatal ? 'startup error' : null;
+    if (code === null || code === undefined) return signal && !STOP_SIGNALS.has(signal) ? `signal ${signal}` : null;
+    return code === EXIT.TRANSIENT ? 'exit 1 without a reason' : null;
+}
+
+/**
+ * Ends an in-process crash loop. The same crash `max` times in a row, each
+ * within `quickMs` of the agent's spawn, is deterministic (the CX23's first
+ * start, 2026-11-08: a missing template file, ENOENT in a callback, crashed
+ * every agent start). Restarting it in-process only repeats it, so the caller
+ * ends the main process with 3, which the unit does not restart
+ * (RestartPreventExitStatus=0 3). Exit 1 would not stop it either: each main
+ * process lives about 4 min through the backoff, so systemd's start limit
+ * (6 starts in 10 min) is never reached and the loop goes on, just slower.
+ * Any other exit, a different crash or a longer session starts the count again.
+ */
+export function createCrashLoopGuard({ max = 5, quickMs = 300_000 } = {}) {
+    let last = null;
+    let count = 0;
+    return {
+        /** @returns {{loop:boolean, count:number, signature:string|null}} */
+        note(signature, connectedMs = 0) {
+            if (!signature || connectedMs >= quickMs) { last = null; count = 0; return { loop: false, count, signature: null }; }
+            count = signature === last ? count + 1 : 1;
+            last = signature;
+            return { loop: count >= max, count, signature };
+        },
+        get max() { return max; },
+        get quickMs() { return quickMs; },
+    };
+}
+
+/**
  * Main-process side: what to do when an agent process ends. Pure apart from the
  * policy and guard state it is given.
  * `connectedMs` is measured from spawn, not from the Minecraft login: the
@@ -104,7 +148,7 @@ export function createRequestedRestartGuard({ max = 5, windowMs = 600_000 } = {}
 export function decideAgentExit({
     code, signal, requestedStop = false, restartRequested = false, singleBotService = false,
     connectedMs = 0, reason = null, now = Date.now(),
-}, policy, guard = null) {
+}, policy, guard = null, crashGuard = null) {
     if (restartRequested) return { action: 'none', reason: 'restart requested by the main process' };
     if (requestedStop || STOP_SIGNALS.has(signal)) {
         return singleBotService
@@ -122,7 +166,13 @@ export function decideAgentExit({
     if (code === EXIT.TRANSIENT && reason?.category === REQUESTED_RESTART && (!guard || guard.allowImmediate(now))) {
         // Adds nothing to the streak, but a long session still resets it (PR #23 review 1).
         policy.noteSession?.(connectedMs);
+        crashGuard?.note(null);
         return { action: 'restart', delayMs: 0, reason: REQUESTED_RESTART };
+    }
+    const crash = crashGuard?.note(crashSignature({ code, signal, reason }), connectedMs);
+    if (crash?.loop) {
+        const mins = Math.round(crashGuard.quickMs / 60_000);
+        return { action: 'exit', code: EXIT.FATAL, reason: `crash_loop: ${crash.signature}, ${crash.count} times in a row, each within ${mins} min of the start` };
     }
     // 1, or killed by a signal the main process did not send: transient.
     const c = reason && !reason.fatal ? reason : { category: code === null ? `signal ${signal}` : 'transient', fatal: false, exitCode: EXIT.TRANSIENT };
