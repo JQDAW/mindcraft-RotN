@@ -14,7 +14,8 @@
 #                                        20,000 lines). N bounds the lines, ROTN_TEST_LOG_MAX_BYTES (48 MiB) the bytes.
 #                                        First line: "##rotn-test since-start files=<..> found=<0|1> lines=<n>
 #                                        over=<0|1> nonempty=<k>"; the lines follow only if found=1 and over=0 (else
-#                                        none); k counts the non-empty ones, so a cut-off answer fails closed
+#                                        none); k counts the non-empty ones, and a last line "##rotn-test end"
+#                                        always follows, so a cut-off answer (even inside its last line) fails closed
 #   rotn-test build-log [N]              tail the first-boot build log
 #   rotn-test verify                     key=value facts for the G0 checks
 #   rotn-test restart [--timeout S]      restart the Minecraft server (G4 #1, server restart; test server only):
@@ -185,6 +186,7 @@ case $cmd in
               if (found && !over) for (i = 1; i <= c; i++) { x = buf[i]; sub(/\r$/, "", x); if (x != "") k++ }
               printf "##rotn-test since-start files=%s found=%d lines=%d over=%d nonempty=%d\n", files, found, c, over, k
               if (found && !over) for (i = 1; i <= c; i++) print buf[i]
+              print "##rotn-test end"
             }'
       fi
     else

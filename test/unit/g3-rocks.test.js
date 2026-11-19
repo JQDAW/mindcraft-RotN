@@ -307,10 +307,18 @@ describe('g3-rocks-to-stone-tools on a simulated server', () => {
         assert.equal(c.no_cheat.pass, true);
     });
 
-    test('a stuck agenda ends the run early; a kick ends it with the reason', async () => {
-        const stuck = await run(sim({ play: [[7, { say: 'agenda step logs stuck: no tree found' }]] }));
-        assert.match(stuck.notes.end.reason, /^the agenda is stuck at step logs: no tree found/);
-        assert.ok(stuck.notes.end.minutes < 9);
+    test('skills-rotn #468: a stuck step never ends the run (it is retried, the agenda goes on); a kick ends it with the reason', async () => {
+        const retried = await run(sim({ play: [[7, { say: 'agenda step logs stuck: 5 min of self-prompting; retry 1 of 3 in 20 min or at the next full day; going on with the steps that do not need it' }],
+            [8, { say: 'agenda step logs retried (1 of 3): a fresh budget' }]] }));
+        assert.match(retried.notes.end.reason, /^maxMinutes \(25\) reached/);
+        assert.ok(retried.notes.agendaChat.some((t) => /^agenda step logs stuck: .*retry 1 of 3/.test(t)), 'the stuck line is kept in the notes');
+        // #468's open goal (nothing runnable, the agenda gathers for the waiting step) neither ends nor stalls the run.
+        const open = await run(sim({ play: [[7, { say: 'agenda open goal: step logs waits; self-prompting on gathering for it' }]] }));
+        assert.match(open.notes.end.reason, /^maxMinutes \(25\) reached/);
+        // #468's lines once the retries are spent (then one a day), and a food step that goes on without it: no end either.
+        const spent = await run(sim({ play: [[7, { say: 'agenda step logs stuck: 5 min of self-prompting; its 3 retries are spent: one retry at each new full day; going on with the steps that do not need it' }],
+            [8, { say: 'agenda step food stuck: 5 min of self-prompting; going on without it for 20 min' }]] }));
+        assert.match(spent.notes.end.reason, /^maxMinutes \(25\) reached/);
         const kicked = await run(sim({ kickAt: 10 }));
         assert.match(kicked.notes.end.reason, /^the bot is gone: lost \(Kicked by an operator\)/);
         assert.equal(byName(kicked).stone_tools.pass, false);
