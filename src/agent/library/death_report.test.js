@@ -312,9 +312,9 @@ test('#247 review 1: the note gives the minutes left from the death, and says wh
 
 test('#247 review 2: the night rule no longer says "only by day"', () => {
     const d = new DeathReporter();
-    d.died({ pos: { x: 100, y: 70, z: 200 }, now: 1_000_000 });
+    d.died({ pos: { x: 100, y: 70, z: 200 }, dimension: 'overworld', now: 1_000_000 });
     const self = { id: 0, position: { x: 0, y: 64, z: 0 } };
-    const agent = { _death: d, memory_bank: { memory: {} }, bot: { entity: self, entities: { 0: self }, time: { timeOfDay: 18000 }, game: {} } };
+    const agent = { _death: d, memory_bank: { memory: {} }, bot: { entity: self, entities: { 0: self }, time: { timeOfDay: 18000 }, game: { dimension: 'overworld' } } };
     const why = deathSpotBlocked(agent, { x: 101, y: 70, z: 200 }, { now: 1_000_000 + 6 * 60_000 });
     assert.match(why, /^it is night: do not go back to where you died now; the items left there will be lost$/);
     assert.doesNotMatch(why, /by day/);

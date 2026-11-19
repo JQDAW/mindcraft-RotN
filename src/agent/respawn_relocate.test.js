@@ -271,8 +271,15 @@ test('#471 nit 5: the spawn point is a place to leave only in the overworld', ()
     assert.deepEqual(placesToLeave(agent, now).map(p => p.what), ['spawn', 'death spot']);
     agent.bot.game.dimension = 'the_nether';
     assert.deepEqual(placesToLeave(agent, now).map(p => p.what), [], 'the death was in the overworld too');
+    // #472 nit 3: names compared without the namespace; an unknown modded dimension is not the overworld.
     agent.bot.game.dimension = 'minecraft:overworld';
-    assert.deepEqual(placesToLeave(agent, now).map(p => p.what), ['spawn'], 'a death spot from another dimension name form is filtered as before');
+    assert.deepEqual(placesToLeave(agent, now).map(p => p.what), ['spawn', 'death spot'], 'minecraft:overworld is the overworld');
+    // #474 review 1: mineflayer leaves a modded dimension (Twilight Forest is 7) undefined: unknown,
+    // never the overworld; no spawn to leave and no overworld death spot there.
+    agent.bot.game.dimension = undefined;
+    assert.deepEqual(placesToLeave(agent, now).map(p => p.what), [], 'an unnamed (modded) dimension');
+    agent.bot.rotnDimensionId = 7;
+    assert.deepEqual(placesToLeave(agent, now).map(p => p.what), []);
 });
 
 test('#471 nits 2-4: a full walk stops at 24 once night falls unarmed; a walk that throws is logged; no position is no crash', async (t) => {
@@ -299,4 +306,31 @@ test('#471 nits 2-4: a full walk stops at 24 once night falls unarmed; a walk th
     const c = agentAt(new Vec3(5, 64, 0), { deaths: death, now });
     const r3 = await walkAwayAtNight(c.bot, { ...fp, places: placesToLeave(c, now) }, { walk: (bot) => new Promise(res => { setTimeout(() => { bot.entity = null; }, 30); setTimeout(() => res(false), 120); }) });
     assert.deepEqual(r3, { arrived: false, nearest: 0, stopped: null });
+});
+
+test('#474 review 1: a death in an unnamed (modded) dimension is recorded as unknown:<id>, and matches only there', async () => {
+    const { dimensionKey, sameDimension, bindDeathReport } = await import('./library/death_report.js');
+    assert.equal(dimensionKey({}), null, 'no game yet: no dimension known');
+    assert.equal(dimensionKey({ game: { dimension: 'overworld' } }), 'overworld');
+    assert.equal(dimensionKey({ game: { dimension: 'minecraft:the_nether' } }), 'the_nether');
+    assert.equal(dimensionKey({ game: { dimension: undefined } }), 'unknown');
+    assert.equal(dimensionKey({ game: { dimension: undefined }, rotnDimensionId: 7 }), 'unknown:7');
+    const tf = { game: { dimension: undefined }, rotnDimensionId: 7 };
+    assert.equal(sameDimension(tf, 'unknown:7'), true);
+    assert.equal(sameDimension(tf, 'overworld'), false);
+    assert.equal(sameDimension({ game: { dimension: 'overworld' } }, 'unknown:7'), false, 'an unknown-dimension spot does not match the overworld');
+    assert.equal(sameDimension({ game: { dimension: 'overworld' } }, null), false, 'a spot with no dimension matches no known dimension');
+    assert.equal(sameDimension({}, 'overworld'), true, 'no game: no filter');
+    // bindDeathReport keeps the packet's id and records the key at a death.
+    const { EventEmitter } = await import('node:events');
+    const client = new EventEmitter();
+    const bot = Object.assign(new EventEmitter(), { _client: client, game: { dimension: undefined }, entity: { position: new Vec3(1, 70, 2) }, health: 20 });
+    const agent = { bot, actions: {}, memory_bank: {} };
+    bindDeathReport(agent, { setTimer: () => 0, clearTimer: () => {}, now: () => 1000 });
+    client.emit('respawn', { dimension: 7 });
+    assert.equal(bot.rotnDimensionId, 7);
+    const logs = [];
+    const orig = console.log; console.log = (...a) => logs.push(a.join(' '));
+    try { bot.emit('death'); } finally { console.log = orig; }
+    assert.equal(agent._death.pending.dimension, 'unknown:7');
 });

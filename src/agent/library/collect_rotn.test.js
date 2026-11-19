@@ -54,7 +54,7 @@ function fakeBot({ blocks = [], items = [], dropsOf = drops } = {}) {
         version: '1.12.2',
         output: '',
         interrupt_code: false,
-        game: { gameMode: 'survival' },
+        game: { gameMode: 'survival', dimension: 'overworld' },
         entity: { position: at(0), height: 1.8 },
         entities: {},
         heldItem: null,
@@ -296,13 +296,13 @@ test('#416 review 2: a crafting table near a recent death spot is still picked u
     const now = Date.now();
     const own = (b) => [[b.name, b.metadata, 1]];
     const table = fakeBot({ blocks: [block('crafting_table', 0, at(2))], dropsOf: own });
-    table.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(3), dimension: null }];
+    table.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(3), dimension: 'overworld' }];
     assert.equal(await skills.collectBlock(table, 'crafting_table', 1), true, table.output);
     assert.equal(countItem(table, 'crafting_table'), 1);
     assert.doesNotMatch(table.output, /left alone/);
     // Two rock piles, one 2 blocks from a recent death spot: the far one only; the line once.
     const piles = fakeBot({ blocks: [block('pyrotech:rock', 0, at(2)), block('pyrotech:rock', 0, at(40))] });
-    piles.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(3), dimension: null }];
+    piles.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(3), dimension: 'overworld' }];
     assert.equal(await skills.collectBlock(piles, 'pyrotech:rock', 2), true, piles.output);
     assert.deepEqual(piles.calls.dug.map(b => b.position.x), [40]);
     assert.equal((piles.output.match(/Some were left alone: within 24 blocks of where you died recently/g) ?? []).length, 1, piles.output);
