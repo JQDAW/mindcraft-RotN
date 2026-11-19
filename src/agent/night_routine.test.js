@@ -14,6 +14,7 @@ import { autonomyTick } from './priority.js';
 import { shelterQuiet, SHELTER_QUIET_MODES } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
 import { PIT } from './library/pit.js';
+import { nightRelocationPlan, NIGHT_RELOCATE, RELOCATE } from './respawn_relocate.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -856,9 +857,17 @@ test('#334 re-review 2 nit: a reset, leaving for a giver and a new shelter clear
 // shelter was refused for want of dirt (501), and it died again to the zombie risen at the spot
 // (server.log 575: "slain by Zombie FRCFLD").
 
+/** A death record (death_report's shape) at time `at`, 9 blocks west of the shelter site. */
+const deathAt = (at) => {
+    const last = { at, pos: new Vec3(-8.5, 64, 0.5), dimension: null };
+    return { last, recentSpots: (now) => (now - at < 30 * 60_000 ? [last] : []) };
+};
+
 function deathOps() {
     const o = { calls: [], away: null };
-    o.moveAwayFrom = (bot, pos, dist) => { o.calls.push('away'); o.away = { pos, dist }; return Promise.resolve(true); };
+    // The real plan (respawn_relocate.nightRelocationPlan), a fake walk that gets there.
+    o.nightRelocation = (agent, now, opts) => { o.relocOpts = opts; return nightRelocationPlan(agent, now, opts); };
+    o.walkAwayAtNight = (bot, plan) => { o.calls.push('away'); o.away = plan; return Promise.resolve({ arrived: true, nearest: plan.away, stopped: null }); };
     o.buildShelter = (bot, opts = {}) => {
         o.calls.push(opts.site ? 'roof' : 'build');
         return Promise.resolve(opts.site
@@ -875,14 +884,16 @@ function deathOps() {
 test('round 9 B (h): after a night death nearby: away from the death spot first, then a shelter; with no dirt a hole; out of the hole in the morning', async (t) => {
     quiet(t);
     const agent = fakeAgent({ t: NIGHT });
-    agent._death = { last: { at: -60_000, pos: { x: -8.5, y: 64, z: 0.5 }, dimension: null } }; // a minute ago, 9 blocks off
+    agent._death = deathAt(-60_000); // a minute ago, 9 blocks off
     const o = deathOps();
     let now = 0;
     const run = async () => { nightTick(agent, { now: ++now, ops: o }); await settle(agent); };
     await run();
     assert.deepEqual(o.calls, ['away'], 'first away from the spot');
-    assert.equal(o.away.dist, 28);
-    assert.match(agent.chat.at(-1), /\[night\] I died 9 blocks from here; moving at least 28 away before sheltering/);
+    assert.equal(o.away.mode, 'short', 'no weapon at night: the first spot 24 blocks from the death spots');
+    assert.equal(o.away.away, 24);
+    assert.deepEqual(o.relocOpts, { night: true, armed: false });
+    assert.match(agent.chat.at(-1), /^\[night\] I died near here recently, and it is night and I have no weapon: moving to the first spot at least 24 blocks from 1 recent death spot, towards -?\d+, -?\d+, before sheltering$/);
     await run();
     assert.deepEqual(o.calls, ['away', 'build'], 'then the shelter, which is refused: no dirt');
     await run();
@@ -900,7 +911,7 @@ test('round 9 B (h): after a night death nearby: away from the death spot first,
 test('round 9 B (h): no walk away when the death was long ago or far off; a hole is tried once a night', async (t) => {
     quiet(t);
     const old = fakeAgent({ t: NIGHT });
-    old._death = { last: { at: -30 * 60_000, pos: { x: -8.5, y: 64, z: 0.5 }, dimension: null } };
+    old._death = deathAt(-30 * 60_000);
     const o = deathOps();
     o.digPit = () => { o.calls.push('pit'); return Promise.resolve(null); }; // no place for a hole
     for (let now = 1; now < 3; now++) { nightTick(old, { now, ops: o }); await settle(old); }
@@ -1944,7 +1955,9 @@ function heldSetup({ weapon = false, plan = true, health = 20, held = 'feet', ba
     o.buildShelter = (bot, opts = {}) => {
         o.builds.push(opts.site ?? null);
         if (opts.site) o.repairs.push({ site: opts.site, skip: (opts.skip ?? []).map(c => `${c.x},${c.y},${c.z}`) });
-        return Promise.resolve({ closed: true, feet: opts.site ?? SITE, placed: 1, line: 'Shelter closed' });
+        // A repair that leaves a held cell out does not close the shelter.
+        const closed = !(opts.skip?.length);
+        return Promise.resolve({ closed, feet: opts.site ?? SITE, placed: 1, line: closed ? 'Shelter closed' : 'Shelter is not closed: 1 open' });
     };
     o.hasWeapon = () => weapon;
     o.heldCells = (bot, site, open) => (held === 'none' ? [] : open.filter(c => held === 'both' || c.equals(opening[0])).map(cell => ({ cell, mob: zombie })));
@@ -1997,12 +2010,18 @@ test('#470 review 2: no weapon, held, health 8 or lower: back away (once per she
     assert.equal(nightState(hit.agent).handFight, true);
     assert.ok(hit.agent.chat.includes('[night] no weapon, health 6, and no way to back away from a zombie in the opening at 1, 64, 0: hitting back by hand'));
     assert.deepEqual(hit.o.repairs, [{ site: SITE, skip: ['1,64,0'] }], 'the other cell is still repaired');
-    // The zombie leaves the cell: no fight by hand any more.
+    // The zombie leaves the cell: the repair closes the shelter, and the fight by hand ends with it (#470 nit).
     hit.o.heldCells = () => [];
     hit.o.open = [hit.opening[0]];
+    nightState(hit.agent).handFight = true;
+    nightState(hit.agent).repairStall = null;
+    hit.agent.bot.rotnSheltered = 'open';
     nightTick(hit.agent, { now: 3 * CHECK_MS, ops: hit.o });
+    assert.equal(nightState(hit.agent).handFight, false, 'no hand fight while nothing holds a cell');
+    nightState(hit.agent).handFight = true; // as set before this repair started
     await settle(hit.agent);
-    assert.equal(nightState(hit.agent).handFight, false);
+    assert.equal(hit.agent.bot.rotnSheltered, true);
+    assert.equal(nightState(hit.agent).handFight, false, 'cleared when the repair closes the shelter');
 });
 
 test('#470 review 3: a back-away whose seal fails with the bot in plan.to keeps the shelter there: held or repaired, never built afresh beside the mob (each seal step)', async (t) => {
@@ -2025,4 +2044,42 @@ test('#470 review 3: a back-away whose seal fails with the bot in plan.to keeps 
     const stay = heldSetup({ health: 5, backAway: () => Promise.resolve({ why: 'could not dig -1, 65, 0' }) });
     await breachAt(stay);
     assert.ok(nightState(stay.agent).site.equals(SITE));
+});
+
+// Soak 3 (rotn-v0.1.5), the lead's C: a walk away a reflex cut short is tried again 5 s later, three
+// walks in all; one that ran out of time is not; the plan is told whether it is night and armed.
+test('soak 3 C: an interrupted walk away is tried again NIGHT_RELOCATE.waitMs later, 3 walks in all, then the shelter; a timed-out walk is not tried again', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = deathOps();
+    o.hasWeapon = () => true;
+    let plans = 0;
+    o.nightRelocation = (a, now, opts) => { plans++; o.relocOpts = opts; return { mode: 'full', target: { x: 60, z: 0 }, places: [], away: 48, line: '[night] I died near here recently: moving at least 48 blocks from the spawn and 1 recent death spot, towards 60, 0, before sheltering' }; };
+    const tick = async (now) => { nightTick(agent, { now, ops: o }); await settle(agent); };
+    agent.actions.interruptNext = true;
+    await tick(1);
+    assert.deepEqual(o.relocOpts, { night: true, armed: true });
+    assert.equal(nightState(agent).leftDeathSpot, false, 'interrupted: not done');
+    await tick(2); // starts the wait
+    await tick(2 + NIGHT_RELOCATE.waitMs - 1);
+    assert.equal(plans, 1, 'waiting');
+    agent.actions.interruptNext = true;
+    await tick(2 + NIGHT_RELOCATE.waitMs);
+    assert.equal(plans, 2);
+    assert.ok(agent.chat.some(l => l.endsWith('before sheltering (walk 2 of 3)')));
+    await tick(3 + NIGHT_RELOCATE.waitMs);
+    agent.actions.interruptNext = true;
+    await tick(4 + 2 * NIGHT_RELOCATE.waitMs);
+    assert.equal(plans, 3);
+    assert.equal(nightState(agent).leftDeathSpot, true, 'after 3 walks: shelter where it is');
+    await tick(5 + 2 * NIGHT_RELOCATE.waitMs);
+    assert.deepEqual(o.calls, ['build'], 'then the shelter (the walks never ran: interrupted)');
+
+    const late = fakeAgent({ t: NIGHT });
+    const o2 = deathOps();
+    o2.nightRelocation = () => ({ mode: 'short', target: { x: 30, z: 0 }, places: [], away: 24, line: '[night] walk' });
+    o2.walkAwayAtNight = () => { o2.calls.push('away'); return Promise.resolve({ arrived: false, nearest: 10, stopped: 'time' }); };
+    nightTick(late, { now: 1, ops: o2 }); await settle(late);
+    nightTick(late, { now: 2, ops: o2 }); await settle(late);
+    assert.deepEqual(o2.calls, ['away', 'build'], 'out of time: no second walk, the shelter next');
 });

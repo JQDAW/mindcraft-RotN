@@ -18,7 +18,8 @@ import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LA
 import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE, heldCells, retreatPlan, backAway, BACK_AWAY } from './library/shelter.js';
 import { goToGoal, descendFromTree } from './library/skills.js';
 import { stowCarried, toolAllows, allowedTool } from './library/rotn_sources.js';
-import { digPit, pitOut, moveAwayFrom, PIT, quickByHand, digWithin, digBudget } from './library/pit.js';
+import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
+import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
 import { hasWeapon, shelterEnemy } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
@@ -62,11 +63,6 @@ export const DUSK_WAIT_MS = 60_000;
  * the shelter is checked on every tick instead of every CHECK_MS.
  */
 export const DIG_ALARM_MS = 15_000;
-/**
- * G3 round 9 B (fix h): after a death at night the bot first walks away from where it died (the
- * killer, and the player zombie that rises there) when that was less than this long ago.
- */
-export const DEATH_NEAR_MS = 20 * 60_000;
 /**
  * G3 gate B: a pillaring zombie (Epic Siege Mod) put its scaffolding into the bot's head cell, and
  * the bot left its closed shelter and died. A block in the bot's two cells that is no hazard is
@@ -132,7 +128,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     restoreCowardice(agent, n);
-    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, descended: false, pitProgress: {} });
+    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {} });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0 });
@@ -533,22 +529,9 @@ const key3 = (p) => `${p.x},${p.y},${p.z}`;
 const mobText = (e) => e?.position ? `a ${e.name ?? e.displayName ?? 'hostile mob'} at ${at(e.position.floored())}` : 'a hostile mob';
 
 /** What the routine does in the world (tests pass their own). */
-export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, moveAwayFrom, onTree: standsOnTree, descend: (bot) => descendFromTree(bot),
+export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, onTree: standsOnTree, descend: (bot) => descendFromTree(bot),
+    nightRelocation: nightRelocationPlan, walkAwayAtNight,
     heldCells, retreatPlan, backAway, hasWeapon };
-
-/**
- * The bot's last death spot when it died less than DEATH_NEAR_MS ago, in this dimension, and is
- * within PIT.awayFrom of it now (round 9 B: it respawned 9 blocks from it, at night), else null.
- */
-function deathSpotNear(agent, now) {
-    const last = agent._death?.last;
-    const pos = agent.bot?.entity?.position;
-    if (!last?.pos || !pos || !Number.isFinite(last.at) || now - last.at >= DEATH_NEAR_MS) return null;
-    const dim = agent.bot.game?.dimension;
-    if (last.dimension != null && dim != null && last.dimension !== dim) return null;
-    const d = Math.hypot(pos.x - last.pos.x, pos.y - last.pos.y, pos.z - last.pos.z);
-    return d < PIT.awayFrom ? { pos: last.pos, d } : null;
-}
 
 /**
  * Exposed with no weapon (round 9 B, fix h): keep away from mobs rather than fight bare-handed.
@@ -703,7 +686,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         bot.rotnSheltered = false;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, descended: false, pitProgress: {}, leaveFrom: null });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -739,16 +722,36 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             });
             return 'night:building';
         }
-        // Round 9 B (fix h): died here at night not long ago: first away from the spot.
-        const spot = n.leftDeathSpot ? null : deathSpotNear(agent, now);
-        n.leftDeathSpot = true;
-        if (spot && ops.moveAwayFrom) {
-            line(agent, `[night] I died ${Math.round(spot.d)} blocks from here; moving at least ${PIT.awayFrom} away before sheltering`);
-            startJob(agent, n, 'action:leaveDeathSpot', () => ops.moveAwayFrom(bot, spot.pos, PIT.awayFrom), (far) => {
-                if (!far) console.warn('[night] could not get far from the death spot; sheltering here');
-                n.nextAt = 0;
-            });
-            return 'night:building';
+        // Round 9 B (fix h), soak 3 (the lead's C): after a recent death, first away from the spawn and
+        // every recent death spot (respawn_relocate.nightRelocationPlan: 48 blocks; with a mob near the
+        // way, or no weapon at night, to the first spot 24 blocks from every death spot). A walk a
+        // reflex cut short is tried again NIGHT_RELOCATE.waitMs later, NIGHT_RELOCATE.tries walks in all.
+        if (!n.leftDeathSpot && ops.nightRelocation) {
+            if (n.relocPending) { n.relocPending = false; n.relocWaitUntil = now + NIGHT_RELOCATE.waitMs; }
+            if (n.relocWaitUntil != null && now < n.relocWaitUntil) return 'night:building';
+            n.relocWaitUntil = null;
+            const plan = ops.nightRelocation(agent, now, { night: phase === 'night', armed: (ops.hasWeapon ?? hasWeapon)(bot) });
+            if (!plan) n.leftDeathSpot = true;
+            else {
+                n.relocTries = (n.relocTries ?? 0) + 1;
+                const tries = NIGHT_RELOCATE.tries;
+                line(agent, `${plan.line}${n.relocTries > 1 ? ` (walk ${n.relocTries} of ${tries})` : ''}`);
+                startJob(agent, n, 'action:leaveDeathSpot', () => ops.walkAwayAtNight(bot, plan), (r, ret) => {
+                    n.nextAt = 0;
+                    const far = `${Math.round(r?.nearest ?? 0)} blocks`;
+                    if (ret?.interrupted && !r?.arrived && n.relocTries < tries) {
+                        n.relocPending = true;
+                        console.log(`[night] the walk away was interrupted at ${far} (walk ${n.relocTries} of ${tries}); trying again in ${NIGHT_RELOCATE.waitMs / 1000} s`);
+                        return;
+                    }
+                    n.leftDeathSpot = true;
+                    if (r?.arrived) console.log(`[night] the walk away is done: ${far} from the places left${r.stopped === 'hostile' ? ' (stopped early: a hostile mob came near)' : ''}; sheltering here`);
+                    else if (r?.stopped === 'time') console.warn(`[night] the walk away ran out of time at ${far} from the places left; sheltering here`);
+                    else if (ret?.interrupted) console.warn(`[night] the walk away was interrupted ${tries} times (${far} from the places left); sheltering here`);
+                    else console.warn(`[night] the walk away did not get there (${far} from the places left); sheltering here`);
+                });
+                return 'night:building';
+            }
         }
         if (n.nextAt === null) n.nextAt = now + RETRY_MS;
         if (now < n.nextAt) return 'night:building';
@@ -837,7 +840,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 bot.rotnSheltered = false;
                 n.state = 'day';
                 n.site = null;
-                Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false });
+                Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false });
                 line(agent, text);
             };
             const failedTry = (why) => {
@@ -965,6 +968,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                             n.checkedAt = null;
                             const still = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody });
                             bot.rotnSheltered = still && still.todo.length === 0 ? true : 'open';
+                            if (bot.rotnSheltered === true) n.handFight = false; // #470 nit
                             line(agent, r?.site ? `[night] backed away: in the shelter at ${at(n.site)}, the cells behind sealed`
                                 : `[night] backed away into ${at(n.site)}, but ${r?.why ?? 'the seal failed'}; holding or repairing there`);
                         });
@@ -987,7 +991,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             const text = `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`;
             if (open) console.log(text); else line(agent, text); // said once, then logged (T1: chat volume)
             startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody, ...(skip.length ? { skip } : {}) }), (r) => {
-                if (r?.closed) { bot.rotnSheltered = true; n.repairStall = null; return; }
+                if (r?.closed) { bot.rotnSheltered = true; n.repairStall = null; n.handFight = false; return; } // #470 nit: no hand fight once closed
                 // CX23 soak: why cells stay open, in the journal (r.line names each cell and its reason).
                 if ((r?.placed ?? 0) > 0) { console.log(`[night] the repair placed ${r.placed} but left some open (${r.line})`); n.repairStall = null; return; } // progress: the next tick tries again
                 // Nothing placed: back to every CHECK_MS until a fight in place ends (#331 re-review).

@@ -10,7 +10,7 @@
 import pf from 'mineflayer-pathfinder';
 import { Vec3 } from 'vec3';
 import { goToGoal } from './library/skills.js';
-import { isPlayerZombie } from './library/threats.js';
+import { isPlayerZombie, shelterEnemy } from './library/threats.js';
 import { safeError } from './safe_error.js';
 import { isGiverGoal } from './agenda_driver.js';
 
@@ -31,7 +31,7 @@ export function placesToLeave(agent, now = Date.now()) {
     const dim = bot?.game?.dimension;
     const places = (agent._death?.recentSpots?.(now) ?? [])
         .filter(s => s.pos && (s.dimension == null || dim == null || s.dimension === dim))
-        .map(s => ({ pos: s.pos, what: 'death spot' }));
+        .map(s => ({ pos: s.pos, what: 'death spot', at: s.at }));
     const sp = bot?.spawnPoint;
     if (sp && !(sp.x === 0 && sp.y === 0 && sp.z === 0)) places.unshift({ pos: sp, what: 'spawn' });
     return places;
@@ -60,25 +60,25 @@ export function relocationReason(agent, now = Date.now()) {
 }
 
 /**
- * A point at least RELOCATE.away from every place: straight away from their centre (from the bot's
+ * A point at least `away` (RELOCATE.away) from every place: straight away from their centre (from the bot's
  * position), as near as that allows; or null when none within RELOCATE.maxTarget.
  */
-export function targetAwayFrom(here, places, { surfaceOk = () => true } = {}) {
+export function targetAwayFrom(here, places, { surfaceOk = () => true, away = RELOCATE.away } = {}) {
     const cx = places.reduce((s, p) => s + p.pos.x, 0) / places.length;
     const cz = places.reduce((s, p) => s + p.pos.z, 0) / places.length;
     let dx = here.x - cx, dz = here.z - cz;
     const len = Math.hypot(dx, dz);
     if (len < 1e-6) { dx = 1; dz = 0; } else { dx /= len; dz /= len; }
-    for (let d = RELOCATE.away; d <= RELOCATE.maxTarget; d += 4) {
+    for (let d = away; d <= RELOCATE.maxTarget; d += 4) {
         const t = { x: Math.round(cx + dx * d), z: Math.round(cz + dz * d) };
         // #416 nit: not a point whose surface (where loaded) is water or lava; on, farther out.
-        if (places.every(p => hdist(p.pos, t) >= RELOCATE.away + 4) && surfaceOk(t.x, t.z)) return t;
+        if (places.every(p => hdist(p.pos, t) >= away + 4) && surfaceOk(t.x, t.z)) return t;
     }
     return null;
 }
 
 /** The surface at x, z near the bot's height is not a liquid (unloaded: assumed fine). */
-function dryAt(bot) {
+export function dryAt(bot) {
     const y0 = Math.floor(bot.entity?.position?.y ?? 64);
     return (x, z) => {
         for (let y = y0 + 16; y >= y0 - 32; y--) {
@@ -146,4 +146,89 @@ export function relocateTick(agent, { now = Date.now(), clock = Date.now, walk =
             log(`[respawn] got only ${Math.round(nearest)} blocks from ${what}${here ? ` (at ${at(here)})` : ''}; the agenda resumes`);
         });
     return 'relocating';
+}
+
+/**
+ * Soak 3 (rotn-v0.1.5), the lead's C: after a death, at night, the night routine first walks away by
+ * this rule instead of 28 blocks from the last death spot only (soak 3: that walk gave up in about
+ * 2 s three times, and a respawn sheltered beside two older spots and died 23 s later; the one
+ * relocation that ran, by day, got 50 blocks away). Full: at least RELOCATE.away (48) from the spawn
+ * and every recent death spot. Short (the lead's change): with a hostile mob within hostilePathRange
+ * of the way, or no weapon once it is night, only to the first spot at least shortAway from every
+ * recent death spot. recentMs: a death this recent (the death spots kept); tries: walks a reflex cut
+ * short, waitMs apart; checkMs: how often the walk looks whether it may stop.
+ */
+export const NIGHT_RELOCATE = { recentMs: 30 * 60_000, shortAway: 24, hostilePathRange: 16, tries: 3, waitMs: 5000, walkMs: RELOCATE.walkMs, checkMs: 500 };
+
+/** The nearest hostile mob (threats.shelterEnemy) within range of the straight way from a to b (horizontally), or null. */
+export function hostileNearWay(bot, a, b, range = NIGHT_RELOCATE.hostilePathRange) {
+    const vx = b.x - a.x, vz = b.z - a.z, len2 = vx * vx + vz * vz;
+    const dist = (p) => {
+        const t = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.z - a.z) * vz) / len2)) : 0;
+        return Math.hypot(p.x - (a.x + t * vx), p.z - (a.z + t * vz));
+    };
+    let best = null, bestD = Infinity;
+    for (const e of Object.values(bot.entities ?? {})) {
+        if (!e || e === bot.entity || !e.position || !shelterEnemy(e)) continue;
+        const d = dist(e.position);
+        if (d <= range && d < bestD) { best = e; bestD = d; }
+    }
+    return best;
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * The walk away at night after a recent death (NIGHT_RELOCATE), or null when none is needed (no
+ * death within recentMs in this dimension, or already far enough). night: the night proper (not
+ * dusk); armed: the bot holds a weapon. Returns {mode: 'full'|'short', target, places, away, line}.
+ */
+export function nightRelocationPlan(agent, now = Date.now(), { night = false, armed = false } = {}) {
+    const bot = agent.bot;
+    const here = bot?.entity?.position;
+    if (!here) return null;
+    const places = placesToLeave(agent, now).filter(p => p.what !== 'death spot' || now - (p.at ?? now) < NIGHT_RELOCATE.recentMs);
+    const deaths = places.filter(p => p.what === 'death spot');
+    if (!deaths.length) return null;
+    const surfaceOk = dryAt(bot);
+    const full = targetAwayFrom(here, places, { surfaceOk });
+    const nearWay = full ? hostileNearWay(bot, here, full) : null;
+    const towards = (t) => `towards ${t.x}, ${t.z}`;
+    if (nearWay || (night && !armed) || !full) {
+        if (deaths.every(p => hdist(p.pos, here) >= NIGHT_RELOCATE.shortAway)) return null;
+        const target = targetAwayFrom(here, deaths, { surfaceOk, away: NIGHT_RELOCATE.shortAway });
+        if (!target) return null;
+        const why = nearWay ? `a ${nearWay.name ?? 'hostile mob'} is near the way` : !full ? `there is no place ${RELOCATE.away} blocks away` : 'it is night and I have no weapon';
+        return { mode: 'short', target, places: deaths, away: NIGHT_RELOCATE.shortAway,
+            line: `[night] I died near here recently, and ${why}: moving to the first spot at least ${NIGHT_RELOCATE.shortAway} blocks from ${plural(deaths.length, 'recent death spot')}, ${towards(target)}, before sheltering` };
+    }
+    if (places.every(p => hdist(p.pos, here) >= RELOCATE.away)) return null;
+    const what = [places.some(p => p.what === 'spawn') ? 'the spawn' : null, plural(deaths.length, 'recent death spot')].filter(Boolean).join(' and ');
+    return { mode: 'full', target: full, places, away: RELOCATE.away,
+        line: `[night] I died near here recently: moving at least ${RELOCATE.away} blocks from ${what}, ${towards(full)}, before sheltering` };
+}
+
+/**
+ * The night walk (nightRelocationPlan), bounded by NIGHT_RELOCATE.walkMs. Short: it stops at the first
+ * spot at least plan.away from every death spot. Full: it stops early, where it is, once a hostile
+ * mob comes within hostilePathRange and the bot is already shortAway from every death spot.
+ * Returns {arrived, nearest, stopped: null|'far'|'hostile'|'time'}; nearest: the least distance to
+ * the places left.
+ */
+export async function walkAwayAtNight(bot, plan, { walk = (b, t) => goToGoal(b, new pf.goals.GoalNearXZ(t.x, t.z, 4)) } = {}) {
+    const deaths = plan.places.filter(p => p.what === 'death spot');
+    const farFrom = (list, d) => list.every(p => hdist(p.pos, bot.entity.position) >= d);
+    let stopped = null, timer, watch;
+    const halt = (why) => { stopped = why; try { bot.pathfinder?.stop?.(); } catch { /* best effort */ } };
+    const limit = new Promise(resolve => { timer = setTimeout(() => { halt('time'); resolve(); }, NIGHT_RELOCATE.walkMs); });
+    watch = setInterval(() => {
+        if (stopped) return;
+        if (plan.mode === 'short' && farFrom(deaths, plan.away)) halt('far');
+        else if (plan.mode === 'full' && farFrom(deaths, NIGHT_RELOCATE.shortAway) && hostileNearWay(bot, bot.entity.position, bot.entity.position)) halt('hostile');
+    }, NIGHT_RELOCATE.checkMs);
+    try { await Promise.race([Promise.resolve().then(() => walk(bot, plan.target)).catch(() => {}), limit]); } finally { clearTimeout(timer); clearInterval(watch); }
+    const here = bot.entity.position;
+    const nearest = Math.min(...plan.places.map(p => hdist(p.pos, here)));
+    const arrived = nearest >= plan.away || (stopped === 'hostile' && farFrom(deaths, NIGHT_RELOCATE.shortAway));
+    return { arrived, nearest, stopped: arrived && stopped === 'time' ? null : stopped };
 }
