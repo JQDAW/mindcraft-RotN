@@ -1332,3 +1332,98 @@ test('#478: a reserve that becomes wanted (the shelter blocks before night) take
     assert.match(agent.self_prompter.prompt, /^RotN agenda, step shelter_blocks/);
     assert.equal(agent._agenda_open_goal, null);
 });
+
+// #479 follow-ups: a run across a window boundary, the 20-min wording, a reserve in between, and a
+// task giver's holds and !agendaStop during the standing goal.
+test('#479 nit 1: a standing run still going when the day changes is carried into the new window (charged there), not restarted', (t) => {
+    noNight(t);
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, clock);
+    const sp = agent.self_prompter;
+    let now = 0;
+    const tick = () => { clock.now = 1_000_000 + now; return autonomyTick(agent, { now }); };
+    assert.equal(tick(), 'goal:open');
+    for (let k = 0; k < 10; k++) { now += TICK_MS; tick(); }
+    const day3 = agent.agenda.standing;
+    assert.equal(day3.key, 'done@day 3');
+    agent.bot.time = { timeOfDay: 1000, day: 4 }; // the day turns while it runs
+    now += TICK_MS;
+    assert.equal(tick(), 'goal:open:running');
+    assert.equal(sp.starts.length, 1, 'not restarted');
+    assert.ok(agent.said.includes('agenda standing goal started (day 4, carried over from day 3)'), agent.said.join('\n'));
+    assert.deepEqual([agent.agenda.standing.key, agent.agenda.standing.starts], ['done@day 4', 1]);
+    assert.equal(agent.agenda.standing.llmMs, OPEN_GOAL.minChargeMs, 'charged from the boundary');
+    for (let k = 0; k < 10; k++) { now += TICK_MS; tick(); }
+    assert.equal(agent.agenda.standing.llmMs, OPEN_GOAL.minChargeMs + 10 * TICK_MS - OPEN_GOAL.minChargeMs, 'its time goes to day 4 (past the minimum charge)');
+});
+
+test('#479 nit 2: in 20-min mode the spent line says "until the next window"', (t) => {
+    noNight(t);
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, clock);
+    agent.bot.time = { timeOfDay: 1000 }; // no day
+    let now = 1_200_000 + 1000; // just after a 20-min window starts (no boundary in the 5 min run)
+    let r = null;
+    for (let k = 0; k <= STEP_LLM_MS / TICK_MS + 3; k++) { clock.now = now; r = autonomyTick(agent, { now }); now += TICK_MS; }
+    assert.equal(r, 'goal:open:spent');
+    assert.ok(agent.said.some(l => /^agenda standing goal: its 5 min of self-prompting for the 20-min window \d+ are spent; none until the next window$/.test(l)), agent.said.join('\n'));
+});
+
+test('#479 nit 4: after a reserve (food) runs and is done, the standing goal comes back with its window intact', (t) => {
+    noNight(t);
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, clock);
+    const sp = agent.self_prompter;
+    const items = [{ name: 'bread', metadata: 0, count: 4 }, { name: 'cobblestone', metadata: 0, count: 10 }, { name: 'stone_pickaxe', metadata: 0, count: 1 }, { name: 'stone_axe', metadata: 0, count: 1 }];
+    agent.bot.inventory = { items: () => items.filter(i => i.count > 0), slots: [] };
+    let now = 0;
+    const tick = () => { clock.now = 1_000_000 + now; return autonomyTick(agent, { now }); };
+    assert.equal(tick(), 'goal:open');
+    for (let k = 0; k < 5; k++) { now += TICK_MS; tick(); }
+    const before = { ...agent.agenda.standing };
+    // Food runs out: the food reserve (a standing duty once the agenda is done) takes the loop.
+    items[0].count = 0;
+    agent.bot.food = 12;
+    now += TICK_MS;
+    assert.equal(tick(), 'food');
+    assert.match(sp.prompt, /^RotN agenda, step food/);
+    // Fed again: back to the standing goal, the same window, its start and LLM time kept.
+    items[0].count = 4;
+    agent.bot.food = 20;
+    now += TICK_MS;
+    tick();
+    assert.equal(agent.agenda.standing.key, before.key);
+    assert.equal(agent.agenda.standing.starts, before.starts, 'no new start counted yet');
+    assert.ok(agent.agenda.standing.llmMs >= before.llmMs, 'its LLM time kept');
+    now += BACKOFF_MS;
+    assert.equal(tick(), 'goal:open', 'it starts again (after its backoff)');
+    assert.equal(agent.agenda.standing.starts, before.starts + 1);
+    assert.equal(agent.said.filter(l => /^agenda standing goal started/.test(l)).length, 1, 'the day\'s start line once');
+});
+
+test('#479 nit 4: a giver\'s !stop or !pause holds the standing goal and !resume brings it back with its window; !agendaStop ends it', async (t) => {
+    noNight(t);
+    const { getCommand } = await import('./commands/index.js');
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, clock);
+    Object.assign(agent, { actions: { stop: () => Promise.resolve(), cancelResume() {}, executing: false }, clearBotLogs() {} });
+    const sp = agent.self_prompter;
+    let now = 0;
+    const tick = () => { clock.now = 1_000_000 + now; return autonomyTick(agent, { now }); };
+    assert.equal(tick(), 'goal:open');
+    for (const cmd of ['!pause', '!stop']) {
+        await getCommand(cmd).perform(agent, { sender: 'JQDAW' });
+        assert.equal(sp.isActive(), false, `${cmd}: stopped`);
+        for (let k = 0; k < 5; k++) { now += 30_000; assert.match(tick(), /^held:/, `${cmd}: held`); }
+        const kept = { ...agent.agenda.standing };
+        await getCommand('!resume').perform(agent, { sender: 'JQDAW' });
+        now += BACKOFF_MS * 4;
+        assert.equal(tick(), 'goal:open', `${cmd}: back after !resume`);
+        assert.equal(agent.agenda.standing.key, kept.key);
+        assert.equal(agent.agenda.standing.starts, kept.starts + 1, 'the same window');
+    }
+    await getCommand('!agendaStop').perform(agent, { sender: 'JQDAW' });
+    assert.equal(sp.isActive(), false);
+    for (let k = 0; k < 5; k++) { now += 60_000; assert.equal(tick(), null, 'no standing goal once the agenda is stopped'); }
+    assert.equal(sp.isActive(), false);
+});
