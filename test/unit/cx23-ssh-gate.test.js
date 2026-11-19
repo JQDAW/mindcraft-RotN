@@ -1,12 +1,14 @@
 // Offline tests for deploy/cx23/mindcraft-rotn-ssh-gate.sh, the forced command of the CX33's restricted SSH key to
 // deploy@cx23 (ADR 0009, ADR 0011). A copy runs with its program paths pointed at fakes: `sudo` and `logger` record
 // their exact argv (NUL-separated), so the tests see what root (or rotn-build) would run and what syslog would get.
-// The fake sudo answers the ctl's `list` ($FAKE_LIST, exit $FAKE_LIST_RC) and `is-enabled BOT` ($FAKE_EN_<bot>,
-// default "disabled"); every other call exits $FAKE_RC. Nothing connects to the CX23.
+// The fake sudo answers the ctl's `list` ($FAKE_LIST, exit $FAKE_LIST_RC), `is-enabled BOT` ($FAKE_EN_<bot>, default
+// "disabled") and `is-active BOT` ($FAKE_ACT_<bot>, default "inactive"; exit 0 only for "active", like systemctl); the
+// deploy call sleeps $FAKE_DEPLOY_SLEEP seconds if set; every other call exits $FAKE_RC. The ctl's lock is a temp file
+// (gate.lock, made per test unless a test removes it). Nothing connects to the CX23.
 import './isolate-tmp.mjs';
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,7 +26,7 @@ const AS_BUILD = ['-n', '-u', 'rotn-build', DEPLOY_SH];
 const REFUSAL = 'rotn-ssh-gate: refused. Allowed: status|start|stop|metrics BOT; journal BOT [--since YYYY-MM-DDTHH:MM[:SS][Z]|@EPOCH]; '
     + 'reset-state BOT NAME; deploy|deploy-check rotn-vX.Y.Z; release\n';
 
-let tmp, copy, sudoLog, loggerLog, pathSudoLog;
+let tmp, copy, sudoLog, loggerLog, pathSudoLog, lockFile;
 beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-gate-'));
     sudoLog = path.join(tmp, 'sudo.log');
@@ -39,6 +41,8 @@ beforeEach(() => {
         'case "$*" in',
         `  "-n ${CTL} list") printf '%b' "\${FAKE_LIST-}"; exit "\${FAKE_LIST_RC:-0}" ;;`,
         `  "-n ${CTL} is-enabled "*) v="FAKE_EN_\${4//-/_}"; s=\${!v-disabled}; [[ -n $s ]] && echo "$s"; [[ $s == enabled ]] && exit 0; exit 1 ;;`,
+        `  "-n ${CTL} is-active "*) v="FAKE_ACT_\${4//-/_}"; s=\${!v-inactive}; [[ -n $s ]] && echo "$s"; [[ $s == active ]] && exit 0; exit "\${FAKE_ACT_RC:-3}" ;;`,
+        `  "-n -u rotn-build ${DEPLOY_SH} --no-restart deploy "*) [[ -n \${FAKE_DEPLOY_SLEEP-} ]] && exec sleep "$FAKE_DEPLOY_SLEEP" ;;`,
         'esac',
         'exit "${FAKE_RC:-0}"',
     ].join('\n'));
@@ -46,8 +50,11 @@ beforeEach(() => {
     // A "sudo" earlier on any PATH the caller could set: the gate must never run it.
     fs.mkdirSync(path.join(tmp, 'evil'));
     fake(path.join('evil', 'sudo'), pathSudoLog);
+    lockFile = path.join(tmp, 'gate.lock');
+    fs.writeFileSync(lockFile, '');
     const body = SRC.replace('readonly SUDO=/usr/bin/sudo', `readonly SUDO=${sudo}`)
-        .replace('readonly LOGGER=/usr/bin/logger', `readonly LOGGER=${logger}`);
+        .replace('readonly LOGGER=/usr/bin/logger', `readonly LOGGER=${logger}`)
+        .replace('readonly CTL_LOCK=/run/mindcraft-rotn-ctl.lock', `readonly CTL_LOCK=${lockFile}`);
     assert.notEqual(body, SRC);
     copy = path.join(tmp, 'gate.sh');
     fs.writeFileSync(copy, body, { mode: 0o755 });
@@ -241,13 +248,16 @@ describe('mindcraft-rotn-ssh-gate: it trusts nothing in its environment', () => 
 describe('mindcraft-rotn-ssh-gate: ADR 0011 (deploy, deploy-check and release as rotn-build; reset-state BOT NAME)', () => {
     const LIST = ['-n', CTL, 'list'];
     const isEnabled = (b) => ['-n', CTL, 'is-enabled', b];
+    const isActive = (b) => ['-n', CTL, 'is-active', b];
     const infos = (r) => r.logger.filter((a) => a[3] === 'auth.info').map((a) => a.at(-1));
     const warnings = (r) => r.logger.filter((a) => a[3] === 'auth.warning').map((a) => a.at(-1));
 
     test('deploy TAG with no bot enabled: every listed bot is asked, then `sudo -n -u rotn-build DEPLOY_SH --no-restart deploy TAG`, and "deploy TAG exit=0" is logged', () => {
         const r = gate('deploy rotn-v0.1.8', { FAKE_LIST: 'frcfld\\nbot-2\\n' });
         assert.equal(r.code, 0, r.stderr);
-        assert.deepEqual(r.sudo, [LIST, isEnabled('frcfld'), isEnabled('bot-2'), [...AS_BUILD, '--no-restart', 'deploy', 'rotn-v0.1.8']]);
+        assert.deepEqual(r.sudo, [LIST, isEnabled('frcfld'), isActive('frcfld'), isEnabled('bot-2'), isActive('bot-2'), [...AS_BUILD, '--no-restart', 'deploy', 'rotn-v0.1.8']]);
+        // a failed unit counts as stopped
+        assert.equal(gate('deploy rotn-v0.1.8', { FAKE_LIST: 'frcfld\\n', FAKE_ACT_frcfld: 'failed' }).code, 0);
         assert.deepEqual(infos(r), ['allowed: deploy rotn-v0.1.8', 'deploy rotn-v0.1.8 exit=0']);
         assert.deepEqual(warnings(r), []);
         // No bot at all is fine too; the tag's digits may have any length.
@@ -274,6 +284,10 @@ describe('mindcraft-rotn-ssh-gate: ADR 0011 (deploy, deploy-check and release as
             [{ FAKE_LIST: 'Frcfld\\n' }, /ctl list printed an unexpected line/],
             [{ FAKE_LIST: 'frcfld x\\n' }, /ctl list printed an unexpected line/],
             [{ FAKE_LIST: '../x\\n' }, /ctl list printed an unexpected line/],
+            // #485 review: running, or not known to be stopped: the PRINTED state must be exactly inactive or failed
+            ...['active', 'activating', 'deactivating', 'reloading', 'refreshing', 'unknown', ''].map((st) => [{ FAKE_LIST: 'frcfld\\n', FAKE_ACT_frcfld: st }, /bot frcfld is not stopped/]),
+            [{ FAKE_LIST: 'frcfld\\n', FAKE_ACT_frcfld: 'inactive ', FAKE_ACT_RC: '3' }, /bot frcfld is not stopped/],
+            [{ FAKE_LIST: 'frcfld\\n', FAKE_ACT_frcfld: 'Inactive' }, /bot frcfld is not stopped/],
         ];
         for (const [env, re] of cases) {
             const r = gate('deploy rotn-v0.1.8', env);
@@ -283,6 +297,57 @@ describe('mindcraft-rotn-ssh-gate: ADR 0011 (deploy, deploy-check and release as
             assert.equal(warnings(r).length, 1);
             assert.match(warnings(r)[0], /^deploy rotn-v0\.1\.8 not run: /);
             assert.deepEqual(infos(r), [], 'not logged as allowed');
+        }
+    });
+
+    test('#485 review: the deploy holds the ctl\'s lock (shared with start, restart and reset-state); a held or missing lock refuses', () => {
+        // held by someone else (a start in progress): not run
+        const holder = spawn('flock', [lockFile, 'sleep', '20'], { stdio: 'ignore' });
+        try {
+            const deadline = Date.now() + 5000;
+            while (spawnSync('flock', ['-n', lockFile, 'true']).status === 0 && Date.now() < deadline) spawnSync('sleep', ['0.1']);
+            const r = gate('deploy rotn-v0.1.8', { FAKE_LIST: 'frcfld\\n' });
+            assert.equal(r.code, 2);
+            assert.match(r.stderr, /the ctl's lock is held \(a bot start, a reset-state or another deploy\)/);
+            assert.ok(!r.sudo.some((a) => a.includes(DEPLOY_SH)));
+            assert.deepEqual(r.sudo, [LIST], 'no state was even asked: the lock comes first');
+        } finally { holder.kill(); }
+        // missing (no ctl list has made it): not run
+        fs.rmSync(lockFile);
+        const missing = gate('deploy rotn-v0.1.8');
+        assert.equal(missing.code, 2);
+        assert.match(missing.stderr, /cannot open the ctl's lock/);
+    });
+
+    test('#485 review: during the deploy the gate holds the lock, so a start (flock -w on the same file) cannot get it', async () => {
+        const env = { PATH: `${path.join(tmp, 'evil')}:/usr/bin:/bin`, HOME: tmp, SSH_ORIGINAL_COMMAND: 'deploy rotn-v0.1.8', FAKE_DEPLOY_SLEEP: '3' };
+        const child = spawn(BASH, ['-p', copy], { env, stdio: 'ignore' });
+        const done = new Promise((resolve) => child.on('close', resolve));
+        // wait until the deploy runs (the fake sudo logged it)
+        const deadline = Date.now() + 5000;
+        while (!(fs.existsSync(sudoLog) && fs.readFileSync(sudoLog, 'utf8').includes(DEPLOY_SH)) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+        assert.equal(spawnSync('flock', ['-n', lockFile, 'true']).status, 1, 'the lock is held while the build runs');
+        assert.equal(await done, 0);
+        assert.equal(spawnSync('flock', ['-n', lockFile, 'true']).status, 0, 'and released after it');
+    });
+
+    test('#485 review: a HUP, INT or TERM during the deploy is logged and passed on to the build as TERM; the exit line follows', async () => {
+        for (const sig of ['SIGHUP', 'SIGTERM', 'SIGINT']) {
+            for (const f of [sudoLog, loggerLog]) fs.rmSync(f, { force: true });
+            const env = { PATH: `${path.join(tmp, 'evil')}:/usr/bin:/bin`, HOME: tmp, SSH_ORIGINAL_COMMAND: 'deploy rotn-v0.1.8', FAKE_DEPLOY_SLEEP: '20' };
+            const child = spawn(BASH, ['-p', copy], { env, stdio: 'ignore' });
+            const done = new Promise((resolve) => child.on('close', (code, signal) => resolve({ code, signal })));
+            const deadline = Date.now() + 5000;
+            while (!(fs.existsSync(sudoLog) && fs.readFileSync(sudoLog, 'utf8').includes(DEPLOY_SH)) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+            const t0 = Date.now();
+            child.kill(sig);
+            const { code } = await done;
+            assert.ok(Date.now() - t0 < 10000, `${sig}: the build was stopped, not waited out`);
+            assert.equal(code, 143, `${sig}: the build's exit (TERM) comes back`);
+            const lines = fs.readFileSync(loggerLog, 'utf8').split('\n').filter(Boolean).map((l) => l.split('\0').slice(0, -1).at(-1));
+            const short = sig.slice(3);
+            assert.deepEqual(lines, ['allowed: deploy rotn-v0.1.8', `deploy rotn-v0.1.8 interrupted by SIG${short}; passing TERM to the build`,
+                `deploy rotn-v0.1.8 exit=143 (after SIG${short})`], sig);
         }
     });
 
@@ -319,6 +384,8 @@ describe('mindcraft-rotn-ssh-gate: ADR 0011 (deploy, deploy-check and release as
     test('the source: root\'s deploy.sh as rotn-build through sudo (which resets the environment), no env passing, no other deploy.sh verb', () => {
         assert.match(SRC, /^readonly DEPLOY_SH=\/usr\/local\/lib\/mindcraft-rotn\/deploy\.sh$/m);
         assert.match(SRC, /^readonly BUILD_USER=rotn-build$/m);
+        assert.match(SRC, /^readonly CTL_LOCK=\/run\/mindcraft-rotn-ctl\.lock /m);
+        assert.match(SRC, /^readonly FLOCK=\/usr\/bin\/flock$/m);
         assert.match(SRC, /^readonly DEPLOY_RUN=\("\$SUDO" -n -u "\$BUILD_USER" "\$DEPLOY_SH"\)$/m);
         assert.match(SRC, /^readonly DEPLOY_RE="\^\(deploy\|deploy-check\) \(\$TAG_RE\)\\\$"$/m);
         assert.match(SRC, /^readonly TAG_RE='rotn-v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+'$/m);

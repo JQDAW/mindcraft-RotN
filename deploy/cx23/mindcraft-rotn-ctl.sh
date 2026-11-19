@@ -46,6 +46,9 @@ readonly DATE=/usr/bin/date
 readonly FLOCK=/usr/bin/flock
 readonly LOCK=/run/mindcraft-rotn-ctl.lock   # in root's /run: no other user can create or replace it
 readonly LOCK_WAIT_S=30
+readonly LOCK_OWNER=root:deploy
+readonly CHOWN=/usr/bin/chown
+readonly CHMOD=/usr/bin/chmod
 readonly BOTS_DIR=/var/lib/mindcraft-rotn/bots
 readonly ARCHIVE_DIR=/var/lib/mindcraft-rotn-archive
 readonly SVC_USER=mindcraft-rotn
@@ -73,16 +76,24 @@ unit_of() {
   [[ -f $ETC_DIR/$bot.env ]] || die "no env file for '$bot' (run bootstrap.sh add-bot $bot)"
   echo "mindcraft-rotn@$bot.service"
 }
-# LOCK on fd 9, held until this process (or the program it execs) ends: start and reset-state take it.
+# LOCK, in root's /run: root:deploy 0640, so the gate (as deploy) can open it read-only and hold it for a whole deploy
+# (flock needs no write access), and nobody else, rotn-build included, can (ADR 0011). `list` makes sure it exists:
+# the gate calls list before it takes the lock.
+lock_file() {
+  exec 9>> "$LOCK" || die "cannot open $LOCK"
+  "$CHOWN" "$LOCK_OWNER" "$LOCK" && "$CHMOD" 0640 "$LOCK" || die "cannot set the owner and mode of $LOCK"
+}
+# The lock on fd 9, held until this process (or the program it execs) ends: start, restart and reset-state take it,
+# and the gate holds it during a deploy.
 take_lock() {
-  exec 9> "$LOCK" || die "cannot open $LOCK"
-  "$FLOCK" -w "$LOCK_WAIT_S" 9 || die "another start or reset-state holds $LOCK (waited ${LOCK_WAIT_S}s)"
+  lock_file
+  "$FLOCK" -w "$LOCK_WAIT_S" 9 || die "another start, reset-state or deploy holds $LOCK (waited ${LOCK_WAIT_S}s)"
 }
 # reset-state BOT NAME (ADR 0011). Root works in a tree the bot user can write, so: lstat checks (no symlink, the
 # expected owner), then a cd into the folder, checked to be the same inode the lstat saw; every move is relative to
 # that directory (a later swap of a path above it changes nothing), by rename(2) on one filesystem.
 reset_state() {
-  local bot=$1 name=$2 unit=$3 st dir ino p n k keep archive
+  local bot=$1 name=$2 unit=$3 st dir ino owner botsdev p n k keep archive
   local -a move=() kept=() left=()
   [[ $name =~ $NAME_RE ]] || die "bad profile name '$name' ([A-Za-z0-9_], 1-16)"
   export LC_ALL=C
@@ -90,18 +101,23 @@ reset_state() {
   take_lock
   st=$("$SYSTEMCTL" show --no-pager --property=ActiveState --value "$unit") || die "cannot read the state of $unit (nothing moved)"
   [[ $st == inactive || $st == failed ]] || die "$unit is '$st', not inactive or failed: stop it first (nothing moved)"
+  # Root works in a tree the bot user can write, so every check is made on the folder actually entered (cd -P, then
+  # ONE stat of "."), never on a path that could be swapped between a check and its use (#485 review). A swap of a
+  # path after the cd changes nothing: every later lookup and move is relative to the entered folder.
   [[ -d $BOTS_DIR && ! -L $BOTS_DIR ]] || die "$BOTS_DIR is not a real directory (nothing moved)"
+  cd -P -- "$BOTS_DIR" || die "cannot enter $BOTS_DIR (nothing moved)"
+  read -r owner botsdev < <("$STAT" -c '%U %d' -- .) || die "cannot stat $BOTS_DIR (nothing moved)"
+  [[ $owner == "$SVC_USER" ]] || die "$BOTS_DIR is not owned by $SVC_USER (nothing moved)"
   dir=$BOTS_DIR/$name
-  [[ -d $dir && ! -L $dir ]] || die "$dir is not a real directory (missing, a file or a symlink; nothing moved)"
-  [[ $("$STAT" -c %U -- "$dir") == "$SVC_USER" ]] || die "$dir is not owned by $SVC_USER (nothing moved)"
-  ino=$("$STAT" -c %d:%i -- "$dir")
-  cd -P -- "$dir" || die "cannot enter $dir (nothing moved)"
-  [[ $("$STAT" -c %d:%i -- .) == "$ino" ]] || die "$dir changed while it was checked (nothing moved)"
+  [[ -d ./$name && ! -L ./$name ]] || die "$dir is not a real directory (missing, a file or a symlink; nothing moved)"
+  cd -P -- "./$name" || die "cannot enter $dir (nothing moved)"
+  read -r owner ino < <("$STAT" -c '%U %d:%i' -- .) || die "cannot stat $dir (nothing moved)"
+  [[ $owner == "$SVC_USER" ]] || die "$dir is not owned by $SVC_USER (nothing moved)"
   # The archive parent: root's own, 0700, outside the bot user's tree; on the same device as BOTS_DIR and this folder.
   if [[ ! -e $ARCHIVE_DIR && ! -L $ARCHIVE_DIR ]]; then "$MKDIR" -m 0700 -- "$ARCHIVE_DIR" || die "cannot create $ARCHIVE_DIR (nothing moved)"; fi
   [[ -d $ARCHIVE_DIR && ! -L $ARCHIVE_DIR ]] || die "$ARCHIVE_DIR is not a real directory (nothing moved)"
   [[ $("$STAT" -c '%u %a' -- "$ARCHIVE_DIR") == "$ARCHIVE_UID 700" ]] || die "$ARCHIVE_DIR must be root's and 0700 (nothing moved)"
-  [[ $("$STAT" -c %d -- "$BOTS_DIR") == $("$STAT" -c %d -- "$ARCHIVE_DIR") && $("$STAT" -c %d -- .) == $("$STAT" -c %d -- "$ARCHIVE_DIR") ]] \
+  [[ $botsdev == "$("$STAT" -c %d -- "$ARCHIVE_DIR")" && ${ino%%:*} == "$botsdev" ]] \
     || die "$BOTS_DIR and $ARCHIVE_DIR are on different devices: a move could copy and delete (nothing moved)"
   shopt -s nullglob dotglob
   for p in ./*; do
@@ -134,6 +150,7 @@ action=${1:-}
 case $action in
   list)
     (( $# == 1 )) || die "list takes no arguments"
+    lock_file   # the shared lock file exists (and is root:deploy 0640) before the gate opens it
     shopt -s nullglob
     for f in "$ETC_DIR"/*.env; do b=$(basename "$f" .env); [[ $b =~ $BOT_RE ]] && echo "$b"; done
     exit 0 ;;

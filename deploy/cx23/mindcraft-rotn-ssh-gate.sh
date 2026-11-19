@@ -21,10 +21,14 @@
 #   deploy TAG         TAG exactly rotn-vX.Y.Z (digits only, no suffix; deliberately stricter than deploy.sh's own
 #                      TAG_RE, which allows a suffix: do not align them):
 #                      `sudo -n -u rotn-build DEPLOY_SH --no-restart deploy TAG`. Refused while any bot is enabled
-#                      (an enabled bot would come back on the new release at the next reboot or restart): every bot
-#                      of `ctl list` must answer exactly "disabled" to `ctl is-enabled`, or nothing runs. Not
-#                      exec'ed: the gate logs "deploy TAG exit=N" afterwards; the root-owned journal is the record
-#                      (deploys.log is rotn-build's, so release code can rewrite it).
+#                      or running: the gate takes the ctl's lock (CTL_LOCK, which start, restart and reset-state also
+#                      take) and holds it for the whole deploy, so no bot can start on a half-built release; then
+#                      every bot of `ctl list` must print exactly "disabled" to `ctl is-enabled` and exactly
+#                      "inactive" or "failed" to `ctl is-active` (exit codes are not trusted: is-active exits non-zero
+#                      for activating and deactivating too), or nothing runs. Not exec'ed: the gate logs
+#                      "deploy TAG exit=N" afterwards; the root-owned journal is the record (deploys.log is
+#                      rotn-build's, so release code can rewrite it). A HUP, INT or TERM during the deploy is logged
+#                      ("deploy TAG interrupted by SIGx") and passed on to the build as TERM; the exit line follows.
 #   deploy-check TAG   `sudo -n -u rotn-build DEPLOY_SH check TAG`: fetch, then is the tag on develop, and its commit.
 #                      Builds nothing.
 #   release            `sudo -n -u rotn-build DEPLOY_SH status` (read-only).
@@ -62,6 +66,8 @@ PATH=/usr/sbin:/usr/bin:/sbin:/bin
 readonly SUDO=/usr/bin/sudo
 readonly CTL=/usr/local/sbin/mindcraft-rotn-ctl
 readonly BUILD_USER=rotn-build
+readonly FLOCK=/usr/bin/flock
+readonly CTL_LOCK=/run/mindcraft-rotn-ctl.lock   # root:deploy 0640, made by `ctl list`; deploy may open it read-only
 readonly DEPLOY_SH=/usr/local/lib/mindcraft-rotn/deploy.sh
 readonly DEPLOY_RUN=("$SUDO" -n -u "$BUILD_USER" "$DEPLOY_SH")
 readonly LOGGER=/usr/bin/logger
@@ -101,18 +107,31 @@ not_now() {
   echo "rotn-ssh-gate: deploy $1 not run: $2" >&2
   exit 2
 }
-# 0 if no bot is enabled: every bot `ctl list` prints must answer exactly "disabled". Anything else (enabled, static,
-# masked, linked, an error, an odd name, a failed list) counts as enabled: fail closed.
-none_enabled() {
+# 0 if no bot is enabled or running, with the ctl's lock held on fd 9 until the gate exits. `ctl list` first: it makes
+# sure the lock file exists. Then, under the lock, every listed bot must print exactly "disabled" (is-enabled) and
+# exactly "inactive" or "failed" (is-active). Anything else (enabled, static, masked, activating, deactivating, an
+# error, empty output, an odd name, a failed list, a held lock) refuses: fail closed.
+deploy_allowed() {
   local out b state
   out=$("$SUDO" -n "$CTL" list) || { why="ctl list failed"; return 1; }
+  { exec 9< "$CTL_LOCK"; } 2>/dev/null || { why="cannot open the ctl's lock $CTL_LOCK"; return 1; }
+  "$FLOCK" -n 9 || { why="the ctl's lock is held (a bot start, a reset-state or another deploy)"; return 1; }
   while IFS= read -r b; do
     [[ -z $b ]] && continue
     [[ $b =~ $BOT_LINE_RE ]] || { why="ctl list printed an unexpected line"; return 1; }
     state=$("$SUDO" -n "$CTL" is-enabled "$b" 2>/dev/null) || true
     [[ $state == disabled ]] || { why="bot $b is not disabled (is-enabled: '$(safe "$state")')"; return 1; }
+    state=$("$SUDO" -n "$CTL" is-active "$b" 2>/dev/null) || true
+    [[ $state == inactive || $state == failed ]] || { why="bot $b is not stopped (is-active: '$(safe "$state")')"; return 1; }
   done <<< "$out"
   return 0
+}
+# A signal during a deploy: logged, and passed on to the build (sudo relays TERM to deploy.sh); the gate then waits for
+# it and logs its exit as usual.
+on_signal() {
+  interrupted=$1
+  log auth.warning "deploy $tag interrupted by SIG$1; passing TERM to the build"
+  kill -s TERM "$child" 2>/dev/null || true
 }
 
 if [[ -z ${SSH_ORIGINAL_COMMAND+x} ]]; then req=''; refuse 'no command (an interactive login)'; fi
@@ -132,12 +151,19 @@ elif [[ $req =~ $DEPLOY_RE ]]; then
     log auth.info "allowed: deploy-check $tag"
     exec "${DEPLOY_RUN[@]}" check "$tag"
   fi
-  why=''
-  none_enabled || not_now "$tag" "$why"
+  why='' interrupted='' child=''
+  deploy_allowed || not_now "$tag" "$why"
   log auth.info "allowed: deploy $tag"
+  trap 'on_signal HUP' HUP
+  trap 'on_signal INT' INT
+  trap 'on_signal TERM' TERM
+  "${DEPLOY_RUN[@]}" --no-restart deploy "$tag" &
+  child=$!
   rc=0
-  "${DEPLOY_RUN[@]}" --no-restart deploy "$tag" || rc=$?
-  if (( rc == 0 )); then log auth.info "deploy $tag exit=0"; else log auth.warning "deploy $tag exit=$rc"; fi
+  wait "$child" || rc=$?
+  # wait returns early (>128) when a trapped signal arrives; wait again until the build itself has ended.
+  while kill -0 "$child" 2>/dev/null; do rc=0; wait "$child" || rc=$?; done
+  if (( rc == 0 )) && [[ -z $interrupted ]]; then log auth.info "deploy $tag exit=0"; else log auth.warning "deploy $tag exit=$rc${interrupted:+ (after SIG$interrupted)}"; fi
   exit "$rc"
 elif [[ $req =~ $RELEASE_RE ]]; then
   log auth.info "allowed: release"

@@ -103,7 +103,11 @@ from="<the CX33's IPv4>",restrict,command="/usr/local/sbin/mindcraft-rotn-ssh-ga
 
   Each runs as `sudo -n mindcraft-rotn-ctl ...`, and the ctl checks every argument again.
 - **Allowed as the build user** (ADR 0011), with TAG exactly `^rotn-v[0-9]+\.[0-9]+\.[0-9]+$` (no suffix; deliberately stricter than deploy.sh's own TAG_RE):
-  - `deploy TAG`: `sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy TAG`. **Not run while any bot is enabled:** the gate asks `ctl list`, then `ctl is-enabled` for each bot, and runs the deploy only if every answer is exactly `disabled` (anything else, or a failed `list`, counts as enabled). Then: exit 2, `rotn-ssh-gate: deploy TAG not run: <why>` on stderr and in syslog (`auth.warning`). The gate does not `exec` the deploy: afterwards it logs `deploy TAG exit=N` (`auth.info` for 0, else `auth.warning`) and exits N. That syslog line is the record; `deploys.log` belongs to `rotn-build`.
+  - `deploy TAG`: `sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy TAG`. **Not run while any bot is enabled or running** (#485 review):
+    - the gate asks `ctl list` (which also makes sure the ctl's lock file `/run/mindcraft-rotn-ctl.lock`, `root:deploy` 0640, exists), then **takes that lock** (read-only, `flock -n`) and holds it for the whole deploy. `start`, `restart` and `reset-state` take the same lock, so no bot can start on a half-built release: a `start` during a deploy waits 30 s and then refuses;
+    - under the lock, every bot must **print** exactly `disabled` to `ctl is-enabled` and exactly `inactive` or `failed` to `ctl is-active` (exit codes are not trusted: `is-active` exits non-zero for `activating` and `deactivating` too). Anything else, empty output, a ctl error, a failed `list` or a held lock refuses: exit 2, `rotn-ssh-gate: deploy TAG not run: <why>` on stderr and in syslog (`auth.warning`).
+
+    The gate does not `exec` the deploy: afterwards it logs `deploy TAG exit=N` (`auth.info` for 0, else `auth.warning`) and exits N. A HUP, INT or TERM during the deploy (a dropped session, say) is logged as `deploy TAG interrupted by SIGx; passing TERM to the build`, passed on to the build as TERM, and the exit line follows with `(after SIGx)`. That syslog record is the record; `deploys.log` belongs to `rotn-build`.
   - `deploy-check TAG`: `... deploy.sh check TAG`, a dry run: fetch, then is the tag on develop, and its commit. It builds nothing.
   - `release`: `... deploy.sh status`.
 
@@ -241,13 +245,17 @@ As in A: `git archive <TAG> deploy/cx23` on your own machine, `grep -rlI $'\r'` 
 bash /root/cx23-<TAG>/bootstrap.sh build-user
 ```
 
-It creates `rotn-build` (system user, `/usr/sbin/nologin`, a locked password, home `/var/lib/rotn-build` 0700, listed in `/etc/cron.deny` and `/etc/at.deny`, in no other group). It also:
+It creates `rotn-build` (system user, `/usr/sbin/nologin`, a locked password, home `/var/lib/rotn-build` 0700, listed in `/etc/cron.deny` and `/etc/at.deny`, in no other group); `mindcraft-rotn` is listed in both files too. It also:
 - runs `chown -R -P rotn-build:mindcraft-rotn /opt/mindcraft-rotn` (repo.git, releases, `current`, state, deploys.log), then sets `/opt/mindcraft-rotn` and `releases` to 2750;
 - installs root's copies of `deploy.sh` (`/usr/local/lib/mindcraft-rotn/deploy.sh`) and the ctl (`/usr/local/sbin/mindcraft-rotn-ctl`, with `reset-state`);
 - writes deploy's two sudo rules and checks them with `visudo -c` and `sudo -l` (it removes them and stops if `sudo -l` shows anything else);
 - removes the retired `/home/deploy/deploy.sh`.
 
-It ends with `build-user done: rotn-build owns /opt/mindcraft-rotn; ...`. Then check each point; **stop and tell the lead if any output differs**:
+It ends with `build-user done: rotn-build owns /opt/mindcraft-rotn; ...`.
+
+**If it stops at the sudo check** (`... does not show exactly the two rules ...` or `... shows SETENV or env_keep ...`), it has **removed `/etc/sudoers.d/mindcraft-rotn`**, both rules. From then on **every gate request fails** (`sudo -n` refuses without a rule), the old ones too, until the cause is fixed and `build-user` runs again. Tell the lead before changing anything else.
+
+Then check each point; **stop and tell the lead if any output differs**:
 
 | Check | Expected |
 | --- | --- |
@@ -255,7 +263,8 @@ It ends with `build-user done: rotn-build owns /opt/mindcraft-rotn; ...`. Then c
 | `getent passwd rotn-build` | `rotn-build:x:<n>:<n>::/var/lib/rotn-build:/usr/sbin/nologin` |
 | `passwd -S rotn-build` | `rotn-build L ...` (L: locked) |
 | `stat -c '%U %G %a' /var/lib/rotn-build` | `rotn-build rotn-build 700` |
-| `grep -x rotn-build /etc/cron.deny /etc/at.deny` | `/etc/cron.deny:rotn-build` and `/etc/at.deny:rotn-build` |
+| `grep -xE 'rotn-build\|mindcraft-rotn' /etc/cron.deny /etc/at.deny` | `/etc/cron.deny:rotn-build`, `/etc/cron.deny:mindcraft-rotn`, `/etc/at.deny:rotn-build`, `/etc/at.deny:mindcraft-rotn` |
+| `grep -rnE '^[^#]*(env_keep\|SETENV\|setenv)' /etc/sudoers /etc/sudoers.d/` | nothing. (`grep -rnE 'env_keep\|SETENV\|setenv' /etc/sudoers /etc/sudoers.d/` without the `^[^#]*` may show Ubuntu's commented examples, lines that start with `#`, such as `#Defaults:%sudo env_keep += "http_proxy ..."`: those are expected; any line that does not start with `#` is not.) |
 | `ls -a /var/lib/rotn-build/.ssh 2>&1` | `No such file or directory` (no SSH key) |
 | `sudo -l -U rotn-build` | no rule: no line with `NOPASSWD` or `(` |
 | `sudo -l -U deploy` | exactly two `NOPASSWD` lines: `(root) NOPASSWD: /usr/local/sbin/mindcraft-rotn-ctl` and `(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh`; no `SETENV` and no `env_keep` anywhere. (deploy is also in group `sudo`, so the group's own `(ALL : ALL) ALL` line, which needs deploy's password, shows as well: that one is expected.) |
@@ -293,31 +302,54 @@ sudo -u deploy sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh rol
 
 ### D5. The gate's new requests, without SSH (as root)
 
+FRCFLD must be stopped (`sudo mindcraft-rotn-ctl is-active frcfld` prints `inactive` or `failed`).
+
 ```bash
+mv --version | head -1    # record it: Ubuntu 26.04 may ship uutils coreutils instead of GNU
 sudo -u deploy env SSH_ORIGINAL_COMMAND='release' /usr/local/sbin/mindcraft-rotn-ssh-gate; echo "exit $?"
 sudo -u deploy env SSH_ORIGINAL_COMMAND='deploy-check <TAG>' /usr/local/sbin/mindcraft-rotn-ssh-gate; echo "exit $?"
 sudo -u deploy env SSH_ORIGINAL_COMMAND='reset-state frcfld NOSUCHBOT' /usr/local/sbin/mindcraft-rotn-ssh-gate; echo "exit $?"
 sudo -u deploy env SSH_ORIGINAL_COMMAND='rollback' /usr/local/sbin/mindcraft-rotn-ssh-gate; echo "exit $?"
-journalctl -t rotn-ssh-gate -n 8 --no-pager
 ```
 
 | Request | Expected |
 | --- | --- |
+| `mv --version` | one line, e.g. `mv (GNU coreutils) 9.x` or `mv (uutils coreutils) 0.x`: send it to the lead |
 | `release` | the `status` lines of D4; `exit 0` |
 | `deploy-check <TAG>` | the `check` line of D4; `exit 0` |
-| `reset-state frcfld NOSUCHBOT` | `mindcraft-rotn-ctl: /var/lib/mindcraft-rotn/bots/NOSUCHBOT is not a real directory (missing, a file or a symlink; nothing moved)`; `exit 2`. (A name that does not exist: this check moves nothing.) |
+| `reset-state frcfld NOSUCHBOT` | `mindcraft-rotn-ctl: /var/lib/mindcraft-rotn/bots/NOSUCHBOT is not a real directory (missing, a file or a symlink; nothing moved)`; `exit 2` (moves nothing) |
 | `rollback` | `rotn-ssh-gate: refused. Allowed: ...`; `exit 126` |
-| the journal | `allowed: release`, `allowed: deploy-check <TAG>`, `allowed: reset-state frcfld NOSUCHBOT`, and `refused (not an allowed request): 'rollback' (8 bytes)` |
 
-(The `rollback` refusal here is your own test, not an incident.)
+**A real reset-state, on a test folder (not FRCFLD's).** As root, make a folder the bot user owns, with a dummy `memory.json`, a `histories` folder and a symlink, then reset it through the gate:
+
+```bash
+install -d -o mindcraft-rotn -g mindcraft-rotn -m 0750 /var/lib/mindcraft-rotn/bots/RVTEST
+sudo -u mindcraft-rotn sh -c 'cd /var/lib/mindcraft-rotn/bots/RVTEST && echo "{}" > memory.json && mkdir histories && ln -s /etc/hostname link'
+cat /etc/hostname
+sudo -u deploy env SSH_ORIGINAL_COMMAND='reset-state frcfld RVTEST' /usr/local/sbin/mindcraft-rotn-ssh-gate; echo "exit $?"
+ls -la /var/lib/mindcraft-rotn/bots/RVTEST/ /var/lib/mindcraft-rotn-archive/frcfld-*/
+stat -c '%U %G %a %n' /var/lib/mindcraft-rotn-archive /var/lib/mindcraft-rotn-archive/frcfld-*
+cat /etc/hostname
+journalctl -t rotn-ssh-gate -n 8 --no-pager
+```
+
+| Step | Expected |
+| --- | --- |
+| the reset | exactly these lines, then `exit 0`:<br>`reset-state frcfld: moved 2 entries of /var/lib/mindcraft-rotn/bots/RVTEST`<br>`  moved: link`<br>`  moved: memory.json`<br>`  remains: histories`<br>`archive: /var/lib/mindcraft-rotn-archive/frcfld-<YYYYMMDDTHHMMSSZ>` |
+| `ls -la` | `RVTEST/` holds only `histories`; the archive holds `link -> /etc/hostname` (the link itself, moved) and `memory.json` |
+| `stat` | `root root 700 /var/lib/mindcraft-rotn-archive` and `root root 700 /var/lib/mindcraft-rotn-archive/frcfld-<time>` |
+| `cat /etc/hostname`, before and after | the same line: the link's target is untouched |
+| the journal | `allowed: release`, `allowed: deploy-check <TAG>`, `allowed: reset-state frcfld NOSUCHBOT`, `refused (not an allowed request): 'rollback' (8 bytes)`, `allowed: reset-state frcfld RVTEST` |
+
+Afterwards, as root: `rm -r /var/lib/mindcraft-rotn/bots/RVTEST /var/lib/mindcraft-rotn-archive/frcfld-<time>` (only these two; the archive parent stays). The `rollback` refusal here is your own test, not an incident.
 
 ### What `reset-state BOT NAME` does (ADR 0011)
 
 - It works on `/var/lib/mindcraft-rotn/bots/<NAME>/`, Mindcraft's per-agent folder (`FRCFLD` for unit `frcfld`).
-- **Only while the unit is `inactive` or `failed`**, under a lock that `start` and `restart` also take (`/run/mindcraft-rotn-ctl.lock`), so a start cannot race a reset.
+- **Only while the unit is `inactive` or `failed`**, under a lock that `start` and `restart` also take, and that the gate holds during a deploy (`/run/mindcraft-rotn-ctl.lock`), so a start cannot race a reset.
 - **Kept:** `action-code`, `histories` and `last_profile.json`. **Moved:** every other entry (`memory.json`, `agenda.json`, `control.json`, `tasks.json`, `screenshots/`, ...), by `rename(2)` only (`mv -T`; a symlink moves as itself), into a new `/var/lib/mindcraft-rotn-archive/<bot>-<UTC time>/` (root 0700; its parent root 0700, made at the first reset). **Nothing is deleted or copied.**
 - **Refused** if `bots/` or `bots/<NAME>` is a symlink or not a directory, if `<NAME>` is not owned by `mindcraft-rotn`, or if the archive parent is not root's 0700 or is on another device.
-- It enters the folder and checks that it is the same one it checked; every move is relative to it.
+- **No path is trusted between a check and its use** (#485 review): it enters `bots/` (`cd -P`) and checks the folder it entered (`stat` of `.`: owned by `mindcraft-rotn`), then enters `<NAME>` relative to that and takes the owner (`mindcraft-rotn`) and device from ONE `stat` of `.`. Every later lookup and move is relative to the entered folder, so swapping `bots/` or `<NAME>` for a link in between moves nothing out of another folder (a test does exactly that swap at each check).
 - **Never touched:** the token cache `/var/lib/mindcraft-rotn/<bot>/msa` (outside `bots/`) and the env file.
 - It prints what moved, what remains and the archive path. **To restore** an archive by hand (as root, with the bot stopped): `mv /var/lib/mindcraft-rotn-archive/<bot>-<time>/* /var/lib/mindcraft-rotn/bots/<NAME>/` (and the same for any dotfile).
 

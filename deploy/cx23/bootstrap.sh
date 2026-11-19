@@ -18,7 +18,7 @@
 #   bootstrap.sh build-user
 #       ADR 0011, on a host set up before it (setup does the same): the build user `rotn-build` (system user, no
 #       login shell, no SSH key, no sudo rule, a locked password, home /var/lib/rotn-build 0700, in /etc/cron.deny
-#       and /etc/at.deny, never in group sudo, admin or mindcraft-rotn) owns /opt/mindcraft-rotn (2750 setgid,
+#       and /etc/at.deny, as is mindcraft-rotn; never in group sudo, admin or mindcraft-rotn) owns /opt/mindcraft-rotn (2750 setgid,
 #       group mindcraft-rotn); root's copy of deploy.sh at /usr/local/lib/mindcraft-rotn/deploy.sh; deploy's second
 #       sudoers rule `(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh`, checked with visudo and
 #       sudo -l; the ctl with reset-state; and the retired /home/deploy/deploy.sh removed. Release code
@@ -69,8 +69,17 @@ log()  { echo "[bootstrap] $*" >&2; }
 die()  { echo "[bootstrap] ERROR: $*" >&2; exit 1; }
 p()    { echo "$ROOT$1"; }   # a path on the target system
 
-# dir_owned MODE OWNER:GROUP PATH
-dir_owned() { mkdir -p "$(p "$3")"; chown "$2" "$(p "$3")"; chmod "$1" "$(p "$3")"; }
+# dir_owned MODE OWNER:GROUP PATH, never through a symlink (#485 review: as root, chown and chmod follow one, and some
+# of these folders sit in trees other users can write, e.g. /opt/mindcraft-rotn is rotn-build's): PATH must not be a
+# symlink, and the owner and mode are set on the folder actually entered (cd -P, then checked to be PATH itself, so
+# no component of the path was swapped for a link), as ".", never on a path that could change in between.
+dir_owned() {
+  local d; d=$(p "$3")
+  [[ ! -L $d ]] || die "$d is a symlink; refusing to change it as root"
+  mkdir -p -- "$d"
+  ( cd -P -- "$d" && [[ $(pwd -P) == "$d" ]] && chown -h "$2" . && chmod "$1" . ) \
+    || die "$d is not the folder it should be (a symlink on its path?), or its owner or mode could not be set"
+}
 # file_owned MODE OWNER:GROUP PATH < content. Carriage returns are dropped: a copy made from a
 # Windows checkout would otherwise install CRLF scripts (bash fails on them) and env values ending in \r.
 file_owned() {
@@ -196,13 +205,16 @@ setup_build_user() {
   local groups; groups=$(id -nG "$BUILD_USER") || die "id -nG $BUILD_USER failed"
   [[ " $groups " != *" sudo "* && " $groups " != *" admin "* && " $groups " != *" $SVC_USER "* ]] \
     || die "$BUILD_USER is in group sudo, admin or $SVC_USER; remove it (gpasswd -d $BUILD_USER GROUP) and rerun"
-  # No cron or at jobs: release code must not leave anything that runs later (ADR 0011).
-  local f
+  # No cron or at jobs for either service user: release code (run as rotn-build in the build, as mindcraft-rotn when
+  # the bot runs) must not leave anything that runs later (ADR 0011, #485 review).
+  local f u
   for f in /etc/cron.deny /etc/at.deny; do
-    if [[ -f $(p "$f") ]] && tr -d '\r' < "$(p "$f")" | grep -qxF -- "$BUILD_USER"; then continue; fi
-    if [[ -f $(p "$f") ]]; then printf '%s\n' "$BUILD_USER" >> "$(p "$f")"
-    else printf '%s\n' "$BUILD_USER" | file_owned 0644 root:root "$f"; fi
-    log "$f: $BUILD_USER added"
+    for u in "$BUILD_USER" "$SVC_USER"; do
+      if [[ -f $(p "$f") ]] && tr -d '\r' < "$(p "$f")" | grep -qxF -- "$u"; then continue; fi
+      if [[ -f $(p "$f") ]]; then printf '%s\n' "$u" >> "$(p "$f")"
+      else printf '%s\n' "$u" | file_owned 0644 root:root "$f"; fi
+      log "$f: $u added"
+    done
   done
 }
 
@@ -369,8 +381,12 @@ EOF
 # everything under /opt/mindcraft-rotn (repo.git, releases, current, state, deploys.log) changes owner; chown -R -P
 # never follows a symlink (current is changed itself).
 setup_build_files() {
-  if [[ -d $(p /opt/mindcraft-rotn) ]]; then chown -R -P "$BUILD_USER:$SVC_USER" "$(p /opt/mindcraft-rotn)"; fi
+  local base; base=$(p /opt/mindcraft-rotn)
   dir_owned 2750 "$BUILD_USER:$SVC_USER" /opt/mindcraft-rotn
+  # A re-run finds a tree rotn-build may have changed: never follow its links (chown -R -h -P, from inside the real
+  # folder), and dir_owned refuses a releases/ that is a symlink.
+  ( cd -P -- "$base" && [[ $(pwd -P) == "$base" ]] && chown -R -h -P "$BUILD_USER:$SVC_USER" . ) \
+    || die "cannot give $base to $BUILD_USER (is it a symlink?)"
   dir_owned 2750 "$BUILD_USER:$SVC_USER" /opt/mindcraft-rotn/releases
   dir_owned 0755 root:root /usr/local/lib/mindcraft-rotn
   file_owned 0755 root:root "$DEPLOY_SH_ROOT" < "$HERE/deploy.sh"

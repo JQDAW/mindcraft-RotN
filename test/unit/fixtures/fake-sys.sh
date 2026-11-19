@@ -24,7 +24,11 @@
 name=$1
 shift
 line=$name
-for a in "$@"; do line+=$'\t'$a; done
+# chown, chmod and chgrp on "." are logged with the folder they ran in (bootstrap's dir_owned works from inside it).
+for a in "$@"; do
+  if [[ $a == . && ( $name == chown || $name == chmod || $name == chgrp ) ]]; then a=$PWD; fi
+  line+=$'\t'$a
+done
 [[ $name == npm ]] && line+=$'\t'"cwd=$PWD"
 [[ -n ${FAKE_LOG:-} ]] && printf '%s\n' "$line" >> "$FAKE_LOG"
 

@@ -64,6 +64,8 @@ readonly NPM_CI_TRIES=3
 NPM_CI_RETRY_S=${NPM_CI_RETRY_S:-120}
 # Only this fork's release tags (lead, rotn-v0.1.0): the repo also carries upstream Mindcraft's v0.x tags, and upstream
 # v0.1.0 is an ancestor of develop, so `deploy v0.1.0` would pass the on-develop check and deploy plain Mindcraft.
+# Do not align this with the CX33 gate's TAG_RE (ADR 0011): the gate deliberately allows only rotn-vX.Y.Z (no suffix);
+# a suffixed tag (rotn-v0.1.0-rc.1) is deployed only by the human, through the build user.
 TAG_RE='^rotn-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
 CTL=(sudo -n /usr/local/sbin/mindcraft-rotn-ctl)
 NO_RESTART=0
@@ -277,6 +279,8 @@ do_status() {
   return 0
 }
 
+# Never as root (#485 review): release code would run with every right. rotn-build is the user (ADR 0011).
+[[ $(id -u) != 0 ]] || die "never run deploy.sh as root: sudo -u $BUILD_USER /usr/local/lib/mindcraft-rotn/deploy.sh ..."
 HOME=$(getent passwd "$(id -un)" | cut -d: -f6) || HOME=
 [[ $HOME == /* ]] || die "no home directory for $(id -un) in the passwd database"
 export HOME

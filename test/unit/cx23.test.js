@@ -357,6 +357,7 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
             .replace('readonly DATE=/usr/bin/date', `readonly DATE=${posix(date)}`)
             .replace('readonly LOCK=/run/mindcraft-rotn-ctl.lock', `readonly LOCK=${posix(path.join(tmp, 'ctl.lock'))}`)
             .replace('readonly LOCK_WAIT_S=30', `readonly LOCK_WAIT_S=${lockWait ?? 30}`)
+            .replace('readonly LOCK_OWNER=root:deploy', `readonly LOCK_OWNER=${os.userInfo().username}:${spawnSync('id', ['-gn'], { encoding: 'utf8' }).stdout.trim()}`)
             .replace('readonly BOTS_DIR=/var/lib/mindcraft-rotn/bots', `readonly BOTS_DIR=${fwd(rootFile('var/lib/mindcraft-rotn/bots'))}`)
             .replace('readonly ARCHIVE_DIR=/var/lib/mindcraft-rotn-archive', `readonly ARCHIVE_DIR=${fwd(rootFile('var/lib/mindcraft-rotn-archive'))}`)
             .replace('readonly SVC_USER=mindcraft-rotn', `readonly SVC_USER=${svcUser ?? os.userInfo().username}`)
@@ -661,12 +662,68 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
             while (spawnSync('flock', ['-n', lock, 'true']).status === 0 && Date.now() < deadline) spawnSync('sleep', ['0.1']);
             const reset = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE, { lockWait: 1 });
             assert.equal(reset.code, 2);
-            assert.match(reset.stderr, /another start or reset-state holds/);
+            assert.match(reset.stderr, /another start, reset-state or deploy holds/);
             const start = ctl(['start', 'rotn-bot'], {}, { lockWait: 1 });
             assert.equal(start.code, 2);
             assert.equal(called('systemctl').length, 0, 'neither reached systemctl');
         } finally { holder.kill(); }
         assert.equal(fs.readdirSync(path.join(BOTS(), 'ROTN_BOT')).length, KEPT.length + MOVED.length);
+    });
+
+    test('#485 review: bots/ swapped for a link to a foreign folder in the middle of the checks moves nothing out of that folder', () => {
+        // The reviewer's attack: while root checks bots/NAME, the bot user swaps bots/ for a symlink to a folder it does
+        // not own (one the fake stat reports as someone else's) with a NAME inside. The fake stat makes the swap at its
+        // Nth call, for every N from 1 to 4, so it lands between any two of the ctl's checks.
+        const victim = path.join(tmp, 'foreign');
+        const realBots = rootFile('var/lib/mindcraft-rotn/bots-real');
+        const count = path.join(tmp, 'stat-calls');
+        const fakeStat = path.join(tmp, 'swap-stat');
+        fs.writeFileSync(fakeStat, [
+            '#!/bin/bash',
+            `n=$(( $(cat '${fwd(count)}' 2>/dev/null || echo 0) + 1 )); echo "$n" > '${fwd(count)}'`,
+            // absolute paths: ln is one of this suite's fakes
+            `if (( n == SWAP_AT )); then /usr/bin/mv '${fwd(BOTS())}' '${fwd(realBots)}'; /usr/bin/ln -s '${fwd(victim)}' '${fwd(BOTS())}'; fi`,
+            'out=$(/usr/bin/stat "$@") || exit $?',
+            `p=$(cd -P -- "\${@: -1}" 2>/dev/null && pwd -P)`,
+            `if [[ $p == '${fwd(victim)}'* ]]; then out=\${out/$(/usr/bin/id -un)/someone-else}; fi`,
+            'printf "%s\\n" "$out"',
+        ].join('\n'), { mode: 0o755 });
+        for (const swapAt of [1, 2, 3, 4]) {
+            for (const d of [BOTS(), realBots, victim, ARCH()]) fs.rmSync(d, { recursive: true, force: true });
+            fs.rmSync(count, { force: true });
+            stateTree();
+            fs.mkdirSync(path.join(victim, 'ROTN_BOT'), { recursive: true });
+            for (const f of ['shadow', 'memory.json', 'histories']) fs.writeFileSync(path.join(victim, 'ROTN_BOT', f), 'foreign data');
+            const before = files(victim);
+            const r = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], { ...INACTIVE, SWAP_AT: String(swapAt) }, { stat: posix(fakeStat) });
+            assert.deepEqual(files(victim), before, `swap at stat call ${swapAt}: nothing moved out of the foreign folder (${r.all})`);
+            if (r.code === 0) assert.deepEqual(fs.readdirSync(path.join(fs.existsSync(realBots) ? realBots : BOTS(), 'ROTN_BOT')).sort(), KEPT, `swap at ${swapAt}`);
+            else assert.equal(r.code, 2, `swap at ${swapAt}: ${r.all}`);
+        }
+    });
+
+    test('#485 review: a bots/ or folder entered through a link to a foreign-owned folder is refused by the one stat of "." (owner)', () => {
+        stateTree();
+        // bots/NAME is a real folder, but the stat of the entered "." says root's: refused, nothing moved.
+        const fakeStat = path.join(tmp, 'owner-stat');
+        fs.writeFileSync(fakeStat, `#!/bin/bash\nout=$(/usr/bin/stat "$@") || exit $?\nif [[ $2 == '%U %d:%i' ]]; then out=\${out/$(/usr/bin/id -un)/someone-else}; fi\nprintf '%s\\n' "$out"\n`, { mode: 0o755 });
+        const r = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE, { stat: posix(fakeStat) });
+        assert.equal(r.code, 2, r.all);
+        assert.match(r.stderr, /ROTN_BOT is not owned by/);
+        const botsStat = path.join(tmp, 'bots-owner-stat');
+        fs.writeFileSync(botsStat, `#!/bin/bash\nout=$(/usr/bin/stat "$@") || exit $?\nif [[ $2 == '%U %d' ]]; then out=\${out/$(/usr/bin/id -un)/someone-else}; fi\nprintf '%s\\n' "$out"\n`, { mode: 0o755 });
+        const b = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE, { stat: posix(botsStat) });
+        assert.equal(b.code, 2, b.all);
+        assert.match(b.stderr, /bots is not owned by/);
+        assert.equal(fs.readdirSync(path.join(BOTS(), 'ROTN_BOT')).length, KEPT.length + MOVED.length);
+    });
+
+    test('list makes the shared lock file (the gate opens it read-only during a deploy): owner set, mode 0640', () => {
+        const lock = path.join(tmp, 'ctl.lock');
+        assert.ok(!fs.existsSync(lock));
+        assert.equal(ctl(['list']).code, 0);
+        assert.equal(fs.statSync(lock).mode & 0o777, 0o640);
+        assert.match(SRC, /^readonly LOCK_OWNER=root:deploy$/m);
     });
 
     test('reset-state, the source: fixed paths, exactly three kept entries, rename only (mv -T), no rm, no eval, never the env file', () => {
@@ -725,11 +782,11 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         assert.ok(called('passwd').some((c) => c.join(' ') === 'passwd --lock rotn-build'));
         assert.ok(!called('usermod').some((c) => c.at(-1) === 'rotn-build'), 'rotn-build joins no group');
         assert.ok(called('chmod').some((c) => c[1] === '0700' && c[2].endsWith('/var/lib/rotn-build')));
-        assert.equal(read('etc/cron.deny'), 'rotn-build\n');
-        assert.equal(read('etc/at.deny'), 'rotn-build\n');
+        assert.equal(read('etc/cron.deny'), 'rotn-build\nmindcraft-rotn\n');
+        assert.equal(read('etc/at.deny'), 'rotn-build\nmindcraft-rotn\n');
         for (const d of ['/opt/mindcraft-rotn', '/opt/mindcraft-rotn/releases']) {
             assert.ok(called('chmod').some((c) => c[1] === '2750' && c[2].endsWith(d)), d);
-            assert.ok(called('chown').some((c) => c[1] === 'rotn-build:mindcraft-rotn' && c[2].endsWith(d)), d);
+            assert.ok(called('chown').some((c) => c.join(' ') === `chown -h rotn-build:mindcraft-rotn ${fwd(rootFile(d.slice(1)))}`), d);
         }
         assert.equal(read('usr/local/lib/mindcraft-rotn/deploy.sh'), fs.readFileSync(path.join(CX, 'deploy.sh'), 'utf8').replace(/\r/g, ''));
         assert.ok(called('chmod').some((c) => c[1] === '0755' && c[2].includes('/usr/local/lib/mindcraft-rotn/deploy.sh.tmp.')), 'root:root 0755 (file_owned: set on the temp file, then renamed)');
@@ -976,10 +1033,10 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         fs.writeFileSync(rootFile('etc/cron.deny'), 'games\n');
         const r = boot(['build-user'], { FAKE_RC_getent: '0' });
         assert.equal(r.code, 0, r.all);
-        assert.ok(called('chown').some((c) => c.join(' ') === `chown -R -P rotn-build:mindcraft-rotn ${fwd(rootFile('opt/mindcraft-rotn'))}`));
+        assert.ok(called('chown').some((c) => c.join(' ') === `chown -R -h -P rotn-build:mindcraft-rotn ${fwd(rootFile('opt/mindcraft-rotn'))}`));
         assert.ok(called('chmod').some((c) => c[1] === '2750' && c[2].endsWith('/opt/mindcraft-rotn')));
-        assert.equal(read('etc/cron.deny'), 'games\nrotn-build\n');
-        assert.equal(read('etc/at.deny'), 'rotn-build\n');
+        assert.equal(read('etc/cron.deny'), 'games\nrotn-build\nmindcraft-rotn\n');
+        assert.equal(read('etc/at.deny'), 'rotn-build\nmindcraft-rotn\n');
         assert.ok(!exists('home/deploy/deploy.sh'), 'retired');
         assert.match(r.stderr, /removed the retired \/home\/deploy\/deploy\.sh/);
         assert.equal(read('usr/local/sbin/mindcraft-rotn-ctl'), fs.readFileSync(path.join(CX, 'mindcraft-rotn-ctl.sh'), 'utf8').replace(/\r/g, ''));
@@ -988,9 +1045,48 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         assert.match(r.stderr, /sudo -u rotn-build \/usr\/local\/lib\/mindcraft-rotn\/deploy\.sh status/);
         // Again: nothing doubled.
         assert.equal(boot(['build-user'], { FAKE_RC_getent: '0' }).code, 0);
-        assert.equal(read('etc/cron.deny'), 'games\nrotn-build\n');
-        assert.equal(read('etc/at.deny'), 'rotn-build\n');
+        assert.equal(read('etc/cron.deny'), 'games\nrotn-build\nmindcraft-rotn\n');
+        assert.equal(read('etc/at.deny'), 'rotn-build\nmindcraft-rotn\n');
         assert.equal(called('useradd').filter((c) => c.at(-1) === 'rotn-build').length, 0, 'getent finds it: no useradd');
+    });
+
+    test('#485 review: a re-run never follows a symlink as root: releases/ or /opt/mindcraft-rotn a link, or a link on the path, refuses', () => {
+        ubuntu();
+        fs.mkdirSync(rootFile('home/deploy'), { recursive: true });
+        const victim = path.join(tmp, 'victim');
+        fs.mkdirSync(victim);
+        fs.writeFileSync(path.join(victim, 'f'), 'x');
+        // releases/ swapped for a link (rotn-build owns /opt/mindcraft-rotn after the first run)
+        fs.mkdirSync(rootFile('opt/mindcraft-rotn'), { recursive: true });
+        fs.symlinkSync(victim, rootFile('opt/mindcraft-rotn/releases'));
+        const r = boot(['build-user'], { FAKE_RC_getent: '0' });
+        assert.equal(r.code, 1, r.all);
+        assert.match(r.stderr, /opt\/mindcraft-rotn\/releases is a symlink; refusing to change it as root|releases is missing: run setup first/);
+        // with releases/ a link to a real folder, the build-user precheck passes; dir_owned must still refuse
+        fs.mkdirSync(rootFile('opt/mindcraft-rotn-real-releases'));
+        fs.unlinkSync(rootFile('opt/mindcraft-rotn/releases'));
+        fs.symlinkSync(victim, rootFile('opt/mindcraft-rotn/releases'));
+        const again = boot(['setup', '--deploy-key-file', keyFile()]);
+        assert.equal(again.code, 1, again.all);
+        assert.match(again.stderr, /opt\/mindcraft-rotn\/releases is a symlink; refusing to change it as root/);
+        // /opt/mindcraft-rotn itself a link
+        fs.rmSync(rootFile('opt/mindcraft-rotn'), { recursive: true });
+        fs.symlinkSync(victim, rootFile('opt/mindcraft-rotn'));
+        const top = boot(['setup', '--deploy-key-file', keyFile()]);
+        assert.equal(top.code, 1, top.all);
+        assert.match(top.stderr, /opt\/mindcraft-rotn is a symlink; refusing to change it as root/);
+        // a link on the path (here /opt itself): pwd -P differs, refused
+        fs.unlinkSync(rootFile('opt/mindcraft-rotn'));
+        fs.rmSync(rootFile('opt'), { recursive: true });
+        const realOpt = path.join(tmp, 'real-opt');
+        fs.mkdirSync(path.join(realOpt, 'mindcraft-rotn', 'releases'), { recursive: true });
+        fs.symlinkSync(realOpt, rootFile('opt'));
+        const onPath = boot(['setup', '--deploy-key-file', keyFile()]);
+        assert.equal(onPath.code, 1, onPath.all);
+        assert.match(onPath.stderr, /opt\/mindcraft-rotn is not the folder it should be \(a symlink on its path\?\)/);
+        // nothing of the victim was touched: no chown or chmod ever ran on it
+        for (const c of [...called('chown'), ...called('chmod')]) assert.ok(!c.some((a) => a.startsWith(fwd(victim)) || a.startsWith(fwd(realOpt))), c.join(' '));
+        assert.deepEqual(fs.readdirSync(victim), ['f']);
     });
 
     test('ufw: never enabled when the SSH rule did not take; an enable that does not take stops setup; sshd is untouched', () => {
@@ -1525,5 +1621,17 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         assert.ok(order.every((i) => i > 0), JSON.stringify(order));
         assert.deepEqual([...order].sort((a, b) => a - b), order, 'in this order');
         assert.ok(!/chmod[^\n]*g\+s/.test(DEPLOY_SRC), 'no chmod g+s: as a non-member of the group it would clear the bit');
+    });
+
+    test('#485 review: deploy.sh never runs as root (uid 0), in any shape; the do-not-align note sits next to its TAG_RE', () => {
+        setupRepo();
+        for (const args of [['status'], ['check', 'rotn-v0.0.1'], ['--no-restart', 'deploy', 'rotn-v0.0.1'], ['deploy', 'rotn-v0.0.1']]) {
+            const r = dep(args, { FAKE_OUT_id: '0' });
+            assert.equal(r.code, 1, args.join(' '));
+            assert.match(r.stderr, /never run deploy\.sh as root: sudo -u rotn-build \/usr\/local\/lib\/mindcraft-rotn\/deploy\.sh/, args.join(' '));
+        }
+        assert.deepEqual(releases(), []);
+        assert.ok(!exists(`${BASE}/repo.git`), 'nothing fetched');
+        assert.match(DEPLOY_SRC, /# Do not align this with the CX33 gate's TAG_RE \(ADR 0011\)[^\n]*\n[^\n]*\nTAG_RE=/);
     });
 });
