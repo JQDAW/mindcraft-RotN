@@ -1,6 +1,46 @@
 # Status: skills-rotn
 
-Updated: 2026-11-19T03:27Z (from `date -u`)
+Updated: 2026-11-19T15:07Z (from `date -u`)
+
+## 2026-11-19 (later): soak 4 fixes for rotn-v0.1.8 (summary, 2026-11-19T15:07Z by `date -u`)
+
+Soak 4 (rotn-v0.1.7, #478) failed 8 of 9. `agenda_done` passed in 11 min and there were 0 deaths. What failed:
+- the bot waited a whole day in its shelter for a zombie stuck at the corner;
+- it didn't eat at food 12 while held there (`ate_when_low`);
+- after "agenda done" the self-prompter never started again.
+
+#477 and #479 are in rotn-v0.1.8 (`22a8e820`), which soak 5 runs. #481 merged after the tag, so it isn't in v0.1.8. #482 is open. I'm idle until soak 5.
+
+### Merged since the 2026-11-19 03:27 summary
+| PR | What |
+| --- | --- |
+| #477 | (in v0.1.8) The morning rule. With a hostile mob within 8 blocks at full day: a 2-min grace, then the mob's state is logged (moved, health, held item, helmet, sky light). Armed, health ≥ 14, one mob near and nothing that explodes or shoots within 16: open the wall on the mob's side and fight from the shelter. Otherwise, or below health 12, a second mob or a creeper arriving, or a hole shelter: leave by the side away from it (`digOut`/`pitOut` with `away`) and walk 16 away. Never past 5 min. The morning state is cleared by the resets. Eating: in a closed shelter a mob outside is no threat, so the bot eats at food 12 |
+| #479 | (in v0.1.8) The standing goal after "agenda done": the model's own goal (keep food and 10 shelter blocks, keep and improve tools, explore by day within 64 blocks of the last shelter, back before dusk), with 5 min of self-prompting per in-game day (a fixed 20 min when the day is unknown). Lines `agenda standing goal started (day N)` and `… spent; none until the next day`. The #477 nit |
+| #481 | (after v0.1.8) The #479 follow-ups: a standing run carried across a window boundary; `until the next window` in 20-min mode; `lastShelter` on more paths; tests for a reserve, the holds and `!agendaStop` during the standing goal |
+
+### Open
+- **#482** (`42d0ae38`): the #481 nit. The carry across a window boundary applies whenever the run is charged to the window (a model `!goal` swapped in mid-run too).
+
+### To check in soak 5, on rotn-v0.1.8 (all tested offline only)
+- **The morning:**
+  - `staying in until it leaves (… at most 2 min)`, then the mob-state line;
+  - `opening the wall toward …` or `leaving the shelter … by the side away from …`;
+  - `… still near … after 5 min; back to work`;
+  - never `at the end of the day`.
+- **Eating:** `[reflex] ate … at food 12` while sheltered (`ate_when_low`).
+- **The standing goal:**
+  - `agenda standing goal started (day N)` after `agenda done`;
+  - the spent line;
+  - self-prompting starting again each morning.
+  - The 64-block radius is advisory (prompt only).
+- **Carried over from the soak 3 list:** the night walk away after a death, the side pocket and back-away lines, the weapon reserve, the stuck-step retries and the open goal, the held re-plan prompt, hurt sources naming real mobs.
+
+### Not done
+1. **`death_report.js` comment nits (#474):** say that `bindDeathReport` misses the login packet, so a bot that logs in inside a modded dimension records "unknown" (never the overworld); and note that spots with no dimension went from match-all to match-none. For the next PR that touches the file.
+2. **Polar bears:** one near its cub attacks unprovoked (not built).
+3. **#431 review, the lookAt-window nit:** still to do.
+4. **Requests to rotn-data (through the lead):** a size-aware slime entry, and `WEAPON_ATTACK` as a cited table.
+5. **Cosmetic nits** from the 2026-11-08 summary.
 
 ## 2026-11-19: soak 3 fixes for rotn-v0.1.7 (summary, 2026-11-19T03:27Z by `date -u`)
 
