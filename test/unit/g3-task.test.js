@@ -270,9 +270,9 @@ describe('g3-task-preempts-agenda: the task only while the agenda is active (lea
         assert.equal(a(['agenda step rocks started: collect 6 rocks']), true);
         assert.equal(a(['agenda step rocks started: x', 'agenda step rocks done']), true, 'a done step changes nothing');
         assert.equal(a(['agenda step rocks started: x', 'agenda step rocks stuck: 5 min of self-prompting; agenda paused']), false);
-        // skills-rotn #468: a stuck step is retried (or given up) while the agenda goes on with the other steps: still active.
+        // skills-rotn #468: a stuck step is retried (after 3 retries, once a day) while the agenda goes on: still active.
         assert.equal(a(['agenda step rocks started: x', 'agenda step rocks stuck: 5 min of self-prompting; retry 1 of 3 in 20 min or at the next full day; going on with the steps that do not need it']), true);
-        assert.equal(a(['agenda step rocks started: x', 'agenda step rocks stuck: 5 min of self-prompting; given up after 3 retries; going on with the steps that do not need it']), true);
+        assert.equal(a(['agenda step rocks started: x', 'agenda step rocks stuck: 5 min of self-prompting; its 3 retries are spent: one retry at each new full day; going on with the steps that do not need it']), true);
         // #468: nothing runnable, the agenda self-prompts on gathering for the waiting step: active, neither done nor stuck.
         const open = 'agenda open goal: step rocks waits; self-prompting on gathering for it';
         assert.deepEqual(agendaActive(['agenda step rocks stuck: 5 min of self-prompting; agenda paused', open]), { active: true, last: open });
