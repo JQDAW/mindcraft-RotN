@@ -14,7 +14,7 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, shelterShell, dumpState, isFullDay, replanHold } from './library/night.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, shelterShell, dumpState, isFullDay, replanHold } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE, heldCells, retreatPlan, backAway, BACK_AWAY } from './library/shelter.js';
 import { goToGoal, descendFromTree } from './library/skills.js';
 import { stowCarried, toolAllows, allowedTool } from './library/rotn_sources.js';
@@ -190,6 +190,28 @@ export function resumeNightGoal(agent) {
 /** #463 nit 1: a task giver's !endGoal or !stop: the goal the night stopped does not come back. */
 export function forgetNightGoal(agent) {
     agent._night_goal = null;
+}
+
+/**
+ * The back-away (#470) and the hole's side pocket (soak 3, the lead's (a)) as a job: backAway into
+ * plan.to. #470 review 3: in plan.to (sealed or not) that is the shelter now: held or repaired there
+ * by the checks, never built afresh beside a mob. done: the line's verb ("backed away", "moved into
+ * the side pocket").
+ */
+function startBackAway(agent, n, ops, plan, tolerateBody, label, done) {
+    const bot = agent.bot;
+    startJob(agent, n, label, () => ops.backAway(bot, plan), (r) => {
+        const inTo = !!r?.site || bot.entity.position.floored().equals(plan.to);
+        if (!inTo) { console.warn(`[night] ${done === 'backed away' ? 'backing away' : 'the side pocket'} did not work (${r?.why ?? 'no result'}); staying in the shelter at ${at(n.site)}`); return; }
+        n.site = plan.to.clone?.() ?? plan.to;
+        n.repairStall = null;
+        n.checkedAt = null;
+        const still = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody });
+        bot.rotnSheltered = still && still.todo.length === 0 ? true : 'open';
+        if (bot.rotnSheltered === true) n.handFight = false; // #470 nit
+        line(agent, r?.site ? `[night] ${done}: in the shelter at ${at(n.site)}, the cells behind sealed`
+            : `[night] ${done} into ${at(n.site)}, but ${r?.why ?? 'the seal failed'}; holding or repairing there`);
+    });
 }
 
 /**
@@ -736,7 +758,9 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.relocTries = (n.relocTries ?? 0) + 1;
                 const tries = NIGHT_RELOCATE.tries;
                 line(agent, `${plan.line}${n.relocTries > 1 ? ` (walk ${n.relocTries} of ${tries})` : ''}`);
-                startJob(agent, n, 'action:leaveDeathSpot', () => ops.walkAwayAtNight(bot, plan), (r, ret) => {
+                // #471 nit 2: night may fall during a walk that began at dusk.
+                const shortNow = () => { const tn = n.clock.timeOfDay(Date.now()); return tn !== null && nightPhase(tn) === 'night' && !(ops.hasWeapon ?? hasWeapon)(bot); };
+                startJob(agent, n, 'action:leaveDeathSpot', () => ops.walkAwayAtNight(bot, plan, { shortNow }), (r, ret) => {
                     n.nextAt = 0;
                     const far = `${Math.round(r?.nearest ?? 0)} blocks`;
                     if (ret?.interrupted && !r?.arrived && n.relocTries < tries) {
@@ -745,7 +769,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                         return;
                     }
                     n.leftDeathSpot = true;
-                    if (r?.arrived) console.log(`[night] the walk away is done: ${far} from the places left${r.stopped === 'hostile' ? ' (stopped early: a hostile mob came near)' : ''}; sheltering here`);
+                    if (r?.arrived) console.log(`[night] the walk away is done: ${far} from the places left${r.stopped === 'hostile' ? ' (stopped early: a hostile mob came near)' : r.stopped === 'night' ? ' (stopped early: night fell, and no weapon)' : ''}; sheltering here`);
                     else if (r?.stopped === 'time') console.warn(`[night] the walk away ran out of time at ${far} from the places left; sheltering here`);
                     else if (ret?.interrupted) console.warn(`[night] the walk away was interrupted ${tries} times (${far} from the places left); sheltering here`);
                     else console.warn(`[night] the walk away did not get there (${far} from the places left); sheltering here`);
@@ -766,7 +790,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.pit = pit;
                 n.digAt = null; // digging seen at an earlier shelter is not this one's
                 n.repairStall = null;
-                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false });
+                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false });
                 n.checkedAt = null; // set by the next tick, on its clock
                 bot.rotnSheltered = true;
                 // Gate2 B: where the bot was and what it stood on, for the line if it is ever out of it.
@@ -942,6 +966,19 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             return 'night:building';
         }
         if (need.todo.length === 0 && open) { bot.rotnSheltered = true; n.repairStall = null; } // closed again: the shelter's rules are back
+        // Soak 3, the lead's (a): a hole shelter, closed: once, into a side pocket at its bottom, with
+        // the shaft under the roof sealed behind (shelter.wallItems: blocks the diggers cannot break
+        // first, cobblestone first). A zombie that digs the roof then finds a sealed column, not the bot.
+        if (need.todo.length === 0 && n.pit && !n.pocketTried && ops.retreatPlan && ops.backAway) {
+            n.pocketTried = true;
+            const plan = ops.retreatPlan(bot, n.site, []);
+            if (plan) {
+                line(agent, `[night] the hole shelter at ${at(n.site)}: moving into a side pocket at ${at(plan.to)} and sealing the shaft behind`);
+                startBackAway(agent, n, ops, plan, tolerateBody, POCKET_LABEL, 'moved into the side pocket');
+                return 'night:inside';
+            }
+            console.log(`[night] the hole shelter at ${at(n.site)}: no enclosed side for a pocket (or fewer than 2 blocks to seal with); staying under the roof`);
+        }
         // Soak 3, the lead's (b), #470 review: with no weapon, a cell a mob holds (heldCells) is left
         // out of the repair and the other open cells are repaired; at BACK_AWAY.lowHealth or lower the
         // bot backs away into an enclosed column on the far side (once per shelter), else hits back by
@@ -958,20 +995,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     if (plan) {
                         n.backedAway = true;
                         line(agent, `[night] no weapon, health ${Math.round(bot.health)}, and ${mob} in the opening at ${at(held[0].cell)}: backing away into ${at(plan.to)}`);
-                        startJob(agent, n, BACK_AWAY_LABEL, () => ops.backAway(bot, plan), (r) => {
-                            // #470 review 3: in plan.to (sealed or not), that is the shelter now: it is held or
-                            // repaired there by the checks below, never built afresh beside the mob.
-                            const inTo = !!r?.site || bot.entity.position.floored().equals(plan.to);
-                            if (!inTo) { console.warn(`[night] backing away did not work (${r?.why ?? 'no result'}); staying in the shelter at ${at(n.site)}`); return; }
-                            n.site = plan.to.clone?.() ?? plan.to;
-                            n.repairStall = null;
-                            n.checkedAt = null;
-                            const still = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody });
-                            bot.rotnSheltered = still && still.todo.length === 0 ? true : 'open';
-                            if (bot.rotnSheltered === true) n.handFight = false; // #470 nit
-                            line(agent, r?.site ? `[night] backed away: in the shelter at ${at(n.site)}, the cells behind sealed`
-                                : `[night] backed away into ${at(n.site)}, but ${r?.why ?? 'the seal failed'}; holding or repairing there`);
-                        });
+                        startBackAway(agent, n, ops, plan, tolerateBody, BACK_AWAY_LABEL, 'backed away');
                         return 'night:inside';
                     }
                     n.handFight = true;

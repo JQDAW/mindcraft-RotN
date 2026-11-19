@@ -27,6 +27,8 @@ import { getBlock, registryName, loadRotnData, howToGet, PACK_VERSION, WILDCARD_
 export const REPAIR_LABEL = 'action:repairShelter';
 /** The night routine's back-away from an opening a mob holds, with no weapon (soak 3, the lead's (b)). */
 export const BACK_AWAY_LABEL = 'action:backAway';
+/** The move into a hole shelter's side pocket (soak 3, the lead's (a)). */
+export const POCKET_LABEL = 'action:sidePocket';
 export const NIGHT_START = 12542;
 export const NIGHT_END = 23460;
 export const MORNING_FREEZE = 3001;

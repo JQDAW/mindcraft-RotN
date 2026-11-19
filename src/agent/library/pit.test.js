@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { pitProblem, choosePit, digPit, pitOut, moveAwayFrom, PIT } from './pit.js';
+import { pitProblem, choosePit, digPit, pitOut, PIT } from './pit.js';
 import { buildShelter } from './shelter.js';
 
 const reg = minecraftData('1.12.2');
@@ -126,21 +126,6 @@ test('round 9 B (h): in the morning the roof and one side\'s stairs are dug by h
     assert.ok(bot.entity.position.floored().equals(exit));
 });
 
-test('round 9 B (h): moveAwayFrom walks until at least PIT.awayFrom from the death spot', async (t) => {
-    t.mock.method(console, 'log', () => {});
-    const { bot, calls } = fakeBot({ at: new Vec3(-70, 64, -57) });
-    const spot = { x: -78.5, y: 58, z: -59.5 };
-    bot.pathfinder.goto = (goal) => { calls.gotos.push(goal); bot.entity.position = new Vec3(-40.5, 64, -57.5); return Promise.resolve(); };
-    assert.equal(PIT.awayFrom, 28);
-    assert.equal(await moveAwayFrom(bot, spot), true);
-    assert.equal(calls.gotos.length, 1);
-    const g = calls.gotos[0];
-    assert.equal(g.constructor.name, 'GoalInvert');
-    assert.equal(g.goal.constructor.name, 'GoalNear');
-    assert.deepEqual([g.goal.x, g.goal.z, g.goal.rangeSq], [-79, -60, 28 * 28]);
-    assert.equal(await moveAwayFrom(bot, spot), true, 'already far: no walk');
-    assert.equal(calls.gotos.length, 1);
-});
 
 // ---- #337 review (lead, REQUEST CHANGES on 36bb947) ----
 

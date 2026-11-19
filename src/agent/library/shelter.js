@@ -15,7 +15,7 @@
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { isSturdy, isSoftWall, isWall, handDiggable, dirtPileRecipes, shelterShell, dumpState } from './night.js';
-import { loadRotnData, PACK_VERSION, registryName, botName } from '../../../packages/rotn-data/index.js';
+import { loadRotnData, PACK_VERSION, registryName, botName, getItem, mobDigging, canMobDig } from '../../../packages/rotn-data/index.js';
 import { formatName } from './rotn_names.js';
 import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { cobbleChoices } from './cobble.js';
@@ -514,7 +514,13 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     if (problem && pick.ok) return refuse(plan?.feet ?? null, plan?.todo ?? [], problem);
     const sturdy = () => countOf(shelterItems(bot));
     if (pick.ok && sturdy() < plan.blocks) await craftMore(bot, 'cobblestone', plan.blocks - sturdy(), craft);
-    let mode = { items: shelterItems, accept: keepSoft ? isWall : isSturdy };
+    // Soak 3, the lead's (c): the blocks the nearby diggers cannot break first (wallItems).
+    const diggers = nearbyDiggers(bot);
+    const armedDigger = diggers.find(d => d.held.length > 0);
+    if (armedDigger && ![...shelterItems(bot), ...softItems(bot)].some(i => mobProof(i, diggers))) {
+        log(bot, `A ${armedDigger.name.replace(/^minecraft:/, '')} near holds a ${armedDigger.held[0].type}: none of the blocks you hold stops it.`);
+    }
+    let mode = { items: (b) => wallItems(b, shelterItems(b), diggers), accept: keepSoft ? isWall : isSturdy };
 
     // 2. The dirt fallback: too few sturdy blocks, or no pickaxe to dig out of rock.
     if (!pick.ok || sturdy() < plan.blocks) {
@@ -530,7 +536,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
         const have = countOf(items(bot));
         if (!softProblem && have >= soft.blocks) {
             plan = soft;
-            mode = { items, accept: isWall };
+            mode = { items: (b) => wallItems(b, items(b), diggers), accept: isWall };
             log(bot, `Building the shelter with dirt too${pick.ok ? '' : ' (no pickaxe: dirt can be dug out by hand)'}; mobs can dig through dirt.`);
         } else {
             const dirt = countOf(softItems(bot));
@@ -717,10 +723,68 @@ export async function backAway(bot, plan) {
     // From here on the bot is in plan.to: a seal that fails leaves it there (#470 review 3: the night
     // routine holds or repairs at plan.to, never a fresh build beside the mob).
     const interior = new Set([key(plan.to), key(plan.to.offset(0, 1, 0))]);
-    const mode = { items: (b) => [...shelterItems(b), ...softItems(b)], accept: isWall };
+    const mode = { items: (b) => wallItems(b, [...shelterItems(b), ...softItems(b)], nearbyDiggers(b)), accept: isWall };
     for (const c of plan.seal) {
         if (!await fillCell(bot, c, interior, mode)) return { why: `could not seal ${at(c)}` };
     }
     log(bot, `Backed away from the opening into ${at(plan.to)} and sealed ${plan.seal.map(at).join(' and ')} behind.`);
     return { site: plan.to };
+}
+
+/**
+ * Soak 3, the lead's (c), from rotn-data's mob-digging.json (Epic Siege Mod + ESM-Tweaks): zombies
+ * and the other diggers dig toward their target, but with Requires Tools on they dig only blocks that
+ * need no tool (dirt, sand, gravel, wood, glass) unless they hold the right tool (a zombie may pick up
+ * the bot's lost pickaxe). Zombie Players are no diggers in mob-digging.json, whatever they hold.
+ * range: the diggers looked at; assumed: who comes when none is loaded yet (night brings zombies).
+ */
+export const DIGGERS = { range: 32, assumed: ['minecraft:zombie'] };
+
+const entityRegistryName = (n) => (typeof n === 'string' && n.includes(':') ? n : `minecraft:${n}`);
+
+/** The tool classes a mob holds in either hand ([{type, level}], rotn-data's item tool classes). */
+export function heldTools(e) {
+    const items = [e?.heldItem, ...(Array.isArray(e?.equipment) ? e.equipment.slice(0, 2) : [])].filter(i => typeof i?.name === 'string');
+    const out = [];
+    for (const i of items) {
+        let classes = null;
+        try { classes = getItem(registryName(i.name))?.toolClasses ?? null; } catch { classes = null; }
+        for (const [type, level] of Object.entries(classes ?? {})) if (Number.isFinite(level)) out.push({ type, level });
+    }
+    return out;
+}
+
+/** The digging mobs within range ([{name, held}]), else DIGGERS.assumed with empty hands. */
+export function nearbyDiggers(bot, range = DIGGERS.range) {
+    const here = bot?.entity?.position;
+    const list = [];
+    for (const e of Object.values(bot?.entities ?? {})) {
+        if (!e || e === bot.entity || !e.position || typeof e.name !== 'string') continue;
+        if (here && e.position.distanceTo(here) > range) continue;
+        const name = entityRegistryName(e.name);
+        let digs = null;
+        try { digs = mobDigging(name); } catch { digs = null; }
+        if (digs) list.push({ name, held: heldTools(e) });
+    }
+    return list.length ? list : DIGGERS.assumed.map(name => ({ name, held: [] }));
+}
+
+/**
+ * Whether no digger can dig the block this item places (canMobDig; an unknown block or an uncertain
+ * hardness counts as diggable: fail safe).
+ */
+export function mobProof(item, diggers) {
+    const block = (() => { try { return registryName(item.name); } catch { return null; } })();
+    if (!block) return false;
+    return diggers.every(d => {
+        let r = null;
+        try { r = canMobDig(d.name, block, { meta: item.metadata ?? 0, held: d.held }); } catch { r = null; }
+        return !!r && !r.canDig && !r.uncertain;
+    });
+}
+
+/** Wall, roof and seal stacks in order: the ones the diggers cannot break first, cobblestone first among those, then the biggest. */
+export function wallItems(bot, items, diggers = nearbyDiggers(bot)) {
+    const proof = new Map(items.map(i => [i, mobProof(i, diggers)]));
+    return [...items].sort((a, b) => (proof.get(b) - proof.get(a)) || ((b.name === 'cobblestone') - (a.name === 'cobblestone')) || (b.count - a.count));
 }

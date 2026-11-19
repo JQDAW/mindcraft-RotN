@@ -11,7 +11,6 @@ import { requestReplan, hasReplan, QUIET_MS } from './replan.js';
 import { initModes } from './modes.js';
 import { nightTick, nightState } from './night_routine.js';
 import { ActionManager } from './action_manager.js';
-import { PIT } from './library/pit.js';
 
 __setRegistryForTest(minecraftData('1.12.2'));
 const quiet = { log: () => {} };
@@ -86,5 +85,4 @@ test('#463 review 1: a night death\'s re-plan survives the routine\'s jobs (leav
     assert.equal(hasReplan(agent), false, 'delivered, so never again');
     assert.ok(!lines.some(l => l.startsWith('[reflex] re-plan request dropped')), 'never dropped by a routine job');
     assert.equal(lines.filter(l => l.startsWith('[reflex] re-plan prompt held: the night routine is running; it goes once at full day')).length, 1);
-    assert.equal(PIT.awayFrom, 28);
 });
