@@ -6,7 +6,10 @@
 # Generic behaviour, per command NAME (with '-' turned into '_'):
 #   FAKE_OUT_NAME   printed on stdout        FAKE_RC_NAME   exit code (default 0)
 # Special cases:
-#   id -nG USER                       $FAKE_ID_GROUPS (default USER)
+#   id -nG USER                       $FAKE_ID_GROUPS_<USER> or $FAKE_ID_GROUPS (default USER), plus the groups
+#                                     logged usermod --append --groups calls gave USER
+#   id -gn USER                       $FAKE_ID_GN (default USER)
+#   getent group NAME                 see the getent case below
 #   -o FILE   (curl and gpg only)     creates FILE
 #   ln -sfn TARGET LINK               writes TARGET into the file LINK (no symlinks needed on Windows)
 #   fallocate -l SIZE FILE            creates FILE
@@ -42,10 +45,42 @@ rc_var="FAKE_RC_$key"
 case $name in
   id)
     # id -nG USER: $FAKE_ID_GROUPS (default: USER's own group only); every other id call: FAKE_OUT_id / FAKE_RC_id.
-    if [[ ${1:-} == -nG ]]; then echo "${FAKE_ID_GROUPS:-${2:-}}"; exit 0; fi
+    if [[ ${1:-} == -nG ]]; then
+      u=${2:-}; v="FAKE_ID_GROUPS_${u//-/_}"; g=${!v:-${FAKE_ID_GROUPS:-$u}}
+      # plus every group a logged `usermod --append --groups G USER` added
+      if [[ -n ${FAKE_LOG:-} && -f $FAKE_LOG ]]; then
+        while IFS=$'\t' read -r n a b grp who; do
+          [[ $n == usermod && $a == --append && $b == --groups && $who == "$u" ]] && g+=" ${grp//,/ }"
+        done < "$FAKE_LOG"
+      fi
+      echo "$g"; exit 0
+    fi
+    if [[ ${1:-} == -gn ]]; then echo "${FAKE_ID_GN:-${2:-}}"; exit 0; fi
     [[ -n ${FAKE_OUT_id:-} ]] && echo "$FAKE_OUT_id"
     exit "${FAKE_RC_id:-0}" ;;
+  getent)
+    # getent group NAME: exists if FAKE_RC_getent is 0 (or unset) or a groupadd of NAME was logged; its members are
+    # $FAKE_GROUP_MEMBERS if set, else every USER of a logged `usermod --append --groups NAME USER`, in order.
+    if [[ ${1:-} == group ]]; then
+      grp=${2:-}
+      if [[ ${FAKE_RC_getent:-0} != 0 ]] && ! grep -qxF "groupadd"$'\t'"--system"$'\t'"$grp" "${FAKE_LOG:-/dev/null}"; then exit 2; fi
+      if [[ -n ${FAKE_GROUP_MEMBERS+x} ]]; then m=$FAKE_GROUP_MEMBERS
+      else
+        m=''
+        while IFS=$'\t' read -r n a b g who; do
+          [[ $n == usermod && $a == --append && $b == --groups && ,$g, == *",$grp,"* && ,$m, != *",$who,"* ]] && m+=${m:+,}$who
+        done < "${FAKE_LOG:-/dev/null}"
+      fi
+      echo "$grp:x:999:$m"; exit 0
+    fi
+    [[ -n ${FAKE_OUT_getent:-} ]] && echo "$FAKE_OUT_getent"
+    exit "${FAKE_RC_getent:-0}" ;;
   npm)
+    # FAKE_NPM_NODE_GYP: what canvas's node-gyp did on the CX23 (ADR 0011 install, rotn-v0.1.10): it resets its build
+    # folder's mode, which drops the setgid bit, so a file made there gets the builder's own group.
+    if [[ -n ${FAKE_NPM_NODE_GYP:-} ]]; then
+      mkdir -p node_modules/canvas/build && /bin/chmod g-s node_modules/canvas/build && : > node_modules/canvas/build/config.gypi
+    fi
     if [[ -n ${FAKE_FAIL_FIRST_npm:-} ]] && (( $(grep -c $'^npm\t' "$FAKE_LOG") <= FAKE_FAIL_FIRST_npm )); then exit 1; fi
     exit "${FAKE_RC_npm:-0}" ;;
   ln)
@@ -95,7 +130,12 @@ case $name in
   systemctl)
     # is-active: 3 (inactive) when FAKE_SSH_INACTIVE is set, else 0. cat: 1 when FAKE_NO_SSH_UNIT is set.
     if [[ ${1:-} == is-active ]]; then [[ -n ${FAKE_SSH_INACTIVE:-} ]] && exit 3; exit 0; fi
-    if [[ ${1:-} == cat ]]; then [[ -n ${FAKE_NO_SSH_UNIT:-} ]] && exit 1; exit 0; fi ;;
+    if [[ ${1:-} == cat ]]; then [[ -n ${FAKE_NO_SSH_UNIT:-} ]] && exit 1; exit 0; fi
+    # list-units: $FAKE_UNITS (printf %b), exit $FAKE_LIST_UNITS_RC
+    if [[ ${1:-} == list-units ]]; then printf '%b' "${FAKE_UNITS-}"; exit "${FAKE_LIST_UNITS_RC:-0}"; fi ;;
+  pgrep)
+    # 1 (no process) unless FAKE_RC_pgrep says otherwise
+    exit "${FAKE_RC_pgrep:-1}" ;;
   ufw)
     # State in $ROOT/.fake-ufw: the added rules (one "ufw allow ..." line each) and whether it is enabled.
     # FAKE_UFW_DROP_RULES: allow does not take (show added lists nothing); FAKE_UFW_NO_ENABLE: enable

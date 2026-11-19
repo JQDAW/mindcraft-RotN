@@ -29,10 +29,12 @@
 # ROOT, MINDCRAFT_ROTN_REPO_URL, HEALTH_WAIT_S, KEEP_RELEASES and NPM_CI_RETRY_S are for the offline tests: sudo does
 # not pass them.
 #
-# Release folders: /opt/mindcraft-rotn and releases/ are setgid (2750, group mindcraft-rotn), so what the build
-# creates gets the bots' group. rotn-build is not in that group, so a chmod by it clears the setgid bit of a folder
-# (the kernel drops S_ISGID for a non-member), and files made in such a folder would get rotn-build's own group: the
-# build refuses (fail closed) if anything in the release is outside SVC_GROUP before it sets the permissions.
+# Release group (ADR 0011, changed after the first install): /opt/mindcraft-rotn and releases/ are
+# rotn-build:rotn-release 2750. rotn-release has two members, rotn-build and the bot user mindcraft-rotn; the bot
+# reads its release through it. rotn-build stays out of mindcraft-rotn (the bots' state). The setgid bit alone was not
+# enough: canvas's node-gyp resets its build folder's mode, which drops setgid, and files made there got rotn-build's
+# own group (node_modules/canvas/build/config.gypi, the first install). So the build sets the group of every file
+# itself (chgrp -R -h -P: a member can always do that), then checks (fail closed) that nothing is outside REL_GROUP.
 #
 # Layout under /opt/mindcraft-rotn:
 #   repo.git/              bare clone of the repo (develop and tags only)
@@ -60,7 +62,7 @@ ROOT=${ROOT:-}
 REPO_URL=${MINDCRAFT_ROTN_REPO_URL:-https://github.com/JQDAW/mindcraft-RotN.git}
 BASE=$ROOT/opt/mindcraft-rotn
 BOTS_DIR=/var/lib/mindcraft-rotn/bots
-SVC_GROUP=mindcraft-rotn
+REL_GROUP=rotn-release
 HEALTH_WAIT_S=${HEALTH_WAIT_S:-45}
 KEEP_RELEASES=${KEEP_RELEASES:-5}
 readonly NPM_CI_TRIES=3
@@ -128,11 +130,11 @@ fetch() {
   git_ fetch --quiet --prune --force origin '+refs/heads/develop:refs/heads/develop' '+refs/tags/*:refs/tags/*'
 }
 
-# in_group DIR: 0 if everything under DIR has the group SVC_GROUP (ADR 0011: the setgid folders gave it to them).
+# in_group DIR: 0 if everything under DIR (links themselves, never followed) has the group REL_GROUP.
 in_group() {
   local bad
-  bad=$(find "$1" ! -group "$SVC_GROUP" -print -quit) || return 1
-  [[ -z $bad ]] || { log "not in group $SVC_GROUP: ${bad#"$1"/} (a folder lost its setgid bit?)"; return 1; }
+  bad=$(find "$1" ! -group "$REL_GROUP" -print -quit) || return 1
+  [[ -z $bad ]] || { log "not in group $REL_GROUP: ${bad#"$1"/} (after chgrp -R)"; return 1; }
 }
 
 # settings_check DIR: DIR/settings.js's default export, as main.js imports it. Exit 0 only if:
@@ -185,9 +187,11 @@ build() {
   # first code generation, which insecure coding off never reaches (lead decision after G4 step 0, #412 review).
   rm -rf "$tmp/bots"
   ln -sfn "$BOTS_DIR" "$tmp/bots"
-  touch "$tmp/.release-ok.new"   # made before the chmod below, which clears the folders' setgid bit as rotn-build
-  in_group "$tmp" || { rm -rf "$tmp"; die "$tag: part of the release is not in group $SVC_GROUP; the bot could not read it; refusing"; }
-  chgrp -R "$SVC_GROUP" "$tmp"
+  touch "$tmp/.release-ok.new"
+  # Every file gets the release group, whatever its folder's setgid bit (node-gyp's mode reset clears it). -h -P: the
+  # ./bots link itself, never what it points to.
+  chgrp -R -h -P "$REL_GROUP" "$tmp" || { rm -rf "$tmp"; die "$tag: cannot give the release the group $REL_GROUP (is $(id -un) in it? bootstrap.sh build-user); refusing"; }
+  in_group "$tmp" || { rm -rf "$tmp"; die "$tag: part of the release is not in group $REL_GROUP; the bot could not read it; refusing"; }
   chmod -R g+rX,g-w,o-rwx "$tmp"
   mv -T "$tmp/.release-ok.new" "$tmp/.release-ok"
   mv -T "$tmp" "$BASE/releases/$name"
