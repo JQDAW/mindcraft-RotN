@@ -1,11 +1,35 @@
 #!/usr/bin/env bash
-# Tag-based deploy and rollback on the bot's CX23, run there as the `deploy` user (harness-ops, brief
-# deliverable 5). Installed by the human with the rest of deploy/cx23/; it needs no secrets: the repo
-# is public and the bots' keys stay in /etc/mindcraft-rotn/<bot>.env.
+# Tag-based deploy and rollback on the bot's CX23 (harness-ops, brief deliverable 5). It needs no secrets: the
+# repo is public and the bots' keys stay in /etc/mindcraft-rotn/<bot>.env.
 #
-#   deploy.sh deploy TAG [--force]   release TAG (a tag on develop): extract it, npm ci, switch, restart
-#   deploy.sh rollback               switch back to the previous release and restart
-#   deploy.sh status                 current and previous release, and the releases on disk
+# Since ADR 0011 it runs only as the build user rotn-build, which owns /opt/mindcraft-rotn and has no login shell,
+# no SSH key, no sudo rule and no access to the bots' state: release code (settings.js, npm's install scripts) never
+# runs as deploy. Root's copy is /usr/local/lib/mindcraft-rotn/deploy.sh (root:root 0755); deploy may run exactly that
+# as rotn-build, the CX33's gate and the human alike:
+#   sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy TAG
+#   sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh check TAG
+#   sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh status
+# That sudoers rule allows any arguments, so run as BUILD_USER this script accepts exactly those three shapes
+# (ADR 0011) and refuses everything else, rollback and a deploy without --no-restart included.
+#
+#   deploy.sh [--no-restart] deploy TAG [--force]   release TAG (a tag on develop): extract it, npm ci, switch,
+#                                                   restart the enabled bots (not with --no-restart)
+#   deploy.sh rollback                              switch back to the previous release and restart (not as BUILD_USER)
+#   deploy.sh status                                current and previous release, and the releases on disk
+#   deploy.sh check TAG                             fetch, then: is TAG on develop, and its commit. Builds nothing.
+#
+# --no-restart never calls the ctl (rotn-build has no sudo rule): the bots are not restarted and not health-checked.
+# The gate refuses a deploy while any bot is enabled.
+#
+# PATH is fixed (node, npm and git from /usr/bin), and HOME is the running user's home from the passwd database
+# (rotn-build's /var/lib/rotn-build: npm's cache), whatever the caller's environment; sudo resets the rest.
+# ROOT, MINDCRAFT_ROTN_REPO_URL, HEALTH_WAIT_S, KEEP_RELEASES and NPM_CI_RETRY_S are for the offline tests: sudo does
+# not pass them.
+#
+# Release folders: /opt/mindcraft-rotn and releases/ are setgid (2750, group mindcraft-rotn), so what the build
+# creates gets the bots' group. rotn-build is not in that group, so a chmod by it clears the setgid bit of a folder
+# (the kernel drops S_ISGID for a non-member), and files made in such a folder would get rotn-build's own group: the
+# build refuses (fail closed) if anything in the release is outside SVC_GROUP before it sets the permissions.
 #
 # Layout under /opt/mindcraft-rotn:
 #   repo.git/              bare clone of the repo (develop and tags only)
@@ -23,6 +47,11 @@
 # from GitHub's release downloads, which answered 504 for every repo on 2026-11-08 (#394, #397); with no
 # prebuild they fall back to node-gyp, which cannot build here (no compiler or pkg-config, by design).
 set -Eeuo pipefail
+PATH=/usr/bin:/bin
+BUILD_USER=rotn-build
+# As the build user nothing in the environment may steer it (sudo resets it too; ADR 0011): the test hooks below
+# keep their defaults.
+if [[ $(id -un) == "$BUILD_USER" ]]; then unset ROOT MINDCRAFT_ROTN_REPO_URL HEALTH_WAIT_S KEEP_RELEASES NPM_CI_RETRY_S; fi
 
 ROOT=${ROOT:-}
 REPO_URL=${MINDCRAFT_ROTN_REPO_URL:-https://github.com/JQDAW/mindcraft-RotN.git}
@@ -37,6 +66,7 @@ NPM_CI_RETRY_S=${NPM_CI_RETRY_S:-120}
 # v0.1.0 is an ancestor of develop, so `deploy v0.1.0` would pass the on-develop check and deploy plain Mindcraft.
 TAG_RE='^rotn-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
 CTL=(sudo -n /usr/local/sbin/mindcraft-rotn-ctl)
+NO_RESTART=0
 
 log() { echo "[deploy $(date -u +%H:%M:%S)] $*" >&2; }
 die() { echo "[deploy] ERROR: $*" >&2; exit 1; }
@@ -62,6 +92,7 @@ switch_to() {
 
 enabled_bots() {
   local b
+  (( NO_RESTART )) && return 0   # never calls the ctl: no bot is restarted or health-checked
   for b in $("${CTL[@]}" list); do
     "${CTL[@]}" is-enabled "$b" > /dev/null 2>&1 && echo "$b"
   done
@@ -90,6 +121,13 @@ fetch() {
     git clone --quiet --bare "$REPO_URL" "$BASE/repo.git"
   fi
   git_ fetch --quiet --prune --force origin '+refs/heads/develop:refs/heads/develop' '+refs/tags/*:refs/tags/*'
+}
+
+# in_group DIR: 0 if everything under DIR has the group SVC_GROUP (ADR 0011: the setgid folders gave it to them).
+in_group() {
+  local bad
+  bad=$(find "$1" ! -group "$SVC_GROUP" -print -quit) || return 1
+  [[ -z $bad ]] || { log "not in group $SVC_GROUP: ${bad#"$1"/} (a folder lost its setgid bit?)"; return 1; }
 }
 
 # settings_check DIR: DIR/settings.js's default export, as main.js imports it. Exit 0 only if:
@@ -142,9 +180,11 @@ build() {
   # first code generation, which insecure coding off never reaches (lead decision after G4 step 0, #412 review).
   rm -rf "$tmp/bots"
   ln -sfn "$BOTS_DIR" "$tmp/bots"
+  touch "$tmp/.release-ok.new"   # made before the chmod below, which clears the folders' setgid bit as rotn-build
+  in_group "$tmp" || { rm -rf "$tmp"; die "$tag: part of the release is not in group $SVC_GROUP; the bot could not read it; refusing"; }
   chgrp -R "$SVC_GROUP" "$tmp"
   chmod -R g+rX,g-w,o-rwx "$tmp"
-  touch "$tmp/.release-ok"
+  mv -T "$tmp/.release-ok.new" "$tmp/.release-ok"
   mv -T "$tmp" "$BASE/releases/$name"
 }
 
@@ -179,7 +219,7 @@ do_deploy() {
   restart_bots "${bots[@]}"
   if healthy "${bots[@]}"; then
     ledger "deploy $tag $sha $name ok bots=${bots[*]:-none}"
-    log "deployed $name (bots: ${bots[*]:-none})"
+    log "deployed $name (bots restarted: ${bots[*]:-none}$( (( NO_RESTART )) && echo '; --no-restart' || true))"
     prune "$name" "$cur"
     return 0
   fi
@@ -215,6 +255,17 @@ do_rollback() {
   die "rolled back to $prev, but the bots are not healthy; check the journal"
 }
 
+# check TAG: a dry run of deploy's first steps (ADR 0011's deploy-check): fetch, then the tag must be on develop.
+do_check() {
+  local tag=${1:-} sha
+  (( $# == 1 )) && [[ $tag =~ $TAG_RE ]] || die "usage: deploy.sh check rotn-vX.Y.Z[-suffix]"
+  lock
+  fetch
+  sha=$(git_ rev-parse --verify --quiet "refs/tags/$tag^{commit}") || die "no tag '$tag' in $REPO_URL"
+  git_ merge-base --is-ancestor "$sha" refs/heads/develop || die "tag '$tag' ($sha) is not on develop"
+  echo "tag=$tag commit=$sha on-develop=yes release=$tag-${sha:0:12}"
+}
+
 do_status() {
   echo "current=$(state_get current)"
   echo "previous=$(state_get previous)"
@@ -226,10 +277,22 @@ do_status() {
   return 0
 }
 
+HOME=$(getent passwd "$(id -un)" | cut -d: -f6) || HOME=
+[[ $HOME == /* ]] || die "no home directory for $(id -un) in the passwd database"
+export HOME
+# Run as the build user, exactly the three shapes the sudoers rule is for (ADR 0011).
+if [[ $(id -un) == "$BUILD_USER" ]]; then
+  case "$#:${1:-}:${2:-}" in
+    1:status:|2:check:*|3:--no-restart:deploy) ;;
+    *) die "as $BUILD_USER only: status | check TAG | --no-restart deploy TAG" ;;
+  esac
+fi
 [[ -d $BASE/releases ]] || die "$BASE/releases is missing (run bootstrap.sh setup first)"
+if [[ ${1:-} == --no-restart ]]; then NO_RESTART=1; shift; fi
 case ${1:-} in
   deploy) shift; do_deploy "$@" ;;
-  rollback) shift; do_rollback ;;
-  status) do_status ;;
-  *) die "usage: deploy.sh deploy TAG [--force] | rollback | status" ;;
+  rollback) (( NO_RESTART == 0 && $# == 1 )) || die "usage: deploy.sh rollback"; do_rollback ;;
+  status) (( NO_RESTART == 0 && $# == 1 )) || die "usage: deploy.sh status"; do_status ;;
+  check) (( NO_RESTART == 0 )) || die "usage: deploy.sh check TAG"; shift; do_check "$@" ;;
+  *) die "usage: deploy.sh [--no-restart] deploy TAG [--force] | rollback | status | check TAG" ;;
 esac

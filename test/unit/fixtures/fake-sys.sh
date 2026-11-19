@@ -6,6 +6,7 @@
 # Generic behaviour, per command NAME (with '-' turned into '_'):
 #   FAKE_OUT_NAME   printed on stdout        FAKE_RC_NAME   exit code (default 0)
 # Special cases:
+#   id -nG USER                       $FAKE_ID_GROUPS (default USER)
 #   -o FILE   (curl and gpg only)     creates FILE
 #   ln -sfn TARGET LINK               writes TARGET into the file LINK (no symlinks needed on Windows)
 #   fallocate -l SIZE FILE            creates FILE
@@ -32,6 +33,11 @@ out_var="FAKE_OUT_$key"
 rc_var="FAKE_RC_$key"
 
 case $name in
+  id)
+    # id -nG USER: $FAKE_ID_GROUPS (default: USER's own group only); every other id call: FAKE_OUT_id / FAKE_RC_id.
+    if [[ ${1:-} == -nG ]]; then echo "${FAKE_ID_GROUPS:-${2:-}}"; exit 0; fi
+    [[ -n ${FAKE_OUT_id:-} ]] && echo "$FAKE_OUT_id"
+    exit "${FAKE_RC_id:-0}" ;;
   npm)
     if [[ -n ${FAKE_FAIL_FIRST_npm:-} ]] && (( $(grep -c $'^npm\t' "$FAKE_LOG") <= FAKE_FAIL_FIRST_npm )); then exit 1; fi
     exit "${FAKE_RC_npm:-0}" ;;
@@ -88,15 +94,17 @@ case $name in
     esac
     exit "${!rc_var:-0}" ;;
   sudo)
-    # sudo --version: $FAKE_SUDO_VERSION (default sudo-rs). sudo -l -U USER: the rule in
-    # $ROOT/etc/sudoers.d/mindcraft-rotn if it exists, unless FAKE_SUDO_IGNORES_DROPIN is set.
+    # sudo --version: $FAKE_SUDO_VERSION (default sudo-rs). sudo -l -U USER: USER's rules in
+    # $ROOT/etc/sudoers.d/mindcraft-rotn if it exists, unless FAKE_SUDO_IGNORES_DROPIN is set; then the extra
+    # lines in $FAKE_SUDO_EXTRA_RULES (e.g. a rule from another file).
     if [[ ${1:-} == --version ]]; then echo "${FAKE_SUDO_VERSION:-sudo-rs 0.2.8}"; exit 0; fi
     if [[ ${1:-} == -l ]]; then
       echo "User ${3:-} may run the following commands on cx23:"
       f=${ROOT:-}/etc/sudoers.d/mindcraft-rotn
       if [[ -z ${FAKE_SUDO_IGNORES_DROPIN:-} && -f $f ]]; then
-        sed -n 's/^[a-z][a-z0-9-]* ALL=\(([a-z]*)\) \(.*\)$/    \1 \2/p' "$f"
+        grep "^${3:-} ALL=" "$f" | sed -n 's/^[a-z][a-z0-9-]* ALL=\(([a-z-]*)\) \(.*\)$/    \1 \2/p'
       fi
+      [[ -n ${FAKE_SUDO_EXTRA_RULES:-} ]] && printf '%s\n' "$FAKE_SUDO_EXTRA_RULES"
       exit 0
     fi
     action=$3 bot=${4:-}

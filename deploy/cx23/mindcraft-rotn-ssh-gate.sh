@@ -1,5 +1,5 @@
 #!/bin/bash -p
-# The forced command of the CX33's restricted SSH key to deploy@cx23 (ADR 0009), installed as
+# The forced command of the CX33's restricted SSH key to deploy@cx23 (ADR 0009, ADR 0011), installed as
 # /usr/local/sbin/mindcraft-rotn-ssh-gate (root:root 0755) and named in deploy's authorized_keys:
 #
 #   from="<the CX33's address>",restrict,command="/usr/local/sbin/mindcraft-rotn-ssh-gate" ssh-ed25519 AAAA... <comment>
@@ -12,10 +12,29 @@
 #   journal BOT
 #   journal BOT --since YYYY-MM-DDTHH:MM[:SS][Z]     (read as UTC by the ctl; no space form: no quoting needed)
 #   journal BOT --since @EPOCH_SECONDS
+#   reset-state BOT NAME                             (ADR 0011; NAME is the bot's Mindcraft profile name, e.g. FRCFLD)
 #
-# and runs it as `sudo -n mindcraft-rotn-ctl VERB BOT [--since TIME]`, which checks the name and the time again
-# (deploy/cx23/mindcraft-rotn-ctl.sh). restart, enable, disable, list, daemon-reload and everything else are
-# refused: behind this gate the sudoers rule allows every ctl verb, so the gate is the only barrier (ADR 0009).
+# and runs it as `sudo -n mindcraft-rotn-ctl VERB BOT [...]`, which checks every argument again
+# (deploy/cx23/mindcraft-rotn-ctl.sh). And, as the build user rotn-build (ADR 0011: release code never runs as
+# deploy; deploy's second sudoers rule allows exactly `(rotn-build) /usr/local/lib/mindcraft-rotn/deploy.sh`):
+#
+#   deploy TAG         TAG exactly rotn-vX.Y.Z (digits only, no suffix; deliberately stricter than deploy.sh's own
+#                      TAG_RE, which allows a suffix: do not align them):
+#                      `sudo -n -u rotn-build DEPLOY_SH --no-restart deploy TAG`. Refused while any bot is enabled
+#                      (an enabled bot would come back on the new release at the next reboot or restart): every bot
+#                      of `ctl list` must answer exactly "disabled" to `ctl is-enabled`, or nothing runs. Not
+#                      exec'ed: the gate logs "deploy TAG exit=N" afterwards; the root-owned journal is the record
+#                      (deploys.log is rotn-build's, so release code can rewrite it).
+#   deploy-check TAG   `sudo -n -u rotn-build DEPLOY_SH check TAG`: fetch, then is the tag on develop, and its commit.
+#                      Builds nothing.
+#   release            `sudo -n -u rotn-build DEPLOY_SH status` (read-only).
+#
+# DEPLOY_SH is root's copy, /usr/local/lib/mindcraft-rotn/deploy.sh. sudo resets the environment, so nothing of the
+# client's or sshd's reaches it (deploy.sh reads ROOT, MINDCRAFT_ROTN_REPO_URL, HEALTH_WAIT_S and more from its
+# environment), and deploy.sh sets its own PATH. As deploy, the gate runs only fixed root-owned programs, never
+# release code. restart, enable, disable, list, daemon-reload, rollback and everything else are refused: behind this
+# gate the sudoers rule allows every ctl verb, so the gate is the only barrier (ADR 0009). No request reads or writes
+# the env files in /etc/mindcraft-rotn: they stay the human's (ADR 0011).
 #
 # How it stays safe:
 #   - The request is matched as ONE string against fixed anchored patterns; the arguments are the patterns'
@@ -42,6 +61,9 @@ PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 readonly SUDO=/usr/bin/sudo
 readonly CTL=/usr/local/sbin/mindcraft-rotn-ctl
+readonly BUILD_USER=rotn-build
+readonly DEPLOY_SH=/usr/local/lib/mindcraft-rotn/deploy.sh
+readonly DEPLOY_RUN=("$SUDO" -n -u "$BUILD_USER" "$DEPLOY_SH")
 readonly LOGGER=/usr/bin/logger
 readonly TAG=rotn-ssh-gate
 readonly MAX_LEN=128
@@ -50,6 +72,11 @@ readonly REFUSED=126   # a gate refusal; the ctl refuses with 2 (#365 review)
 readonly BOT='[a-z0-9][a-z0-9-]{0,31}'
 readonly SIMPLE_RE="^(status|start|stop|metrics) ($BOT)\$"
 readonly JOURNAL_RE="^journal ($BOT)( --since ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z?|@[0-9]{1,12}))?\$"
+readonly RESET_RE="^reset-state ($BOT) ([A-Za-z0-9_]{1,16})\$"
+readonly TAG_RE='rotn-v[0-9]+\.[0-9]+\.[0-9]+'
+readonly DEPLOY_RE="^(deploy|deploy-check) ($TAG_RE)\$"
+readonly BOT_LINE_RE="^$BOT\$"
+readonly RELEASE_RE='^release$'
 
 # The request as one log-safe line: printable ASCII kept, every other byte '?', at most LOG_MAX bytes.
 safe() {
@@ -64,8 +91,28 @@ safe() {
 log() { "$LOGGER" -t "$TAG" -p "$1" -- "$2" 2>/dev/null || true; }
 refuse() {
   log auth.warning "refused ($1): '$(safe "$req")' (${#req} bytes)"
-  echo "rotn-ssh-gate: refused. Allowed: status|start|stop|metrics BOT; journal BOT [--since YYYY-MM-DDTHH:MM[:SS][Z]|@EPOCH]" >&2
+  echo "rotn-ssh-gate: refused. Allowed: status|start|stop|metrics BOT; journal BOT [--since YYYY-MM-DDTHH:MM[:SS][Z]|@EPOCH]; reset-state BOT NAME; deploy|deploy-check rotn-vX.Y.Z; release" >&2
   exit "$REFUSED"
+}
+# A well-formed deploy that the state of the host does not allow: logged and refused with the ctl's refusal code (2),
+# not the gate's 126 (it is not a malformed request).
+not_now() {
+  log auth.warning "deploy $1 not run: $2"
+  echo "rotn-ssh-gate: deploy $1 not run: $2" >&2
+  exit 2
+}
+# 0 if no bot is enabled: every bot `ctl list` prints must answer exactly "disabled". Anything else (enabled, static,
+# masked, linked, an error, an odd name, a failed list) counts as enabled: fail closed.
+none_enabled() {
+  local out b state
+  out=$("$SUDO" -n "$CTL" list) || { why="ctl list failed"; return 1; }
+  while IFS= read -r b; do
+    [[ -z $b ]] && continue
+    [[ $b =~ $BOT_LINE_RE ]] || { why="ctl list printed an unexpected line"; return 1; }
+    state=$("$SUDO" -n "$CTL" is-enabled "$b" 2>/dev/null) || true
+    [[ $state == disabled ]] || { why="bot $b is not disabled (is-enabled: '$(safe "$state")')"; return 1; }
+  done <<< "$out"
+  return 0
 }
 
 if [[ -z ${SSH_ORIGINAL_COMMAND+x} ]]; then req=''; refuse 'no command (an interactive login)'; fi
@@ -77,6 +124,24 @@ if [[ $req =~ $SIMPLE_RE ]]; then
 elif [[ $req =~ $JOURNAL_RE ]]; then
   args=(journal "${BASH_REMATCH[1]}")
   [[ -n ${BASH_REMATCH[2]} ]] && args+=(--since "${BASH_REMATCH[3]}")
+elif [[ $req =~ $RESET_RE ]]; then
+  args=(reset-state "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}")
+elif [[ $req =~ $DEPLOY_RE ]]; then
+  verb=${BASH_REMATCH[1]} tag=${BASH_REMATCH[2]}
+  if [[ $verb == deploy-check ]]; then
+    log auth.info "allowed: deploy-check $tag"
+    exec "${DEPLOY_RUN[@]}" check "$tag"
+  fi
+  why=''
+  none_enabled || not_now "$tag" "$why"
+  log auth.info "allowed: deploy $tag"
+  rc=0
+  "${DEPLOY_RUN[@]}" --no-restart deploy "$tag" || rc=$?
+  if (( rc == 0 )); then log auth.info "deploy $tag exit=0"; else log auth.warning "deploy $tag exit=$rc"; fi
+  exit "$rc"
+elif [[ $req =~ $RELEASE_RE ]]; then
+  log auth.info "allowed: release"
+  exec "${DEPLOY_RUN[@]}" status
 else
   refuse 'not an allowed request'
 fi
