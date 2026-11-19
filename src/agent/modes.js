@@ -105,7 +105,9 @@ export function foodDue(agent) {
 const isDaylight = (agent) => { const t = timeOfDayFor(agent); return t !== null && nightPhase(t) === 'day'; };
 
 function nightRoutineBusy(agent) {
-    return [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL].includes(agent.actions.currentActionLabel) || (!!agent._night?.leaveFrom && !!agent._night?.job);
+    // #477 review 2: and the morning leave (away from a crowd or a creeper): no melee in the opening meanwhile.
+    return [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL].includes(agent.actions.currentActionLabel) || (!!agent._night?.leaveFrom && !!agent._night?.job)
+        || agent._night?.morningAct === 'leaving';
 }
 
 /**

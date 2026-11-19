@@ -496,3 +496,13 @@ test('#470 review 2: unarmed, held, low health and no way to back away (agent._n
     for (let i = 0; i < 40 && calls.attacks.length === 0; i++) await new Promise(r => setTimeout(r, 25));
     assert.ok(calls.attacks.length > 0, 'bare hands beat standing still');
 });
+
+test('#477 review 2: while the morning rule leaves the shelter (a crowd or a creeper), no melee in the opening', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const creeper = { id: 5, name: 'creeper', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.7 };
+    const { agent, calls } = shelter({ others: [creeper] });
+    agent._night = { morningAct: 'leaving' };
+    await selfDefense(agent);
+    await new Promise(r => setTimeout(r, 50));
+    assert.deepEqual(calls.attacks, []);
+});

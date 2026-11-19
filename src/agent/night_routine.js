@@ -429,22 +429,38 @@ const exitWalk = (bot, goal) => goToGoal(bot, goal, { canDig: false });
  * shelter at full day is waited for at most waitMs (2 min). Then the bot fights it through the wall
  * on its side when it holds a weapon, has fightHealth or more, at most maxFight hostile mobs are
  * near and nothing that explodes, shoots or must be avoided is within dangerRange; else (or below
- * fleeHealth in that fight) it leaves by the side away from the mob and walks awayDist from it.
- * capMs: never later than this, it hands back to the agenda.
+ * fleeHealth in that fight, or once morningDanger holds during it) it leaves by the side away from
+ * the mob and walks awayDist from it. A hole or side-pocket shelter always leaves (its far stairs).
+ * capMs: never later than this, it hands back to the agenda. goneMs: a mob out of range for less
+ * than this keeps the wait's start (and the cap).
  */
-export const MORNING = { waitMs: 2 * 60_000, capMs: 5 * 60_000, fightHealth: 14, fleeHealth: 10, maxFight: 1, dangerRange: 16, awayDist: 16 };
+export const MORNING = { waitMs: 2 * 60_000, capMs: 5 * 60_000, fightHealth: 14, fleeHealth: 12, maxFight: 1, dangerRange: 16, awayDist: 16, goneMs: 30_000 };
 
-/** The morning choice with a mob near: {action: 'fight'|'leave', why}. */
-export function morningChoice(bot, site) {
+/**
+ * #477 review 2: why the morning fight must not go on (more than maxFight hostile mobs within
+ * LEAVE_MOB_RANGE, or a mob that explodes, shoots or must be avoided within dangerRange), or null.
+ */
+export function morningDanger(bot, site) {
     const c = site.offset(0.5, 0, 0.5);
     const mobs = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && shelterEnemy(e));
     const near = mobs.filter(e => e.position.distanceTo(c) <= LEAVE_MOB_RANGE);
     const danger = mobs.find(e => e.position.distanceTo(c) <= MORNING.dangerRange && ['avoid', 'keep-distance', 'take-cover'].includes(threatFor(e)?.reaction));
+    if (near.length > MORNING.maxFight) return `${near.length} hostile mobs near`;
+    if (danger) return `a ${danger.name} near (${threatFor(danger).reaction})`;
+    return null;
+}
+
+/** The morning choice with a mob near: {action: 'fight'|'leave', why}. pit: a hole or side-pocket shelter. */
+export function morningChoice(bot, site, { pit = false } = {}) {
+    const c = site.offset(0.5, 0, 0.5);
+    const near = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && shelterEnemy(e) && e.position.distanceTo(c) <= LEAVE_MOB_RANGE);
     const health = Math.round(bot.health ?? 0);
+    // #477 review 1: a hole (or its side pocket) is never opened toward a mob: out by its far stairs.
+    if (pit) return { action: 'leave', why: 'a hole shelter' };
     if (!hasWeapon(bot)) return { action: 'leave', why: 'no weapon' };
     if (!(bot.health >= MORNING.fightHealth)) return { action: 'leave', why: `armed, but health ${health}` };
-    if (near.length > MORNING.maxFight) return { action: 'leave', why: `${near.length} hostile mobs near` };
-    if (danger) return { action: 'leave', why: `a ${danger.name} near (${threatFor(danger).reaction})` };
+    const danger = morningDanger(bot, site);
+    if (danger) return { action: 'leave', why: danger };
     if (near[0] && isPlayerZombie(near[0]) && !canFightHard(bot)) return { action: 'leave', why: 'a player zombie, and no weapon or health at half or less' };
     return { action: 'fight', why: `armed, health ${health}, one ${near[0]?.name ?? 'mob'} near` };
 }
@@ -481,7 +497,10 @@ export function mobStateLine(bot, mob, first, waitedMs) {
     const helmet = eq[5]?.name ?? 'none';
     let sky = null;
     try { sky = mob.position ? bot.blockAt?.(mob.position.floored?.() ?? mob.position)?.skyLight ?? null : null; } catch { sky = null; }
-    return `[night] morning: after ${Math.round(waitedMs / 1000)} s ${mobText(mob)} ${moved === null ? 'may have moved' : moved < 0.5 ? 'has not moved' : `moved ${Math.round(moved * 10) / 10} blocks`}; `
+    // #477 nit: another mob than the first one seen is no "has not moved".
+    const other = first?.id != null && mob.id != null && first.id !== mob.id;
+    const how = other ? 'is a different mob from the first one' : moved === null ? 'may have moved' : moved < 0.5 ? 'has not moved' : `moved ${Math.round(moved * 10) / 10} blocks`;
+    return `[night] morning: after ${Math.round(waitedMs / 1000)} s ${mobText(mob)} ${how}; `
         + `health ${health ?? 'unknown'}, holds ${held}, helmet ${helmet}, sky light ${sky ?? 'unknown'}`;
 }
 
@@ -929,7 +948,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.state = 'day';
                 n.site = null;
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
-                    mobFirst: null, mobStateSaid: false, morningAct: null, morningWhy: null });
+                    mobFirst: null, mobStateSaid: false, morningAct: null, morningWhy: null, mobGoneAt: null });
                 line(agent, text);
             };
             const failedTry = (why) => {
@@ -956,7 +975,13 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             // a fixed 3 min handed back with the mob still there); the bound is below. A mob that
             // leaves ends its wait (mobSince): a later one gets its own, said again.
             const mob = ops.hostileNear?.(bot, LEAVE_MOB_RANGE);
-            if (!mob) Object.assign(n, { mobSince: null, mobSaid: false, mobFirst: null, mobStateSaid: false, morningAct: null, morningWhy: null });
+            if (mob) n.mobGoneAt = null;
+            else if (n.mobSince != null && n.morningAct !== 'leaving') {
+                // #477 nit: out of range for less than MORNING.goneMs, the wait's start (and the cap) stay.
+                n.mobGoneAt ??= now;
+                if (now - n.mobGoneAt < MORNING.goneMs) { n.exitAt = n.mobGoneAt + MORNING.goneMs; return 'night:inside'; }
+            }
+            if (!mob) Object.assign(n, { mobSince: null, mobSaid: false, mobFirst: null, mobStateSaid: false, morningAct: null, morningWhy: null, mobGoneAt: null });
             if (mob) {
                 n.mobSince ??= now;
                 n.mobFirst ??= { pos: mob.position?.clone?.() ?? mob.position, id: mob.id };
@@ -973,7 +998,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 }
                 if (!n.mobStateSaid) { n.mobStateSaid = true; line(agent, mobStateLine(bot, mob, n.mobFirst, waited)); }
                 if (!n.morningAct) {
-                    const choice = (ops.morningChoice ?? morningChoice)(bot, n.site);
+                    const choice = (ops.morningChoice ?? morningChoice)(bot, n.site, { pit: !!n.pit });
                     n.morningAct = choice.action;
                     n.morningWhy = choice.why;
                     if (choice.action === 'fight') {
@@ -987,9 +1012,14 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                         return 'night:inside';
                     }
                 }
-                if (n.morningAct === 'fight' && Number.isFinite(bot.health) && bot.health < MORNING.fleeHealth) {
-                    n.morningAct = 'leave';
-                    n.morningWhy = `health ${Math.round(bot.health)} in the fight`;
+                if (n.morningAct === 'fight') {
+                    // #477 review 2: every tick: a second mob, or one that explodes or shoots, ends the fight.
+                    const danger = (ops.morningDanger ?? morningDanger)(bot, n.site);
+                    if (danger) { n.morningAct = 'leave'; n.morningWhy = `${danger} in the fight`; }
+                    else if (Number.isFinite(bot.health) && bot.health < MORNING.fleeHealth) {
+                        n.morningAct = 'leave';
+                        n.morningWhy = `health ${Math.round(bot.health)} in the fight`;
+                    }
                 }
                 if (n.morningAct === 'leave') {
                     n.morningAct = 'leaving';
@@ -1024,6 +1054,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             });
             return 'night:inside';
         }
+        // A fallback since soak 4's morning rule (MORNING.capMs hands back after 5 min, long before
+        // the full day ends): kept only for a full day shorter than the cap (a stuck clock).
         // #372 review: the bound of the morning wait for a mob. The lead's noon (6000) comes after
         // the full day ends on this pack's clock (dusk: SHELTER_LEAD_MIN before sunset, about 5348),
         // so the bound is the end of the full day: a warning naming the mob, and the bot stays in
