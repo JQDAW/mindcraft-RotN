@@ -1427,3 +1427,37 @@ test('#479 nit 4: a giver\'s !stop or !pause holds the standing goal and !resume
     for (let k = 0; k < 5; k++) { now += 60_000; assert.equal(tick(), null, 'no standing goal once the agenda is stopped'); }
     assert.equal(sp.isActive(), false);
 });
+
+test('#481 nit: a model !goal swapped in mid-run is carried across the day boundary too (it is charged to the window); a giver\'s goal is not', (t) => {
+    noNight(t);
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, clock);
+    const sp = agent.self_prompter;
+    let now = 0;
+    const tick = () => { clock.now = 1_000_000 + now; return autonomyTick(agent, { now }); };
+    assert.equal(tick(), 'goal:open');
+    for (let k = 0; k < 5; k++) { now += TICK_MS; tick(); }
+    sp.prompt = 'Find iron ore in the cave to the north'; // the model's own !goal mid-run
+    now += TICK_MS;
+    assert.equal(tick(), 'goal:open:running', 'still charged to the window');
+    agent.bot.time = { timeOfDay: 1000, day: 4 };
+    now += TICK_MS;
+    assert.equal(tick(), 'goal:open:running');
+    assert.ok(agent.said.includes('agenda standing goal started (day 4, carried over from day 3)'), agent.said.join('\n'));
+    assert.deepEqual([agent.agenda.standing.key, agent.agenda.standing.starts], ['done@day 4', 1]);
+    assert.equal(sp.starts.length, 1, 'not restarted');
+
+    // A giver's typed goal is never charged to the window: no carry.
+    const g = doneAgent(t, clock);
+    const gsp = g.self_prompter;
+    now = 0;
+    const gtick = () => { clock.now = 2_000_000 + now; return autonomyTick(g, { now }); };
+    gtick();
+    gsp.prompt = 'Build a house here';
+    gsp.goal_by = 'JQDAW';
+    now += TICK_MS; gtick();
+    g.bot.time = { timeOfDay: 1000, day: 4 };
+    now += TICK_MS; gtick();
+    assert.ok(!g.said.some(l => /carried over/.test(l)), g.said.join('\n'));
+    assert.equal(g.agenda.standing?.key === 'done@day 4' ? g.agenda.standing.starts : 0, 0);
+});

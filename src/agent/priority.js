@@ -28,7 +28,6 @@
 import settings from './settings.js';
 import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
 import { quoteData, isTaskGiver } from './task_queue.js';
-import { STANDING_GOAL_PREFIX } from './agenda.js';
 import { nightTick, leaveShelterFor, resumeNightGoal } from './night_routine.js';
 import { relocateTick } from './respawn_relocate.js';
 import { parseStandOn, standCheck, describeTarget } from './library/stand_on.js';
@@ -248,7 +247,9 @@ function openGoalWindow(agent, now = Date.now()) {
             // changes is carried into the new window: it counts as its first start and is charged
             // there from the boundary (at least OPEN_GOAL.minChargeMs).
             const sp = agent.self_prompter;
-            const carry = !!prev?.running && prev.key?.startsWith('done@') && sp?.isActive?.() && String(sp.prompt ?? '').startsWith(STANDING_GOAL_PREFIX);
+            // #481 nit: whenever the running self-prompting is charged to the window (a model !goal
+            // swapped in mid-run too), not only while the prompt is still the standing goal's.
+            const carry = !!prev?.running && prev.key?.startsWith('done@') && !!sp?.isActive?.() && !ownsPrompt(agent) && !sp.goal_by;
             agenda.standing = carry
                 ? { key, llmMs: OPEN_GOAL.minChargeMs, starts: 1, lastStartAt: now, ended: false }
                 : { key, llmMs: 0, starts: 0, lastStartAt: null, ended: false };
