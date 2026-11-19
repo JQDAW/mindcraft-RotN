@@ -174,6 +174,15 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
             if (sp.isActive() && ownsPrompt(agent)) sp.stop(false);
             agent._agenda_step = null;
         }
+        // Soak 4 (#478): a finished agenda hands over to the standing goal (the model's own goal,
+        // priority.js modelGoalTick, one budget window per in-game day).
+        if (agenda.finished) {
+            const state = tickState(agent);
+            agent._agenda_open_goal = agenda.standingGoal(state, { shelter: agent._night?.lastShelter ?? null });
+            agent._agenda_open_key = agenda.standingKey(state, now);
+        } else {
+            agent._agenda_open_goal = agent._agenda_open_key = null;
+        }
         return null;
     }
 

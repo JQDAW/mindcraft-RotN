@@ -24,7 +24,7 @@ import { hasWeapon, shelterEnemy, threatFor, isPlayerZombie, canFightHard } from
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
 import { say, isGiverGoal, ownsPrompt } from './agenda_driver.js';
-import { OPEN_GOAL_PREFIX } from './agenda.js';
+import { OPEN_GOAL_PREFIX, STANDING_GOAL_PREFIX } from './agenda.js';
 import settings from './settings.js';
 import { heldFoodHunger, FOOD_TARGET } from './library/food.js';
 
@@ -166,7 +166,8 @@ function holdAutonomy(agent) {
     const sp = agent.self_prompter;
     if (sp.isActive()) {
         // #468 review 2: not the open goal: the agenda gives it again (under its window budget).
-        if (!ownsPrompt(agent) && sp.prompt && !sp.prompt.startsWith(OPEN_GOAL_PREFIX)) agent._night_goal = sp.prompt;
+        // #478: nor the standing goal (the agenda gives it again, one budget a day).
+        if (!ownsPrompt(agent) && sp.prompt && !sp.prompt.startsWith(OPEN_GOAL_PREFIX) && !sp.prompt.startsWith(STANDING_GOAL_PREFIX)) agent._night_goal = sp.prompt;
         sp.stop(false);
     }
     agent._agenda_paused = true;
@@ -951,6 +952,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (isFullDay(t) && (!waiting || walkedOut)) {
             const handBack = (text) => {
                 bot.rotnSheltered = false;
+                if (n.site) n.lastShelter = n.site.clone?.() ?? n.site; // #478: the standing goal explores near it
                 n.state = 'day';
                 n.site = null;
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
@@ -1072,7 +1074,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             const text = `[night] warning: ${mob ? `${mobText(mob)} is still within ${LEAVE_MOB_RANGE} blocks` : 'a hostile mob stayed near'} of the shelter at ${at(n.site)} at the end of the day (waited ${Math.round((now - n.mobSince) / 60_000)} min); staying in it for the night`;
             console.warn(text);
             say(agent, text);
-            Object.assign(n, { mobSince: null, mobSaid: false, exitTries: 0, exitAt: null });
+            Object.assign(n, { mobSince: null, mobSaid: false, exitTries: 0, exitAt: null, ...MORNING_CLEAR }); // #477 nit
         }
         if (n.checkedAt === null) n.checkedAt = now;
         // #331 review 4: while a wall is known open (a repair did not close it, or a fight in place

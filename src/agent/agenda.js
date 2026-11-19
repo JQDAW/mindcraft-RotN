@@ -214,6 +214,16 @@ export const SHELTER_RESERVE_STEP = {
  * goal, under its LLM budget, priority.js modelGoalTick).
  */
 export const STUCK_RETRY = { cooldownMs: 20 * 60_000, max: 3 };
+/**
+ * Soak 4 (#478): after "agenda done" the self-prompter stopped and never started again. The lead's
+ * standing goal: the model's own goal once the agenda is done and no reserve is wanted, under the
+ * open goal's budget (priority.js OPEN_GOAL) with one window per in-game day (windowMs when the day
+ * is unknown). exploreRadius: how far from the last shelter it is told to explore.
+ */
+export const STANDING = { exploreRadius: 64, windowMs: 20 * 60_000 };
+/** The standing goal's start: not an autonomy prefix either (the model's own goal). */
+export const STANDING_GOAL_PREFIX = 'Standing goal (the agenda is done): ';
+
 /** The open goal's start: not an autonomy prefix (AUTONOMY_PREFIXES), so it counts as the model's own goal. */
 export const OPEN_GOAL_PREFIX = 'Open goal while the agenda waits: ';
 
@@ -318,6 +328,7 @@ export class Agenda {
         this.done_at = {}; // step id -> when it was first seen done
         this.spent = {}; // step id -> {attempts, llm_ms}: the self-prompter's runs for it (#164 review)
         this.stuck = {}; // step id -> {why, at, day, retries, cooling, capped}: budgets that ran out (STUCK_RETRY)
+        this.standing = null; // the standing goal's window {key, llmMs, starts, lastStartAt, ended} (priority.js)
         this.loadProblem = null;
         this.existed = false; // a readable agenda.json was there: autostart leaves it alone
         this.loadedActive = false; // agenda.json said active: the first step it names says "resumed after a restart" (G4 #11 prep)
@@ -344,6 +355,7 @@ export class Agenda {
                 for (const [id, e] of Object.entries(data.stuck)) if (e && typeof e === 'object') this.stuck[id] = e;
             }
             this.finished = data.finished === true;
+            this.standing = data.standing && typeof data.standing.key === 'string' ? data.standing : null;
             this.existed = true;
             this.loadState = 'present';
         } catch (err) {
@@ -359,7 +371,7 @@ export class Agenda {
         try {
             mkdirSync(path.dirname(this.file), { recursive: true });
             const tmp = `${this.file}.tmp`;
-            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, updated_at: this.now() }, null, 2));
+            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, standing: this.standing, updated_at: this.now() }, null, 2));
             renameSync(tmp, this.file);
             this.existed = true; // a later spawn (a respawn) must not autostart it either
         } catch (err) {
@@ -586,6 +598,25 @@ export class Agenda {
         const pick = this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly })
             ?? this.foodWanted(state, { standing: blocked, readOnly }) ?? step;
         return { step: pick, newlyDone, waiting: blocked };
+    }
+
+    /** The standing goal's window key: the in-game day ("done@day N"), else a STANDING.windowMs slice of time. */
+    standingKey(state, now = this.now()) {
+        let day = null;
+        try { day = state?.day?.() ?? null; } catch { day = null; }
+        return Number.isFinite(day) ? `done@day ${day}` : `done@t ${Math.floor(now / STANDING.windowMs)}`;
+    }
+
+    /** The standing goal (STANDING): reserves, tools, exploring by day near the last shelter. */
+    standingGoal(state, { shelter = null } = {}) {
+        let held = 0, blocks = 0;
+        try { held = state?.foodHeld?.() ?? 0; blocks = reserveHave(state); } catch { /* the plain text */ }
+        const where = shelter ? `your last shelter at ${shelter.x}, ${shelter.y}, ${shelter.z}` : 'where you are';
+        const kind = state && noPickaxe(state) ? 'dirt (no pickaxe yet)' : 'cobblestone first';
+        return `${STANDING_GOAL_PREFIX}keep food worth at least ${FOOD_TARGET.day} hunger (you hold ${held}) and ${SHELTER_RESERVE} blocks for the night's shelter (you have ${blocks}; ${kind}); `
+            + 'keep a weapon and a pickaxe, and make better ones when you can (a stone sword or axe, a spare pickaxe); '
+            + `explore by day within ${STANDING.exploreRadius} blocks of ${where}, away from where you died (a zombie rises there and stays); `
+            + 'be back near it before dusk: the night routine builds the shelter then.';
     }
 
     /** The current stuck window's key (#468 review 1: the open goal's budget is per window), or null. */

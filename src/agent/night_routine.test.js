@@ -2408,3 +2408,31 @@ test('#477 review 4: held by the morning grace, and at night, with a zombie at t
     assert.equal(night.bot.rotnSheltered, true);
     assert.deepEqual(await eatingAt(night), ['harvestcraft:zucchiniitem'], 'eats at 12 at night');
 });
+
+test('#478: the night does not save the standing goal; the hand-back keeps the last shelter for it', async (t) => {
+    quiet(t);
+    const { STANDING_GOAL_PREFIX } = await import('./agenda.js');
+    const agent = fakeAgent({ t: DUSK });
+    agent.self_prompter.prompt = `${STANDING_GOAL_PREFIX}keep food worth at least 12 hunger …`;
+    nightTick(agent, { now: Date.now(), ops: ops() });
+    await settle(agent);
+    assert.equal(agent._night_goal, undefined, 'not saved');
+    agent.bot.time.timeOfDay = MORNING;
+    nightTick(agent, { now: Date.now() + 1, ops: ops() });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'day');
+    assert.ok(nightState(agent).lastShelter.equals(SITE), 'the last shelter, for the standing goal');
+    assert.equal(resumeNightGoal(agent), false);
+});
+
+test('#477 nit: the end-of-day fallback clears the morning state too', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o }); await settle(agent);
+    Object.assign(nightState(agent), { mobSince: 5, morningAct: 'leave', morningLeaving: true, morningWhy: 'no weapon', mobFirst: {}, mobStateSaid: true, mobGoneAt: 7 });
+    agent.bot.time.timeOfDay = 5400; // past the full day: the fallback
+    nightTick(agent, { now: 10, ops: o }); await settle(agent);
+    const n = nightState(agent);
+    assert.deepEqual([n.mobSince, n.morningAct, n.morningLeaving, n.morningWhy, n.mobFirst, n.mobStateSaid, n.mobGoneAt], [null, null, false, null, null, false, null]);
+});
