@@ -11,7 +11,7 @@ import { __setRegistryForTest } from '../utils/mcdata.js';
 import { nightTick, nightState, resetNight, isFullDay, resumeNightGoal, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS, FREE_INTERRUPTS, THREAT_INTERRUPTS, EXPOSED_RETRY_MS, EXPOSED_RETRIES } from './night_routine.js';
 import settings from './settings.js';
 import { autonomyTick } from './priority.js';
-import { shelterQuiet, SHELTER_QUIET_MODES } from './modes.js';
+import { shelterQuiet, SHELTER_QUIET_MODES, __modeForTest } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
 import { PIT } from './library/pit.js';
 import { nightRelocationPlan, NIGHT_RELOCATE, RELOCATE } from './respawn_relocate.js';
@@ -1624,20 +1624,24 @@ test('#364 review 3: in the morning no side is opened while a hostile mob is nea
     await settle(agent);
     assert.equal(o.digs, 0, 'not opened with a mob near');
     assert.equal(agent.bot.rotnSheltered, true);
-    assert.match(agent.chat.at(-1), /\[night\] morning: a hostile mob is within 8 blocks of the shelter at 0, 64, 0; staying in until it leaves \(checking every 30 s\)/);
+    assert.match(agent.chat.at(-1), /\[night\] morning: a hostile mob is within 8 blocks of the shelter at 0, 64, 0; staying in until it leaves \(checking every 30 s, at most 2 min\)/);
     mob = false;
+    // #477 nit: a mob out of range for less than MORNING.goneMs (30 s) keeps the wait; then it is gone.
     nightTick(agent, { now: 10 + RETRY_MS, ops: o });
+    await settle(agent);
+    assert.equal(o.digs, 0, 'gone for less than 30 s: still waiting');
+    nightTick(agent, { now: 10 + 2 * RETRY_MS, ops: o });
     await settle(agent);
     assert.equal(o.digs, 1);
     assert.equal(nightState(agent).state, 'day');
     assert.match(agent.chat.at(-1), /dug out of the shelter at 1, 64, 0; back to work/);
 });
 
-test('#364 follow-up (b), #372 review: a mob that stays near keeps the bot shut in and held past EXIT_TRIES and past the old 3 min, for the full day; at its end a warning naming the mob, and the bot stays in for the night', async (t) => {
+test('#364 follow-up (b), soak 4: a mob that stays near holds the bot in for MORNING.waitMs (2 min) only; then (unarmed) it leaves by the side away from the mob; the wait uses no try', async (t) => {
     quiet(t);
     const warns = [];
     t.mock.method(console, 'warn', (l) => warns.push(String(l)));
-    const { EXIT_TRIES, hostileNear, isFullDay } = await import('./night_routine.js');
+    const { EXIT_TRIES, hostileNear, isFullDay, MORNING: RULE } = await import('./night_routine.js');
     const { MORNING_FREEZE } = await import('./library/night.js');
     // The lead's noon bound (6000) is past the full day on this pack's clock (dusk from about 5348).
     assert.equal(isFullDay(6000), false);
@@ -1649,42 +1653,31 @@ test('#364 follow-up (b), #372 review: a mob that stays near keeps the bot shut 
     nightTick(agent, { now: 0, ops: o });
     await settle(agent);
     const chats = agent.chat.length;
-    // The morning: the time stands at the freeze (3001) for 10 min; 9 checks are 4 min, past
-    // EXIT_TRIES and past the old 3-min mark.
+    const outs = [];
+    o.digOut = (bot, feet, opts) => { o.digs++; outs.push(opts?.away ?? null); return Promise.resolve(new Vec3(-1, 64, 0)); };
+    let fled = 0;
+    o.awayFromMobs = () => { fled++; return Promise.resolve(); };
     agent.bot.time.timeOfDay = MORNING_FREEZE;
-    for (let i = 0; i < 9; i++) {
-        // A night:... result holds the agenda and tasks in the priority stack: nothing else runs (and digs out).
+    // The grace: checks RETRY_MS apart, held, nothing opened, said once.
+    for (let i = 0; i < 4; i++) {
         assert.equal(nightTick(agent, { now: 10 + i * RETRY_MS, ops: o }), 'night:inside');
         await settle(agent);
         assert.equal(nightState(agent).state, 'inside', `still in at check ${i + 1}`);
-        assert.equal(agent.bot.rotnSheltered, true);
-        assert.equal(nightTick(agent, { now: 11 + i * RETRY_MS, ops: o }), 'night:inside', 'held between checks');
     }
-    assert.ok(9 > EXIT_TRIES && 8 * RETRY_MS > 3 * 60_000);
-    assert.equal(o.digs, 0, 'never opened');
-    assert.equal(agent.chat.length - chats, 1, `the wait is said once: ${agent.chat.slice(chats).join(' | ')}`);
-    assert.match(agent.chat.at(-1), /a zombie at 3, 64, -3 is within 8 blocks of the shelter at 0, 64, 0; staying in until it leaves \(checking every 30 s\)/);
-    // The end of the full day with the zombie still there: a warning naming it; no hand-back, the
-    // bot stays in this shelter for the night (never handed back with the mob near).
-    agent.bot.time.timeOfDay = 5400;
-    assert.equal(nightTick(agent, { now: 10 + 9 * RETRY_MS, ops: o }), 'night:inside');
+    assert.equal(o.digs, 0, 'not opened in the grace');
+    assert.equal(agent.chat.length - chats, 1, agent.chat.slice(chats).join(' | '));
+    assert.match(agent.chat.at(-1), /a zombie at 3, 64, -3 is within 8 blocks of the shelter at 0, 64, 0; staying in until it leaves \(checking every 30 s, at most 2 min\)/);
+    // The grace is over (2 min): the mob's state, then (no weapon) out by the side away from it.
+    assert.equal(nightTick(agent, { now: 10 + RULE.waitMs, ops: o }), 'night:inside');
     await settle(agent);
-    const warning = /\[night\] warning: a zombie at 3, 64, -3 is still within 8 blocks of the shelter at 0, 64, 0 at the end of the day \(waited 5 min\); staying in it for the night/;
-    assert.match(agent.chat.at(-1), warning);
-    assert.ok(warns.some(l => warning.test(l)), warns.join('\n'));
-    assert.equal(nightState(agent).state, 'inside');
-    assert.equal(agent.bot.rotnSheltered, true);
-    assert.equal(o.digs, 0);
-    assert.equal(nightState(agent).mobSince, null);
-    nightTick(agent, { now: 11 + 10 * RETRY_MS, ops: o });
-    assert.equal(warns.filter(l => warning.test(l)).length, 1, 'said once');
-    // The next morning with the zombie gone: the usual exit.
-    mob = null;
-    agent.bot.time.timeOfDay = MORNING;
-    nightTick(agent, { now: 20 * 60_000, ops: o });
-    await settle(agent);
+    assert.ok(agent.chat.some(l => /^\[night\] morning: after 120 s a zombie at 3, 64, -3 has not moved; health unknown, holds nothing, helmet none, sky light unknown$/.test(l)), agent.chat.join('\n'));
+    assert.ok(agent.chat.includes('[night] morning: no weapon: leaving the shelter at 0, 64, 0 by the side away from a zombie at 3, 64, -3'));
     assert.equal(o.digs, 1);
+    assert.deepEqual(outs[0], zombie.position, 'dig out away from the zombie');
+    assert.equal(fled, 1, 'then away from it');
     assert.equal(nightState(agent).state, 'day');
+    assert.match(agent.chat.at(-1), /left the shelter at -1, 64, 0 on the side away from a zombie at 3, 64, -3; back to work/);
+    assert.ok(!warns.some(l => /at the end of the day/.test(l)), 'never the whole day');
 
     // The wait used no try: a mob that leaves after 2 min, then 3 failed tries, still hands back after EXIT_TRIES.
     const later = fakeAgent({ t: NIGHT });
@@ -1696,7 +1689,7 @@ test('#364 follow-up (b), #372 review: a mob that stays near keeps the bot shut 
     later.bot.time.timeOfDay = MORNING;
     for (let i = 0; i < 4; i++) { nightTick(later, { now: 10 + i * RETRY_MS, ops: o2 }); await settle(later); }
     near = false;
-    for (let i = 4; i < 4 + EXIT_TRIES; i++) { nightTick(later, { now: 10 + i * RETRY_MS, ops: o2 }); await settle(later); }
+    for (let i = 4; i < 5 + EXIT_TRIES; i++) { nightTick(later, { now: 10 + i * RETRY_MS, ops: o2 }); await settle(later); } // the first: gone under 30 s
     assert.equal(o2.digs, EXIT_TRIES);
     assert.ok(later.chat.some(l => /no safe side of the shelter at 0, 64, 0 to open yet \(try 1 of 3\)/.test(l)), later.chat.join('\n'));
     assert.match(later.chat.at(-1), /could not leave the shelter at 0, 64, 0 after 3 tries \(no safe side/);
@@ -1722,16 +1715,19 @@ test('#372 review: a mob that leaves ends its wait; a later mob gets its own wai
     await settle(agent);
     assert.equal(nightState(agent).mobSince, 10);
     assert.match(agent.chat.at(-1), /a skeleton at -4, 64, 2 is within 8 blocks/);
-    mob = null; // it leaves: the next check is a try (no side opens here), and the wait is over
+    mob = null; // it leaves: once gone 30 s (MORNING.goneMs), the next check is a try (no side opens here), and the wait is over
     nightTick(agent, { now: 10 + RETRY_MS, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).mobSince, 10, 'gone less than 30 s: the wait stays');
+    nightTick(agent, { now: 10 + 2 * RETRY_MS, ops: o });
     await settle(agent);
     assert.equal(o.digs, 1);
     assert.equal(nightState(agent).mobSince, null);
     assert.match(agent.chat.at(-1), /try 1 of 3/);
     mob = zombie; // a later mob: its own wait, said in chat again
-    nightTick(agent, { now: 10 + 2 * RETRY_MS, ops: o });
+    nightTick(agent, { now: 10 + 3 * RETRY_MS, ops: o });
     await settle(agent);
-    assert.equal(nightState(agent).mobSince, 10 + 2 * RETRY_MS);
+    assert.equal(nightState(agent).mobSince, 10 + 3 * RETRY_MS);
     assert.match(agent.chat.at(-1), /a zombie at 5, 64, 0 is within 8 blocks of the shelter at 0, 64, 0; staying in until it leaves/);
     assert.equal(nightState(agent).state, 'inside');
     assert.equal(o.digs, 1);
@@ -2145,4 +2141,270 @@ test('soak 3 (a): a closed hole shelter: into a side pocket once (the shaft seal
     nightTick(built, { now: 1, ops: bo });
     nightTick(built, { now: CHECK_MS + 2, ops: bo }); await settle(built);
     assert.equal(nightState(built).state, 'inside');
+});
+
+// Soak 4 (rotn-v0.1.7): a zombie stood 14 min at the shelter's corner (-58,65,-81 by -59,65,-82),
+// never digging or hitting, and the bot waited the whole day. The lead's morning rule.
+test('soak 4: morningChoice: fight only armed, health 14 or more, one hostile mob near and nothing that explodes or shoots; else leave', async () => {
+    const { morningChoice, sideToward } = await import('./night_routine.js');
+    const zombie = (id, x, z) => ({ id, name: 'zombie', type: 'mob', position: new Vec3(x, 64, z) });
+    const botWith = ({ weapon = true, health = 20, mobs = [zombie(2, 1.5, 1.5)] } = {}) => ({
+        health, entity: { position: new Vec3(0.5, 64, 0.5) },
+        inventory: { items: () => (weapon ? [{ name: 'stone_axe', count: 1 }] : []), slots: [] },
+        entities: Object.fromEntries(mobs.map(m => [m.id, m])),
+    });
+    assert.deepEqual(morningChoice(botWith(), SITE), { action: 'fight', why: 'armed, health 20, one zombie near' });
+    assert.deepEqual(morningChoice(botWith({ weapon: false }), SITE), { action: 'leave', why: 'no weapon' });
+    assert.deepEqual(morningChoice(botWith({ health: 13 }), SITE), { action: 'leave', why: 'armed, but health 13' });
+    assert.deepEqual(morningChoice(botWith({ mobs: [zombie(2, 1.5, 1.5), zombie(3, -4, 2)] }), SITE), { action: 'leave', why: '2 hostile mobs near' });
+    const creeper = { id: 4, name: 'creeper', type: 'mob', position: new Vec3(12, 64, 0) };
+    assert.deepEqual(morningChoice(botWith({ mobs: [zombie(2, 1.5, 1.5), creeper] }), SITE), { action: 'leave', why: 'a creeper near (keep-distance)' });
+    // The side toward a mob: the diagonal corner of soak 4 (+1, +1) takes the x side; else the nearer axis.
+    assert.deepEqual(sideToward(SITE, new Vec3(1.5, 64, 1.5)), new Vec3(1, 0, 0));
+    assert.deepEqual(sideToward(SITE, new Vec3(0.2, 64, -3)), new Vec3(0, 0, -1));
+});
+
+test('soak 4: armed after the grace, the wall toward the mob opens and the fight runs from the shelter; once the mob is gone the usual exit; a fight below health 12 leaves away from it; the cap hands back', async (t) => {
+    quiet(t);
+    const { MORNING: RULE } = await import('./night_routine.js');
+    const zombie = { id: 2, name: 'zombie', position: new Vec3(1.5, 64, 1.5) };
+    const setup = () => {
+        const agent = fakeAgent({ t: NIGHT });
+        const o = ops();
+        let mob = zombie;
+        o.hostileNear = () => mob;
+        o.morningChoice = () => ({ action: 'fight', why: 'armed, health 20, one zombie near' });
+        o.opened = [];
+        o.openToward = (bot, feet, pos) => { o.opened.push(pos); return Promise.resolve([feet.offset(1, 1, 0), feet.offset(1, 0, 0)]); };
+        o.awayFromMobs = () => Promise.resolve();
+        o.outs = [];
+        o.digOut = (bot, feet, opts) => { o.digs++; o.outs.push(opts?.away ?? null); return Promise.resolve(SITE.offset(-1, 0, 0)); };
+        return { agent, o, gone: () => { mob = null; } };
+    };
+    const morning = async ({ agent, o }, until) => {
+        nightTick(agent, { now: 0, ops: o }); await settle(agent);
+        agent.bot.time.timeOfDay = MORNING;
+        for (let now = 10; now <= until; now += RETRY_MS) { nightTick(agent, { now, ops: o }); await settle(agent); }
+    };
+    const fight = setup();
+    await morning(fight, 10 + RULE.waitMs);
+    assert.deepEqual(fight.o.opened, [zombie.position], 'the wall toward the zombie');
+    assert.equal(fight.agent.bot.rotnSheltered, 'open', 'the in-shelter fight (armed) hits it in reach');
+    assert.ok(fight.agent.chat.includes('[night] morning: armed, health 20, one zombie near: opening the wall toward a zombie at 1, 64, 1 to fight it from the shelter'));
+    assert.equal(fight.o.digs, 0);
+    fight.gone(); // killed
+    nightTick(fight.agent, { now: 20 + RULE.waitMs + RETRY_MS, ops: fight.o }); await settle(fight.agent);
+    assert.equal(fight.o.digs, 0, 'gone for less than 30 s');
+    nightTick(fight.agent, { now: 20 + RULE.waitMs + 2 * RETRY_MS, ops: fight.o }); await settle(fight.agent);
+    assert.equal(fight.o.digs, 1);
+    assert.deepEqual(fight.o.outs, [null], 'the usual exit');
+    assert.equal(nightState(fight.agent).state, 'day');
+
+    // Hurt below MORNING.fleeHealth in the fight: out by the side away from it.
+    const hurt = setup();
+    await morning(hurt, 10 + RULE.waitMs);
+    hurt.agent.bot.health = RULE.fleeHealth - 1;
+    nightTick(hurt.agent, { now: 20 + RULE.waitMs, ops: hurt.o }); await settle(hurt.agent);
+    assert.deepEqual(hurt.o.outs, [zombie.position]);
+    assert.ok(hurt.agent.chat.includes(`[night] morning: health ${RULE.fleeHealth - 1} in the fight: leaving the shelter at 0, 64, 0 by the side away from a zombie at 1, 64, 1`));
+    assert.equal(nightState(hurt.agent).state, 'day');
+
+    // The zombie never comes into reach and the bot is not hurt: back to work at MORNING.capMs.
+    const cap = setup();
+    await morning(cap, 10 + RULE.capMs - 1000);
+    assert.equal(nightState(cap.agent).state, 'inside');
+    nightTick(cap.agent, { now: 10 + RULE.capMs, ops: cap.o }); await settle(cap.agent);
+    assert.equal(nightState(cap.agent).state, 'day');
+    assert.match(cap.agent.chat.at(-1), /^\[night\] morning: a zombie at 1, 64, 1 still near the shelter at 0, 64, 0 after 5 min; back to work/);
+});
+
+test('soak 4: openToward opens the wall (head and feet) on the mob\'s side; digOut away from a mob takes the far side first', async (t) => {
+    quiet(t);
+    const { openToward } = await import('./night_routine.js');
+    const { bot, dug } = exitWorld();
+    const cells = await openToward(bot, SITE, new Vec3(1.5, 64, 1.5));
+    assert.deepEqual(cells.map(c => `${c.x},${c.y},${c.z}`), ['1,65,0', '1,64,0']);
+    assert.deepEqual(dug, ['1,65,0', '1,64,0']);
+    const far = exitWorld();
+    const side = await digOut(far.bot, SITE, { away: new Vec3(1.5, 64, 1.5) });
+    assert.ok(side?.equals(new Vec3(-1, 64, 0)) || side?.equals(new Vec3(0, 64, -1)), `opened ${side}: a side away from the zombie`);
+    const near = exitWorld();
+    const plain = await digOut(near.bot, SITE);
+    assert.ok(plain?.equals(new Vec3(1, 64, 0)), 'without a mob: the first side, as before');
+});
+
+test('soak 4: the mob\'s state at the grace end: moved or not, health, held item, helmet, sky light', async () => {
+    const { mobStateLine } = await import('./night_routine.js');
+    const zombie = { name: 'zombie', position: new Vec3(-57.5, 65, -80.5), health: 20, heldItem: null, equipment: [null, null, null, null, null, { name: 'iron_helmet' }] };
+    const bot = { blockAt: () => ({ skyLight: 4 }) };
+    assert.equal(mobStateLine(bot, zombie, { pos: zombie.position.clone() }, 120_000),
+        '[night] morning: after 120 s a zombie at -58, 65, -81 has not moved; health 20, holds nothing, helmet iron_helmet, sky light 4');
+    assert.match(mobStateLine({}, { ...zombie, position: new Vec3(-55.5, 65, -80.5), equipment: [{ name: 'stone_pickaxe' }] }, { pos: zombie.position }, 60_000),
+        /after 60 s a zombie at -56, 65, -81 moved 2 blocks; health 20, holds stone_pickaxe, helmet none, sky light unknown$/);
+});
+
+// #477 review: a hole never opens toward a mob; the fight ends when a second mob or a creeper comes;
+// a mob out of range for a moment keeps the wait and the cap.
+test('#477 review 1: a hole or side-pocket shelter always leaves by its far stairs; never opened toward the mob', async (t) => {
+    quiet(t);
+    const { morningChoice, MORNING: RULE } = await import('./night_routine.js');
+    const armed = { health: 20, entity: { position: new Vec3(0.5, 64, 0.5) }, inventory: { items: () => [{ name: 'stone_axe', count: 1 }], slots: [] },
+        entities: { 2: { id: 2, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5) } } };
+    assert.deepEqual(morningChoice(armed, SITE, { pit: true }), { action: 'leave', why: 'a hole shelter' });
+    const agent = fakeAgent({ t: NIGHT });
+    Object.assign(agent.bot, { health: 20, inventory: armed.inventory, entities: armed.entities });
+    const o = ops();
+    const zombie = armed.entities[2];
+    o.hostileNear = () => zombie;
+    o.openToward = () => { throw new Error('a hole is never opened toward a mob'); };
+    const outs = [];
+    o.pitOut = (bot, feet, opts) => { outs.push(opts?.away ?? null); return Promise.resolve(SITE.offset(-3, 3, 0)); };
+    o.awayFromMobs = () => Promise.resolve();
+    nightTick(agent, { now: 0, ops: o }); await settle(agent);
+    nightState(agent).pit = true;
+    agent.bot.time.timeOfDay = MORNING;
+    for (let now = 10; now <= 10 + RULE.waitMs; now += RETRY_MS) { nightTick(agent, { now, ops: o }); await settle(agent); }
+    assert.deepEqual(outs, [zombie.position]);
+    assert.ok(agent.chat.includes('[night] morning: a hole shelter: leaving the shelter at 0, 64, 0 by the side away from a zombie at 1, 64, 1'));
+    assert.equal(nightState(agent).state, 'day');
+});
+
+test('#477 review 2: mid-fight, a second zombie or a creeper ends the fight at once: out away from them; no melee in the opening while leaving', async (t) => {
+    quiet(t);
+    const { MORNING: RULE } = await import('./night_routine.js');
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5) };
+    const fightWith = async (arrival) => {
+        const agent = fakeAgent({ t: NIGHT });
+        Object.assign(agent.bot, { health: 20, inventory: { items: () => [{ name: 'stone_axe', count: 1 }], slots: [] }, entities: { 2: zombie } });
+        const o = ops();
+        o.hostileNear = () => zombie;
+        o.openToward = (bot, feet) => Promise.resolve([feet.offset(1, 1, 0), feet.offset(1, 0, 0)]);
+        o.outs = [];
+        o.digOut = (bot, feet, opts) => { o.digs++; o.outs.push(opts?.away ?? null); return Promise.resolve(SITE.offset(-1, 0, 0)); };
+        o.awayFromMobs = () => Promise.resolve();
+        nightTick(agent, { now: 0, ops: o }); await settle(agent);
+        agent.bot.time.timeOfDay = MORNING;
+        let now = 10;
+        for (; now <= 10 + RULE.waitMs; now += RETRY_MS) { nightTick(agent, { now, ops: o }); await settle(agent); }
+        assert.equal(agent.bot.rotnSheltered, 'open', 'the fight began');
+        assert.equal(nightState(agent).morningAct, 'fight');
+        agent.bot.entities[arrival.id] = arrival;
+        let leaving = null;
+        o.digOut = (bot, feet, opts) => { leaving = nightState(agent).morningAct; o.digs++; o.outs.push(opts?.away ?? null); return Promise.resolve(SITE.offset(-1, 0, 0)); };
+        nightTick(agent, { now: now + 1, ops: o }); await settle(agent); // the very next tick
+        return { agent, o, leaving };
+    };
+    const two = await fightWith({ id: 3, name: 'zombie', type: 'mob', position: new Vec3(-3, 64, 4) });
+    assert.deepEqual(two.o.outs, [zombie.position], 'out away from the zombie in the opening');
+    assert.ok(two.agent.chat.includes('[night] morning: 2 hostile mobs near in the fight: leaving the shelter at 0, 64, 0 by the side away from a zombie at 1, 64, 1'), two.agent.chat.join('\n'));
+    assert.equal(two.leaving, 'leaving', 'no melee meanwhile (modes.nightRoutineBusy)');
+    const boom = await fightWith({ id: 4, name: 'creeper', type: 'mob', position: new Vec3(10, 64, 0) });
+    assert.ok(boom.agent.chat.includes('[night] morning: a creeper near (keep-distance) in the fight: leaving the shelter at 0, 64, 0 by the side away from a zombie at 1, 64, 1'), boom.agent.chat.join('\n'));
+    assert.equal(nightState(boom.agent).state, 'day');
+});
+
+test('#477 nits: a mob out of range for less than 30 s keeps the wait\'s start and the cap; mobStateLine names a different mob', async (t) => {
+    quiet(t);
+    const { MORNING: RULE, mobStateLine } = await import('./night_routine.js');
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    o.morningChoice = () => ({ action: 'fight', why: 'armed, health 20, one zombie near' });
+    o.morningDanger = () => null;
+    o.openToward = (bot, feet) => Promise.resolve([feet.offset(1, 0, 0)]);
+    const zombie = { id: 2, name: 'zombie', position: new Vec3(1.5, 64, 1.5) };
+    let mob = zombie;
+    o.hostileNear = () => mob;
+    nightTick(agent, { now: 0, ops: o }); await settle(agent);
+    agent.bot.time.timeOfDay = MORNING;
+    nightTick(agent, { now: 10, ops: o }); await settle(agent);
+    assert.equal(nightState(agent).mobSince, 10);
+    mob = null; // steps out of range for 20 s
+    nightTick(agent, { now: 10 + RETRY_MS, ops: o }); await settle(agent);
+    assert.equal(nightState(agent).mobSince, 10);
+    mob = zombie;
+    nightTick(agent, { now: 10 + RETRY_MS + 20_000, ops: o }); await settle(agent);
+    assert.equal(nightState(agent).mobSince, 10, 'the same wait');
+    for (let now = 10 + 2 * RETRY_MS; now < 10 + RULE.capMs; now += RETRY_MS) { nightTick(agent, { now, ops: o }); await settle(agent); }
+    nightTick(agent, { now: 10 + RULE.capMs, ops: o }); await settle(agent);
+    assert.equal(nightState(agent).state, 'day', 'the cap counts from the first sight');
+    assert.match(mobStateLine({}, { id: 9, name: 'zombie', position: new Vec3(2.5, 64, 0.5) }, { id: 2, pos: zombie.position }, 120_000),
+        /^\[night\] morning: after 120 s a zombie at 2, 64, 0 is a different mob from the first one; /);
+});
+
+test('#477 review 1-3: leaveShelterFor clears the morning state; a failed leave try keeps morningLeaving; the wall opened for the fight is not rebuilt while the mob is out of range', async (t) => {
+    quiet(t);
+    const { MORNING: RULE, leaveShelterFor } = await import('./night_routine.js');
+    const zombie = { id: 2, name: 'zombie', position: new Vec3(1.5, 64, 1.5) };
+    // A failed leave try (no side away opens): still leaving between the tries.
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    o.hostileNear = () => zombie;
+    o.digOut = () => { o.digs++; return Promise.resolve(null); };
+    nightTick(agent, { now: 0, ops: o }); await settle(agent);
+    agent.bot.time.timeOfDay = MORNING;
+    for (let now = 10; now <= 10 + RULE.waitMs; now += RETRY_MS) { nightTick(agent, { now, ops: o }); await settle(agent); }
+    assert.equal(o.digs, 1, 'the first leave try failed');
+    assert.equal(nightState(agent).morningAct, 'leave');
+    assert.equal(nightState(agent).morningLeaving, true, 'busy until the hand-back');
+    // A giver's command takes over: the morning state goes with the shelter's rules.
+    assert.equal(leaveShelterFor(agent, "a task giver's command"), true);
+    assert.deepEqual([nightState(agent).morningAct, nightState(agent).morningLeaving, nightState(agent).mobFirst, nightState(agent).mobGoneAt], [null, false, null, null]);
+
+    // The fight's opening: the mob steps out of range (the 30 s window): no repair of that wall.
+    const f = fakeAgent({ t: NIGHT });
+    const fo = ops();
+    let mob = zombie;
+    fo.hostileNear = () => mob;
+    fo.morningChoice = () => ({ action: 'fight', why: 'armed, health 20, one zombie near' });
+    fo.morningDanger = () => null;
+    fo.openToward = (bot, feet) => { fo.open = [feet.offset(1, 0, 0), feet.offset(1, 1, 0)]; return Promise.resolve(fo.open); };
+    nightTick(f, { now: 0, ops: fo }); await settle(f);
+    f.bot.time.timeOfDay = MORNING;
+    let now = 10;
+    for (; now <= 10 + RULE.waitMs; now += RETRY_MS) { nightTick(f, { now, ops: fo }); await settle(f); }
+    const builds = fo.builds.length;
+    mob = null;
+    for (let k = 1; k <= 5; k++) { nightTick(f, { now: now + k * 5000, ops: fo }); await settle(f); }
+    assert.equal(fo.builds.length, builds, 'the opened wall is not rebuilt in the window');
+    assert.equal(f.bot.rotnSheltered, 'open');
+});
+
+// #477 review 4 (#478, ate_when_low): the routine holds the bot in its closed shelter (the morning
+// grace, and at night) with a zombie at the corner; the eating mode eats at food 12.
+test('#477 review 4: held by the morning grace, and at night, with a zombie at the corner, the eating mode eats at food 12', async (t) => {
+    quiet(t);
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5), metadata: [] };
+    const eatingAt = async (agent) => {
+        const bot = agent.bot;
+        const items = [{ name: 'harvestcraft:zucchiniitem', metadata: 0, count: 1 }, { name: 'bread', metadata: 0, count: 1 }];
+        const eaten = [];
+        Object.assign(bot, {
+            food: 12, health: 20, entities: { 1: bot.entity, 2: zombie },
+            inventory: { items: () => items.filter(i => i.count > 0), slots: [] },
+            equip: (item) => { bot.held = item; return Promise.resolve(); },
+            consume: () => { eaten.push(bot.held.name); bot.held.count--; bot.food += 3; return Promise.resolve(); },
+        });
+        const mode = __modeForTest('eating');
+        Object.assign(mode, { wait_until: -Infinity, fails: {}, given_up: new Set(), check_ms: 1 });
+        const modeAgent = { bot, isIdle: () => true, actions: { currentActionLabel: '', resume_func: null, runAction: async (l, fn) => { await fn(); return { interrupted: false }; } } };
+        await mode.update(modeAgent);
+        await new Promise(r => setTimeout(r, 20));
+        return eaten;
+    };
+    // The morning grace: the routine holds the bot in (sealed) with the zombie near.
+    const morning = fakeAgent({ t: NIGHT });
+    const o = ops();
+    o.hostileNear = () => zombie;
+    nightTick(morning, { now: 0, ops: o }); await settle(morning);
+    morning.bot.time.timeOfDay = MORNING;
+    assert.equal(nightTick(morning, { now: 10, ops: o }), 'night:inside');
+    assert.match(morning.chat.at(-1), /staying in until it leaves/);
+    assert.equal(morning.bot.rotnSheltered, true);
+    assert.deepEqual(await eatingAt(morning), ['harvestcraft:zucchiniitem'], 'eats at 12 in the grace');
+    // At night, sealed in, the zombie at the corner.
+    const night = fakeAgent({ t: NIGHT });
+    nightTick(night, { now: 0, ops: ops() }); await settle(night);
+    assert.equal(nightState(night).state, 'inside');
+    assert.equal(night.bot.rotnSheltered, true);
+    assert.deepEqual(await eatingAt(night), ['harvestcraft:zucchiniitem'], 'eats at 12 at night');
 });

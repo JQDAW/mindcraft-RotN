@@ -105,7 +105,9 @@ export function foodDue(agent) {
 const isDaylight = (agent) => { const t = timeOfDayFor(agent); return t !== null && nightPhase(t) === 'day'; };
 
 function nightRoutineBusy(agent) {
-    return [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL].includes(agent.actions.currentActionLabel) || (!!agent._night?.leaveFrom && !!agent._night?.job);
+    // #477 review 2: and the morning leave (away from a crowd or a creeper): no melee in the opening meanwhile.
+    return [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL].includes(agent.actions.currentActionLabel) || (!!agent._night?.leaveFrom && !!agent._night?.job)
+        || agent._night?.morningLeaving === true;
 }
 
 /**
@@ -335,7 +337,9 @@ const modes_list = [
             const bot = agent.bot;
             if (Date.now() < this.wait_until) return;
             let threatened = false;
-            try { threatened = !!threats.threatPlan(bot); } catch { threatened = false; }
+            // Soak 4 (rotn-v0.1.7): in a closed night shelter a mob outside is no threat to eating; a
+            // zombie at the corner kept the bot from eating at food 12 all morning (it waited for 6).
+            try { threatened = bot.rotnSheltered === true ? false : !!threats.threatPlan(bot); } catch { threatened = false; }
             if (!food.wantsToEat(bot.food, { idle: agent.isIdle(), threatened })) return;
             // Soak 2: food 0 kills at once on this pack; at EMERGENCY_FOOD or lower, avoided food too.
             const emergency = Number.isFinite(bot.food) && bot.food <= food.EMERGENCY_FOOD;

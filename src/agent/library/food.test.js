@@ -247,3 +247,53 @@ test('soak 2: the eating reflex eats rotten flesh at food 5 with nothing else, a
     assert.ok(warns.some(w => /eating: food 5 \(food 0 kills on this pack\): eating minecraft:rotten_flesh:0 although it is avoided/.test(w)), warns.join('\n'));
     assert.deepEqual(await run(6), [], 'food 6: not yet');
 });
+
+// Soak 4 (rotn-v0.1.7): a zombie stood at the corner of the closed shelter all morning; the eating
+// reflex took it for a threat and waited for food 6 (food 20 -> 11 with food held, no eat line).
+test('soak 4: in a closed night shelter a mob outside is no threat to eating (food 12 eats); with a wall open it is', async (t) => {
+    quiet(t);
+    const mode = freshMode();
+    const zombie = { name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5), metadata: [] };
+    const shut = eatBot([stack('rustic:wildberries', 0, 3)], 12);
+    shut.bot.entities = { 1: shut.bot.entity, 2: zombie };
+    shut.bot.rotnSheltered = true;
+    await mode.update(modeAgent(shut.bot));
+    await settled();
+    assert.deepEqual(shut.eaten, ['rustic:wildberries'], 'sealed in: it eats at 12');
+    const open = eatBot([stack('rustic:wildberries', 0, 3)], 12);
+    open.bot.entities = { 1: open.bot.entity, 2: zombie };
+    open.bot.rotnSheltered = 'open';
+    Object.assign(mode, { wait_until: -Infinity });
+    await mode.update(modeAgent(open.bot));
+    await settled();
+    assert.deepEqual(open.eaten, [], 'a wall open: the zombie is a threat, it waits for 6');
+});
+
+// Soak 4 evidence (#478), ate_when_low failed: "low" at food 12 (11:56:59) while the night routine
+// held the bot in its closed shelter in the morning, a zombie at the corner (-58,65,-81 by
+// -59,65,-82); the reflex ate only at food 6, 24 min later. The same sequence now eats at 12.
+test('#478 ate_when_low: held in the closed shelter with a zombie at the corner, food 13 -> 12 ("low") eats at 12, not at 6', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const { foodCheck } = await import('./survival_log.js');
+    const mode = freshMode();
+    // The soak's held food: bread, a zucchini, a sweet potato, garlic (bread last).
+    const held = eatBot([stack('bread', 0, 1), stack('harvestcraft:zucchiniitem', 0, 1), stack('harvestcraft:sweetpotatoitem', 0, 1), stack('harvestcraft:garlicitem', 0, 1)], 13);
+    const bot = held.bot;
+    Object.assign(bot, { health: 20, entity: { position: new Vec3(-58.5, 65, -81.5) }, rotnSheltered: true });
+    bot.entities = { 1: bot.entity, 2: { id: 2, name: 'zombie', type: 'mob', position: new Vec3(-57.5, 65, -80.5), metadata: [] } };
+    const agent = modeAgent(bot); // nothing runs: the routine holds the bot inside
+    const state = {};
+    foodCheck(state, bot, 0);
+    await mode.update(agent);
+    await settled();
+    assert.deepEqual(held.eaten, [], 'at 13 it does not eat yet');
+    bot.food = 12;
+    assert.equal(foodCheck(state, bot, 1000), '[survival] food 12 health 20 (low)');
+    await mode.update(agent);
+    await settled();
+    assert.equal(held.eaten.length, 1, 'it eats at 12');
+    assert.notEqual(held.eaten[0], 'bread', 'bread last');
+    assert.ok(logs.some(l => /^\[reflex\] ate \S+ at food 12$/.test(l)), logs.join('\n'));
+});

@@ -266,11 +266,13 @@ export async function digWithin(bot, block, ms, { equip = null } = {}) {
  * Out of the hole in the morning: dig the roof and one side's stairs by hand, then walk up them.
  * Returns the exit cell on the surface, or null.
  */
-export async function pitOut(bot, feet) {
+export async function pitOut(bot, feet, { away = null } = {}) {
     const P = feet.offset(0, PIT.depth, 0);
     const roof = feet.offset(0, 2, 0);
     // #337 review 5: a side to get out by first; the roof stays on when there is none.
-    const plans = HORIZONTAL.map(d => stairsPlan(bot, P, d)).filter(Boolean);
+    // Soak 4: away (a mob's position): the stairs whose top is farthest from it first.
+    const from = (s) => (away ? Math.hypot(s.exit.x + 0.5 - away.x, s.exit.z + 0.5 - away.z) : 0);
+    const plans = HORIZONTAL.map(d => stairsPlan(bot, P, d)).filter(Boolean).sort((a, b) => from(b) - from(a));
     if (plans.length === 0) {
         log(bot, `No side of the hole shelter at ${at(feet)} to dig stairs out of by hand; staying in it.`);
         return null;

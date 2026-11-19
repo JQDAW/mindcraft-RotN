@@ -301,3 +301,12 @@ test('#472 follow-up: digPit, the roof, retreatPlan and backAway into the side p
     assert.ok(bot.entity.position.floored().equals(exit));
     assert.equal(exit.y, 64, 'up on the ground');
 });
+
+test('soak 4: pitOut away from a mob takes the stairs whose top is farthest from it', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, items } = fakeBot();
+    const feet = await digPit(bot);
+    await buildShelter(bot, { site: feet, keepSoft: true, craft: craft(items) });
+    const exit = await pitOut(bot, feet, { away: new Vec3(4.5, 64, 0.5) });
+    assert.ok(exit && exit.x < 0, `out on the west, away from the zombie in the east: ${exit}`);
+});
