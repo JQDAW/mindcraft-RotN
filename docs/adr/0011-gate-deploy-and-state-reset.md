@@ -63,7 +63,7 @@ harness-ops writes the steps into `deploy/cx23/README.md` with a check command f
 
 | Request | Runs | Checks |
 | --- | --- | --- |
-| `deploy TAG` | `sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy TAG` (sudo gives a clean environment: no `ROOT`, repo URL or timing overrides; the script sets a fixed `PATH` that includes `node`, `npm` and `git`) | TAG matches `^rotn-v[0-9]+\.[0-9]+\.[0-9]+$` exactly (deliberately stricter than `deploy.sh`'s TAG_RE, which allows a suffix: do not align them). The gate **refuses if any bot is enabled** (via `ctl list` / `is-enabled`): an enabled bot comes back on its own after a reboot and joins whatever its env file names, which the human's start GO must cover. `deploy.sh` checks that the tag is on a freshly fetched `develop`. |
+| `deploy TAG` | `sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy TAG` (sudo gives a clean environment: no `ROOT`, repo URL or timing overrides; the script sets a fixed `PATH` that includes `node`, `npm` and `git`) | TAG matches `^rotn-v[0-9]+\.[0-9]+\.[0-9]+$` exactly (deliberately stricter than `deploy.sh`'s TAG_RE, which allows a suffix: do not align them). The gate **refuses if any bot is enabled** (via `ctl list` / `is-enabled`): an enabled bot comes back on its own after a reboot and joins whatever its env file names, which the human's start GO must cover. It also **refuses while any bot is running** (`ctl is-active` answers anything but `inactive` or `failed`): the unit runs from `current` with `Restart=always`, so a deploy during a soak would put the new release into the running bot at its next restart, with no GO for that code (added after the #485 review). `deploy.sh` checks that the tag is on a freshly fetched `develop`. |
 | `deploy-check TAG` | the same `sudo -u rotn-build` call in a no-build mode: fetch, then check the tag is on `develop` and print its commit | The same TAG check. A dry run. |
 | `release` | `sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh status` | Read-only. |
 | `reset-state BOT NAME` | `sudo -n mindcraft-rotn-ctl reset-state BOT NAME` | BOT is the unit name (the existing regex). NAME is the Mindcraft profile name, `^[A-Za-z0-9_]{1,16}$` (for this bot, unit `frcfld`, profile `FRCFLD`). |
@@ -89,7 +89,7 @@ No verb reads or writes `/etc/mindcraft-rotn/<bot>.env`. A bot `start` still nee
 
 ### When the lead uses the new verbs
 
-- `deploy`: under a written lead GO naming the tag, for a tag the lead created on `develop` after CI passed (or, as a rollback, an earlier tag), with no bot enabled. Afterwards it runs `release`, and records the tag, the SHA and the time in `coord/STATUS-rotn-lead.md`.
+- `deploy`: under a written lead GO naming the tag, for a tag the lead created on `develop` after CI passed (or, as a rollback, an earlier tag), with no bot enabled or running. Afterwards it runs `release`, and records the tag, the SHA and the time in `coord/STATUS-rotn-lead.md`.
 - `reset-state`: under the soak's GO, with the bot stopped.
 - A refused request in the gate's log is still an incident, reported to the human.
 
@@ -104,7 +104,7 @@ No verb reads or writes `/etc/mindcraft-rotn/<bot>.env`. A bot `start` still nee
 
   The unit tests use fakes and cover:
   - word counts, the tag, bot and name regexes, and no `eval` or expansion;
-  - `deploy` refused while any bot is enabled;
+  - `deploy` refused while any bot is enabled or running (the printed `is-active` state compared exactly with `inactive` or `failed`; `activating`, `deactivating`, empty output or a ctl error refused);
   - the clean environment, so `MINDCRAFT_ROTN_REPO_URL` is ignored;
   - the result logged;
   - `reset-state`:
