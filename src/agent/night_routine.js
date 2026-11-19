@@ -150,6 +150,7 @@ export function leaveShelterFor(agent, why) {
     const n = agent?._night;
     if (!n || n.state !== 'inside') return false;
     if (agent.bot) agent.bot.rotnSheltered = false;
+    if (n.site) n.lastShelter = n.site.clone?.() ?? n.site; // #479 nit 3
     console.log(`[night] ${why} takes over: the shelter's rules are off until it is done`);
     Object.assign(n, { state: 'building', attempts: 0, nextAt: 0, site: null, digAt: null, repairStall: null });
     Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, ...MORNING_CLEAR });
@@ -796,6 +797,9 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
     if (isFullDay(t) && n.state !== 'inside') {
         // Morning came before a shelter did (or the bot was exposed): back to work.
         bot.rotnSheltered = false;
+        // #479 nit 3: where the night was spent stands in for the last shelter (the standing goal).
+        const spent = n.site ?? bot.entity?.position?.floored?.();
+        if (spent) n.lastShelter = spent.clone?.() ?? spent;
         n.state = 'day';
         restoreCowardice(agent, n);
         Object.assign(n, { pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null });

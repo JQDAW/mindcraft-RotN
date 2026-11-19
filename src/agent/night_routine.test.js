@@ -2436,3 +2436,24 @@ test('#477 nit: the end-of-day fallback clears the morning state too', async (t)
     const n = nightState(agent);
     assert.deepEqual([n.mobSince, n.morningAct, n.morningLeaving, n.morningWhy, n.mobFirst, n.mobStateSaid, n.mobGoneAt], [null, null, false, null, null, false, null]);
 });
+
+test('#479 nit 3: lastShelter is kept on the no-shelter morning path (where the night was spent) and by leaveShelterFor', async (t) => {
+    quiet(t);
+    const { leaveShelterFor } = await import('./night_routine.js');
+    // Exposed all night (no shelter): the morning keeps where the bot spent it.
+    const exposed = fakeAgent({ t: NIGHT });
+    const o = ops({ closed: false });
+    o.digPit = () => Promise.resolve(null);
+    for (let now = 1; now < 6 * RETRY_MS; now += RETRY_MS + 1) { nightTick(exposed, { now, ops: o }); await settle(exposed); }
+    assert.notEqual(nightState(exposed).state, 'inside');
+    exposed.bot.entity.position = new Vec3(7.5, 64, -3.5);
+    exposed.bot.time.timeOfDay = MORNING;
+    nightTick(exposed, { now: 10 * RETRY_MS, ops: o });
+    assert.equal(nightState(exposed).state, 'day');
+    assert.ok(nightState(exposed).lastShelter.equals(new Vec3(7, 64, -4)));
+    // A giver's command takes the bot out of its shelter: that shelter is kept.
+    const inside = fakeAgent({ t: NIGHT });
+    nightTick(inside, { now: 0, ops: ops() }); await settle(inside);
+    assert.equal(leaveShelterFor(inside, "a task giver's command"), true);
+    assert.ok(nightState(inside).lastShelter.equals(SITE));
+});

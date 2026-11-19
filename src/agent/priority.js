@@ -28,6 +28,7 @@
 import settings from './settings.js';
 import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
 import { quoteData, isTaskGiver } from './task_queue.js';
+import { STANDING_GOAL_PREFIX } from './agenda.js';
 import { nightTick, leaveShelterFor, resumeNightGoal } from './night_routine.js';
 import { relocateTick } from './respawn_relocate.js';
 import { parseStandOn, standCheck, describeTarget } from './library/stand_on.js';
@@ -235,13 +236,28 @@ export const OPEN_GOAL = { maxBackoffMs: 10 * 60_000, minChargeMs: 10_000 };
  * The open goal's state for the current stuck window ({key, llmMs, starts, lastStartAt, ended},
  * saved with the stuck record), or null. What runs now (running, at, elapsed) is kept in memory.
  */
-function openGoalWindow(agent) {
+function openGoalWindow(agent, now = Date.now()) {
     const key = agent._agenda_open_key;
     if (typeof key === 'string' && key.startsWith('done@')) {
         // The standing goal (#478): its window with the agenda (agenda.json), one per in-game day.
         const agenda = agent.agenda;
         if (!agenda) return null;
-        if (agenda.standing?.key !== key) agenda.standing = { key, llmMs: 0, starts: 0, lastStartAt: null, ended: false };
+        const prev = agent._open_goal_run;
+        if (agenda.standing?.key !== key) {
+            // #479 nit 1: a run of the standing goal still going when the day (or the 20-min window)
+            // changes is carried into the new window: it counts as its first start and is charged
+            // there from the boundary (at least OPEN_GOAL.minChargeMs).
+            const sp = agent.self_prompter;
+            const carry = !!prev?.running && prev.key?.startsWith('done@') && sp?.isActive?.() && String(sp.prompt ?? '').startsWith(STANDING_GOAL_PREFIX);
+            agenda.standing = carry
+                ? { key, llmMs: OPEN_GOAL.minChargeMs, starts: 1, lastStartAt: now, ended: false }
+                : { key, llmMs: 0, starts: 0, lastStartAt: null, ended: false };
+            if (carry) {
+                agent._open_goal_run = { key, running: true, at: now, elapsed: 0, spentSaid: false, savedAt: null };
+                say(agent, `agenda standing goal started (${standingLabel(key)}, carried over from ${standingLabel(prev.key)})`);
+                saveWindow(agent, now);
+            }
+        }
         if (agent._open_goal_run?.key !== key) agent._open_goal_run = { key, running: false, at: null, elapsed: 0, spentSaid: false, savedAt: null };
         return agenda.standing;
     }
@@ -286,7 +302,7 @@ export function endOpenGoal(agent) {
  */
 function openGoalTick(agent, now, open) {
     const sp = agent.self_prompter;
-    const w = openGoalWindow(agent);
+    const w = openGoalWindow(agent, now);
     if (!w) return undefined;
     const run = agent._open_goal_run;
     const budget = stepBudget().llm_ms;
@@ -319,7 +335,7 @@ function openGoalTick(agent, now, open) {
         if (!run.spentSaid) {
             run.spentSaid = true;
             say(agent, standingLabel(w.key)
-                ? `agenda standing goal: its ${minutes(budget)} of self-prompting for ${standingLabel(w.key)} are spent; none until the next day`
+                ? `agenda standing goal: its ${minutes(budget)} of self-prompting for ${standingLabel(w.key)} are spent; none until the next ${w.key.startsWith('done@day ') ? 'day' : 'window'}`
                 : `agenda open goal: its ${minutes(budget)} of self-prompting for this wait are spent; none until the retry`);
         }
         return 'goal:open:spent';
