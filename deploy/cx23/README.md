@@ -264,6 +264,8 @@ Then check each point; **stop and tell the lead if any output differs**:
 | `passwd -S rotn-build` | `rotn-build L ...` (L: locked) |
 | `stat -c '%U %G %a' /var/lib/rotn-build` | `rotn-build rotn-build 700` |
 | `grep -xE 'rotn-build\|mindcraft-rotn' /etc/cron.deny /etc/at.deny` | `/etc/cron.deny:rotn-build`, `/etc/cron.deny:mindcraft-rotn`, `/etc/at.deny:rotn-build`, `/etc/at.deny:mindcraft-rotn` |
+| `ls -la /var/spool/cron/crontabs/ 2>&1` | no file named `mindcraft-rotn` or `rotn-build` (the folder may list other users, or not exist). `cron.deny` stops new crontabs, not an existing one: if one is listed, stop and tell the lead |
+| `atq 2>&1` (as root it lists every user's jobs) | no job whose last field is `mindcraft-rotn` or `rotn-build` (or `atq: command not found` if `at` is not installed) |
 | `grep -rnE '^[^#]*(env_keep\|SETENV\|setenv)' /etc/sudoers /etc/sudoers.d/` | nothing. (`grep -rnE 'env_keep\|SETENV\|setenv' /etc/sudoers /etc/sudoers.d/` without the `^[^#]*` may show Ubuntu's commented examples, lines that start with `#`, such as `#Defaults:%sudo env_keep += "http_proxy ..."`: those are expected; any line that does not start with `#` is not.) |
 | `ls -a /var/lib/rotn-build/.ssh 2>&1` | `No such file or directory` (no SSH key) |
 | `sudo -l -U rotn-build` | no rule: no line with `NOPASSWD` or `(` |

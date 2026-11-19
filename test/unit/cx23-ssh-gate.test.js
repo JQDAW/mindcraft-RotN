@@ -38,6 +38,8 @@ beforeEach(() => {
         return f;
     };
     const sudo = fake('sudo', sudoLog, [
+        // fd 9 (the ctl's lock, held by the gate) open in this call or not, by verb
+        'if [[ -n ${FAKE_FD_LOG-} ]]; then v=${4:-$3}; [[ $* == *" deploy "* ]] && v=deploy; [[ -e /proc/self/fd/9 ]] && echo "$v fd9=open" >> "$FAKE_FD_LOG" || echo "$v fd9=closed" >> "$FAKE_FD_LOG"; fi',
         'case "$*" in',
         `  "-n ${CTL} list") printf '%b' "\${FAKE_LIST-}"; exit "\${FAKE_LIST_RC:-0}" ;;`,
         `  "-n ${CTL} is-enabled "*) v="FAKE_EN_\${4//-/_}"; s=\${!v-disabled}; [[ -n $s ]] && echo "$s"; [[ $s == enabled ]] && exit 0; exit 1 ;;`,
@@ -317,6 +319,17 @@ describe('mindcraft-rotn-ssh-gate: ADR 0011 (deploy, deploy-check and release as
         const missing = gate('deploy rotn-v0.1.8');
         assert.equal(missing.code, 2);
         assert.match(missing.stderr, /cannot open the ctl's lock/);
+    });
+
+    test('#485 re-review: the build never inherits the ctl\'s lock (fd 9 closed for it; the state queries do see it)', () => {
+        const fdLog = path.join(tmp, 'fd.log');
+        const r = gate('deploy rotn-v0.1.8', { FAKE_LIST: 'frcfld\\n', FAKE_FD_LOG: fdLog });
+        assert.equal(r.code, 0, r.stderr);
+        const lines = fs.readFileSync(fdLog, 'utf8').trim().split('\n');
+        assert.ok(lines.includes('frcfld fd9=open'), `the probe sees an inherited fd 9 (control): ${lines}`);
+        assert.ok(lines.includes('deploy fd9=closed'), `the build gets no fd 9: ${lines}`);
+        assert.match(SRC, /^ {2}"\$\{DEPLOY_RUN\[@\]\}" --no-restart deploy "\$tag" 9<&- &$/m);
+        assert.ok(!/kill -0/.test(SRC.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n')), 'no kill -0 probe on the setuid sudo');
     });
 
     test('#485 review: during the deploy the gate holds the lock, so a start (flock -w on the same file) cannot get it', async () => {

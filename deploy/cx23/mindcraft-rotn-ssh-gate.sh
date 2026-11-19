@@ -129,9 +129,9 @@ deploy_allowed() {
 # A signal during a deploy: logged, and passed on to the build (sudo relays TERM to deploy.sh); the gate then waits for
 # it and logs its exit as usual.
 on_signal() {
-  interrupted=$1
+  interrupted=$1 woke=1
   log auth.warning "deploy $tag interrupted by SIG$1; passing TERM to the build"
-  kill -s TERM "$child" 2>/dev/null || true
+  kill -s TERM "$child" 2>/dev/null || log auth.warning "deploy $tag: could not pass TERM to the build (pid $child); it goes on"
 }
 
 if [[ -z ${SSH_ORIGINAL_COMMAND+x} ]]; then req=''; refuse 'no command (an interactive login)'; fi
@@ -151,18 +151,23 @@ elif [[ $req =~ $DEPLOY_RE ]]; then
     log auth.info "allowed: deploy-check $tag"
     exec "${DEPLOY_RUN[@]}" check "$tag"
   fi
-  why='' interrupted='' child=''
+  why='' interrupted='' child='' woke=0
   deploy_allowed || not_now "$tag" "$why"
   log auth.info "allowed: deploy $tag"
   trap 'on_signal HUP' HUP
   trap 'on_signal INT' INT
   trap 'on_signal TERM' TERM
-  "${DEPLOY_RUN[@]}" --no-restart deploy "$tag" &
+  # 9<&-: the build never inherits the ctl's lock (release code must not be able to hold it).
+  "${DEPLOY_RUN[@]}" --no-restart deploy "$tag" 9<&- &
   child=$!
-  rc=0
-  wait "$child" || rc=$?
-  # wait returns early (>128) when a trapped signal arrives; wait again until the build itself has ended.
-  while kill -0 "$child" 2>/dev/null; do rc=0; wait "$child" || rc=$?; done
+  # wait returns early (>128) when a trapped signal arrives, and on_signal then sets woke: wait again. Only a wait that
+  # no signal woke gives the build's own exit status. No kill -0 probe: the child is the setuid sudo, which this user
+  # may not be allowed to signal (EPERM, e.g. under sudo-rs) while it still runs.
+  while :; do
+    woke=0 rc=0
+    wait "$child" || rc=$?
+    (( woke )) || break
+  done
   if (( rc == 0 )) && [[ -z $interrupted ]]; then log auth.info "deploy $tag exit=0"; else log auth.warning "deploy $tag exit=$rc${interrupted:+ (after SIG$interrupted)}"; fi
   exit "$rc"
 elif [[ $req =~ $RELEASE_RE ]]; then
