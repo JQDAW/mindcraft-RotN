@@ -268,3 +268,32 @@ test('soak 4: in a closed night shelter a mob outside is no threat to eating (fo
     await settled();
     assert.deepEqual(open.eaten, [], 'a wall open: the zombie is a threat, it waits for 6');
 });
+
+// Soak 4 evidence (#478), ate_when_low failed: "low" at food 12 (11:56:59) while the night routine
+// held the bot in its closed shelter in the morning, a zombie at the corner (-58,65,-81 by
+// -59,65,-82); the reflex ate only at food 6, 24 min later. The same sequence now eats at 12.
+test('#478 ate_when_low: held in the closed shelter with a zombie at the corner, food 13 -> 12 ("low") eats at 12, not at 6', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const { foodCheck } = await import('./survival_log.js');
+    const mode = freshMode();
+    // The soak's held food: bread, a zucchini, a sweet potato, garlic (bread last).
+    const held = eatBot([stack('bread', 0, 1), stack('harvestcraft:zucchiniitem', 0, 1), stack('harvestcraft:sweetpotatoitem', 0, 1), stack('harvestcraft:garlicitem', 0, 1)], 13);
+    const bot = held.bot;
+    Object.assign(bot, { health: 20, entity: { position: new Vec3(-58.5, 65, -81.5) }, rotnSheltered: true });
+    bot.entities = { 1: bot.entity, 2: { id: 2, name: 'zombie', type: 'mob', position: new Vec3(-57.5, 65, -80.5), metadata: [] } };
+    const agent = modeAgent(bot); // nothing runs: the routine holds the bot inside
+    const state = {};
+    foodCheck(state, bot, 0);
+    await mode.update(agent);
+    await settled();
+    assert.deepEqual(held.eaten, [], 'at 13 it does not eat yet');
+    bot.food = 12;
+    assert.equal(foodCheck(state, bot, 1000), '[survival] food 12 health 20 (low)');
+    await mode.update(agent);
+    await settled();
+    assert.equal(held.eaten.length, 1, 'it eats at 12');
+    assert.notEqual(held.eaten[0], 'bread', 'bread last');
+    assert.ok(logs.some(l => /^\[reflex\] ate \S+ at food 12$/.test(l)), logs.join('\n'));
+});
