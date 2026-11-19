@@ -235,6 +235,8 @@ scp -r /tmp/cx23-<TAG>/deploy/cx23 root@<cx23>:/root/cx23-<TAG>
 
 **What you need from the lead:** `<TAG>`, the release tag with this change (deploy/cx23 at that tag holds the new gate, ctl, deploy.sh and bootstrap.sh). It is **not deployed yet**, so step D4 is a real build as `rotn-build`. Every bot is stopped and **not enabled** (`sudo mindcraft-rotn-ctl is-enabled frcfld` says `disabled`).
 
+**Again, for the release group (after the rotn-v0.1.10 install).** That install stopped at D4 for a real reason: canvas's build (node-gyp) resets its build folder's mode, which drops the setgid bit, so `node_modules/canvas/build/config.gypi` got `rotn-build`'s own group, and `rotn-build`, not in `mindcraft-rotn`, could not set it back. Now a release group `rotn-release` holds exactly `rotn-build` and the bot user `mindcraft-rotn`. `/opt/mindcraft-rotn` and `releases` become `rotn-build:rotn-release` 2750, and deploy.sh gives every file of a build that group itself. **Rerun D1 to D4 with the new `<TAG>`, `build-user` (D2) included**: it creates the group, adds both users and moves the existing tree over. D5 needs no rerun if it already passed; else run it too.
+
 ### D1. A clean copy of the reviewed folder
 
 As in A: `git archive <TAG> deploy/cx23` on your own machine, `grep -rlI $'\r'` prints nothing, then `scp -r` it to `root@<cx23>:/root/cx23-<TAG>`.
@@ -245,8 +247,9 @@ As in A: `git archive <TAG> deploy/cx23` on your own machine, `grep -rlI $'\r'` 
 bash /root/cx23-<TAG>/bootstrap.sh build-user
 ```
 
-It creates `rotn-build` (system user, `/usr/sbin/nologin`, a locked password, home `/var/lib/rotn-build` 0700, listed in `/etc/cron.deny` and `/etc/at.deny`, in no other group); `mindcraft-rotn` is listed in both files too. It also:
-- runs `chown -R -P rotn-build:mindcraft-rotn /opt/mindcraft-rotn` (repo.git, releases, `current`, state, deploys.log), then sets `/opt/mindcraft-rotn` and `releases` to 2750;
+It creates `rotn-build` (system user, `/usr/sbin/nologin`, a locked password, home `/var/lib/rotn-build` 0700, listed in `/etc/cron.deny` and `/etc/at.deny`; its primary group stays `rotn-build`); `mindcraft-rotn` is listed in both files too. It also:
+- creates the system group `rotn-release` if missing and adds `rotn-build` and `mindcraft-rotn` to it (`usermod --append --groups`); it stops if the group then has any other member, or if `rotn-build` is in `sudo`, `admin` or `mindcraft-rotn`, or its primary group is not `rotn-build`;
+- runs `chown -R -P rotn-build:rotn-release /opt/mindcraft-rotn` (repo.git, releases, `current`, state, deploys.log: `deploy`'s from before ADR 0011, partly `rotn-build`'s), then sets `/opt/mindcraft-rotn` and `releases` to 2750;
 - installs root's copies of `deploy.sh` (`/usr/local/lib/mindcraft-rotn/deploy.sh`) and the ctl (`/usr/local/sbin/mindcraft-rotn-ctl`, with `reset-state`);
 - writes deploy's two sudo rules and checks them with `visudo -c` and `sudo -l` (it removes them and stops if `sudo -l` shows anything else);
 - removes the retired `/home/deploy/deploy.sh`.
@@ -259,7 +262,11 @@ Then check each point; **stop and tell the lead if any output differs**:
 
 | Check | Expected |
 | --- | --- |
-| `id rotn-build` | `uid=<n>(rotn-build) gid=<n>(rotn-build) groups=<n>(rotn-build)`: its own group only, no `sudo`, no `mindcraft-rotn` |
+| `id rotn-build` | `uid=<n>(rotn-build) gid=<n>(rotn-build) groups=<n>(rotn-build),<n>(rotn-release)`: no `sudo`, no `mindcraft-rotn` |
+| `id -gn rotn-build` | `rotn-build` (its primary group stays its own) |
+| `getent group rotn-release` | `rotn-release:x:<n>:rotn-build,mindcraft-rotn`: exactly these two |
+| `id -nG mindcraft-rotn` | includes `rotn-release` |
+| `id -nG deploy` | does **not** include `rotn-release` (by design, see below) |
 | `getent passwd rotn-build` | `rotn-build:x:<n>:<n>::/var/lib/rotn-build:/usr/sbin/nologin` |
 | `passwd -S rotn-build` | `rotn-build L ...` (L: locked) |
 | `stat -c '%U %G %a' /var/lib/rotn-build` | `rotn-build rotn-build 700` |
@@ -270,10 +277,14 @@ Then check each point; **stop and tell the lead if any output differs**:
 | `ls -a /var/lib/rotn-build/.ssh 2>&1` | `No such file or directory` (no SSH key) |
 | `sudo -l -U rotn-build` | no rule: no line with `NOPASSWD` or `(` |
 | `sudo -l -U deploy` | exactly two `NOPASSWD` lines: `(root) NOPASSWD: /usr/local/sbin/mindcraft-rotn-ctl` and `(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh`; no `SETENV` and no `env_keep` anywhere. (deploy is also in group `sudo`, so the group's own `(ALL : ALL) ALL` line, which needs deploy's password, shows as well: that one is expected.) |
-| `stat -c '%U %G %a' /opt/mindcraft-rotn /opt/mindcraft-rotn/releases` | `rotn-build mindcraft-rotn 2750`, twice |
+| `stat -c '%U %G %a' /opt/mindcraft-rotn /opt/mindcraft-rotn/releases` | `rotn-build rotn-release 2750`, twice |
+| `sudo -u mindcraft-rotn test -r /opt/mindcraft-rotn/current/main.js; echo $?` | `0`: the bot user reads the current release (still the one from before) through `rotn-release` |
 | `stat -c '%U %G %a' /usr/local/lib/mindcraft-rotn/deploy.sh /usr/local/sbin/mindcraft-rotn-ctl` | `root root 755`, twice |
 | `ls /home/deploy/deploy.sh 2>&1` | `No such file or directory` |
 | `find /opt/mindcraft-rotn ! -user rotn-build \| head` | nothing |
+| `find /opt/mindcraft-rotn ! -group rotn-release \| head` | nothing |
+
+**`deploy` is in neither `rotn-release` nor `rotn-build`, by design** (ADR 0011): it loses read access to `/opt/mindcraft-rotn`, and `ls /opt/mindcraft-rotn` as `deploy` says `Permission denied`. That is intended: the gate's `release` and `deploy-check` run as `rotn-build`. Do not add `deploy` to `rotn-release`. A bot reads its release through the group too; systemd gives the unit `mindcraft-rotn`'s supplementary groups when it starts, so a bot started after `build-user` has it (FRCFLD is stopped now).
 
 ### D3. The gate
 
@@ -289,7 +300,8 @@ Send the lead the three hashes. They must equal `sha256sum deploy/cx23/mindcraft
 ```bash
 sudo -u deploy sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh check <TAG>
 sudo -u deploy sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy <TAG>; echo "exit $?"
-find /opt/mindcraft-rotn/current/ ! -group mindcraft-rotn
+find /opt/mindcraft-rotn/current/ ! -group rotn-release
+sudo -u mindcraft-rotn test -r /opt/mindcraft-rotn/current/main.js; echo "readable $?"
 sudo -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh status
 sudo -u deploy sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh rollback; echo "exit $?"
 ```
@@ -298,12 +310,13 @@ sudo -u deploy sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh rol
 | --- | --- |
 | `check <TAG>` | `tag=<TAG> commit=<40 hex> on-develop=yes release=<TAG>-<sha12>` |
 | `--no-restart deploy <TAG>` | first `[deploy hh:mm:ss] removing a stale build folder: releases/.tmp-...` once for each build folder older than a day (the one from rotn-v0.1.2, say), then `npm ci` output, then `[deploy hh:mm:ss] deployed <TAG>-<sha12> (bots restarted: none; --no-restart)`; `exit 0` |
-| `find /opt/mindcraft-rotn/current/ ! -group mindcraft-rotn` | **nothing**: every file of the new release has the bots' group |
+| `find /opt/mindcraft-rotn/current/ ! -group rotn-release` | **nothing**: every file of the new release has the release group (canvas's `build/config.gypi` included) |
+| `test -r .../current/main.js` as `mindcraft-rotn` | `readable 0`: the bot user reads the new release |
 | `ls -d /opt/mindcraft-rotn/releases/.tmp-*` | `No such file or directory` (no build folder left) |
 | `status` | `current=<TAG>-<sha12>`, then `previous=` the release before |
 | `rollback` (as rotn-build) | `[deploy] ERROR: as rotn-build only: status \| check TAG \| --no-restart deploy TAG`; `exit 1` |
 
-If the deploy was refused with `part of the release is not in group mindcraft-rotn` and `find: Failed to restore initial working directory: Permission denied` just before it: that deploy.sh still ran in the caller's folder (`/root` here), which `rotn-build` cannot read. Install deploy.sh and the gate from a tag with the fix (D1, D3, compare the hashes), then run D4 again.
+If the deploy was refused with `part of the release is not in group mindcraft-rotn`: that is the deploy.sh from before the release group (with `find: Failed to restore initial working directory` just before it, from before the `cd /` fix too). Do D1 to D3 with the new `<TAG>` (compare the hashes), then D4 again. With this deploy.sh, `cannot give the release the group rotn-release (is rotn-build in it? ...)` means D2's group checks did not pass: stop and tell the lead.
 
 ### D5. The gate's new requests, without SSH (as root)
 
@@ -377,7 +390,7 @@ sudo -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh status
 - **Retired:** `bash ~/deploy.sh ...` as `deploy`, and `deploy.sh rollback`. Run as `rotn-build`, deploy.sh accepts only the three shapes above and refuses everything else (the sudoers rule allows any arguments). **The rollback is a deploy of the previous tag.**
 - `--no-restart` never calls the ctl (`rotn-build` has no sudo rule): no bot is restarted or health-checked. During G4 no bot is enabled. Restarting enabled bots after a deploy becomes a separate ctl step, defined when the bots are enabled (`sudo mindcraft-rotn-ctl restart <bot>`, as `deploy`).
 - As `rotn-build`, deploy.sh ignores `ROOT`, `MINDCRAFT_ROTN_REPO_URL` and the timing variables (sudo removes them anyway), fixes `PATH` to `/usr/bin:/bin`, and takes `HOME` from the passwd database (`/var/lib/rotn-build`, npm's cache).
-- **The release's group.** `/opt/mindcraft-rotn` and `releases/` are `rotn-build:mindcraft-rotn` **2750** (setgid), so what the build creates gets the bots' group, and the bot reads its release through it. `rotn-build` is not in that group, so a `chmod` by it clears a folder's setgid bit (the kernel drops it for a non-member); files made in such a folder would get `rotn-build`'s own group. deploy.sh therefore refuses a release with anything outside `mindcraft-rotn` (before its `chgrp`), and never runs `chmod g+s`.
+- **The release group.** `/opt/mindcraft-rotn` and `releases/` are `rotn-build:rotn-release` **2750**. `rotn-release` has exactly two members, `rotn-build` and the bot user `mindcraft-rotn`, and the bot reads its release through it. `rotn-build` stays out of `mindcraft-rotn` (that group reaches the bots' state), and `deploy` is in neither. The setgid bit is not relied on: canvas's node-gyp resets its build folder's mode, which drops it (the rotn-v0.1.10 install). So after `npm ci` deploy.sh gives every file of the build the group itself (`chgrp -R -h -P rotn-release`: a member can always do that; links themselves, never their targets). Then it refuses the release, fail closed, if anything is still outside `rotn-release`.
 - **The working folder is `/`.** sudo keeps the caller's folder (`/root`, `/home/deploy`), which `rotn-build` cannot read, so deploy.sh and the gate both change to `/` first; GNU `find` fails in a folder it cannot return to.
 - **Stale build folders.** A build happens in `releases/.tmp-<release>-<pid>` and is renamed when complete; a failed build removes its folder. One killed outright (SIGKILL, a reboot) leaves it behind. Each deploy removes `.tmp-*` folders older than a day (under the deploy lock, so none is in use) and logs `removing a stale build folder: releases/...`. `status` never lists them. If one stays (the log says `could not remove`), as root, with no deploy running (`ls /opt/mindcraft-rotn/.deploy.lock` shows nothing): `ls -ld /opt/mindcraft-rotn/releases/.tmp-*`, then `rm -r` exactly the folder that names, e.g. `rm -r /opt/mindcraft-rotn/releases/.tmp-rotn-v0.1.2-<sha12>-<pid>`.
 - `repo.git` is a bare clone of the public repo, holding only `develop` and the tags.
@@ -425,7 +438,7 @@ That is the pin in `bootstrap.sh`.
 
 ## Not verified yet
 
-- **ADR 0011 on the real CX23:** `bootstrap.sh build-user`, a build as `rotn-build` (setgid release folders, npm's cache in `/var/lib/rotn-build`), sudo-rs's `sudo -n -u rotn-build`, `flock` and `reset-state` are tested offline only (fakes, plus real files for `reset-state` and real git and tar for deploy.sh). Steps D2 to D5 prove them.
+- **ADR 0011 on the real CX23:** `bootstrap.sh build-user`, a build as `rotn-build` (the release group `rotn-release`, npm's cache in `/var/lib/rotn-build`), sudo-rs's `sudo -n -u rotn-build`, `flock` and `reset-state` are tested offline only (fakes, plus real files for `reset-state` and real git and tar for deploy.sh). Steps D2 to D5 prove them.
 
 - **The 26.04 system steps on a real server** (ADR 0007). Offline tests with fake commands cover the checks in `setup`, but these have not yet run on a real 26.04:
   - the `ssh.service` unit;

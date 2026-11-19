@@ -33,7 +33,7 @@ function findBash() {
 }
 const BASH = findBash();
 
-const FAKES = ['id', 'getent', 'useradd', 'usermod', 'passwd', 'chown', 'chmod', 'chgrp', 'apt-get', 'curl', 'gpg', 'node',
+const FAKES = ['id', 'getent', 'useradd', 'usermod', 'groupadd', 'passwd', 'chown', 'chmod', 'chgrp', 'apt-get', 'curl', 'gpg', 'node',
     'swapon', 'fallocate', 'mkswap', 'sysctl', 'ufw', 'visudo', 'sshd', 'systemctl', 'npm', 'sudo', 'ln', 'journalctl'];
 const ACCEPTED = 'Accepted publickey for deploy from 203.0.113.5 port 50122 ssh2: ED25519 SHA256:AAAAfakefakefake';
 
@@ -779,16 +779,21 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
             'deploy ALL=(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh']);
         assert.ok(called('visudo').length === 1 && called('chmod').some((c) => c[1] === '0440'));
         // ADR 0011: the build user (no login, own 0700 home, locked, never in sudo or the bots' group), cron and at denied,
-        // /opt/mindcraft-rotn setgid for it, root's copy of deploy.sh
+        // /opt/mindcraft-rotn rotn-build:rotn-release 2750, root's copy of deploy.sh
         assert.ok(called('useradd').some((c) => c.join(' ') === 'useradd --system --home-dir /var/lib/rotn-build --no-create-home --shell /usr/sbin/nologin rotn-build'));
         assert.ok(called('passwd').some((c) => c.join(' ') === 'passwd --lock rotn-build'));
-        assert.ok(!called('usermod').some((c) => c.at(-1) === 'rotn-build'), 'rotn-build joins no group');
+        // ADR 0011 (after the first install): the release group, with exactly rotn-build and the bot user
+        assert.ok(called('groupadd').some((c) => c.join(' ') === 'groupadd --system rotn-release'));
+        assert.deepEqual(called('usermod').filter((c) => c.at(-1) === 'rotn-build').map((c) => c.join(' ')), ['usermod --append --groups rotn-release rotn-build'],
+            'rotn-build joins rotn-release only');
+        assert.ok(called('usermod').some((c) => c.join(' ') === 'usermod --append --groups rotn-release mindcraft-rotn'));
+        assert.ok(!called('usermod').some((c) => c.at(-1) === 'deploy' && c[3].split(',').includes('rotn-release')), 'deploy is not in rotn-release');
         assert.ok(called('chmod').some((c) => c[1] === '0700' && c[2].endsWith('/var/lib/rotn-build')));
         assert.equal(read('etc/cron.deny'), 'rotn-build\nmindcraft-rotn\n');
         assert.equal(read('etc/at.deny'), 'rotn-build\nmindcraft-rotn\n');
         for (const d of ['/opt/mindcraft-rotn', '/opt/mindcraft-rotn/releases']) {
             assert.ok(called('chmod').some((c) => c[1] === '2750' && c[2].endsWith(d)), d);
-            assert.ok(called('chown').some((c) => c.join(' ') === `chown -h rotn-build:mindcraft-rotn ${fwd(rootFile(d.slice(1)))}`), d);
+            assert.ok(called('chown').some((c) => c.join(' ') === `chown -h rotn-build:rotn-release ${fwd(rootFile(d.slice(1)))}`), d);
         }
         assert.equal(read('usr/local/lib/mindcraft-rotn/deploy.sh'), fs.readFileSync(path.join(CX, 'deploy.sh'), 'utf8').replace(/\r/g, ''));
         assert.ok(called('chmod').some((c) => c[1] === '0755' && c[2].includes('/usr/local/lib/mindcraft-rotn/deploy.sh.tmp.')), 'root:root 0755 (file_owned: set on the temp file, then renamed)');
@@ -1011,6 +1016,33 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         }
     });
 
+    test('ADR 0011 release group: build-user refuses a rotn-release with anyone else in it, or a rotn-build whose primary group changed', () => {
+        const prep = () => {
+            ubuntu();
+            fs.mkdirSync(rootFile('opt/mindcraft-rotn/releases'), { recursive: true });
+            fs.mkdirSync(rootFile('home/deploy'), { recursive: true });
+        };
+        for (const members of ['rotn-build,mindcraft-rotn,deploy', 'rotn-build', 'mindcraft-rotn,rotn-build,rv', '']) {
+            prep();
+            const r = boot(['build-user'], { FAKE_RC_getent: '0', FAKE_GROUP_MEMBERS: members });
+            assert.equal(r.code, 1, members);
+            assert.match(r.stderr, /group rotn-release has the members '.*'; exactly rotn-build and mindcraft-rotn belong in it/, members);
+            assert.ok(!called('chown').some((c) => c.includes('-R')), `${members}: stopped before the tree changes`);
+        }
+        for (const members of ['rotn-build,mindcraft-rotn', 'mindcraft-rotn,rotn-build']) {
+            prep();
+            assert.equal(boot(['build-user'], { FAKE_RC_getent: '0', FAKE_GROUP_MEMBERS: members }).code, 0, members);
+        }
+        prep();
+        const prim = boot(['build-user'], { FAKE_RC_getent: '0', FAKE_ID_GN: 'rotn-release' });
+        assert.equal(prim.code, 1);
+        assert.match(prim.stderr, /rotn-build's primary group is not rotn-build/);
+        // a fresh host: the group is made, then both join it
+        prep();
+        const fresh = boot(['build-user'], { FAKE_RC_getent: '0', FAKE_ID_GROUPS_rotn_build: 'rotn-build' });
+        assert.equal(fresh.code, 0, fresh.all);
+    });
+
     test('ADR 0011: rotn-build in group sudo, admin or mindcraft-rotn stops setup', () => {
         for (const groups of ['rotn-build sudo', 'rotn-build admin', 'rotn-build mindcraft-rotn']) {
             ubuntu();
@@ -1035,7 +1067,10 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         fs.writeFileSync(rootFile('etc/cron.deny'), 'games\n');
         const r = boot(['build-user'], { FAKE_RC_getent: '0' });
         assert.equal(r.code, 0, r.all);
-        assert.ok(called('chown').some((c) => c.join(' ') === `chown -R -h -P rotn-build:mindcraft-rotn ${fwd(rootFile('opt/mindcraft-rotn'))}`));
+        assert.ok(called('chown').some((c) => c.join(' ') === `chown -R -h -P rotn-build:rotn-release ${fwd(rootFile('opt/mindcraft-rotn'))}`),
+            'the existing tree (deploy\'s, partly rotn-build\'s) moves to rotn-build:rotn-release');
+        assert.equal(called('groupadd').length, 0, 'getent finds the group: no groupadd');
+        assert.deepEqual(called('usermod').map((c) => c.join(' ')), ['usermod --append --groups rotn-release rotn-build', 'usermod --append --groups rotn-release mindcraft-rotn']);
         assert.ok(called('chmod').some((c) => c[1] === '2750' && c[2].endsWith('/opt/mindcraft-rotn')));
         assert.equal(read('etc/cron.deny'), 'games\nrotn-build\nmindcraft-rotn\n');
         assert.equal(read('etc/at.deny'), 'rotn-build\nmindcraft-rotn\n');
@@ -1413,7 +1448,7 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
     const dep = (args, extra = {}, { group = myGroup, lockedCwd = null } = {}) => {
         fs.rmSync(path.join(bin, 'node'), { force: true }); // deploy.sh evaluates settings.js with the real node
         const copy = path.join(tmp, 'deploy-under-test.sh');
-        const body = DEPLOY_SRC.replace(/^PATH=\/usr\/bin:\/bin$/m, '').replace(/^SVC_GROUP=mindcraft-rotn$/m, `SVC_GROUP=${group}`);
+        const body = DEPLOY_SRC.replace(/^PATH=\/usr\/bin:\/bin$/m, '').replace(/^REL_GROUP=rotn-release$/m, `REL_GROUP=${group}`);
         assert.equal(body.length < DEPLOY_SRC.length, true);
         fs.writeFileSync(copy, body);
         return run(copy, args, { ...env(), ...extra }, true, lockedCwd);
@@ -1438,7 +1473,7 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         const sudo = called('sudo').map((c) => c.slice(3).join(' '));
         assert.deepEqual(sudo, ['list', 'is-enabled rotn-bot', 'is-enabled idle-bot', 'restart rotn-bot', 'is-active rotn-bot']);
         assert.ok(called('sudo').every((c) => c[1] === '-n' && c[2] === '/usr/local/sbin/mindcraft-rotn-ctl'), 'only the wrapper, non-interactive');
-        assert.ok(called('chgrp').some((c) => c.join(' ').startsWith(`chgrp -R ${myGroup}`)), 'the copy under test uses this user\'s group for mindcraft-rotn');
+        assert.ok(called('chgrp').some((c) => c.join(' ').startsWith(`chgrp -R -h -P ${myGroup}`)), 'the copy under test uses this user\'s group for rotn-release');
         assert.match(read(`${BASE}/deploys.log`), /deploy rotn-v0\.0\.1 [0-9a-f]{40} rotn-v0\.0\.1-[0-9a-f]{12} ok bots=rotn-bot/);
     });
 
@@ -1603,15 +1638,47 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         assert.match(DEPLOY_SRC, /^if \[\[ \$\(id -un\) == "\$BUILD_USER" \]\]; then unset ROOT MINDCRAFT_ROTN_REPO_URL HEALTH_WAIT_S KEEP_RELEASES NPM_CI_RETRY_S; fi$/m);
     });
 
-    test('a release with anything outside the bots\' group is refused (a folder lost its setgid bit); nothing is left behind', () => {
+    test('a release with anything outside rotn-release after the chgrp, or a chgrp that fails, is refused; nothing is left behind', () => {
         setupRepo();
         const other = myGroup === 'root' ? 'nogroup' : 'root';
+        // the fake chgrp changes nothing: as if it could not
         const r = dep(['--no-restart', 'deploy', 'rotn-v0.0.1'], {}, { group: other });
         assert.equal(r.code, 1, r.all);
-        assert.match(r.stderr, new RegExp(`not in group ${other}: .* \\(a folder lost its setgid bit\\?\\)`));
+        assert.match(r.stderr, new RegExp(`not in group ${other}: .* \\(after chgrp -R\\)`));
         assert.match(r.stderr, new RegExp(`part of the release is not in group ${other}; the bot could not read it; refusing`));
         assert.deepEqual(releases(), [], 'no release and no temp folder left');
         assert.ok(!exists(`${BASE}/state`));
+        const c = dep(['--no-restart', 'deploy', 'rotn-v0.0.1'], { FAKE_RC_chgrp: '1' });
+        assert.equal(c.code, 1, c.all);
+        assert.match(c.stderr, /cannot give the release the group .*; refusing/);
+        assert.deepEqual(releases(), []);
+    });
+
+    test('ADR 0011 install, rotn-v0.1.10: canvas\'s node-gyp drops a folder\'s setgid bit; the build still gives every file rotn-release (real chgrp, as a member)', (t) => {
+        setupRepo();
+        // rotn-release stands for a group of this test user's other than its primary one (root may use any group)
+        let rel;
+        if (process.getuid?.() === 0) rel = spawnSync('getent', ['group', 'daemon']).status === 0 ? 'daemon' : undefined;
+        else rel = spawnSync('id', ['-Gn'], { encoding: 'utf8' }).stdout.trim().split(/\s+/).find((g) => g && g !== myGroup);
+        if (!rel || process.platform === 'win32') { t.skip('no second group for this user'); return; }
+        const relDir = rootFile(`${BASE}/releases`);
+        assert.equal(spawnSync('chgrp', [rel, relDir]).status, 0);
+        fs.chmodSync(relDir, 0o2750);   // as bootstrap leaves it: setgid, the release group
+        // Without a working chgrp (the fake changes nothing): refused, as the first install was.
+        const before = dep(['--no-restart', 'deploy', 'rotn-v0.0.1'], { FAKE_NPM_NODE_GYP: '1' }, { group: rel });
+        assert.equal(before.code, 1, before.all);
+        assert.match(before.stderr, new RegExp(`not in group ${rel}: `));
+        if (process.getuid?.() !== 0) assert.match(before.stderr, new RegExp(`not in group ${rel}: node_modules/canvas/build/config\\.gypi `));
+        // With the real chgrp: deployed, and config.gypi (made in the folder whose setgid bit was dropped) has the group.
+        fs.rmSync(path.join(bin, 'chgrp'));
+        const r = dep(['--no-restart', 'deploy', 'rotn-v0.0.1'], { FAKE_NPM_NODE_GYP: '1' }, { group: rel });
+        assert.equal(r.code, 0, r.all);
+        const relName = state().current;
+        const gypi = path.join(relDir, relName, 'node_modules', 'canvas', 'build', 'config.gypi');
+        assert.ok(fs.existsSync(gypi));
+        assert.equal(spawnSync('stat', ['-c', '%G', gypi], { encoding: 'utf8' }).stdout.trim(), rel);
+        assert.equal((fs.statSync(path.dirname(gypi)).mode & 0o2000), 0, 'the setgid bit really was dropped there');
+        assert.equal(spawnSync('find', [path.join(relDir, relName), '!', '-group', rel], { encoding: 'utf8' }).stdout, '', 'every file has the release group');
     });
 
     test('the source: PATH fixed to /usr/bin:/bin, HOME from the passwd database, the build user, .release-ok made before the chmod', () => {
@@ -1619,7 +1686,9 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         assert.match(DEPLOY_SRC, /^HOME=\$\(getent passwd "\$\(id -un\)" \| cut -d: -f6\) \|\| HOME=$/m);
         assert.match(DEPLOY_SRC, /^export HOME$/m);
         const build = DEPLOY_SRC.slice(DEPLOY_SRC.indexOf('build() {'), DEPLOY_SRC.indexOf('\n}\n', DEPLOY_SRC.indexOf('build() {')));
-        const order = ['touch "$tmp/.release-ok.new"', 'in_group "$tmp"', 'chgrp -R', 'chmod -R', 'mv -T "$tmp/.release-ok.new"', 'mv -T "$tmp" "$BASE/releases/$name"'].map((t) => build.indexOf(t));
+        const order = ['touch "$tmp/.release-ok.new"', 'chgrp -R -h -P "$REL_GROUP" "$tmp"', 'in_group "$tmp"', 'chmod -R', 'mv -T "$tmp/.release-ok.new"', 'mv -T "$tmp" "$BASE/releases/$name"'].map((t) => build.indexOf(t));
+        assert.match(DEPLOY_SRC, /^REL_GROUP=rotn-release$/m);
+        assert.ok(!/SVC_GROUP|chgrp[^\n]*mindcraft-rotn/.test(DEPLOY_SRC), 'no trace of the bots\' group as the release group');
         assert.ok(order.every((i) => i > 0), JSON.stringify(order));
         assert.deepEqual([...order].sort((a, b) => a - b), order, 'in this order');
         assert.ok(!/chmod[^\n]*g\+s/.test(DEPLOY_SRC), 'no chmod g+s: as a non-member of the group it would clear the bit');

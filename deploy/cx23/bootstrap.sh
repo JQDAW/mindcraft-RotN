@@ -18,8 +18,9 @@
 #   bootstrap.sh build-user
 #       ADR 0011, on a host set up before it (setup does the same): the build user `rotn-build` (system user, no
 #       login shell, no SSH key, no sudo rule, a locked password, home /var/lib/rotn-build 0700, in /etc/cron.deny
-#       and /etc/at.deny, as is mindcraft-rotn; never in group sudo, admin or mindcraft-rotn) owns /opt/mindcraft-rotn (2750 setgid,
-#       group mindcraft-rotn); root's copy of deploy.sh at /usr/local/lib/mindcraft-rotn/deploy.sh; deploy's second
+#       and /etc/at.deny, as is mindcraft-rotn; never in group sudo, admin or mindcraft-rotn) owns /opt/mindcraft-rotn
+#       (rotn-build:rotn-release 2750; the release group rotn-release has exactly rotn-build and mindcraft-rotn, and an
+#       existing tree is moved over with chown -R -P); root's copy of deploy.sh at /usr/local/lib/mindcraft-rotn/deploy.sh; deploy's second
 #       sudoers rule `(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh`, checked with visudo and
 #       sudo -l; the ctl with reset-state; and the retired /home/deploy/deploy.sh removed. Release code
 #       (settings.js, npm's install scripts) then runs only as rotn-build.
@@ -40,6 +41,7 @@ ROOT=${ROOT:-}
 DEPLOY_USER=deploy
 SVC_USER=mindcraft-rotn
 BUILD_USER=rotn-build
+REL_GROUP=rotn-release   # rotn-build writes the releases, mindcraft-rotn reads them (ADR 0011); deploy is not in it
 BUILD_HOME=/var/lib/rotn-build
 DEPLOY_SH_ROOT=/usr/local/lib/mindcraft-rotn/deploy.sh
 CTL_PATH=/usr/local/sbin/mindcraft-rotn-ctl
@@ -137,6 +139,7 @@ preflight_system() {
 }
 
 user_exists() { getent passwd "$1" > /dev/null 2>&1; }
+group_exists() { getent group "$1" > /dev/null 2>&1; }
 
 # A dotted IPv4 address as a number; fails on anything else (octets read as decimal, even with a leading 0).
 ip_to_int() {
@@ -193,8 +196,10 @@ setup_users() {
   fi
 }
 
-# The build user (ADR 0011): a system user with no login shell, no SSH key and no sudo rule, in group mindcraft-rotn
-# (deploy.sh gives each release that group, so the bot service can read it), never in group sudo.
+# The build user (ADR 0011): a system user with no login shell, no SSH key and no sudo rule, never in group sudo or
+# mindcraft-rotn (the bots' state). Its primary group stays rotn-build. It shares the release group rotn-release with
+# the bot user: deploy.sh gives each release that group, and the bot service reads it through it (systemd gives the
+# unit the user's supplementary groups).
 setup_build_user() {
   if ! user_exists "$BUILD_USER"; then
     log "creating system user $BUILD_USER (no login; runs release code: deploy.sh's settings check and npm ci)"
@@ -205,9 +210,25 @@ setup_build_user() {
   local groups; groups=$(id -nG "$BUILD_USER") || die "id -nG $BUILD_USER failed"
   [[ " $groups " != *" sudo "* && " $groups " != *" admin "* && " $groups " != *" $SVC_USER "* ]] \
     || die "$BUILD_USER is in group sudo, admin or $SVC_USER; remove it (gpasswd -d $BUILD_USER GROUP) and rerun"
+  [[ $(id -gn "$BUILD_USER") == "$BUILD_USER" ]] || die "$BUILD_USER's primary group is not $BUILD_USER; set it back (usermod -g $BUILD_USER $BUILD_USER) and rerun"
+  if ! group_exists "$REL_GROUP"; then
+    log "creating group $REL_GROUP (members $BUILD_USER and $SVC_USER: the releases)"
+    groupadd --system "$REL_GROUP"
+  fi
+  local u
+  for u in "$BUILD_USER" "$SVC_USER"; do
+    usermod --append --groups "$REL_GROUP" "$u"
+    [[ " $(id -nG "$u") " == *" $REL_GROUP "* ]] || die "$u is not in group $REL_GROUP after usermod"
+  done
+  # Exactly those two: not deploy (release runs as rotn-build), nobody else.
+  local members want
+  members=$(getent group "$REL_GROUP" | cut -d: -f4) || die "getent group $REL_GROUP failed"
+  members=$(tr ',' '\n' <<< "$members" | sed '/^$/d' | LC_ALL=C sort | tr '\n' ' ')
+  want=$(printf '%s\n' "$BUILD_USER" "$SVC_USER" | LC_ALL=C sort | tr '\n' ' ')
+  [[ $members == "$want" ]] || die "group $REL_GROUP has the members '${members% }'; exactly $BUILD_USER and $SVC_USER belong in it (gpasswd -d USER $REL_GROUP)"
   # No cron or at jobs for either service user: release code (run as rotn-build in the build, as mindcraft-rotn when
   # the bot runs) must not leave anything that runs later (ADR 0011, #485 review).
-  local f u
+  local f
   for f in /etc/cron.deny /etc/at.deny; do
     for u in "$BUILD_USER" "$SVC_USER"; do
       if [[ -f $(p "$f") ]] && tr -d '\r' < "$(p "$f")" | grep -qxF -- "$u"; then continue; fi
@@ -377,17 +398,18 @@ EOF
   fi
 }
 
-# /opt/mindcraft-rotn for the build user (ADR 0011), and root's copy of deploy.sh. On a host set up before ADR 0011,
-# everything under /opt/mindcraft-rotn (repo.git, releases, current, state, deploys.log) changes owner; chown -R -P
-# never follows a symlink (current is changed itself).
+# /opt/mindcraft-rotn for the build user (ADR 0011), and root's copy of deploy.sh. On a host set up before ADR 0011
+# (or before the release group), everything under /opt/mindcraft-rotn (repo.git, releases, current, state,
+# deploys.log: deploy's, partly rotn-build's) becomes rotn-build:rotn-release; chown -R -P never follows a symlink
+# (current is changed itself).
 setup_build_files() {
   local base; base=$(p /opt/mindcraft-rotn)
-  dir_owned 2750 "$BUILD_USER:$SVC_USER" /opt/mindcraft-rotn
+  dir_owned 2750 "$BUILD_USER:$REL_GROUP" /opt/mindcraft-rotn
   # A re-run finds a tree rotn-build may have changed: never follow its links (chown -R -h -P, from inside the real
   # folder), and dir_owned refuses a releases/ that is a symlink.
-  ( cd -P -- "$base" && [[ $(pwd -P) == "$base" ]] && chown -R -h -P "$BUILD_USER:$SVC_USER" . ) \
+  ( cd -P -- "$base" && [[ $(pwd -P) == "$base" ]] && chown -R -h -P "$BUILD_USER:$REL_GROUP" . ) \
     || die "cannot give $base to $BUILD_USER (is it a symlink?)"
-  dir_owned 2750 "$BUILD_USER:$SVC_USER" /opt/mindcraft-rotn/releases
+  dir_owned 2750 "$BUILD_USER:$REL_GROUP" /opt/mindcraft-rotn/releases
   dir_owned 0755 root:root /usr/local/lib/mindcraft-rotn
   file_owned 0755 root:root "$DEPLOY_SH_ROOT" < "$HERE/deploy.sh"
 }
