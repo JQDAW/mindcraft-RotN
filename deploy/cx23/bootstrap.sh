@@ -10,11 +10,19 @@
 #       `mindcraft-rotn` (no login) that runs the bots. Unattended security upgrades. ufw: SSH only.
 #       2 GB swap. Node 22 from NodeSource (key fingerprint pinned). git. The unit template, check-env,
 #       mindcraft-rotn-ctl, a sudoers rule that lets `deploy` run only mindcraft-rotn-ctl without a
-#       password, and the folders under /opt, /etc and /var/lib.
+#       password, and the folders under /opt, /etc and /var/lib. And the build user (as build-user below).
 #       SSH password login OFF (the human's decision for GO 2): the drop-in
 #       /etc/ssh/sshd_config.d/10-mindcraft-rotn.conf, checked with `sshd -t` and verified with `sshd -T`
 #       before ssh is reloaded. Root keeps its key login (PermitRootLogin is not touched); deploy's
 #       password is for sudo only.
+#   bootstrap.sh build-user
+#       ADR 0011, on a host set up before it (setup does the same): the build user `rotn-build` (system user, no
+#       login shell, no SSH key, no sudo rule, a locked password, home /var/lib/rotn-build 0700, in /etc/cron.deny
+#       and /etc/at.deny, as is mindcraft-rotn; never in group sudo, admin or mindcraft-rotn) owns /opt/mindcraft-rotn (2750 setgid,
+#       group mindcraft-rotn); root's copy of deploy.sh at /usr/local/lib/mindcraft-rotn/deploy.sh; deploy's second
+#       sudoers rule `(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh`, checked with visudo and
+#       sudo -l; the ctl with reset-state; and the retired /home/deploy/deploy.sh removed. Release code
+#       (settings.js, npm's install scripts) then runs only as rotn-build.
 #   bootstrap.sh add-bot BOT [--mindserver-port N]
 #       Per-bot folders (token cache 0700) and /etc/mindcraft-rotn/BOT.env (0600 root:root) from bot.env.example.
 #       Never overwrites an existing env file.
@@ -31,6 +39,10 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=${ROOT:-}
 DEPLOY_USER=deploy
 SVC_USER=mindcraft-rotn
+BUILD_USER=rotn-build
+BUILD_HOME=/var/lib/rotn-build
+DEPLOY_SH_ROOT=/usr/local/lib/mindcraft-rotn/deploy.sh
+CTL_PATH=/usr/local/sbin/mindcraft-rotn-ctl
 BOT_RE='^[a-z0-9][a-z0-9-]{0,31}$'
 KEY_RE='^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,3}( [^[:cntrl:]]*)?$'
 NODE_MAJOR=22   # ADR 0002
@@ -57,8 +69,17 @@ log()  { echo "[bootstrap] $*" >&2; }
 die()  { echo "[bootstrap] ERROR: $*" >&2; exit 1; }
 p()    { echo "$ROOT$1"; }   # a path on the target system
 
-# dir_owned MODE OWNER:GROUP PATH
-dir_owned() { mkdir -p "$(p "$3")"; chown "$2" "$(p "$3")"; chmod "$1" "$(p "$3")"; }
+# dir_owned MODE OWNER:GROUP PATH, never through a symlink (#485 review: as root, chown and chmod follow one, and some
+# of these folders sit in trees other users can write, e.g. /opt/mindcraft-rotn is rotn-build's): PATH must not be a
+# symlink, and the owner and mode are set on the folder actually entered (cd -P, then checked to be PATH itself, so
+# no component of the path was swapped for a link), as ".", never on a path that could change in between.
+dir_owned() {
+  local d; d=$(p "$3")
+  [[ ! -L $d ]] || die "$d is a symlink; refusing to change it as root"
+  mkdir -p -- "$d"
+  ( cd -P -- "$d" && [[ $(pwd -P) == "$d" ]] && chown -h "$2" . && chmod "$1" . ) \
+    || die "$d is not the folder it should be (a symlink on its path?), or its owner or mode could not be set"
+}
 # file_owned MODE OWNER:GROUP PATH < content. Carriage returns are dropped: a copy made from a
 # Windows checkout would otherwise install CRLF scripts (bash fails on them) and env values ending in \r.
 file_owned() {
@@ -159,6 +180,7 @@ setup_users() {
     passwd --lock "$DEPLOY_USER" > /dev/null   # no password until the human sets one (needed before lockdown)
   fi
   usermod --append --groups sudo,"$SVC_USER" "$DEPLOY_USER"
+  setup_build_user
   dir_owned 0700 "$DEPLOY_USER:$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh"
   # Append the key if it is missing; never drop keys already there (PR #30 review finding 5).
   local ak; ak=$(p "/home/$DEPLOY_USER/.ssh/authorized_keys")
@@ -171,29 +193,67 @@ setup_users() {
   fi
 }
 
+# The build user (ADR 0011): a system user with no login shell, no SSH key and no sudo rule, in group mindcraft-rotn
+# (deploy.sh gives each release that group, so the bot service can read it), never in group sudo.
+setup_build_user() {
+  if ! user_exists "$BUILD_USER"; then
+    log "creating system user $BUILD_USER (no login; runs release code: deploy.sh's settings check and npm ci)"
+    useradd --system --home-dir "$BUILD_HOME" --no-create-home --shell /usr/sbin/nologin "$BUILD_USER"
+  fi
+  passwd --lock "$BUILD_USER" > /dev/null
+  dir_owned 0700 "$BUILD_USER:$BUILD_USER" "$BUILD_HOME"
+  local groups; groups=$(id -nG "$BUILD_USER") || die "id -nG $BUILD_USER failed"
+  [[ " $groups " != *" sudo "* && " $groups " != *" admin "* && " $groups " != *" $SVC_USER "* ]] \
+    || die "$BUILD_USER is in group sudo, admin or $SVC_USER; remove it (gpasswd -d $BUILD_USER GROUP) and rerun"
+  # No cron or at jobs for either service user: release code (run as rotn-build in the build, as mindcraft-rotn when
+  # the bot runs) must not leave anything that runs later (ADR 0011, #485 review).
+  local f u
+  for f in /etc/cron.deny /etc/at.deny; do
+    for u in "$BUILD_USER" "$SVC_USER"; do
+      if [[ -f $(p "$f") ]] && tr -d '\r' < "$(p "$f")" | grep -qxF -- "$u"; then continue; fi
+      if [[ -f $(p "$f") ]]; then printf '%s\n' "$u" >> "$(p "$f")"
+      else printf '%s\n' "$u" | file_owned 0644 root:root "$f"; fi
+      log "$f: $u added"
+    done
+  done
+}
+
+# deploy's two passwordless rules: the ctl as root, and root's deploy.sh as the build user (ADR 0011).
 setup_sudoers() {
   local f tmp
   f=$(p /etc/sudoers.d/mindcraft-rotn)
   tmp=$(p /etc/sudoers.d/.mindcraft-rotn.new)
   mkdir -p "$(dirname "$f")"
-  cat > "$tmp" <<EOF
-# deploy may run only the bot control wrapper without a password (it validates its arguments).
-# General sudo for deploy needs deploy's own password, which the human sets before lockdown.
-$DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/mindcraft-rotn-ctl
-EOF
+  cat > "$tmp" <<RULES
+# deploy may run only the bot control wrapper without a password (it validates its arguments), and root's copy of
+# deploy.sh as the build user $BUILD_USER (ADR 0011: release code never runs as deploy). Nothing else without a
+# password; general sudo for deploy needs deploy's own password, which the human sets before lockdown.
+$DEPLOY_USER ALL=(root) NOPASSWD: $CTL_PATH
+$DEPLOY_USER ALL=($BUILD_USER) NOPASSWD: $DEPLOY_SH_ROOT
+RULES
   chown root:root "$tmp"; chmod 0440 "$tmp"
-  visudo -c -f "$tmp" > /dev/null || { rm -f "$tmp"; die "visudo rejected the sudoers rule"; }
+  visudo -c -f "$tmp" > /dev/null || { rm -f "$tmp"; die "visudo rejected the sudoers rules"; }
   mv -f "$tmp" "$f"
-  # Ubuntu 26.04 ships sudo-rs as sudo (ADR 0007): check that the rule really applies, not only that
-  # visudo accepts it (sudo-rs must read /etc/sudoers.d and grant exactly the wrapper without a password).
-  local which list
+  # Ubuntu 26.04 ships sudo-rs as sudo (ADR 0007): check that the rules really apply, not only that visudo accepts
+  # them: deploy shows exactly these two passwordless rules, and the build user shows none.
+  local which list nopw build
   which=$(sudo --version 2> /dev/null | head -1) || true
   list=$(sudo -l -U "$DEPLOY_USER" 2> /dev/null) || true
-  if ! grep -Eq "NOPASSWD:[[:space:]]*/usr/local/sbin/mindcraft-rotn-ctl([[:space:],]|$)" <<< "$list"; then
+  nopw=$(grep -c 'NOPASSWD:' <<< "$list") || true
+  if ! grep -Eq "\(root\) NOPASSWD:[[:space:]]*$CTL_PATH([[:space:],]|$)" <<< "$list" \
+    || ! grep -Eq "\($BUILD_USER\) NOPASSWD:[[:space:]]*$DEPLOY_SH_ROOT([[:space:],]|$)" <<< "$list" || [[ $nopw != 2 ]]; then
     rm -f "$f"
-    die "sudo (${which:-unknown}) does not show the rule for $DEPLOY_USER after install (sudo -l -U $DEPLOY_USER); removed it"
+    die "sudo (${which:-unknown}) does not show exactly the two rules for $DEPLOY_USER after install (sudo -l -U $DEPLOY_USER); removed them"
   fi
-  log "sudoers: $DEPLOY_USER may run only mindcraft-rotn-ctl without a password (${which:-sudo})"
+  if grep -Eq 'SETENV|env_keep' <<< "$list"; then
+    rm -f "$f"
+    die "sudo -l -U $DEPLOY_USER shows SETENV or env_keep; sudo must reset the environment for deploy's rules (ADR 0011); removed them"
+  fi
+  build=$(sudo -l -U "$BUILD_USER" 2> /dev/null) || true
+  if grep -Eq 'NOPASSWD:|\) ' <<< "$build"; then
+    die "sudo -l -U $BUILD_USER shows a rule; $BUILD_USER must have none (check /etc/sudoers and /etc/sudoers.d)"
+  fi
+  log "sudoers: $DEPLOY_USER may run only mindcraft-rotn-ctl, and deploy.sh as $BUILD_USER, without a password; $BUILD_USER has no rule (${which:-sudo})"
 }
 
 setup_packages() {
@@ -317,9 +377,23 @@ EOF
   fi
 }
 
+# /opt/mindcraft-rotn for the build user (ADR 0011), and root's copy of deploy.sh. On a host set up before ADR 0011,
+# everything under /opt/mindcraft-rotn (repo.git, releases, current, state, deploys.log) changes owner; chown -R -P
+# never follows a symlink (current is changed itself).
+setup_build_files() {
+  local base; base=$(p /opt/mindcraft-rotn)
+  dir_owned 2750 "$BUILD_USER:$SVC_USER" /opt/mindcraft-rotn
+  # A re-run finds a tree rotn-build may have changed: never follow its links (chown -R -h -P, from inside the real
+  # folder), and dir_owned refuses a releases/ that is a symlink.
+  ( cd -P -- "$base" && [[ $(pwd -P) == "$base" ]] && chown -R -h -P "$BUILD_USER:$SVC_USER" . ) \
+    || die "cannot give $base to $BUILD_USER (is it a symlink?)"
+  dir_owned 2750 "$BUILD_USER:$SVC_USER" /opt/mindcraft-rotn/releases
+  dir_owned 0755 root:root /usr/local/lib/mindcraft-rotn
+  file_owned 0755 root:root "$DEPLOY_SH_ROOT" < "$HERE/deploy.sh"
+}
+
 setup_files() {
-  dir_owned 0750 "$DEPLOY_USER:$SVC_USER" /opt/mindcraft-rotn
-  dir_owned 0750 "$DEPLOY_USER:$SVC_USER" /opt/mindcraft-rotn/releases
+  setup_build_files
   dir_owned 0750 "$SVC_USER:$SVC_USER" /var/lib/mindcraft-rotn
   dir_owned 0750 "$SVC_USER:$SVC_USER" /var/lib/mindcraft-rotn/bots
   dir_owned 0750 "root:$SVC_USER" /etc/mindcraft-rotn
@@ -457,9 +531,26 @@ EOF
   log "root login and password login are off; only $DEPLOY_USER with its key can log in"
 }
 
+# ---------------------------------------------------------------- build-user (ADR 0011)
+do_build_user() {
+  (( $# == 0 )) || die "build-user takes no options"
+  require_root_ubuntu
+  user_exists "$DEPLOY_USER" || die "no user $DEPLOY_USER: run setup first"
+  [[ -d $(p /opt/mindcraft-rotn/releases) ]] || die "/opt/mindcraft-rotn/releases is missing: run setup first"
+  setup_build_user
+  setup_build_files
+  file_owned 0755 root:root "$CTL_PATH" < "$HERE/mindcraft-rotn-ctl.sh"
+  setup_sudoers
+  # Retired (ADR 0011): every deploy goes through the build user, the human's too.
+  if [[ -e $(p /home/$DEPLOY_USER/deploy.sh) ]]; then rm -f "$(p /home/$DEPLOY_USER/deploy.sh)"; log "removed the retired /home/$DEPLOY_USER/deploy.sh"; fi
+  log "build-user done: $BUILD_USER owns /opt/mindcraft-rotn; $DEPLOY_SH_ROOT is root's; deploy runs it as $BUILD_USER:"
+  log "  sudo -u $BUILD_USER $DEPLOY_SH_ROOT status"
+}
+
 case ${1:-} in
   setup) shift; do_setup "$@" ;;
+  build-user) shift; do_build_user "$@" ;;
   add-bot) shift; do_add_bot "$@" ;;
   lockdown) shift; do_lockdown "$@" ;;
-  *) die "usage: bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] [--allow-fpr-override] | add-bot BOT [--mindserver-port N] | lockdown --turn-off-root-ssh --i-tested-deploy-login (not on this CX23)" ;;
+  *) die "usage: bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] [--allow-fpr-override] | build-user | add-bot BOT [--mindserver-port N] | lockdown --turn-off-root-ssh --i-tested-deploy-login (not on this CX23)" ;;
 esac

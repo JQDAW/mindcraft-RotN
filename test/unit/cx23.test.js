@@ -5,7 +5,7 @@
 import './isolate-tmp.mjs';
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -339,17 +339,30 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
     // The wrapper's paths are fixed (root runs it). The tests run a copy with exactly those two lines
     // pointed at the fake systemctl and a temp /etc; everything else is the real file.
     const SRC = fs.readFileSync(path.join(CX, 'mindcraft-rotn-ctl.sh'), 'utf8').replace(/\r/g, '');
-    const ctl = (args, extraEnv = {}, { bytes = null } = {}) => {
+    // reset-state's paths (ADR 0011) go under ROOT too: the bots' folders, root's archive parent, the lock, a fixed
+    // clock; the owner checks use this test's own user and uid (o.svcUser, o.archiveUid change them for a refusal).
+    const ctl = (args, extraEnv = {}, { bytes = null, svcUser = null, archiveUid = null, stat = null, lockWait = null } = {}) => {
         const etc = path.join(ROOT, 'etc', 'mindcraft-rotn');
         fs.mkdirSync(etc, { recursive: true });
         fs.writeFileSync(path.join(etc, 'rotn-bot.env'), 'x=1\n');
         fs.writeFileSync(path.join(etc, 'bot.env.example'), 'x=1\n');
+        const date = path.join(tmp, 'fake-date');
+        fs.writeFileSync(date, '#!/bin/bash\necho 20261119T120000Z\n', { mode: 0o755 });
         const copy = path.join(tmp, 'ctl-under-test.sh');
         const body = SRC.replace(/^PATH=.*$/m, '')
             .replace('readonly SYSTEMCTL=/usr/bin/systemctl', `readonly SYSTEMCTL=${posix(path.join(bin, 'systemctl'))}`)
             .replace('readonly JOURNALCTL=/usr/bin/journalctl', `readonly JOURNALCTL=${posix(path.join(bin, 'journalctl'))}`)
             .replace('readonly ETC_DIR=/etc/mindcraft-rotn', `readonly ETC_DIR=${fwd(etc)}`)
-            .replace('readonly JOURNAL_BYTES=8388608', `readonly JOURNAL_BYTES=${bytes ?? 8388608}`);
+            .replace('readonly JOURNAL_BYTES=8388608', `readonly JOURNAL_BYTES=${bytes ?? 8388608}`)
+            .replace('readonly DATE=/usr/bin/date', `readonly DATE=${posix(date)}`)
+            .replace('readonly LOCK=/run/mindcraft-rotn-ctl.lock', `readonly LOCK=${posix(path.join(tmp, 'ctl.lock'))}`)
+            .replace('readonly LOCK_WAIT_S=30', `readonly LOCK_WAIT_S=${lockWait ?? 30}`)
+            .replace('readonly LOCK_OWNER=root:deploy', `readonly LOCK_OWNER=${os.userInfo().username}:${spawnSync('id', ['-gn'], { encoding: 'utf8' }).stdout.trim()}`)
+            .replace('readonly BOTS_DIR=/var/lib/mindcraft-rotn/bots', `readonly BOTS_DIR=${fwd(rootFile('var/lib/mindcraft-rotn/bots'))}`)
+            .replace('readonly ARCHIVE_DIR=/var/lib/mindcraft-rotn-archive', `readonly ARCHIVE_DIR=${fwd(rootFile('var/lib/mindcraft-rotn-archive'))}`)
+            .replace('readonly SVC_USER=mindcraft-rotn', `readonly SVC_USER=${svcUser ?? os.userInfo().username}`)
+            .replace('readonly ARCHIVE_UID=0', `readonly ARCHIVE_UID=${archiveUid ?? process.getuid?.() ?? 0}`)
+            .replace('readonly STAT=/usr/bin/stat', `readonly STAT=${stat ?? '/usr/bin/stat'}`);
         assert.notEqual(body, SRC);
         fs.writeFileSync(copy, body);
         return run(copy, args, extraEnv);
@@ -472,6 +485,262 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
         }
         assert.equal(called('systemctl').length, 0);
     });
+
+    // ---- ADR 0011: reset-state BOT NAME
+    const BOTS = () => rootFile('var/lib/mindcraft-rotn/bots');
+    const ARCH = () => rootFile('var/lib/mindcraft-rotn-archive');
+    const STAMP_DIR = () => path.join(ARCH(), 'rotn-bot-20261119T120000Z');
+    // A state folder like FRCFLD's, plus the token cache next to it (outside bots/) and a file a symlink points at.
+    const KEPT = ['action-code', 'histories', 'last_profile.json'];
+    const MOVED = ['-rf', '.hidden', 'a b', 'agenda.json', 'control.json', 'link', 'memory.json', 'msa', 'screenshots', 'tasks.json'];
+    const stateTree = (name = 'ROTN_BOT') => {
+        const d = path.join(BOTS(), name);
+        fs.mkdirSync(path.join(d, 'action-code'), { recursive: true });
+        fs.writeFileSync(path.join(d, 'action-code', 'a.js'), 'code');
+        fs.mkdirSync(path.join(d, 'histories'));
+        fs.writeFileSync(path.join(d, 'histories', 'h.json'), '[]');
+        fs.writeFileSync(path.join(d, 'last_profile.json'), '{}');
+        for (const f of ['memory.json', 'agenda.json', 'control.json', 'tasks.json', '.hidden', '-rf', 'a b']) fs.writeFileSync(path.join(d, f), `${f}!`);
+        fs.mkdirSync(path.join(d, 'screenshots'));
+        fs.writeFileSync(path.join(d, 'screenshots', 's.png'), 'png');
+        fs.mkdirSync(path.join(d, 'msa'));   // a folder of that name inside bots/<NAME> is not the token cache: it moves
+        fs.writeFileSync(path.join(d, 'msa', 'x'), 'x');
+        const cache = rootFile('var/lib/mindcraft-rotn/rotn-bot/msa');
+        fs.mkdirSync(cache, { recursive: true });
+        fs.writeFileSync(path.join(cache, 'token-cache.json'), 'secret-ish');
+        const outside = path.join(tmp, 'outside.txt');
+        fs.writeFileSync(outside, 'not the bot\'s');
+        fs.symlinkSync(outside, path.join(d, 'link'));
+        return d;
+    };
+    // Every file (not folder) under a tree, with its content: what a reset must keep, somewhere.
+    const files = (dir) => {
+        const out = {};
+        const walk = (d, rel) => {
+            for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+                const p = path.join(d, e.name);
+                const r = rel ? `${rel}/${e.name}` : e.name;
+                if (e.isSymbolicLink()) out[r] = `-> ${fs.readlinkSync(p)}`;
+                else if (e.isDirectory()) walk(p, r);
+                else out[r] = fs.readFileSync(p, 'utf8');
+            }
+        };
+        if (fs.existsSync(dir)) walk(dir, '');
+        return out;
+    };
+    const INACTIVE = { FAKE_OUT_systemctl: 'inactive' };
+
+    test('reset-state (ADR 0011): an inactive unit\'s folder keeps exactly action-code, histories and last_profile.json; the rest moves, nothing is deleted', () => {
+        const d = stateTree();
+        const before = files(d);
+        const cacheBefore = files(rootFile('var/lib/mindcraft-rotn/rotn-bot'));
+        const r = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE);
+        assert.equal(r.code, 0, r.all);
+        assert.deepEqual(called('systemctl'), [['systemctl', 'show', '--no-pager', '--property=ActiveState', '--value', 'mindcraft-rotn@rotn-bot.service']]);
+        assert.deepEqual(fs.readdirSync(d).sort(), KEPT);
+        assert.deepEqual(fs.readdirSync(STAMP_DIR()).sort(), MOVED);
+        // Nothing deleted or changed: every file is in the folder or the archive, with its content.
+        const after = { ...files(d), ...files(STAMP_DIR()) };
+        assert.deepEqual(after, before);
+        assert.equal(fs.lstatSync(path.join(STAMP_DIR(), 'link')).isSymbolicLink(), true, 'the symlink itself moved');
+        assert.equal(fs.readFileSync(path.join(tmp, 'outside.txt'), 'utf8'), 'not the bot\'s', 'its target is untouched');
+        assert.deepEqual(files(rootFile('var/lib/mindcraft-rotn/rotn-bot')), cacheBefore, 'the token cache is never touched');
+        // root's 0700 parent, and a new 0700 archive folder named after the unit's bot and the UTC time
+        assert.equal(fs.statSync(ARCH()).mode & 0o7777, 0o700);
+        assert.equal(fs.statSync(STAMP_DIR()).mode & 0o7777, 0o700);
+        for (const n of KEPT) assert.match(r.stdout, new RegExp(`^  remains: ${n}$`, 'm'));
+        assert.match(r.stdout, /^ {2}moved: a\\ b$/m, 'odd names are printed quoted');
+        assert.match(r.stdout, new RegExp(`^archive: ${STAMP_DIR().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+        // The same folder again: nothing left to move, no second archive.
+        const again = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE);
+        assert.equal(again.code, 0, again.all);
+        assert.match(again.stdout, /nothing to move .* \(no archive made\)/);
+        assert.deepEqual(fs.readdirSync(ARCH()), ['rotn-bot-20261119T120000Z']);
+    });
+
+    test('reset-state: a failed unit is allowed; every other state is refused before anything moves (exit 2)', () => {
+        stateTree();
+        for (const st of ['active', 'activating', 'deactivating', 'reloading', 'maintenance', 'refreshing', '']) {
+            const r = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], { FAKE_OUT_systemctl: st });
+            assert.equal(r.code, 2, st);
+            assert.match(r.stderr, /not inactive or failed: stop it first \(nothing moved\)/, st);
+        }
+        assert.equal(ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], { FAKE_RC_systemctl: '1' }).code, 2, 'an unreadable state refuses');
+        assert.ok(!fs.existsSync(ARCH()), 'no archive parent was made');
+        assert.equal(fs.readdirSync(path.join(BOTS(), 'ROTN_BOT')).length, KEPT.length + MOVED.length);
+        const failed = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], { FAKE_OUT_systemctl: 'failed' });
+        assert.equal(failed.code, 0, failed.all);
+    });
+
+    test('reset-state: exact word count, the bot regex and its env file, the profile name regex; refused before systemctl', () => {
+        stateTree();
+        for (const args of [['reset-state'], ['reset-state', 'rotn-bot'], ['reset-state', 'rotn-bot', 'ROTN_BOT', 'x'], ['reset-state', 'other-bot', 'ROTN_BOT'],
+            ['reset-state', 'Rotn-bot', 'ROTN_BOT'], ['reset-state', 'rotn-bot', '../x'], ['reset-state', 'rotn-bot', 'A-B'], ['reset-state', 'rotn-bot', 'A.B'],
+            ['reset-state', 'rotn-bot', ''], ['reset-state', 'rotn-bot', 'A'.repeat(17)], ['reset-state', 'rotn-bot', 'ROTN_BOT/'], ['reset-state', 'rotn-bot', '*'],
+            ['reset-state', 'rotn-bot', 'ROTN BOT'], ['reset-state', 'rotn-bot', '$(id)']]) {
+            assert.equal(ctl(args, INACTIVE).code, 2, JSON.stringify(args));
+        }
+        assert.equal(called('systemctl').length, 0);
+        assert.ok(!fs.existsSync(ARCH()));
+    });
+
+    test('reset-state: a symlinked, missing, foreign-owned folder, or a symlinked bots/, is refused (nothing moved)', () => {
+        // the folder is a symlink to a real folder elsewhere
+        const elsewhere = path.join(tmp, 'elsewhere');
+        fs.mkdirSync(elsewhere);
+        fs.writeFileSync(path.join(elsewhere, 'memory.json'), 'x');
+        fs.mkdirSync(BOTS(), { recursive: true });
+        fs.symlinkSync(elsewhere, path.join(BOTS(), 'LINKED'));
+        const linked = ctl(['reset-state', 'rotn-bot', 'LINKED'], INACTIVE);
+        assert.equal(linked.code, 2);
+        assert.match(linked.stderr, /is not a real directory/);
+        assert.deepEqual(fs.readdirSync(elsewhere), ['memory.json']);
+        // missing, and a plain file of that name
+        assert.match(ctl(['reset-state', 'rotn-bot', 'NOBODY'], INACTIVE).stderr, /is not a real directory/);
+        fs.writeFileSync(path.join(BOTS(), 'AFILE'), 'x');
+        assert.equal(ctl(['reset-state', 'rotn-bot', 'AFILE'], INACTIVE).code, 2);
+        // owned by someone else than the bot user
+        stateTree();
+        const foreign = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE, { svcUser: 'someone-else' });
+        assert.equal(foreign.code, 2);
+        assert.match(foreign.stderr, /is not owned by someone-else \(nothing moved\)/);
+        // bots/ itself a symlink
+        const realBots = rootFile('var/lib/real-bots');
+        fs.renameSync(BOTS(), realBots);
+        fs.symlinkSync(realBots, BOTS());
+        const botsLink = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE);
+        assert.equal(botsLink.code, 2);
+        assert.match(botsLink.stderr, /bots is not a real directory/);
+        assert.equal(fs.readdirSync(path.join(realBots, 'ROTN_BOT')).length, KEPT.length + MOVED.length);
+        assert.ok(!fs.existsSync(ARCH()), 'no archive parent was made');
+    });
+
+    test('reset-state: the archive parent must be a real folder, root\'s (the archive uid) and 0700; an existing archive name or a link there refuses', () => {
+        const d = stateTree();
+        const n = () => fs.readdirSync(d).length;
+        // a symlink as the parent: nothing is written through it
+        const target = path.join(tmp, 'archive-target');
+        fs.mkdirSync(target, { mode: 0o700 });
+        fs.mkdirSync(path.dirname(ARCH()), { recursive: true });
+        fs.symlinkSync(target, ARCH());
+        assert.match(ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE).stderr, /mindcraft-rotn-archive is not a real directory/);
+        assert.deepEqual(fs.readdirSync(target), []);
+        fs.unlinkSync(ARCH());
+        // wrong mode, wrong owner
+        fs.mkdirSync(ARCH(), { mode: 0o755 });
+        fs.chmodSync(ARCH(), 0o755);
+        assert.match(ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE).stderr, /must be root's and 0700/);
+        fs.chmodSync(ARCH(), 0o700);
+        assert.match(ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE, { archiveUid: 4242 }).stderr, /must be root's and 0700/);
+        // the new archive's name already exists (a folder, or a symlink to elsewhere): mkdir fails, nothing moves
+        fs.mkdirSync(STAMP_DIR());
+        assert.match(ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE).stderr, /cannot create .*rotn-bot-20261119T120000Z/);
+        fs.rmdirSync(STAMP_DIR());
+        fs.symlinkSync(target, STAMP_DIR());
+        assert.equal(ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE).code, 2);
+        assert.deepEqual(fs.readdirSync(target), [], 'nothing written through the link');
+        assert.equal(n(), KEPT.length + MOVED.length, 'nothing moved');
+    });
+
+    test('reset-state: another device for the archive parent refuses (a mv there would copy and delete)', () => {
+        stateTree();
+        // A stat that reports another device number for the archive parent only.
+        const fakeStat = path.join(tmp, 'fake-stat');
+        fs.writeFileSync(fakeStat, `#!/bin/bash\nif [[ $2 == %d && $4 == '${fwd(ARCH())}' ]]; then echo 99999; exit 0; fi\nexec /usr/bin/stat "$@"\n`, { mode: 0o755 });
+        const r = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE, { stat: posix(fakeStat) });
+        assert.equal(r.code, 2, r.all);
+        assert.match(r.stderr, /on different devices: a move could copy and delete \(nothing moved\)/);
+        assert.equal(fs.readdirSync(path.join(BOTS(), 'ROTN_BOT')).length, KEPT.length + MOVED.length);
+    });
+
+    test('reset-state and start take the same lock: while it is held, both refuse after the wait and change nothing', () => {
+        stateTree();
+        const lock = path.join(tmp, 'ctl.lock');
+        const holder = spawn('flock', [lock, 'sleep', '20'], { stdio: 'ignore' });
+        try {
+            const deadline = Date.now() + 5000;
+            while (spawnSync('flock', ['-n', lock, 'true']).status === 0 && Date.now() < deadline) spawnSync('sleep', ['0.1']);
+            const reset = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE, { lockWait: 1 });
+            assert.equal(reset.code, 2);
+            assert.match(reset.stderr, /another start, reset-state or deploy holds/);
+            const start = ctl(['start', 'rotn-bot'], {}, { lockWait: 1 });
+            assert.equal(start.code, 2);
+            assert.equal(called('systemctl').length, 0, 'neither reached systemctl');
+        } finally { holder.kill(); }
+        assert.equal(fs.readdirSync(path.join(BOTS(), 'ROTN_BOT')).length, KEPT.length + MOVED.length);
+    });
+
+    test('#485 review: bots/ swapped for a link to a foreign folder in the middle of the checks moves nothing out of that folder', () => {
+        // The reviewer's attack: while root checks bots/NAME, the bot user swaps bots/ for a symlink to a folder it does
+        // not own (one the fake stat reports as someone else's) with a NAME inside. The fake stat makes the swap at its
+        // Nth call, for every N from 1 to 4, so it lands between any two of the ctl's checks.
+        const victim = path.join(tmp, 'foreign');
+        const realBots = rootFile('var/lib/mindcraft-rotn/bots-real');
+        const count = path.join(tmp, 'stat-calls');
+        const fakeStat = path.join(tmp, 'swap-stat');
+        fs.writeFileSync(fakeStat, [
+            '#!/bin/bash',
+            `n=$(( $(cat '${fwd(count)}' 2>/dev/null || echo 0) + 1 )); echo "$n" > '${fwd(count)}'`,
+            // absolute paths: ln is one of this suite's fakes
+            `if (( n == SWAP_AT )); then /usr/bin/mv '${fwd(BOTS())}' '${fwd(realBots)}'; /usr/bin/ln -s '${fwd(victim)}' '${fwd(BOTS())}'; fi`,
+            'out=$(/usr/bin/stat "$@") || exit $?',
+            `p=$(cd -P -- "\${@: -1}" 2>/dev/null && pwd -P)`,
+            `if [[ $p == '${fwd(victim)}'* ]]; then out=\${out/$(/usr/bin/id -un)/someone-else}; fi`,
+            'printf "%s\\n" "$out"',
+        ].join('\n'), { mode: 0o755 });
+        for (const swapAt of [1, 2, 3, 4]) {
+            for (const d of [BOTS(), realBots, victim, ARCH()]) fs.rmSync(d, { recursive: true, force: true });
+            fs.rmSync(count, { force: true });
+            stateTree();
+            fs.mkdirSync(path.join(victim, 'ROTN_BOT'), { recursive: true });
+            for (const f of ['shadow', 'memory.json', 'histories']) fs.writeFileSync(path.join(victim, 'ROTN_BOT', f), 'foreign data');
+            const before = files(victim);
+            const r = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], { ...INACTIVE, SWAP_AT: String(swapAt) }, { stat: posix(fakeStat) });
+            assert.deepEqual(files(victim), before, `swap at stat call ${swapAt}: nothing moved out of the foreign folder (${r.all})`);
+            if (r.code === 0) assert.deepEqual(fs.readdirSync(path.join(fs.existsSync(realBots) ? realBots : BOTS(), 'ROTN_BOT')).sort(), KEPT, `swap at ${swapAt}`);
+            else assert.equal(r.code, 2, `swap at ${swapAt}: ${r.all}`);
+        }
+    });
+
+    test('#485 review: a bots/ or folder entered through a link to a foreign-owned folder is refused by the one stat of "." (owner)', () => {
+        stateTree();
+        // bots/NAME is a real folder, but the stat of the entered "." says root's: refused, nothing moved.
+        const fakeStat = path.join(tmp, 'owner-stat');
+        fs.writeFileSync(fakeStat, `#!/bin/bash\nout=$(/usr/bin/stat "$@") || exit $?\nif [[ $2 == '%U %d:%i' ]]; then out=\${out/$(/usr/bin/id -un)/someone-else}; fi\nprintf '%s\\n' "$out"\n`, { mode: 0o755 });
+        const r = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE, { stat: posix(fakeStat) });
+        assert.equal(r.code, 2, r.all);
+        assert.match(r.stderr, /ROTN_BOT is not owned by/);
+        const botsStat = path.join(tmp, 'bots-owner-stat');
+        fs.writeFileSync(botsStat, `#!/bin/bash\nout=$(/usr/bin/stat "$@") || exit $?\nif [[ $2 == '%U %d' ]]; then out=\${out/$(/usr/bin/id -un)/someone-else}; fi\nprintf '%s\\n' "$out"\n`, { mode: 0o755 });
+        const b = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE, { stat: posix(botsStat) });
+        assert.equal(b.code, 2, b.all);
+        assert.match(b.stderr, /bots is not owned by/);
+        assert.equal(fs.readdirSync(path.join(BOTS(), 'ROTN_BOT')).length, KEPT.length + MOVED.length);
+    });
+
+    test('list makes the shared lock file (the gate opens it read-only during a deploy): owner set, mode 0640', () => {
+        const lock = path.join(tmp, 'ctl.lock');
+        assert.ok(!fs.existsSync(lock));
+        assert.equal(ctl(['list']).code, 0);
+        assert.equal(fs.statSync(lock).mode & 0o777, 0o640);
+        assert.match(SRC, /^readonly LOCK_OWNER=root:deploy$/m);
+    });
+
+    test('reset-state, the source: fixed paths, exactly three kept entries, rename only (mv -T), no rm, no eval, never the env file', () => {
+        for (const re of [/^readonly MV=\/usr\/bin\/mv$/m, /^readonly MKDIR=\/usr\/bin\/mkdir$/m, /^readonly FLOCK=\/usr\/bin\/flock$/m,
+            /^readonly LOCK=\/run\/mindcraft-rotn-ctl\.lock /m, /^readonly BOTS_DIR=\/var\/lib\/mindcraft-rotn\/bots$/m,
+            /^readonly ARCHIVE_DIR=\/var\/lib\/mindcraft-rotn-archive$/m, /^readonly SVC_USER=mindcraft-rotn$/m, /^readonly ARCHIVE_UID=0$/m,
+            /^readonly KEEP=\(action-code histories last_profile\.json\)$/m, /^readonly NAME_RE='\^\[A-Za-z0-9_\]\{1,16\}\$'$/m]) {
+            assert.match(SRC, re);
+        }
+        const fn = SRC.slice(SRC.indexOf('reset_state() {'), SRC.indexOf('\n}\n', SRC.indexOf('reset_state() {')));
+        const code = fn.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+        assert.ok(!/\$RM\b|\brm\b/.test(code), 'no removal');
+        assert.ok(!/\beval\b|\bsource\b/.test(code));
+        assert.ok(!/ETC_DIR|\.env\b/.test(code), 'the env file is never read');
+        assert.deepEqual(code.match(/"\$MV"[^\n]*/g), ['"$MV" -T -- "./$n" "$archive/$n" || die "moving $n failed; what moved so far is in $archive"']);
+        assert.match(SRC, /if \[\[ \$action == start \|\| \$action == restart \]\]; then take_lock; fi/);
+    });
 });
 
 // ---------------------------------------------------------------- bootstrap.sh
@@ -502,10 +771,25 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         // key: exactly the given line, 0600, owned by deploy
         assert.equal(read('home/deploy/.ssh/authorized_keys'), `${KEY}\n`);
         assert.ok(called('chmod').some((c) => c[1] === '0700' && c[2].endsWith('/home/deploy/.ssh')));
-        // sudoers: only the wrapper, checked by visudo before it is moved into place
+        // sudoers: only the wrapper, and root's deploy.sh as the build user (ADR 0011), checked by visudo before it is moved into place
         const sudoers = read('etc/sudoers.d/mindcraft-rotn');
-        assert.deepEqual(sudoers.split('\n').filter((l) => l && !l.startsWith('#')), ['deploy ALL=(root) NOPASSWD: /usr/local/sbin/mindcraft-rotn-ctl']);
+        assert.deepEqual(sudoers.split('\n').filter((l) => l && !l.startsWith('#')), ['deploy ALL=(root) NOPASSWD: /usr/local/sbin/mindcraft-rotn-ctl',
+            'deploy ALL=(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh']);
         assert.ok(called('visudo').length === 1 && called('chmod').some((c) => c[1] === '0440'));
+        // ADR 0011: the build user (no login, own 0700 home, locked, never in sudo or the bots' group), cron and at denied,
+        // /opt/mindcraft-rotn setgid for it, root's copy of deploy.sh
+        assert.ok(called('useradd').some((c) => c.join(' ') === 'useradd --system --home-dir /var/lib/rotn-build --no-create-home --shell /usr/sbin/nologin rotn-build'));
+        assert.ok(called('passwd').some((c) => c.join(' ') === 'passwd --lock rotn-build'));
+        assert.ok(!called('usermod').some((c) => c.at(-1) === 'rotn-build'), 'rotn-build joins no group');
+        assert.ok(called('chmod').some((c) => c[1] === '0700' && c[2].endsWith('/var/lib/rotn-build')));
+        assert.equal(read('etc/cron.deny'), 'rotn-build\nmindcraft-rotn\n');
+        assert.equal(read('etc/at.deny'), 'rotn-build\nmindcraft-rotn\n');
+        for (const d of ['/opt/mindcraft-rotn', '/opt/mindcraft-rotn/releases']) {
+            assert.ok(called('chmod').some((c) => c[1] === '2750' && c[2].endsWith(d)), d);
+            assert.ok(called('chown').some((c) => c.join(' ') === `chown -h rotn-build:mindcraft-rotn ${fwd(rootFile(d.slice(1)))}`), d);
+        }
+        assert.equal(read('usr/local/lib/mindcraft-rotn/deploy.sh'), fs.readFileSync(path.join(CX, 'deploy.sh'), 'utf8').replace(/\r/g, ''));
+        assert.ok(called('chmod').some((c) => c[1] === '0755' && c[2].includes('/usr/local/lib/mindcraft-rotn/deploy.sh.tmp.')), 'root:root 0755 (file_owned: set on the temp file, then renamed)');
         // unattended security upgrades
         assert.equal(read('etc/apt/apt.conf.d/20auto-upgrades'), 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n');
         // G4 step 0 C1: the one list (gl's X libraries in it), with no recommends, exactly as ci-ubuntu-2604 installs it.
@@ -700,13 +984,109 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         ubuntu();
         const r = boot(['setup', '--deploy-key-file', keyFile()], { FAKE_SUDO_IGNORES_DROPIN: '1' });
         assert.equal(r.code, 1);
-        assert.match(r.stderr, /sudo \(sudo-rs 0\.2\.8\) does not show the rule for deploy after install \(sudo -l -U deploy\); removed it/);
+        assert.match(r.stderr, /sudo \(sudo-rs 0\.2\.8\) does not show exactly the two rules for deploy after install \(sudo -l -U deploy\); removed them/);
         assert.ok(!exists('etc/sudoers.d/mindcraft-rotn'));
         assert.equal(called('ufw').length + sshdChecks(), 0, 'the firewall and sshd are untouched (only the read-only preflight sshd -T ran)');
         assert.ok(called('sudo').some((c) => c.join(' ') === 'sudo -l -U deploy'));
         const ok = boot(['setup', '--deploy-key-file', keyFile()]);
         assert.equal(ok.code, 0, ok.all);
-        assert.match(ok.stderr, /sudoers: deploy may run only mindcraft-rotn-ctl without a password \(sudo-rs 0\.2\.8\)/);
+        assert.match(ok.stderr, /sudoers: deploy may run only mindcraft-rotn-ctl, and deploy\.sh as rotn-build, without a password; rotn-build has no rule \(sudo-rs 0\.2\.8\)/);
+    });
+
+    test('ADR 0011 sudo checks: a third passwordless rule, SETENV or env_keep, or any rule for rotn-build stops setup', () => {
+        const cases = [
+            ['    (ALL) NOPASSWD: /usr/bin/id', /does not show exactly the two rules for deploy/, true],
+            ['    (rotn-build) SETENV: NOPASSWD: /bin/true', /does not show exactly the two rules|shows SETENV or env_keep/, true],
+            ['Matching Defaults entries for deploy: env_reset, env_keep+=MINDCRAFT_ROTN_REPO_URL', /shows SETENV or env_keep/, true],
+        ];
+        for (const [extra, re, removed] of cases) {
+            ubuntu();
+            const r = boot(['setup', '--deploy-key-file', keyFile()], { FAKE_SUDO_EXTRA_RULES: extra });
+            assert.equal(r.code, 1, extra);
+            assert.match(r.stderr, re, extra);
+            if (removed) assert.ok(!exists('etc/sudoers.d/mindcraft-rotn'), extra);
+            assert.equal(called('ufw').length + sshdChecks(), 0, 'stopped before ufw and sshd');
+        }
+    });
+
+    test('ADR 0011: rotn-build in group sudo, admin or mindcraft-rotn stops setup', () => {
+        for (const groups of ['rotn-build sudo', 'rotn-build admin', 'rotn-build mindcraft-rotn']) {
+            ubuntu();
+            const r = boot(['setup', '--deploy-key-file', keyFile()], { FAKE_ID_GROUPS: groups });
+            assert.equal(r.code, 1, groups);
+            assert.match(r.stderr, /rotn-build is in group sudo, admin or mindcraft-rotn/, groups);
+        }
+    });
+
+    test('build-user (ADR 0011, a host set up before it): build user, ownership, root\'s deploy.sh, the ctl, two sudo rules; the retired ~deploy/deploy.sh is removed; cron.deny kept', () => {
+        ubuntu();
+        // Not before setup.
+        const early = boot(['build-user']);
+        assert.equal(early.code, 1);
+        assert.match(early.stderr, /run setup first/);
+        assert.equal(boot(['build-user', '--x']).code, 1);
+        // A host as GO 2 left it, with deploy's old copy of deploy.sh and a cron.deny of its own.
+        fs.mkdirSync(rootFile('opt/mindcraft-rotn/releases/rotn-v0.1.0-abc'), { recursive: true });
+        fs.mkdirSync(rootFile('home/deploy'), { recursive: true });
+        fs.writeFileSync(rootFile('home/deploy/deploy.sh'), 'old');
+        fs.mkdirSync(rootFile('etc'), { recursive: true });
+        fs.writeFileSync(rootFile('etc/cron.deny'), 'games\n');
+        const r = boot(['build-user'], { FAKE_RC_getent: '0' });
+        assert.equal(r.code, 0, r.all);
+        assert.ok(called('chown').some((c) => c.join(' ') === `chown -R -h -P rotn-build:mindcraft-rotn ${fwd(rootFile('opt/mindcraft-rotn'))}`));
+        assert.ok(called('chmod').some((c) => c[1] === '2750' && c[2].endsWith('/opt/mindcraft-rotn')));
+        assert.equal(read('etc/cron.deny'), 'games\nrotn-build\nmindcraft-rotn\n');
+        assert.equal(read('etc/at.deny'), 'rotn-build\nmindcraft-rotn\n');
+        assert.ok(!exists('home/deploy/deploy.sh'), 'retired');
+        assert.match(r.stderr, /removed the retired \/home\/deploy\/deploy\.sh/);
+        assert.equal(read('usr/local/sbin/mindcraft-rotn-ctl'), fs.readFileSync(path.join(CX, 'mindcraft-rotn-ctl.sh'), 'utf8').replace(/\r/g, ''));
+        assert.equal(read('usr/local/lib/mindcraft-rotn/deploy.sh'), fs.readFileSync(path.join(CX, 'deploy.sh'), 'utf8').replace(/\r/g, ''));
+        assert.equal(read('etc/sudoers.d/mindcraft-rotn').split('\n').filter((l) => l && !l.startsWith('#')).length, 2);
+        assert.match(r.stderr, /sudo -u rotn-build \/usr\/local\/lib\/mindcraft-rotn\/deploy\.sh status/);
+        // Again: nothing doubled.
+        assert.equal(boot(['build-user'], { FAKE_RC_getent: '0' }).code, 0);
+        assert.equal(read('etc/cron.deny'), 'games\nrotn-build\nmindcraft-rotn\n');
+        assert.equal(read('etc/at.deny'), 'rotn-build\nmindcraft-rotn\n');
+        assert.equal(called('useradd').filter((c) => c.at(-1) === 'rotn-build').length, 0, 'getent finds it: no useradd');
+    });
+
+    test('#485 review: a re-run never follows a symlink as root: releases/ or /opt/mindcraft-rotn a link, or a link on the path, refuses', () => {
+        ubuntu();
+        fs.mkdirSync(rootFile('home/deploy'), { recursive: true });
+        const victim = path.join(tmp, 'victim');
+        fs.mkdirSync(victim);
+        fs.writeFileSync(path.join(victim, 'f'), 'x');
+        // releases/ swapped for a link (rotn-build owns /opt/mindcraft-rotn after the first run)
+        fs.mkdirSync(rootFile('opt/mindcraft-rotn'), { recursive: true });
+        fs.symlinkSync(victim, rootFile('opt/mindcraft-rotn/releases'));
+        const r = boot(['build-user'], { FAKE_RC_getent: '0' });
+        assert.equal(r.code, 1, r.all);
+        assert.match(r.stderr, /opt\/mindcraft-rotn\/releases is a symlink; refusing to change it as root|releases is missing: run setup first/);
+        // with releases/ a link to a real folder, the build-user precheck passes; dir_owned must still refuse
+        fs.mkdirSync(rootFile('opt/mindcraft-rotn-real-releases'));
+        fs.unlinkSync(rootFile('opt/mindcraft-rotn/releases'));
+        fs.symlinkSync(victim, rootFile('opt/mindcraft-rotn/releases'));
+        const again = boot(['setup', '--deploy-key-file', keyFile()]);
+        assert.equal(again.code, 1, again.all);
+        assert.match(again.stderr, /opt\/mindcraft-rotn\/releases is a symlink; refusing to change it as root/);
+        // /opt/mindcraft-rotn itself a link
+        fs.rmSync(rootFile('opt/mindcraft-rotn'), { recursive: true });
+        fs.symlinkSync(victim, rootFile('opt/mindcraft-rotn'));
+        const top = boot(['setup', '--deploy-key-file', keyFile()]);
+        assert.equal(top.code, 1, top.all);
+        assert.match(top.stderr, /opt\/mindcraft-rotn is a symlink; refusing to change it as root/);
+        // a link on the path (here /opt itself): pwd -P differs, refused
+        fs.unlinkSync(rootFile('opt/mindcraft-rotn'));
+        fs.rmSync(rootFile('opt'), { recursive: true });
+        const realOpt = path.join(tmp, 'real-opt');
+        fs.mkdirSync(path.join(realOpt, 'mindcraft-rotn', 'releases'), { recursive: true });
+        fs.symlinkSync(realOpt, rootFile('opt'));
+        const onPath = boot(['setup', '--deploy-key-file', keyFile()]);
+        assert.equal(onPath.code, 1, onPath.all);
+        assert.match(onPath.stderr, /opt\/mindcraft-rotn is not the folder it should be \(a symlink on its path\?\)/);
+        // nothing of the victim was touched: no chown or chmod ever ran on it
+        for (const c of [...called('chown'), ...called('chmod')]) assert.ok(!c.some((a) => a.startsWith(fwd(victim)) || a.startsWith(fwd(realOpt))), c.join(' '));
+        assert.deepEqual(fs.readdirSync(victim), ['f']);
     });
 
     test('ufw: never enabled when the SSH rule did not take; an enable that does not take stops setup; sshd is untouched', () => {
@@ -1020,11 +1400,21 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         fs.mkdirSync(rootFile('opt/mindcraft-rotn/releases'), { recursive: true });
     };
     const BASE = 'opt/mindcraft-rotn';
+    // The user deploy.sh runs as comes from the fake id, its HOME from the fake getent (ADR 0011: from the passwd
+    // database, never the caller's HOME); FAKE_OUT_id=rotn-build runs it as the build user.
     const env = () => ({ MINDCRAFT_ROTN_REPO_URL: fwd(src), HEALTH_WAIT_S: '0', NPM_CI_RETRY_S: '0', FAKE_BOTS: 'rotn-bot idle-bot', FAKE_ENABLED: 'rotn-bot',
-        FAKE_CURRENT_FILE: fwd(rootFile(`${BASE}/current`)) });
-    const dep = (args, extra = {}) => {
+        FAKE_CURRENT_FILE: fwd(rootFile(`${BASE}/current`)), FAKE_OUT_id: 'tester', FAKE_OUT_getent: `tester:x:1000:1000::${fwd(path.join(tmp, 'home-tester'))}:/bin/bash` });
+    const DEPLOY_SRC = fs.readFileSync(path.join(CX, 'deploy.sh'), 'utf8');
+    const myGroup = spawnSync('id', ['-gn'], { encoding: 'utf8' }).stdout.trim();
+    // deploy.sh fixes PATH to /usr/bin:/bin (node, npm and git there on the CX23): the copy under test drops that one
+    // line, so the fakes (and this machine's node) are found; its group is this test user's (the setgid check).
+    const dep = (args, extra = {}, { group = myGroup } = {}) => {
         fs.rmSync(path.join(bin, 'node'), { force: true }); // deploy.sh evaluates settings.js with the real node
-        return run(path.join(CX, 'deploy.sh'), args, { ...env(), ...extra });
+        const copy = path.join(tmp, 'deploy-under-test.sh');
+        const body = DEPLOY_SRC.replace(/^PATH=\/usr\/bin:\/bin$/m, '').replace(/^SVC_GROUP=mindcraft-rotn$/m, `SVC_GROUP=${group}`);
+        assert.equal(body.length < DEPLOY_SRC.length, true);
+        fs.writeFileSync(copy, body);
+        return run(copy, args, { ...env(), ...extra });
     };
     const state = () => Object.fromEntries(read(`${BASE}/state`).trim().split('\n').map((l) => l.split('=')));
     const releases = () => fs.readdirSync(rootFile(`${BASE}/releases`)).sort();
@@ -1046,7 +1436,7 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         const sudo = called('sudo').map((c) => c.slice(3).join(' '));
         assert.deepEqual(sudo, ['list', 'is-enabled rotn-bot', 'is-enabled idle-bot', 'restart rotn-bot', 'is-active rotn-bot']);
         assert.ok(called('sudo').every((c) => c[1] === '-n' && c[2] === '/usr/local/sbin/mindcraft-rotn-ctl'), 'only the wrapper, non-interactive');
-        assert.ok(called('chgrp').some((c) => c.join(' ').startsWith('chgrp -R mindcraft-rotn')));
+        assert.ok(called('chgrp').some((c) => c.join(' ').startsWith(`chgrp -R ${myGroup}`)), 'the copy under test uses this user\'s group for mindcraft-rotn');
         assert.match(read(`${BASE}/deploys.log`), /deploy rotn-v0\.0\.1 [0-9a-f]{40} rotn-v0\.0\.1-[0-9a-f]{12} ok bots=rotn-bot/);
     });
 
@@ -1157,5 +1547,91 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         const left = releases();
         assert.equal(left.length, 2);
         assert.ok(left.every((d) => /^rotn-v0\.0\.[23]-/.test(d)), left.join(','));
+    });
+
+    // ---- ADR 0011: the build user
+    test('--no-restart deploy never calls the ctl (no list, no restart, no health check): rotn-build has no sudo rule', () => {
+        setupRepo();
+        const r = dep(['--no-restart', 'deploy', 'rotn-v0.0.1']);
+        assert.equal(r.code, 0, r.all);
+        assert.equal(called('sudo').length, 0, 'no sudo at all');
+        assert.equal(state().current, `rotn-v0.0.1-${git(src, 'rev-parse', 'rotn-v0.0.1').slice(0, 12)}`);
+        assert.match(r.stderr, /deployed rotn-v0\.0\.1-[0-9a-f]{12} \(bots restarted: none; --no-restart\)/);
+        assert.ok(exists(`${BASE}/releases/${state().current}/.release-ok`));
+        assert.ok(!exists(`${BASE}/releases/${state().current}/.release-ok.new`));
+        assert.match(read(`${BASE}/deploys.log`), /deploy rotn-v0\.0\.1 [0-9a-f]{40} \S+ ok bots=none/);
+    });
+
+    test('check TAG: fetch, then the tag on develop and its commit; builds nothing; a tag off develop or a bad shape is refused', () => {
+        setupRepo();
+        const sha = git(src, 'rev-parse', 'rotn-v0.0.2');
+        const r = dep(['check', 'rotn-v0.0.2']);
+        assert.equal(r.code, 0, r.all);
+        assert.equal(r.stdout, `tag=rotn-v0.0.2 commit=${sha} on-develop=yes release=rotn-v0.0.2-${sha.slice(0, 12)}\n`);
+        assert.deepEqual(releases(), [], 'no release built');
+        assert.equal(called('npm').length + called('sudo').length, 0);
+        assert.ok(!exists(`${BASE}/state`), 'nothing switched');
+        const side = dep(['check', 'rotn-v0.9.0-side']);
+        assert.equal(side.code, 1);
+        assert.match(side.stderr, /is not on develop/);
+        for (const args of [['check'], ['check', 'v0.1.0'], ['check', 'rotn-v0.0.2', 'x'], ['--no-restart', 'check', 'rotn-v0.0.2'], ['check', 'rotn-v0.0.9']]) {
+            assert.equal(dep(args).code, 1, args.join(' '));
+        }
+        assert.deepEqual(releases(), []);
+    });
+
+    test('as rotn-build, only status, check TAG and --no-restart deploy TAG; rollback and a restarting deploy are refused (the sudoers rule allows any arguments)', () => {
+        setupRepo();
+        const asBuild = { FAKE_OUT_id: 'rotn-build' };
+        for (const args of [['rollback'], ['deploy', 'rotn-v0.0.1'], ['deploy', 'rotn-v0.0.1', '--force'], ['--no-restart', 'deploy', 'rotn-v0.0.1', '--force'],
+            ['--no-restart', 'rollback'], ['--no-restart', 'status'], ['status', 'x'], ['check'], ['check', 'rotn-v0.0.1', 'x'], ['--no-restart'], [], ['x']]) {
+            const r = dep(args, asBuild);
+            assert.equal(r.code, 1, args.join(' '));
+            assert.match(r.stderr, /as rotn-build only: status \| check TAG \| --no-restart deploy TAG/, args.join(' '));
+        }
+        assert.equal(calls().filter((c) => !['id', 'getent'].includes(c[0])).length, 0, 'refused before anything ran');
+        // The allowed shapes pass the shape check; as the build user the environment's test hooks (ROOT, the repo URL,
+        // the timings) are ignored, so here they look for the real /opt/mindcraft-rotn, which this machine lacks.
+        for (const args of [['status'], ['check', 'rotn-v0.0.1'], ['--no-restart', 'deploy', 'rotn-v0.0.1']]) {
+            const r = dep(args, asBuild);
+            assert.equal(r.code, 1, args.join(' '));
+            assert.match(r.stderr, /\/opt\/mindcraft-rotn\/releases is missing/, `${args.join(' ')}: ROOT from the environment is ignored`);
+            assert.ok(!r.stderr.includes(fwd(ROOT)), 'never the test ROOT');
+        }
+        assert.match(DEPLOY_SRC, /^if \[\[ \$\(id -un\) == "\$BUILD_USER" \]\]; then unset ROOT MINDCRAFT_ROTN_REPO_URL HEALTH_WAIT_S KEEP_RELEASES NPM_CI_RETRY_S; fi$/m);
+    });
+
+    test('a release with anything outside the bots\' group is refused (a folder lost its setgid bit); nothing is left behind', () => {
+        setupRepo();
+        const other = myGroup === 'root' ? 'nogroup' : 'root';
+        const r = dep(['--no-restart', 'deploy', 'rotn-v0.0.1'], {}, { group: other });
+        assert.equal(r.code, 1, r.all);
+        assert.match(r.stderr, new RegExp(`not in group ${other}: .* \\(a folder lost its setgid bit\\?\\)`));
+        assert.match(r.stderr, new RegExp(`part of the release is not in group ${other}; the bot could not read it; refusing`));
+        assert.deepEqual(releases(), [], 'no release and no temp folder left');
+        assert.ok(!exists(`${BASE}/state`));
+    });
+
+    test('the source: PATH fixed to /usr/bin:/bin, HOME from the passwd database, the build user, .release-ok made before the chmod', () => {
+        assert.match(DEPLOY_SRC, /^set -Eeuo pipefail\nPATH=\/usr\/bin:\/bin\nBUILD_USER=rotn-build$/m);
+        assert.match(DEPLOY_SRC, /^HOME=\$\(getent passwd "\$\(id -un\)" \| cut -d: -f6\) \|\| HOME=$/m);
+        assert.match(DEPLOY_SRC, /^export HOME$/m);
+        const build = DEPLOY_SRC.slice(DEPLOY_SRC.indexOf('build() {'), DEPLOY_SRC.indexOf('\n}\n', DEPLOY_SRC.indexOf('build() {')));
+        const order = ['touch "$tmp/.release-ok.new"', 'in_group "$tmp"', 'chgrp -R', 'chmod -R', 'mv -T "$tmp/.release-ok.new"', 'mv -T "$tmp" "$BASE/releases/$name"'].map((t) => build.indexOf(t));
+        assert.ok(order.every((i) => i > 0), JSON.stringify(order));
+        assert.deepEqual([...order].sort((a, b) => a - b), order, 'in this order');
+        assert.ok(!/chmod[^\n]*g\+s/.test(DEPLOY_SRC), 'no chmod g+s: as a non-member of the group it would clear the bit');
+    });
+
+    test('#485 review: deploy.sh never runs as root (uid 0), in any shape; the do-not-align note sits next to its TAG_RE', () => {
+        setupRepo();
+        for (const args of [['status'], ['check', 'rotn-v0.0.1'], ['--no-restart', 'deploy', 'rotn-v0.0.1'], ['deploy', 'rotn-v0.0.1']]) {
+            const r = dep(args, { FAKE_OUT_id: '0' });
+            assert.equal(r.code, 1, args.join(' '));
+            assert.match(r.stderr, /never run deploy\.sh as root: sudo -u rotn-build \/usr\/local\/lib\/mindcraft-rotn\/deploy\.sh/, args.join(' '));
+        }
+        assert.deepEqual(releases(), []);
+        assert.ok(!exists(`${BASE}/repo.git`), 'nothing fetched');
+        assert.match(DEPLOY_SRC, /# Do not align this with the CX33 gate's TAG_RE \(ADR 0011\)[^\n]*\n[^\n]*\nTAG_RE=/);
     });
 });
