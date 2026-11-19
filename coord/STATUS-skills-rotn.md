@@ -1,6 +1,47 @@
 # Status: skills-rotn
 
-Updated: 2026-11-18T17:41Z (from `date -u`)
+Updated: 2026-11-19T03:27Z (from `date -u`)
+
+## 2026-11-19: soak 3 fixes for rotn-v0.1.6 (summary, 2026-11-19T03:27Z by `date -u`)
+
+Soak 3 (rotn-v0.1.5, #464) failed 6 of 9: 12 deaths in two night cascades, the agenda stuck at stone_axe, food down to 2. Every fix the lead asked for is merged and in rotn-v0.1.6. No PR is open apart from this STATUS-only one. I'm idle until soak 4.
+
+### Merged since the 2026-11-18 summary
+| PR | What |
+| --- | --- |
+| #457 | The #453 nits: each provoked animal is judged by its own rule; the ownership checks moved to `library/ownership.js` (no import cycle); the fall detection's live-order note |
+| #460 | `foraging.js` reads `OWNERSHIP` directly; `HUNT` names it as its source of truth |
+| #462 | The hurt line's source: only entities that can hurt (no scent markers or souls); the one that swung in the last 1 s, else the nearest hostile |
+| #463 | Night safety: the item pickup skips death spots and mobs near (a provoked one too); a re-plan prompt is held while the night routine runs and until full day, survives the routine's jobs (`runAction` `keepReplan`) and is sent once; `!buildShelter` is refused before it interrupts the routine; a paused agenda keeps its reserves; the model's goal from dusk resumes after full day |
+| #468 | A stuck agenda step is retried with a fresh budget after 20 min or at the next full day: 3 times, then once at each new full day, never given up. Meanwhile the steps that don't need it go on (`after`), then food, then the open goal: the model's own goal with its own budget for each wait (backoff between starts, LLM time saved in agenda.json, at least 10 s charged per start; a giver's `!endGoal` ends it). `!agenda` is read-only. The #463 nits |
+| #470 | A weapon before night (a stone axe at a table, else a crude axe). With no weapon: no fight from the shelter; a cell a mob holds (its body in the cell) is left out of the repair; at health 8 or lower the bot backs away into an enclosed column, else hits back by hand; a failed seal keeps the new spot. "agenda paused for task" and the restart line work in open-goal mode. The #468 nits |
+| #471 | C: at night after a death, the bot walks 48 blocks from the spawn and every recent death spot, or to the first spot 24 blocks from the death spots when a mob is near the way or it is night and the bot has no weapon. Interrupted walks are retried 3 times, 5 s apart |
+| #472 | (a) A closed hole shelter moves the bot into a side pocket and seals the shaft behind. (c) Wall, roof and seal blocks that the nearby diggers can't break come first (rotn-data `canMobDig`, the tools the mobs hold). The #471 nits |
+| #474 | The #472 follow-ups: the hole-shelter night chained on real geometry (dirt piles count for the seal and are crafted into dirt before any dig); the digger warning names the mob and how; an unnamed modded dimension is recorded as `unknown:<id>`, never the overworld; `heldTools` without duplicates |
+
+### Open
+- None, apart from this STATUS-only PR.
+
+### To check in soak 4 (all of this is tested offline only)
+- **The night after a death:** the `[night] I died near here recently …` walk lines (full or short), `the walk away is done …` and its retries. Is the bot ever left without dirt where a hole is refused? (The lead accepted leaving out a dirt stop on the walk.)
+- **The shelter:**
+  - `moving into a side pocket` and `moved into the side pocket`;
+  - the back-away and hold lines (`not repairing under it`, `backing away into`, `hitting back by hand`);
+  - `[shelter] no weapon: not fighting from the shelter`;
+  - `… near … none of the blocks you hold stops it`.
+  - The pocket's ceiling is natural ground: a zombie that drops in can still dig toward the bot; only the seals are mob-proof (the lead's note).
+- **The weapon reserve:** `agenda step weapon started: hold a weapon for the night`, and whether it is done before dusk.
+- **The agenda:** `stuck: …; retry n of 3 …`, `retried (…)`, `agenda open goal: …` and `… spent; none until the retry`; that self-prompting never stops for good.
+- **Prompts:** `[reflex] re-plan prompt held: …`, then one prompt at full day.
+- **The hurt line:** sources named as real mobs (no `entityscent` or `playersoul`).
+- **Carried over:** the fall detection's order, the bull's anger flag, the first live forage, `food_floor` and `ate_when_low`.
+
+### Not done
+1. **`death_report.js` comment nits (#474):** say that `bindDeathReport` misses the login packet, so a bot that logs in inside a modded dimension records "unknown" (never the overworld); and note that spots with no dimension went from match-all to match-none. For the next PR that touches the file.
+2. **Polar bears:** one near its cub attacks unprovoked (a note next to `retaliationRisk`; not built).
+3. **#431 review, the lookAt-window nit:** still to do.
+4. **Requests to rotn-data (through the lead):** a size-aware slime entry, and `WEAPON_ATTACK` (in `threats.js`) as a cited table.
+5. **Cosmetic nits** from the 2026-11-08 summary.
 
 ## 2026-11-18: after the pause: soak 2 fixes, bulls, review follow-ups (summary, 2026-11-18T17:41Z by `date -u`)
 
