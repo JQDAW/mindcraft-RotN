@@ -14,7 +14,7 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { isSturdy, isSoftWall, isWall, handDiggable, dirtPileRecipes, shelterShell, dumpState } from './night.js';
+import { isSturdy, isSoftWall, isWall, handDiggable, dirtPileRecipes, shelterShell, dumpState, placeableDirt } from './night.js';
 import { loadRotnData, PACK_VERSION, registryName, botName, getItem, mobDigging, canMobDig } from '../../../packages/rotn-data/index.js';
 import { formatName } from './rotn_names.js';
 import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
@@ -516,10 +516,8 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     if (pick.ok && sturdy() < plan.blocks) await craftMore(bot, 'cobblestone', plan.blocks - sturdy(), craft);
     // Soak 3, the lead's (c): the blocks the nearby diggers cannot break first (wallItems).
     const diggers = nearbyDiggers(bot);
-    const armedDigger = diggers.find(d => d.held.length > 0);
-    if (armedDigger && ![...shelterItems(bot), ...softItems(bot)].some(i => mobProof(i, diggers))) {
-        log(bot, `A ${armedDigger.name.replace(/^minecraft:/, '')} near holds a ${armedDigger.held[0].type}: none of the blocks you hold stops it.`);
-    }
+    const defeat = blockDefeat([...shelterItems(bot), ...softItems(bot)], diggers);
+    if (defeat) log(bot, defeat);
     let mode = { items: (b) => wallItems(b, shelterItems(b), diggers), accept: keepSoft ? isWall : isSturdy };
 
     // 2. The dirt fallback: too few sturdy blocks, or no pickaxe to dig out of rock.
@@ -694,7 +692,9 @@ export function retreatPlan(bot, site, open = []) {
     const sides = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
     const isOpenSide = (d) => openKeys.has(key(p.plus(d))) || openKeys.has(key(p.plus(d).offset(0, 1, 0)));
     const across = (d) => sides.some(o => isOpenSide(o) && o.x === -d.x && o.z === -d.z);
-    const held = countOf(shelterItems(bot)) + countOf(softItems(bot));
+    // #472 follow-up 1: dirt piles count (crafted into dirt before the seal): a hole dug with nothing
+    // held leaves piles, not dirt blocks.
+    const held = countOf(shelterItems(bot)) + placeableDirt(bot.inventory.items());
     if (held < 2) return null;
     const candidates = sides.filter(d => !isOpenSide(d)).sort((a, b) => across(b) - across(a));
     for (const d of candidates) {
@@ -714,7 +714,7 @@ export function retreatPlan(bot, site, open = []) {
  * own column behind with held blocks (sturdy first, then dirt). Returns {site} (the new feet) when
  * the bot is in the new column with both cells behind it filled, else {why}.
  */
-export async function backAway(bot, plan) {
+export async function backAway(bot, plan, { craft = craftRecipe } = {}) {
     for (const c of plan.dig) {
         if (!isEmpty(bot.blockAt(c)) && !await breakBlockAt(bot, c.x, c.y, c.z)) return { why: `could not dig ${at(c)}` };
     }
@@ -723,6 +723,8 @@ export async function backAway(bot, plan) {
     // From here on the bot is in plan.to: a seal that fails leaves it there (#470 review 3: the night
     // routine holds or repairs at plan.to, never a fresh build beside the mob).
     const interior = new Set([key(plan.to), key(plan.to.offset(0, 1, 0))]);
+    const have = countOf(shelterItems(bot)) + countOf(softItems(bot));
+    if (have < plan.seal.length) await craftMore(bot, 'dirt', plan.seal.length - have, craft);
     const mode = { items: (b) => wallItems(b, [...shelterItems(b), ...softItems(b)], nearbyDiggers(b)), accept: isWall };
     for (const c of plan.seal) {
         if (!await fillCell(bot, c, interior, mode)) return { why: `could not seal ${at(c)}` };
@@ -745,17 +747,20 @@ const entityRegistryName = (n) => (typeof n === 'string' && n.includes(':') ? n 
 /** The tool classes a mob holds in either hand ([{type, level}], rotn-data's item tool classes). */
 export function heldTools(e) {
     const items = [e?.heldItem, ...(Array.isArray(e?.equipment) ? e.equipment.slice(0, 2) : [])].filter(i => typeof i?.name === 'string');
-    const out = [];
+    const out = new Map(); // #472 nit 4: heldItem is also equipment[0]: each class once, at its best level
     for (const i of items) {
         let classes = null;
         try { classes = getItem(registryName(i.name))?.toolClasses ?? null; } catch { classes = null; }
-        for (const [type, level] of Object.entries(classes ?? {})) if (Number.isFinite(level)) out.push({ type, level });
+        for (const [type, level] of Object.entries(classes ?? {})) {
+            if (Number.isFinite(level) && level > (out.get(type) ?? -Infinity)) out.set(type, level);
+        }
     }
-    return out;
+    return [...out].map(([type, level]) => ({ type, level }));
 }
 
 /** The digging mobs within range ([{name, held}]), else DIGGERS.assumed with empty hands. */
 export function nearbyDiggers(bot, range = DIGGERS.range) {
+    // assumed: no digger loaded (the empty-handed zombie stands in); blockDefeat names only real ones.
     const here = bot?.entity?.position;
     const list = [];
     for (const e of Object.values(bot?.entities ?? {})) {
@@ -766,7 +771,7 @@ export function nearbyDiggers(bot, range = DIGGERS.range) {
         try { digs = mobDigging(name); } catch { digs = null; }
         if (digs) list.push({ name, held: heldTools(e) });
     }
-    return list.length ? list : DIGGERS.assumed.map(name => ({ name, held: [] }));
+    return list.length ? list : DIGGERS.assumed.map(name => ({ name, held: [], assumed: true }));
 }
 
 /**
@@ -787,4 +792,28 @@ export function mobProof(item, diggers) {
 export function wallItems(bot, items, diggers = nearbyDiggers(bot)) {
     const proof = new Map(items.map(i => [i, mobProof(i, diggers)]));
     return [...items].sort((a, b) => (proof.get(b) - proof.get(a)) || ((b.name === 'cobblestone') - (a.name === 'cobblestone')) || (b.count - a.count));
+}
+
+const article = (word) => (/^[aeiou]/i.test(word) ? `an ${word}` : `a ${word}`);
+
+/**
+ * #472 nit 2: when no held block stops a digger that is really near (not the assumed one), the line
+ * naming the mob that defeats the best block (wallItems' first) and how: the tool it holds, or by
+ * hand (a block that needs no tool, or a digger that needs none). Null when a block stops them all,
+ * nothing is held, or no digger is loaded.
+ */
+export function blockDefeat(items, diggers) {
+    const real = diggers.filter(d => !d.assumed);
+    if (!items.length || !real.length || items.some(i => mobProof(i, real))) return null;
+    const best = wallItems(null, items, real)[0];
+    const block = (() => { try { return registryName(best.name); } catch { return null; } })();
+    for (const d of real) {
+        let r = null;
+        try { r = canMobDig(d.name, block, { meta: best.metadata ?? 0, held: d.held }); } catch { r = null; }
+        if (r && !r.canDig && !r.uncertain) continue;
+        const mob = article(d.name.replace(/^minecraft:/, ''));
+        const how = r?.canDig && !r.byHand && r.needs ? `holds ${article(r.needs.type)}` : 'digs it by hand';
+        return `${mob[0].toUpperCase()}${mob.slice(1)} near ${how}: none of the blocks you hold stops it (best: ${best.name}).`;
+    }
+    return null;
 }

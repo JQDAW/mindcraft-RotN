@@ -10,7 +10,7 @@ import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
 import { pitProblem, choosePit, digPit, pitOut, PIT } from './pit.js';
-import { buildShelter } from './shelter.js';
+import { buildShelter, retreatPlan, backAway } from './shelter.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -255,4 +255,49 @@ test('#431 review 6: no dig starts once the time is up (an equip still running w
     assert.equal(await digPit(bot, { progress: {} }), null);
     await new Promise(resolve => setTimeout(resolve, 350)); // the equip ends after digPit returned
     assert.deepEqual(calls.digs, [], 'no dig started afterwards');
+});
+
+// #472 follow-up 1: the whole night of a hole shelter on the fake world's real geometry: dug with
+// nothing held, roofed from its own piles, the side pocket (piles crafted into the seal's dirt), and
+// out in the morning from the pocket.
+test('#472 follow-up: digPit, the roof, retreatPlan and backAway into the side pocket, then pitOut from the pocket', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, items, world, calls } = fakeBot();
+    // The pocket's step into its middle walks (sneaking): 0.1 a step towards where the bot looks.
+    let looking = null;
+    bot.lookAt = (p) => { looking = p; return Promise.resolve(); };
+    bot.setControlState = (control, on) => {
+        if (control !== 'forward' || !on || !looking) return;
+        const pos = bot.entity.position, dx = looking.x - pos.x, dz = looking.z - pos.z, d = Math.hypot(dx, dz);
+        if (d > 0) bot.entity.position = pos.offset(dx / d * Math.min(0.1, d), 0, dz / d * Math.min(0.1, d));
+    };
+    const feet = await digPit(bot);
+    assert.ok(feet.equals(new Vec3(0, 61, 0)));
+    assert.equal((await buildShelter(bot, { site: feet, keepSoft: true, craft: craft(items) })).closed, true, bot.output);
+    // The roof kept SHELTER_SPARE dirt; say a repair used it up and the bot holds piles instead
+    // (dug cells give piles, not dirt blocks): the pocket crafts its seal from them.
+    const dirt = items.find(i => i.name === 'dirt');
+    assert.equal(dirt?.count, 2, 'the spare dirt');
+    dirt.count = 0;
+    const piles = items.find(i => i.name === PILE.name) ?? (items.push({ ...PILE, count: 0 }), items.at(-1));
+    piles.count = 8;
+
+    const plan = retreatPlan(bot, feet, []);
+    assert.ok(plan, 'the piles count towards the seal');
+    assert.equal(key(plan.to), '1,61,0');
+    const r = await backAway(bot, plan, { craft: craft(items) });
+    assert.deepEqual(r, { site: new Vec3(1, 61, 0) }, bot.output);
+    assert.equal(world.get('0,61,0'), 'dirt');
+    assert.equal(world.get('0,62,0'), 'dirt');
+    assert.equal(piles.count, 8, 'the pocket\'s two cells gave 8 piles; 8 made the two dirt of the seal');
+    assert.equal(world.get('0,63,0'), 'dirt', 'the roof still on');
+    assert.deepEqual(['1,61,0', '1,62,0'].map(k => world.get(k)), ['air', 'air'], 'in the pocket');
+    // The pocket's ceiling is natural ground: only the two seals were placed (the lead's soak note).
+    assert.equal(world.get('1,63,0') ?? 'dirt', 'dirt');
+
+    calls.digs.length = 0;
+    const exit = await pitOut(bot, plan.to);
+    assert.ok(exit, `out of the pocket in the morning: ${bot.output}`);
+    assert.ok(bot.entity.position.floored().equals(exit));
+    assert.equal(exit.y, 64, 'up on the ground');
 });

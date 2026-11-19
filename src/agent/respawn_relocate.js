@@ -26,15 +26,19 @@ const hdist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const at = (p) => `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`;
 
 /** The places to keep away from: the spawn point (when known) and the recent death spots in this dimension. */
+/** #472 nit 3: a dimension name without its namespace ('minecraft:overworld' -> 'overworld'), or null. */
+const dimName = (d) => (d == null ? null : String(d).replace(/^minecraft:/, ''));
+
 export function placesToLeave(agent, now = Date.now()) {
     const bot = agent.bot;
-    const dim = bot?.game?.dimension;
+    const dim = dimName(bot?.game?.dimension);
     const places = (agent._death?.recentSpots?.(now) ?? [])
-        .filter(s => s.pos && (s.dimension == null || dim == null || s.dimension === dim))
+        .filter(s => s.pos && (s.dimension == null || dim == null || dimName(s.dimension) === dim))
         .map(s => ({ pos: s.pos, what: 'death spot', at: s.at }));
     const sp = bot?.spawnPoint;
-    // #471 nit 5: the spawn point is in the overworld; elsewhere it is no place to leave.
-    const overworld = dim == null || /overworld$/.test(String(dim));
+    // #471 nit 5: the spawn point is in the overworld; elsewhere (an unknown modded dimension too,
+    // #472 nit 3) it is no place to leave.
+    const overworld = dim == null || dim === 'overworld';
     if (overworld && sp && !(sp.x === 0 && sp.y === 0 && sp.z === 0)) places.unshift({ pos: sp, what: 'spawn' });
     return places;
 }

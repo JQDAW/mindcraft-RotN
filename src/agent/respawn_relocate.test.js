@@ -271,8 +271,11 @@ test('#471 nit 5: the spawn point is a place to leave only in the overworld', ()
     assert.deepEqual(placesToLeave(agent, now).map(p => p.what), ['spawn', 'death spot']);
     agent.bot.game.dimension = 'the_nether';
     assert.deepEqual(placesToLeave(agent, now).map(p => p.what), [], 'the death was in the overworld too');
+    // #472 nit 3: names compared without the namespace; an unknown modded dimension is not the overworld.
     agent.bot.game.dimension = 'minecraft:overworld';
-    assert.deepEqual(placesToLeave(agent, now).map(p => p.what), ['spawn'], 'a death spot from another dimension name form is filtered as before');
+    assert.deepEqual(placesToLeave(agent, now).map(p => p.what), ['spawn', 'death spot'], 'minecraft:overworld is the overworld');
+    agent.bot.game.dimension = 'twilightforest';
+    assert.deepEqual(placesToLeave(agent, now).map(p => p.what), [], 'a modded dimension: no spawn there');
 });
 
 test('#471 nits 2-4: a full walk stops at 24 once night falls unarmed; a walk that throws is logged; no position is no crash', async (t) => {

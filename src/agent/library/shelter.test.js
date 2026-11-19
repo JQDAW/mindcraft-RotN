@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, firmFloor, LATE_UPDATE_MS, SHELTER_SPARE, SHELTER_GAP, SETTLE, retreatPlan, backAway, heldCells, BACK_AWAY, wallItems, mobProof, nearbyDiggers, heldTools } from './shelter.js';
+import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, firmFloor, LATE_UPDATE_MS, SHELTER_SPARE, SHELTER_GAP, SETTLE, retreatPlan, backAway, heldCells, BACK_AWAY, wallItems, mobProof, nearbyDiggers, heldTools, blockDefeat } from './shelter.js';
 import { getCommand } from '../commands/index.js';
 
 const reg = minecraftData('1.12.2');
@@ -1008,7 +1008,7 @@ test('soak 3 (c): wallItems puts the blocks the diggers cannot break first, cobb
     const cobble = { name: 'cobblestone', metadata: 0, count: 2 };
     const meta = { name: 'undergroundbiomes:metamorphic_cobble', metadata: 0, count: 9 };
     const bot = { entity: { position: new Vec3(0, 64, 0) }, entities: {} };
-    assert.deepEqual(nearbyDiggers(bot), [{ name: 'minecraft:zombie', held: [] }], 'none loaded: an empty-handed zombie is assumed');
+    assert.deepEqual(nearbyDiggers(bot), [{ name: 'minecraft:zombie', held: [], assumed: true }], 'none loaded: an empty-handed zombie is assumed');
     assert.deepEqual(wallItems(bot, [dirt, meta, cobble]).map(i => i.name), ['cobblestone', 'undergroundbiomes:metamorphic_cobble', 'dirt']);
     assert.equal(mobProof(dirt, nearbyDiggers(bot)), false);
     assert.equal(mobProof(cobble, nearbyDiggers(bot)), true);
@@ -1020,7 +1020,7 @@ test('soak 3 (c): wallItems puts the blocks the diggers cannot break first, cobb
     assert.equal(mobProof(cobble, nearbyDiggers(bot)), false);
     // A Zombie Player is no digger (mob-digging.json): the assumed zombie stands in for it.
     bot.entities = { 4: { id: 4, type: 'mob', name: 'zombie_players:zombie_player', position: new Vec3(5, 64, 0), heldItem: { name: 'stone_pickaxe' } } };
-    assert.deepEqual(nearbyDiggers(bot), [{ name: 'minecraft:zombie', held: [] }]);
+    assert.deepEqual(nearbyDiggers(bot), [{ name: 'minecraft:zombie', held: [], assumed: true }]);
     // Far off (beyond DIGGERS.range): not counted.
     bot.entities = { 3: { ...armed, position: new Vec3(100, 64, 0) } };
     assert.deepEqual(nearbyDiggers(bot)[0].held, []);
@@ -1031,11 +1031,28 @@ test('soak 3 (c): a repair says so when a digger near holds a tool that breaks e
     const { bot } = fakeBot({ cobble: 4, set: shellAt({ '1,64,0': 'air' }) });
     bot.entities = { 3: { id: 3, type: 'mob', name: 'zombie', position: new Vec3(6.5, 64, 0.5), heldItem: { name: 'stone_pickaxe' } } };
     await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
-    assert.match(bot.output, /A zombie near holds a pickaxe: none of the blocks you hold stops it\./);
+    assert.match(bot.output, /A zombie near holds a pickaxe: none of the blocks you hold stops it \(best: cobblestone\)\./);
 
     const { bot: hole, world } = holeShelter({ dirt: 4, cobble: 2 });
     const plan = retreatPlan(hole, new Vec3(0, 61, 0), OPEN_EAST);
     assert.deepEqual(await backAway(hole, plan), { site: new Vec3(-1, 61, 0) });
     assert.equal(world.get('0,61,0').name, 'cobblestone');
     assert.equal(world.get('0,62,0').name, 'cobblestone');
+});
+
+test('#472 nits 2 and 4: the warning names the mob that beats the best block and how (a tool, "an axe", or by hand); none for the assumed zombie; each tool class once', () => {
+    const dirt = { name: 'dirt', metadata: 0, count: 10 };
+    const cobble = { name: 'cobblestone', metadata: 0, count: 10 };
+    const planks = { name: 'planks', metadata: 0, count: 10 };
+    const zombie = { name: 'minecraft:zombie', held: [] };
+    assert.equal(blockDefeat([dirt], [{ ...zombie, assumed: true }]), null, 'no real digger near: no warning');
+    assert.equal(blockDefeat([dirt], [zombie]), 'A zombie near digs it by hand: none of the blocks you hold stops it (best: dirt).');
+    assert.equal(blockDefeat([dirt, cobble], [zombie]), null, 'the cobblestone stops it');
+    assert.equal(blockDefeat([cobble], [{ name: 'minecraft:zombie', held: [{ type: 'pickaxe', level: 0 }] }]), 'A zombie near holds a pickaxe: none of the blocks you hold stops it (best: cobblestone).');
+    assert.equal(blockDefeat([planks], [{ name: 'minecraft:husk', held: [{ type: 'axe', level: 0 }] }]), 'A husk near digs it by hand: none of the blocks you hold stops it (best: planks).', 'wood needs no tool');
+    // A tool-free digger (Requires Tools off): it digs cobblestone by hand.
+    assert.equal(blockDefeat([cobble], [{ name: 'minecraft:silverfish', held: [] }]), 'A silverfish near digs it by hand: none of the blocks you hold stops it (best: cobblestone).');
+    // heldTools: the held item is also equipment[0]: once.
+    const pick = { name: 'stone_pickaxe' };
+    assert.deepEqual(heldTools({ heldItem: pick, equipment: [pick, null] }), [{ type: 'pickaxe', level: 0 }]);
 });
