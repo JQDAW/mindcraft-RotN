@@ -604,7 +604,7 @@ A short session of the real agent with the **production** task-giver list. `Serv
   - **`agenda_resumed`:** the agenda's first step line after the rejoin is `agenda step <id> started: ... (resumed after a restart)`, for a step not done before. `agenda resumed: <id>` counts only when a task was running at the restart, since the agenda comes back after it (#383 review). A plain `started` fails it ("the agenda began anew").
   - **`no_step_twice`:** for `observeMinutes` (5), no step done before the restart is done again.
   - **`task_resumed`:** `task <id> started: ... (resumed after a restart)` within `resumeMinutes` (5).
-- **Open for the lead:** on S the bot's agenda state persists on the CX23 (`/var/lib/mindcraft-rotn/bots/frcfld/agenda.json`), and the gate has no verb to reset it. A run on a bot whose agenda is already done is "not reached". The human resets the state under the GO.
+- **State on S:** the bot's agenda state persists on the CX23 (`/var/lib/mindcraft-rotn/bots/FRCFLD/agenda.json`: the folder is named after the profile name, not the unit). A run on a bot whose agenda is already done is "not reached". Before a run, the state is reset under the soak's GO with the bot stopped: by the human, or, once the ADR 0011 gate is installed, through the gate with `reset-state frcfld FRCFLD` (it moves everything but `action-code`, `histories` and `last_profile.json` into a root-only archive; it deletes nothing).
 - **Tests:** `test/unit/g4-restart-persistence.test.js`: a simulated server and bot (S and T), and one test through the real `serviceBot`.
 
 ### G4 #7 (with #2, #4, #5): `g4-soak-2h` (measuring run M1 done, #419; the targets are ADR 0010's)

@@ -548,7 +548,7 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
         assert.equal(fs.statSync(ARCH()).mode & 0o7777, 0o700);
         assert.equal(fs.statSync(STAMP_DIR()).mode & 0o7777, 0o700);
         for (const n of KEPT) assert.match(r.stdout, new RegExp(`^  remains: ${n}$`, 'm'));
-        assert.match(r.stdout, /^  moved: a\\ b$/m, 'odd names are printed quoted');
+        assert.match(r.stdout, /^ {2}moved: a\\ b$/m, 'odd names are printed quoted');
         assert.match(r.stdout, new RegExp(`^archive: ${STAMP_DIR().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
         // The same folder again: nothing left to move, no second archive.
         const again = ctl(['reset-state', 'rotn-bot', 'ROTN_BOT'], INACTIVE);
