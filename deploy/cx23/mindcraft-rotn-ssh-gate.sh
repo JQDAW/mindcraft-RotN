@@ -62,6 +62,9 @@
 set -uf -o pipefail
 export LC_ALL=C
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
+# Out of deploy's home before anything runs: sudo keeps the working folder, and rotn-build cannot read /home/deploy
+# (the first ADR 0011 install: deploy.sh's find failed there). deploy.sh changes to / itself as well.
+cd / || exit 2
 
 readonly SUDO=/usr/bin/sudo
 readonly CTL=/usr/local/sbin/mindcraft-rotn-ctl

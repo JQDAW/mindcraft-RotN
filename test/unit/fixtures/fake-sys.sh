@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fake system commands for the offline CX23 tests (test/unit/cx23.test.js). Called as
 #   fake-sys.sh NAME ARGS...   (through a shim named NAME on PATH)
-# Every call is appended to $FAKE_LOG as one line: NAME<TAB>ARG<TAB>ARG... (npm also logs cwd=$PWD).
+# Every call is appended to $FAKE_LOG as one line: NAME<TAB>ARG<TAB>ARG... (npm and find also log cwd=$PWD).
 #
 # Generic behaviour, per command NAME (with '-' turned into '_'):
 #   FAKE_OUT_NAME   printed on stdout        FAKE_RC_NAME   exit code (default 0)
@@ -10,6 +10,9 @@
 #   -o FILE   (curl and gpg only)     creates FILE
 #   ln -sfn TARGET LINK               writes TARGET into the file LINK (no symlinks needed on Windows)
 #   fallocate -l SIZE FILE            creates FILE
+#   find                              GNU find in a working folder it cannot read (mode 000, or stat fails): exit 1
+#                                     with GNU's message, also for root; else the real find (only where a test
+#                                     puts a find shim on PATH)
 #   sshd -T                           the effective config from $ROOT's sshd_config and its Include (first value wins)
 #   systemctl is-active ... / cat ... 3 if $FAKE_SSH_INACTIVE / 1 if $FAKE_NO_SSH_UNIT is set, else 0
 #   ufw allow/delete/enable/show added/status   kept as state under $ROOT (see below)
@@ -29,7 +32,7 @@ for a in "$@"; do
   if [[ $a == . && ( $name == chown || $name == chmod || $name == chgrp ) ]]; then a=$PWD; fi
   line+=$'\t'$a
 done
-[[ $name == npm ]] && line+=$'\t'"cwd=$PWD"
+[[ $name == npm || $name == find ]] && line+=$'\t'"cwd=$PWD"
 [[ -n ${FAKE_LOG:-} ]] && printf '%s\n' "$line" >> "$FAKE_LOG"
 
 key=${name//-/_}
@@ -48,6 +51,15 @@ case $name in
   ln)
     printf '%s\n' "${@: -2:1}" > "${@: -1}"
     exit 0 ;;
+  find)
+    # GNU find goes back to its starting folder at the end and fails if it cannot (the CX23: sudo -u rotn-build kept
+    # /root or /home/deploy). Permissions do not stop root, so a folder of mode 000 stands for "cannot read".
+    mode=$(stat -c %a . 2> /dev/null) || mode=
+    if [[ -z $mode || $mode == 0 ]]; then
+      echo "find: Failed to restore initial working directory: Permission denied" >&2
+      exit 1
+    fi
+    exec /usr/bin/find "$@" ;;
   fallocate)
     : > "${@: -1}"
     exit 0 ;;

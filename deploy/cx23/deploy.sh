@@ -23,6 +23,9 @@
 #
 # PATH is fixed (node, npm and git from /usr/bin), and HOME is the running user's home from the passwd database
 # (rotn-build's /var/lib/rotn-build: npm's cache), whatever the caller's environment; sudo resets the rest.
+# The working folder is /, whatever the caller's: sudo keeps the caller's (/root, /home/deploy), which rotn-build
+# cannot read, and GNU find fails when it cannot return to it (the first ADR 0011 install, D4). Every path is absolute.
+# A deploy removes the leftovers of a killed build (releases/.tmp-*) once they are a day old.
 # ROOT, MINDCRAFT_ROTN_REPO_URL, HEALTH_WAIT_S, KEEP_RELEASES and NPM_CI_RETRY_S are for the offline tests: sudo does
 # not pass them.
 #
@@ -190,6 +193,18 @@ build() {
   mv -T "$tmp" "$BASE/releases/$name"
 }
 
+# A build killed by SIGKILL, a reboot or an older deploy.sh leaves releases/.tmp-*: remove those older than a day.
+# Under the deploy lock no other build is running, so none of them is in use; the day is a margin all the same.
+# A failed removal is logged, not fatal (README: "Stale build folders").
+prune_tmp() {
+  local d
+  while IFS= read -r -d '' d; do
+    log "removing a stale build folder: releases/${d##*/}"
+    rm -rf -- "$d" || log "could not remove releases/${d##*/}; see the README, \"Stale build folders\""
+  done < <(find "$BASE/releases" -mindepth 1 -maxdepth 1 -name '.tmp-*' -mmin +1440 -print0)
+  return 0
+}
+
 prune() {
   local cur=$1 prev=$2 n=0 d
   # Newest first; keep KEEP_RELEASES complete releases plus current and previous.
@@ -207,6 +222,7 @@ do_deploy() {
   [[ ${2:-} == --force ]] && force=1
   [[ $tag =~ $TAG_RE ]] || die "usage: deploy.sh deploy rotn-vX.Y.Z[-suffix] [--force] (bad tag '$tag': only this fork's rotn-v release tags are deployed; v0.x tags are upstream Mindcraft's)"
   lock
+  prune_tmp
   fetch
   sha=$(git_ rev-parse --verify --quiet "refs/tags/$tag^{commit}") || die "no tag '$tag' in $REPO_URL"
   git_ merge-base --is-ancestor "$sha" refs/heads/develop || die "tag '$tag' ($sha) is not on develop; refusing"
@@ -291,6 +307,10 @@ if [[ $(id -un) == "$BUILD_USER" ]]; then
     *) die "as $BUILD_USER only: status | check TAG | --no-restart deploy TAG" ;;
   esac
 fi
+# Never in the caller's folder: sudo keeps it, and rotn-build cannot read /root or /home/deploy. GNU find (in_group)
+# then fails with "Failed to restore initial working directory: Permission denied", and the build was refused as
+# "not in group" (the first ADR 0011 install, D4). Nothing below uses a relative path.
+cd / || die "cannot change to /"
 [[ -d $BASE/releases ]] || die "$BASE/releases is missing (run bootstrap.sh setup first)"
 if [[ ${1:-} == --no-restart ]]; then NO_RESTART=1; shift; fi
 case ${1:-} in

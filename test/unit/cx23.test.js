@@ -52,10 +52,12 @@ beforeEach(() => {
 });
 
 // run SCRIPT ARGS with the fakes first on PATH (Git Bash puts /usr/bin first, so PATH is set inside bash).
-function run(scriptPath, args, extraEnv = {}, fakes = true) {
-    const argv = fakes
+// With lockedCwd, SCRIPT starts in that folder, made mode 000 once entered (a caller's folder the user cannot read).
+function run(scriptPath, args, extraEnv = {}, fakes = true, lockedCwd = null) {
+    let argv = fakes
         ? ['-c', 'PATH="$(cygpath -u "$1" 2>/dev/null || echo "$1"):$PATH"; shift; exec bash "$@"', '_', fwd(bin), fwd(scriptPath), ...args]
         : [fwd(scriptPath), ...args];
+    if (lockedCwd) argv = ['-c', 'cd -- "$1" && /bin/chmod 000 . && shift && exec bash "$@"', '_', fwd(lockedCwd), ...argv];
     // A value of undefined removes that variable (so an inherited DEBUG or NODE_OPTIONS cannot leak in).
     const e = { ...process.env, ROOT, FAKE_LOG: logFile, ...extraEnv };
     for (const [k, v] of Object.entries(e)) if (v === undefined) delete e[k];
@@ -1408,13 +1410,13 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
     const myGroup = spawnSync('id', ['-gn'], { encoding: 'utf8' }).stdout.trim();
     // deploy.sh fixes PATH to /usr/bin:/bin (node, npm and git there on the CX23): the copy under test drops that one
     // line, so the fakes (and this machine's node) are found; its group is this test user's (the setgid check).
-    const dep = (args, extra = {}, { group = myGroup } = {}) => {
+    const dep = (args, extra = {}, { group = myGroup, lockedCwd = null } = {}) => {
         fs.rmSync(path.join(bin, 'node'), { force: true }); // deploy.sh evaluates settings.js with the real node
         const copy = path.join(tmp, 'deploy-under-test.sh');
         const body = DEPLOY_SRC.replace(/^PATH=\/usr\/bin:\/bin$/m, '').replace(/^SVC_GROUP=mindcraft-rotn$/m, `SVC_GROUP=${group}`);
         assert.equal(body.length < DEPLOY_SRC.length, true);
         fs.writeFileSync(copy, body);
-        return run(copy, args, { ...env(), ...extra });
+        return run(copy, args, { ...env(), ...extra }, true, lockedCwd);
     };
     const state = () => Object.fromEntries(read(`${BASE}/state`).trim().split('\n').map((l) => l.split('=')));
     const releases = () => fs.readdirSync(rootFile(`${BASE}/releases`)).sort();
@@ -1621,6 +1623,59 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         assert.ok(order.every((i) => i > 0), JSON.stringify(order));
         assert.deepEqual([...order].sort((a, b) => a - b), order, 'in this order');
         assert.ok(!/chmod[^\n]*g\+s/.test(DEPLOY_SRC), 'no chmod g+s: as a non-member of the group it would clear the bit');
+    });
+
+    test('ADR 0011 install, D4: deploy.sh works from a caller\'s folder it cannot read (sudo keeps /root, /home/deploy): it runs in /', () => {
+        setupRepo();
+        // find through the fake: GNU find's failure in a folder it cannot return to, also for root (see fake-sys.sh).
+        fs.writeFileSync(path.join(bin, 'find'), `#!/usr/bin/env bash\nexec bash "${fwd(path.join(here, 'fixtures', 'fake-sys.sh'))}" find "$@"\n`, { mode: 0o755 });
+        const home = path.join(tmp, 'caller-home');
+        fs.mkdirSync(home, { mode: 0o700 });
+        try {
+            // The control: in that folder, find fails as on the CX23 (this is what refused D4 as "not in group").
+            const probe = path.join(tmp, 'probe.sh');
+            fs.writeFileSync(probe, `find '${fwd(tmp)}' -maxdepth 0\n`);
+            const p = run(probe, [], {}, true, home);
+            assert.equal(p.code, 1, p.all);
+            assert.match(p.stderr, /Failed to restore initial working directory: Permission denied/);
+            fs.chmodSync(home, 0o700);
+            for (const args of [['check', 'rotn-v0.0.1'], ['--no-restart', 'deploy', 'rotn-v0.0.1'], ['status']]) {
+                const r = dep(args, {}, { lockedCwd: home });
+                fs.chmodSync(home, 0o700);
+                assert.equal(r.code, 0, `${args.join(' ')}: ${r.all}`);
+                assert.doesNotMatch(r.all, /not in group|Failed to restore/, args.join(' '));
+            }
+            const finds = called('find').filter((c) => c[1] !== fwd(tmp));   // not the control's
+            assert.ok(finds.length >= 1, 'in_group ran find');
+            assert.ok(finds.every((c) => c.at(-1) === 'cwd=/'), JSON.stringify(finds));
+            assert.match(state().current, /^rotn-v0\.0\.1-[0-9a-f]{12}$/);
+        } finally { fs.chmodSync(home, 0o700); }
+        assert.match(DEPLOY_SRC, /^cd \/ \|\| die "cannot change to \/"$/m);
+        assert.ok(DEPLOY_SRC.indexOf('\ncd / ||') < DEPLOY_SRC.indexOf('\n[[ -d $BASE/releases ]]'), 'before anything uses a path');
+    });
+
+    test('ADR 0011 install: a deploy removes releases/.tmp-* older than a day (a killed build\'s), keeps newer ones; status lists none', () => {
+        setupRepo();
+        const rel = rootFile(`${BASE}/releases`);
+        const old = path.join(rel, '.tmp-rotn-v0.1.2-0123456789ab-4242');
+        const fresh = path.join(rel, '.tmp-rotn-v0.0.9-aaaaaaaaaaaa-77');
+        fs.mkdirSync(path.join(old, 'node_modules', 'x'), { recursive: true });
+        fs.writeFileSync(path.join(old, 'node_modules', 'x', 'index.js'), '');
+        fs.mkdirSync(fresh);
+        const twoDaysAgo = new Date(Date.now() - 2 * 86400 * 1000);
+        fs.utimesSync(old, twoDaysAgo, twoDaysAgo);
+        // check builds nothing and leaves them alone
+        assert.equal(dep(['check', 'rotn-v0.0.1']).code, 0);
+        assert.ok(fs.existsSync(old));
+        const r = dep(['--no-restart', 'deploy', 'rotn-v0.0.1']);
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, /removing a stale build folder: releases\/\.tmp-rotn-v0\.1\.2-0123456789ab-4242\n/);
+        assert.doesNotMatch(r.stderr, /tmp-rotn-v0\.0\.9/);
+        assert.ok(!fs.existsSync(old), 'the day-old one is gone');
+        assert.ok(fs.existsSync(fresh), 'a newer one stays');
+        const s = dep(['status']);
+        assert.equal(s.code, 0);
+        assert.doesNotMatch(s.stdout, /\.tmp-/);
     });
 
     test('#485 review: deploy.sh never runs as root (uid 0), in any shape; the do-not-align note sits next to its TAG_RE', () => {
