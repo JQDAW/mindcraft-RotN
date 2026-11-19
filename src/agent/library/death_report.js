@@ -228,6 +228,31 @@ const treeNote = (lastFell) => `A falling tree crushed you${lastFell?.pos ? ` (t
     + 'from the side away from the canopy and steps back; never cut a tree by hand or from under its leaves. ';
 
 /**
+ * #474 review 1: the bot's dimension as recorded with a death spot. mineflayer 4.33 on 1.12 names
+ * only overworld, the_nether and the_end; a modded dimension (Twilight Forest is 7) leaves
+ * bot.game.dimension undefined. Then it is "unknown:<id>" (the login or respawn packet's id, kept by
+ * bindDeathReport as bot.rotnDimensionId), else "unknown": never the overworld, and never matching
+ * every dimension. Null only before bot.game exists (no dimension known: no filter).
+ */
+export function dimensionKey(bot) {
+    if (!bot?.game) return null;
+    const d = bot.game.dimension;
+    if (typeof d === 'string' && d) return d.replace(/^minecraft:/, '');
+    return Number.isFinite(bot.rotnDimensionId) ? `unknown:${bot.rotnDimensionId}` : 'unknown';
+}
+
+/**
+ * Whether a death spot's recorded dimension is the bot's dimension now. With no dimension known for
+ * the bot (no bot.game) there is no filter; a spot recorded with none matches only then.
+ */
+export function sameDimension(bot, recorded) {
+    const now = dimensionKey(bot);
+    if (now == null) return true;
+    if (recorded == null) return false;
+    return String(recorded).replace(/^minecraft:/, '') === now;
+}
+
+/**
  * Why the bot must not walk to `pos` now because it is near its last death spot, or null.
  * Used by the walking commands (!goToRememberedPlace, !goToCoordinates).
  */
@@ -235,8 +260,7 @@ export function deathSpotBlocked(agent, pos, { now = Date.now() } = {}) {
     const last = agent?._death?.last;
     if (!last?.pos || !pos) return null;
     const bot = agent.bot;
-    const dimension = bot?.game?.dimension;
-    if (last.dimension != null && dimension != null && last.dimension !== dimension) return null;
+    if (!sameDimension(bot, last.dimension)) return null;
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
     if (dist(pos, last.pos) > DEATH_SPOT_RADIUS) return null;
     if (isHome(agent, pos, dist)) return null;
@@ -298,6 +322,11 @@ export function bindDeathReport(agent, { setTimer = setTimeout, clearTimer = cle
     let lastSample = -Infinity, retry = null, settle = null;
     // CX23 soak: the recent death spots, for skills (collectBlock keeps its targets out of their radius).
     bot.rotnDeathSpots = (now = Date.now()) => d.recentSpots(now);
+    // #474 review 1: the dimension id from the login and respawn packets, for a modded dimension that
+    // mineflayer leaves unnamed (dimensionKey).
+    const keepId = (packet) => { if (Number.isFinite(packet?.dimension)) bot.rotnDimensionId = packet.dimension; };
+    bot._client?.on?.('login', keepId);
+    bot._client?.on?.('respawn', keepId);
 
     bot.on('physicsTick', () => {
         if (!(bot.health > 0) || bot.isAlive === false || d.pending) return;
@@ -308,7 +337,7 @@ export function bindDeathReport(agent, { setTimer = setTimeout, clearTimer = cle
     });
 
     bot.on('death', () => {
-        const rec = d.died({ pos: bot.entity?.position, dimension: bot.game?.dimension, now: now() });
+        const rec = d.died({ pos: bot.entity?.position, dimension: dimensionKey(bot), now: now() });
         if (!rec) return;
         // The action the death interrupted; this listener runs before the agent's own death
         // listener stops it (#215 review 1).

@@ -931,10 +931,11 @@ test('CX23 soak: after hitting a mob out of the opening, a hurt bot too hungry t
 
 // Soak 3 (rotn-v0.1.5), the lead's (b): with no weapon, back away from an opening a mob holds into an
 // enclosed column on the far side, sealing the shelter's own column behind; never out into the open.
-function holeShelter({ dirt = 4, cobble = 0, set = {} } = {}) {
+function holeShelter({ dirt = 4, cobble = 0, piles = 0, set = {} } = {}) {
     // A hole shelter: the bot at 0 61 0 underground (dirt below 64), the east wall dug open.
     const base = { '0,61,0': 'air', '0,62,0': 'air', '1,61,0': 'air', '1,62,0': 'air', ...set };
-    const f = fakeBot({ cobble, pickaxe: false, at: new Vec3(0.5, 61, 0.5), set: base, items: dirt ? [{ name: 'dirt', metadata: 0, count: dirt }] : [] });
+    const more = [...(dirt ? [{ name: 'dirt', metadata: 0, count: dirt }] : []), ...(piles ? [{ name: 'betterwithmods:dirt_pile', metadata: 0, count: piles }] : [])];
+    const f = fakeBot({ cobble, pickaxe: false, at: new Vec3(0.5, 61, 0.5), set: base, items: more });
     f.bot.entities = { 7: { id: 7, type: 'mob', name: 'zombie', position: new Vec3(1.5, 61, 0.5), height: 1.95 } };
     return f;
 }
@@ -1055,4 +1056,33 @@ test('#472 nits 2 and 4: the warning names the mob that beats the best block and
     // heldTools: the held item is also equipment[0]: once.
     const pick = { name: 'stone_pickaxe' };
     assert.deepEqual(heldTools({ heldItem: pick, equipment: [pick, null] }), [{ type: 'pickaxe', level: 0 }]);
+});
+
+test('#474 review 2: the seal\'s dirt is crafted from piles before any dig; a craft that fails leaves the bot where it is, nothing dug', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // Only piles held: 8 piles, enough for 2 dirt; the craft fails.
+    const failed = holeShelter({ dirt: 0, piles: 8 });
+    const plan = retreatPlan(failed.bot, new Vec3(0, 61, 0), OPEN_EAST);
+    assert.ok(plan, 'the piles count towards the seal');
+    const crafts = [];
+    const r = await backAway(failed.bot, plan, { craft: (b, name, n) => { crafts.push([name, n]); return Promise.resolve(false); } });
+    assert.deepEqual(r, { why: 'only 0 of the 2 blocks to seal with (no more dirt crafted from piles)' });
+    assert.deepEqual(crafts, [['dirt:0', 2]], 'tried before anything else');
+    assert.deepEqual(failed.dug, [], 'nothing dug');
+    assert.ok(failed.bot.entity.position.floored().equals(new Vec3(0, 61, 0)), 'not moved');
+    // The craft works: the dirt is made first, then the dig, the step and the seal.
+    const ok = holeShelter({ dirt: 0, piles: 8 });
+    const order = [];
+    const dig = ok.bot.dig;
+    ok.bot.dig = (b) => { order.push('dig'); return dig(b); };
+    const craft = (b, name, n) => {
+        order.push('craft');
+        const p = ok.items.find(i => i.name === 'betterwithmods:dirt_pile');
+        p.count -= 4 * n;
+        ok.items.push({ name: 'dirt', metadata: 0, count: n });
+        return Promise.resolve(true);
+    };
+    const r2 = await backAway(ok.bot, retreatPlan(ok.bot, new Vec3(0, 61, 0), OPEN_EAST), { craft });
+    assert.deepEqual(r2, { site: new Vec3(-1, 61, 0) }, ok.bot.output);
+    assert.deepEqual(order, ['craft', 'dig', 'dig']);
 });

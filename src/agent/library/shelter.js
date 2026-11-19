@@ -715,6 +715,11 @@ export function retreatPlan(bot, site, open = []) {
  * the bot is in the new column with both cells behind it filled, else {why}.
  */
 export async function backAway(bot, plan, { craft = craftRecipe } = {}) {
+    // #474 review 2: the seal's blocks first, before any dig or step: piles crafted into dirt and
+    // checked. Still short: nothing is dug and the bot does not move.
+    const have = () => countOf(shelterItems(bot)) + countOf(softItems(bot));
+    if (have() < plan.seal.length) await craftMore(bot, 'dirt', plan.seal.length - have(), craft);
+    if (have() < plan.seal.length) return { why: `only ${have()} of the ${plan.seal.length} blocks to seal with (no more dirt crafted from piles)` };
     for (const c of plan.dig) {
         if (!isEmpty(bot.blockAt(c)) && !await breakBlockAt(bot, c.x, c.y, c.z)) return { why: `could not dig ${at(c)}` };
     }
@@ -723,8 +728,6 @@ export async function backAway(bot, plan, { craft = craftRecipe } = {}) {
     // From here on the bot is in plan.to: a seal that fails leaves it there (#470 review 3: the night
     // routine holds or repairs at plan.to, never a fresh build beside the mob).
     const interior = new Set([key(plan.to), key(plan.to.offset(0, 1, 0))]);
-    const have = countOf(shelterItems(bot)) + countOf(softItems(bot));
-    if (have < plan.seal.length) await craftMore(bot, 'dirt', plan.seal.length - have, craft);
     const mode = { items: (b) => wallItems(b, [...shelterItems(b), ...softItems(b)], nearbyDiggers(b)), accept: isWall };
     for (const c of plan.seal) {
         if (!await fillCell(bot, c, interior, mode)) return { why: `could not seal ${at(c)}` };

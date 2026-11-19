@@ -11,7 +11,7 @@ import { fallSafe, treeSafe, standsOnTree, isFirmGround, isUnsafeBlock, isLeafBl
 import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
-import { DEATH_SPOT_RADIUS } from "./death_report.js";
+import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
 import { shelterEnemy, threatPlan } from "./threats.js";
 import { logAte, fightJournal } from "./survival_log.js";
 import { foodKey } from "./food.js";
@@ -959,7 +959,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     // player zombie rose there and never leaves (the agenda dug dirt among them, death after death).
     // #416 review 2: not for a crafting table the bot placed and picks up again (pickUpTable).
     const deathSpots = (baseType === 'crafting_table' || typeof bot.rotnDeathSpots !== 'function' ? [] : bot.rotnDeathSpots())
-        .filter(s => s.pos && Date.now() - s.at < COLLECT_LIMITS.deathSpotMs && (s.dimension == null || bot.game?.dimension == null || s.dimension === bot.game.dimension));
+        .filter(s => s.pos && Date.now() - s.at < COLLECT_LIMITS.deathSpotMs && sameDimension(bot, s.dimension));
     const nearDeath = (p) => deathSpots.some(s => Math.hypot(p.x - s.pos.x, p.z - s.pos.z) <= DEATH_SPOT_RADIUS);
     let deathSkips = 0, deathSkipsSaid = false;
     const forageRefusals = new Set(); // G4 #5: wild food blocks left alone, said once at the end
@@ -1732,10 +1732,9 @@ export const ITEM_PICKUP = { hostileRange: 12, saidKeptMs: 15 * 60_000 };
 export function itemPickupRefusal(bot, item, now = Date.now()) {
     const p = item?.position;
     if (!p) return null;
-    const dim = bot?.game?.dimension;
     const spots = typeof bot?.rotnDeathSpots === 'function' ? bot.rotnDeathSpots(now) : [];
     const spot = spots.find(s => s?.pos && now - s.at < COLLECT_LIMITS.deathSpotMs
-        && (s.dimension == null || dim == null || s.dimension === dim)
+        && sameDimension(bot, s.dimension)
         && Math.hypot(p.x - s.pos.x, p.z - s.pos.z) <= DEATH_SPOT_RADIUS);
     if (spot) return `within ${DEATH_SPOT_RADIUS} blocks of where you died recently (a player zombie rises there and never leaves)`;
     const here = bot?.entity?.position;

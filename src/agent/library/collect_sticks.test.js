@@ -78,7 +78,7 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
     const log = { digs: [], walks: [] };
     const bot = {
         log, world, registry: reg, version: '1.12.2', output: '', interrupt_code: false,
-        game: { gameMode: 'survival' },
+        game: { gameMode: 'survival', dimension: 'overworld' },
         entity: { position: start.offset(0.5, 0, 0.5) },
         entities, heldItem: held,
         setQuickBarSlot(i) { bot.heldItem = slots[36 + i] ?? null; },
@@ -403,12 +403,12 @@ test('CX23 soak: a collect skips targets within 24 blocks of a recent death spot
     fast(t);
     const now = Date.now();
     const bot = fakeBot({ bushes: [{ x: 8, sticks: 1 }, { x: 40, sticks: 1 }] });
-    bot.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(6), dimension: null }];
+    bot.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(6), dimension: 'overworld' }];
     assert.equal(await skills.collectBlock(bot, 'stick', 1), true, bot.output);
     assert.deepEqual(bot.log.digs.map(d => d.pos), ['40,64,0'], 'the bush 2 blocks from the death spot is left');
     // Every target near one: nothing, and the line says why.
     const all = fakeBot({ bushes: [{ x: 8, sticks: 1 }, { x: 12, sticks: 1 }] });
-    all.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(10), dimension: null }];
+    all.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(10), dimension: 'overworld' }];
     assert.equal(await skills.collectBlock(all, 'stick', 1), false);
     assert.deepEqual(all.log.digs, []);
     assert.match(all.output, /Some were left alone: within 24 blocks of where you died recently \(a player zombie rises there and never leaves\)\./);

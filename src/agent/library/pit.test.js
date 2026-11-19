@@ -289,7 +289,7 @@ test('#472 follow-up: digPit, the roof, retreatPlan and backAway into the side p
     assert.deepEqual(r, { site: new Vec3(1, 61, 0) }, bot.output);
     assert.equal(world.get('0,61,0'), 'dirt');
     assert.equal(world.get('0,62,0'), 'dirt');
-    assert.equal(piles.count, 8, 'the pocket\'s two cells gave 8 piles; 8 made the two dirt of the seal');
+    assert.equal(piles.count, 8, 'the 8 piles made the two dirt of the seal before the dig; the pocket\'s two cells gave 8 more');
     assert.equal(world.get('0,63,0'), 'dirt', 'the roof still on');
     assert.deepEqual(['1,61,0', '1,62,0'].map(k => world.get(k)), ['air', 'air'], 'in the pocket');
     // The pocket's ceiling is natural ground: only the two seals were placed (the lead's soak note).
