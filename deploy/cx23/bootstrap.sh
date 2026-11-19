@@ -578,9 +578,9 @@ EOF
 # Every mindcraft-rotn@ unit must be inactive or failed (#491 review): build-user changes the release a running bot
 # reads, and the bot's groups. Anything else, or a failed systemctl, refuses.
 bots_stopped() {
-  local out unit load active rest
+  local out unit active
   out=$(systemctl list-units --all --plain --no-legend --no-pager 'mindcraft-rotn@*') || die "systemctl list-units failed"
-  while read -r unit load active rest; do
+  while read -r unit _ active _; do
     [[ -z $unit ]] && continue
     [[ $active == inactive || $active == failed ]] \
       || die "$unit is $active: stop every bot first (sudo mindcraft-rotn-ctl stop <bot>), then rerun; nothing changed"
