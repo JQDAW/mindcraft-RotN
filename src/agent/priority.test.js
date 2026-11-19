@@ -1191,3 +1191,53 @@ test('#468 nit 1: the open goal\'s window is saved with the stuck record: a proc
     assert.equal(tick(after), 'goal:open');
     assert.equal(after.agenda.stuck.stone_axe.openGoal.starts, 2);
 });
+
+test('#469 review: a task preempting the open goal says "agenda paused for task <id>"; afterwards "agenda resumed: <step>"', (t) => {
+    const nightBefore = settings.night_shelter;
+    settings.night_shelter = false;
+    t.after(() => { settings.night_shelter = nightBefore; });
+    const clock = { now: 1_000_000 };
+    const agent = soak3Agent(t, clock);
+    const sp = agent.self_prompter;
+    let now = 0;
+    const tick = () => { clock.now = 1_000_000 + now; return autonomyTick(agent, { now }); };
+    tick();
+    agent.agenda.spent.stone_axe = { attempts: 1, llm_ms: STEP_LLM_MS };
+    now += TICK_MS; assert.equal(tick(), 'stuck');
+    now += TICK_MS; assert.equal(tick(), 'goal:open');
+    assert.equal(agent._agenda_step, null);
+    agent.tasks.add({ text: 'go to the gold block at 10 64 -3 and stand on it', priority: 'normal', giver: 'Server' });
+    now += TICK_MS;
+    assert.match(tick(), /^task:t1/);
+    assert.ok(agent.said.includes('agenda paused for task t1'), agent.said.join('\n'));
+    assert.equal(agent._agenda_open_goal, null);
+    if (sp.isActive()) sp.stop();
+    finishTask(agent, agent.tasks.get('t1'), 'done', 'test');
+    for (let k = 0; k < 3; k++) { now += TICK_MS; tick(); }
+    assert.ok(agent.said.includes('agenda resumed: stone_axe'), agent.said.join('\n'));
+    assert.equal(agent.said.filter(l => l === 'agenda resumed: stone_axe').length, 1);
+});
+
+test('#469 review: after a restart in open-goal mode the agenda says the restart form for the waiting step', (t) => {
+    const nightBefore = settings.night_shelter;
+    settings.night_shelter = false;
+    t.after(() => { settings.night_shelter = nightBefore; });
+    const clock = { now: 1_000_000 };
+    const agent = soak3Agent(t, clock);
+    let now = 0;
+    const tick = (a) => { clock.now = 1_000_000 + now; return autonomyTick(a, { now }); };
+    tick(agent);
+    agent.agenda.spent.stone_axe = { attempts: 1, llm_ms: STEP_LLM_MS };
+    now += TICK_MS; assert.equal(tick(agent), 'stuck');
+    now += TICK_MS; tick(agent);
+    const after = fakeAgent(t, { agenda: false, dir: agent.dir });
+    after.agenda = new Agenda('FRCFLD', { dir: agent.dir, now: () => clock.now });
+    after.bot = agent.bot;
+    now += TICK_MS; tick(after);
+    const line = 'agenda step stone_axe started: craft a stone axe, waiting for its retry (resumed after a restart)';
+    assert.equal(after.said[0], line, after.said.join('\n'));
+    // The g4-restart-persistence parser (firstStepLine) reads it as a restart line for stone_axe.
+    assert.match(line, /^agenda step (\S+) started: (.*) \(resumed after a restart\)$/);
+    now += TICK_MS; tick(after);
+    assert.equal(after.said.filter(l => l === line).length, 1, 'once');
+});

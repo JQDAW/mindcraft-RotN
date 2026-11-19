@@ -881,3 +881,17 @@ test('soak 3: the weapon reserve\'s own budget: spent, not again until the night
     assert.equal(agendaTick(agent, { now: 4 * TICK_MS }), 'weapon', 'fresh again at the next dusk');
     assert.equal(agent.agenda.spentOn('weapon').llm_ms, 0);
 });
+
+test('#470 nit: a giver\'s !agendaStart clears a stuck step\'s saved open-goal window', (t) => {
+    const dir = tempDir(t);
+    const a = new Agenda('FRCFLD', { dir, now: () => 10 });
+    a.start();
+    a.markStuck('stone_axe', '5 min of self-prompting');
+    a.stuck.stone_axe.openGoal = { key: 'stone_axe@10', llmMs: 120_000, starts: 4, lastStartAt: 9, ended: true };
+    a.save();
+    const b = new Agenda('FRCFLD', { dir, now: () => 20 });
+    assert.equal(b.stuck.stone_axe.openGoal.llmMs, 120_000, 'saved');
+    b.start();
+    const c = new Agenda('FRCFLD', { dir, now: () => 30 });
+    assert.deepEqual(c.stuck, {}, 'cleared, with its window');
+});

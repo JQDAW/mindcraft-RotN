@@ -487,3 +487,12 @@ test('soak 3 (b): with no weapon the bot does not fight from the shelter (bare h
     assert.equal(logs.filter(l => l === '[shelter] no weapon: not fighting from the shelter').length, 1);
     assert.ok(bot.entities[1], 'the zombie is still there');
 });
+
+test('#470 review 2: unarmed, held, low health and no way to back away (agent._night.handFight): it hits back by hand', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { agent, calls } = shelter({ weapon: false });
+    agent._night = { handFight: true };
+    await selfDefense(agent);
+    for (let i = 0; i < 40 && calls.attacks.length === 0; i++) await new Promise(r => setTimeout(r, 25));
+    assert.ok(calls.attacks.length > 0, 'bare hands beat standing still');
+});

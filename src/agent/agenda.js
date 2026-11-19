@@ -231,7 +231,7 @@ export const WEAPON_RESERVE_STEP = {
     done: (s) => s.hasWeapon?.() !== false,
     goal: 'Night is near and you hold no weapon. Zombies here hit for 6 to 8 and dig into shelters, and bare hands do not hurt them. '
         + 'Craft a stone axe at a crafting table with !craftRecipe("stone_axe", 1): 3 rocks and 2 sticks. Rock piles break by hand: !collectBlocks("pyrotech:rock", 3); sticks: !collectBlocks("stick", 2). '
-        + 'With no crafting table near, a crude axe works too (the same attack, but it wears out after about 8 uses): !craftRecipe("pyrotech:crude_axe", 1) from 1 rock and 2 sticks in your inventory grid. Keep the weapon: do not use it up on trees.',
+        + 'With no crafting table near, a crude axe works too (the same attack, but it wears out after about 8 uses): !craftRecipe("pyrotech:crude_axe", 1) from 1 rock and 2 sticks in your inventory grid. The agenda may use the crude axe up on trees: this reserve then makes a new one (1 rock and 2 sticks) before dusk.',
     goalNow: (s) => {
         const rocks = s.count?.('pyrotech:rock') ?? 0;
         const sticks = s.countOre?.('stickWood') ?? 0;

@@ -4,9 +4,14 @@
 // called only by the self-prompter, and each step gets a bounded share of it
 // (#164 review): at most STEP_ATTEMPTS self-prompter runs, restarted after a
 // doubling back-off, and at most STEP_LLM_MS of self-prompter time. Then the
-// step is stuck: "agenda step <id> stuck: <why>", and the agenda pauses until a
-// giver types !agendaStart. Holds, tasks preempting the agenda and its resuming
-// are in priority.js (E3), which calls agendaTick when no task and no hold is due.
+// step is stuck: "agenda step <id> stuck: <why>; retry ..." (#463 decision, #468):
+// the agenda never pauses on it. The step is retried with a fresh budget after
+// STUCK_RETRY.cooldownMs or at the next full day (3 times, then once at each new
+// full day); meanwhile the steps that do not need it go on, else food, else the
+// open goal (the model's own goal under its window budget, priority.js). A giver's
+// !agendaStart retries every stuck step at once. Holds, tasks preempting the
+// agenda and its resuming are in priority.js (E3), which calls agendaTick when no
+// task and no hold is due.
 import settings from './settings.js';
 import * as world from './library/world.js';
 import { countItem, formatName } from './library/rotn_names.js';
@@ -216,6 +221,15 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         if (agent._agenda_step && sp.isActive() && ownsPrompt(agent)) sp.stop(false);
         agent._agenda_step = null;
         const open = agenda.openGoal(state);
+        // #469 review: in open-goal mode the agenda still says that it resumed after a task, or after
+        // a restart, in the forms the scenarios read ("agenda resumed: <id>"; the restart suffix).
+        const waits = agenda.steps.find(s => agenda.isWaiting(s.id));
+        if (waits && (agent._agenda_preempted || agenda.loadedActive === true)) {
+            const resumed = !!agent._agenda_preempted;
+            agent._agenda_preempted = false;
+            agenda.loadedActive = false;
+            say(agent, resumed ? `agenda resumed: ${waits.id}` : `agenda step ${waits.id} started: ${waits.short}, waiting for its retry (resumed after a restart)`);
+        }
         if (open && agent._agenda_open_goal == null) say(agent, `agenda open goal: step ${agenda.steps.find(s => agenda.isWaiting(s.id))?.id} waits; self-prompting on gathering for it`);
         agent._agenda_open_goal = open;
         agent._agenda_open_key = open ? agenda.openGoalKey() : null;

@@ -102,10 +102,13 @@ export function finishTask(agent, status, text) {
 
 // A task takes the self-prompter from the agenda, which later resumes (not as a new run).
 function yieldAgenda(agent, task) {
-    if (agent._agenda_step) {
+    // #469 review: the open goal (nothing in the agenda runnable) is the agenda's too: a task that
+    // preempts it is a real preemption, said as such (the G3 task scenario waits for the line).
+    if (agent._agenda_step || agent._agenda_open_goal) {
         say(agent, `agenda paused for task ${task.id}`);
         agent._agenda_preempted = true;
         agent._agenda_step = null;
+        agent._agenda_open_goal = agent._agenda_open_key = null;
     }
     agent._agenda_paused = true;
 }

@@ -499,7 +499,9 @@ async function pickaxeFor(bot, level) {
  * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], soft: number, line: string}>}
  *   line: what it logged; soft: the dirt blocks in its walls and roof.
  */
-export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe } = {}) {
+export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [] } = {}) {
+    // #470 review 2: skip: cells a mob holds, left out of a repair (the bot has no weapon to hit it out).
+    const skipKeys = new Set(skip.map(key));
     const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, soft: 0, line }; };
     // 1. A sturdy shelter (rock walls); a repair keeps the dirt walls it has.
     // A repair is of the shelter the bot is in: only fire, lava or a solid block there stops it (G3 round 7 B).
@@ -588,6 +590,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
             if (bot.interrupt_code) { reasons.stopped = true; break; }
             const b = bot.blockAt(pos);
             if (mode.accept(b)) continue;
+            if (skipKeys.has(key(pos))) { reasons.set(key(pos), 'a mob holds it (left for later)'); continue; }
             if (!isEmpty(b) && !isLiquid(b)) {
                 if (!await breakBlockAt(bot, pos.x, pos.y, pos.z)) { reasons.set(key(pos), `could not break the ${b.name} in it`); continue; }
             }
@@ -636,22 +639,37 @@ async function settleOn(bot, feet, { strict = true } = {}) {
 }
 
 /**
- * Soak 3 (rotn-v0.1.5), the lead's (b): with no weapon, the bot backs away from an opening a hostile
- * mob holds instead of repairing under it (it placed nothing, "a zombie stands in it", and was hit
- * for 6-8 until it died). A mob within BACK_AWAY.reach of an open cell's middle (in it, or just
- * outside it) holds the opening.
+ * Soak 3 (rotn-v0.1.5), the lead's (b): with no weapon, the bot does not repair under a mob that holds
+ * an open cell (it placed nothing, "a zombie stands in it", and was hit for 6-8 until it died).
+ * #470 review 1: a cell is held when the mob's body is in it (mobIn); for a wall cell only, also when
+ * the mob's body reaches within `margin` past the cell's outer face (about to step in). Never for
+ * the roof or the floor. lowHealth (#470 review 2): unarmed and held at this health or lower, back
+ * away if possible, else hit back by hand.
  */
-export const BACK_AWAY = { reach: 1.8, centerMs: 2000 };
+export const BACK_AWAY = { margin: 0.15, lowHealth: 8, centerMs: 2000 };
 
-/** The hostile mob (threats.shelterEnemy) holding one of the open cells, or null. */
-export function mobAtOpening(bot, open = []) {
+/** The open cells a hostile mob (threats.shelterEnemy) holds: [{cell, mob}]. */
+export function heldCells(bot, site, open = []) {
+    const p = new Vec3(Math.floor(site.x), Math.floor(site.y), Math.floor(site.z));
+    const mobs = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && shelterEnemy(e));
+    const out = [];
     for (const cell of open) {
-        const c = cell.offset(0.5, 0, 0.5);
-        const mob = Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position && shelterEnemy(e)
-            && Math.hypot(e.position.x - c.x, e.position.z - c.z) <= BACK_AWAY.reach && Math.abs(e.position.y - c.y) <= 2);
-        if (mob) return { mob, cell };
+        const inIt = mobIn(bot, cell);
+        if (inIt && shelterEnemy(inIt)) { out.push({ cell, mob: inIt }); continue; }
+        const dx = cell.x - p.x, dz = cell.z - p.z;
+        const wall = (cell.y === p.y || cell.y === p.y + 1) && Math.abs(dx) + Math.abs(dz) === 1;
+        if (!wall) continue;
+        // The cell stretched outward (away from the bot) by margin; the mob's box (half width 0.3) overlapping it.
+        const lo = (v, d) => (d < 0 ? v - BACK_AWAY.margin : v), hi = (v, d) => (d > 0 ? v + 1 + BACK_AWAY.margin : v + 1);
+        const mob = mobs.find(e => {
+            const w = (e.width ?? 0.6) / 2, h = e.height ?? 1.8;
+            return e.position.x + w > lo(cell.x, dx) && e.position.x - w < hi(cell.x, dx)
+                && e.position.z + w > lo(cell.z, dz) && e.position.z - w < hi(cell.z, dz)
+                && e.position.y < cell.y + 1 && e.position.y + h > cell.y;
+        });
+        if (mob) out.push({ cell, mob });
     }
-    return null;
+    return out;
 }
 
 const wallLike = (b) => !!b && b.boundingBox === 'block' && !isLiquid(b) && !hazardOf(b) && !hurtsOnContact(b);
@@ -696,6 +714,8 @@ export async function backAway(bot, plan) {
     }
     await centerIn(bot, plan.to, { timeoutMs: BACK_AWAY.centerMs });
     if (!bot.entity.position.floored().equals(plan.to)) return { why: `could not step into ${at(plan.to)}` };
+    // From here on the bot is in plan.to: a seal that fails leaves it there (#470 review 3: the night
+    // routine holds or repairs at plan.to, never a fresh build beside the mob).
     const interior = new Set([key(plan.to), key(plan.to.offset(0, 1, 0))]);
     const mode = { items: (b) => [...shelterItems(b), ...softItems(b)], accept: isWall };
     for (const c of plan.seal) {

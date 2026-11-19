@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, firmFloor, LATE_UPDATE_MS, SHELTER_SPARE, SHELTER_GAP, SETTLE, retreatPlan, backAway, mobAtOpening } from './shelter.js';
+import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, firmFloor, LATE_UPDATE_MS, SHELTER_SPARE, SHELTER_GAP, SETTLE, retreatPlan, backAway, heldCells, BACK_AWAY } from './shelter.js';
 import { getCommand } from '../commands/index.js';
 
 const reg = minecraftData('1.12.2');
@@ -940,11 +940,25 @@ function holeShelter({ dirt = 4, set = {} } = {}) {
 }
 const OPEN_EAST = [new Vec3(1, 61, 0), new Vec3(1, 62, 0)];
 
-test('soak 3 (b): mobAtOpening names the mob holding an open cell; retreatPlan picks the enclosed column across from the opening', () => {
+test('#470 review 1: a cell is held only with the mob\'s body in it, or (a wall cell) just reaching in; the reviewer\'s four cases are not held', () => {
+    const site = new Vec3(0, 61, 0);
+    const at = (x, y, z) => { const { bot } = holeShelter(); bot.entities[7].position = new Vec3(x, y, z); return bot; };
+    // In the opening: both wall cells of the column it stands in.
+    assert.deepEqual(heldCells(at(1.5, 61, 0.5), site, OPEN_EAST).map(h => key(h.cell)), ['1,61,0', '1,62,0']);
+    // About to step in: its body reaches BACK_AWAY.margin past the outer face.
+    assert.equal(heldCells(at(2.0 + 0.3 + BACK_AWAY.margin - 0.05, 61, 0.5), site, OPEN_EAST).length, 2);
+    // 1. Beyond an empty opening (in the next cell out, its middle): not held.
+    assert.deepEqual(heldCells(at(2.5, 61, 0.5), site, OPEN_EAST), []);
+    // 2. Diagonal to the opening: not held.
+    assert.deepEqual(heldCells(at(1.5, 61, 1.5), site, OPEN_EAST), []);
+    // 3. Outside a closed wall with the roof open: the roof gets no margin, and nothing is in it.
+    assert.deepEqual(heldCells(at(1.5, 63, 0.5), site, [new Vec3(0, 63, 0)]), []);
+    // 4. Outside a closed corner, beside (not across) an open wall cell: not held.
+    assert.deepEqual(heldCells(at(1.5, 61, 1.5), site, [new Vec3(0, 61, 1)]), []);
+});
+
+test('soak 3 (b): retreatPlan picks the enclosed column across from the opening; never into the open', () => {
     const { bot } = holeShelter();
-    const held = mobAtOpening(bot, OPEN_EAST);
-    assert.equal(held.mob.name, 'zombie');
-    assert.equal(key(held.cell), '1,61,0');
     const plan = retreatPlan(bot, new Vec3(0, 61, 0), OPEN_EAST);
     assert.deepEqual(plan.dir, new Vec3(-1, 0, 0), 'across from the opening');
     assert.equal(key(plan.to), '-1,61,0');
@@ -958,10 +972,20 @@ test('soak 3 (b): mobAtOpening names the mob holding an open cell; retreatPlan p
     // A surface shelter (open air outside the walls): never out into the open.
     const surface = fakeBot({ cobble: 4, set: { ...shellAt({ '1,64,0': 'air', '1,65,0': 'air' }) } });
     assert.equal(retreatPlan(surface.bot, new Vec3(0, 64, 0), [new Vec3(1, 64, 0), new Vec3(1, 65, 0)]), null);
-    // No mob near the opening: nothing holds it.
-    const quiet = holeShelter();
-    quiet.bot.entities[7].position = new Vec3(5.5, 61, 0.5);
-    assert.equal(mobAtOpening(quiet.bot, OPEN_EAST), null);
+});
+
+test('#470 review 3: a seal that fails leaves the bot in plan.to and says why (each seal step)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    for (const lost of ['0,61,0', '0,62,0']) {
+        const { bot, placed } = holeShelter();
+        const place = bot.placeBlock;
+        bot.placeBlock = (ref, face) => (key(ref.position.plus(face)) === lost ? Promise.resolve() : place(ref, face)); // never lands
+        const plan = retreatPlan(bot, new Vec3(0, 61, 0), OPEN_EAST);
+        const r = await backAway(bot, plan);
+        assert.deepEqual(r, { why: `could not seal ${lost.replaceAll(',', ', ')}` });
+        assert.ok(bot.entity.position.floored().equals(plan.to), 'in plan.to');
+        assert.deepEqual(placed, lost === '0,61,0' ? [] : ['0,61,0']);
+    }
 });
 
 test('soak 3 (b): backAway digs the column by hand, steps in and seals the shelter\'s column behind with held dirt', async (t) => {

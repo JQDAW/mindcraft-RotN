@@ -119,7 +119,9 @@ function fightInShelter(mode, agent, { override = false } = {}) {
     if (nightRoutineBusy(agent)) return false;
     // Soak 3, the lead's (b): from the shelter only with a weapon. Bare hands did not hurt the zombies
     // ("4 hits did not hurt the zombie") while they hit for 6-8; the night routine backs away instead.
-    if (!threats.hasWeapon(bot)) {
+    // #470 review 2: unarmed, held and at low health with no way to back away, the night routine
+    // lets it hit back by hand (agent._night.handFight): bare hands beat standing still.
+    if (!threats.hasWeapon(bot) && !agent._night?.handFight) {
         if (Date.now() - noWeaponSaidAt >= SHELTER_SAY_MS) {
             noWeaponSaidAt = Date.now();
             console.log('[shelter] no weapon: not fighting from the shelter');
