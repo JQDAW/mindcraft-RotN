@@ -7,7 +7,7 @@ import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
 import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
-import { REPAIR_LABEL, nightPhase, minutesToSunset, replanHold } from './library/night.js';
+import { REPAIR_LABEL, BACK_AWAY_LABEL, nightPhase, minutesToSunset, replanHold } from './library/night.js';
 import { RESERVE_LEAD_MIN } from './agenda.js';
 import { huntTarget, knownBases, huntAnimal, skipAnimal, HUNT, tooWeakToHunt } from './library/hunting.js';
 import { forageTarget } from './library/foraging.js';
@@ -73,6 +73,7 @@ export function shelterQuiet(name, bot) {
 /** A mob in reach is named in chat at most this often from the shelter (T1: up to 24 lines a minute). */
 export const SHELTER_SAY_MS = 30_000;
 let shelterSaidAt = -Infinity;
+let noWeaponSaidAt = -Infinity;
 
 /**
  * The night routine's own work, which the in-shelter fight and eating never interrupt: the repair
@@ -104,7 +105,7 @@ export function foodDue(agent) {
 const isDaylight = (agent) => { const t = timeOfDayFor(agent); return t !== null && nightPhase(t) === 'day'; };
 
 function nightRoutineBusy(agent) {
-    return agent.actions.currentActionLabel === REPAIR_LABEL || (!!agent._night?.leaveFrom && !!agent._night?.job);
+    return [REPAIR_LABEL, BACK_AWAY_LABEL].includes(agent.actions.currentActionLabel) || (!!agent._night?.leaveFrom && !!agent._night?.job);
 }
 
 /**
@@ -116,6 +117,17 @@ function nightRoutineBusy(agent) {
 function fightInShelter(mode, agent, { override = false } = {}) {
     const bot = agent.bot;
     if (nightRoutineBusy(agent)) return false;
+    // Soak 3, the lead's (b): from the shelter only with a weapon. Bare hands did not hurt the zombies
+    // ("4 hits did not hurt the zombie") while they hit for 6-8; the night routine backs away instead.
+    // #470 review 2: unarmed, held and at low health with no way to back away, the night routine
+    // lets it hit back by hand (agent._night.handFight): bare hands beat standing still.
+    if (!threats.hasWeapon(bot) && !agent._night?.handFight) {
+        if (Date.now() - noWeaponSaidAt >= SHELTER_SAY_MS) {
+            noWeaponSaidAt = Date.now();
+            console.log('[shelter] no weapon: not fighting from the shelter');
+        }
+        return false;
+    }
     if (Date.now() - (bot.rotnFightEndedAt ?? -Infinity) < skills.SHELTER_FIGHT.restMs) return false;
     const target = world.getNearestEntityWhere(bot, (e) => threats.shelterEnemy(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
     if (!target) return false;

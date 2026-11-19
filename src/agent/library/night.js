@@ -25,6 +25,8 @@ import { getBlock, registryName, loadRotnData, howToGet, PACK_VERSION, WILDCARD_
  * interrupt it, so a breach is closed instead of the bot walking out to fight.
  */
 export const REPAIR_LABEL = 'action:repairShelter';
+/** The night routine's back-away from an opening a mob holds, with no weapon (soak 3, the lead's (b)). */
+export const BACK_AWAY_LABEL = 'action:backAway';
 export const NIGHT_START = 12542;
 export const NIGHT_END = 23460;
 export const MORNING_FREEZE = 3001;

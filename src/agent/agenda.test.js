@@ -10,7 +10,7 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP } from './agenda.js';
 import { Vec3 } from 'vec3';
 import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
@@ -48,7 +48,8 @@ function fakeAgent(t, items = [], opts = {}) {
     const said = [];
     const agent = {
         name: 'FRCFLD',
-        agenda: new Agenda('FRCFLD', { dir: tempDir(t) }),
+        // The weapon reserve (soak 3) only where a test asks for it (opts.weapon): the older tests' bots hold none.
+        agenda: new Agenda('FRCFLD', { dir: tempDir(t), weapon: opts.weapon ?? null }),
         self_prompter: fakeSelfPrompter(),
         bot: fakeBot(items, opts),
         said,
@@ -561,7 +562,7 @@ test('#425 review: stuck at 2996-3000 (the freeze window) the minutes already fr
 // after the shelter reserve and before the step, after "agenda done" too, with its own budget.
 function foodAgent(t, items, { food = 12, timeOfDay = 1000, finished = true, now = () => Date.now(), entities = {} } = {}) {
     const agent = fakeAgent(t, items);
-    agent.agenda = new Agenda('FRCFLD', { dir: tempDir(t), now });
+    agent.agenda = new Agenda('FRCFLD', { dir: tempDir(t), now, weapon: null });
     if (finished) agent.agenda.finish(); else agent.agenda.start();
     const self = { id: 0, type: 'player', position: new Vec3(0.5, 64, 0.5) };
     Object.assign(agent.bot, { food, time: { timeOfDay }, entity: self, entities: { 0: self, ...entities } });
@@ -834,4 +835,63 @@ test('#468 review 4: an agenda.json from before (one stuck step, the agenda paus
     assert.equal(b.stuck.stone_axe.cooling, true, 'the new form round-trips');
     b.start();
     assert.deepEqual([b.active, b.stuck, b.spentOn('stone_axe').attempts], [true, {}, 0]);
+});
+
+// Soak 3 (rotn-v0.1.5): after the first death the bot never held a weapon again; bare hands did not
+// hurt the zombies digging into its shelter, which hit for 6-8 (12 deaths). The lead's decision: a
+// weapon in the before-night reserve.
+test('soak 3: before night, after the shelter\'s blocks and before food, the weapon reserve asks for a stone axe (or a crude axe with no table); a weapon held: done', (t) => {
+    const blocks = [stack('pyrotech:rock', 0, 6), stack('dirt', 0, SHELTER_RESERVE), stack('stick', 0, 1)];
+    const agent = fakeAgent(t, blocks, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    assert.equal(agent.said.at(-1), 'agenda step weapon started: hold a weapon for the night');
+    const p = agent.self_prompter.prompt;
+    assert.match(p, /^RotN agenda, step weapon \(before night\): Night is near and you hold no weapon\. Zombies here hit for 6 to 8 /);
+    assert.match(p, /You hold 6 rocks and 1 stick, and no crafting table is near\. Craft a stone axe at a crafting table with !craftRecipe\("stone_axe", 1\)/);
+    assert.match(p, /a crude axe works too .* !craftRecipe\("pyrotech:crude_axe", 1\)/);
+    // A crude axe held counts (attack 3 on this pack): the step goes on.
+    blocks.push(stack('pyrotech:crude_axe', 0, 1));
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks');
+    // The shelter's blocks come first.
+    const few = fakeAgent(t, [stack('pyrotech:rock', 0, 6)], { weapon: WEAPON_RESERVE_STEP });
+    few.bot.time = { timeOfDay: dayAt(7) };
+    assert.equal(agendaTick(few, { now: 0 }), 'shelter_blocks');
+    // By day (not near night) and at night: not asked.
+    const day = fakeAgent(t, blocks.slice(0, 3), { weapon: WEAPON_RESERVE_STEP });
+    day.bot.time = { timeOfDay: 1000 };
+    assert.equal(agendaTick(day, { now: 0 }), 'sticks');
+    const night = fakeAgent(t, blocks.slice(0, 3), { weapon: WEAPON_RESERVE_STEP });
+    night.bot.time = { timeOfDay: NIGHT_START + 500 };
+    assert.equal(night.agenda.weaponWanted(agendaState(night.bot)), null);
+});
+
+test('soak 3: the weapon reserve\'s own budget: spent, not again until the night is past; then fresh', (t) => {
+    const agent = fakeAgent(t, [stack('pyrotech:rock', 0, 6), stack('dirt', 0, SHELTER_RESERVE)], { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    agent.agenda.spent.weapon = { attempts: 1, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
+    assert.equal(agent.said.at(-1), `agenda step weapon stuck: ${STEP_LLM_MS / 60_000} min of self-prompting; going on without it until the night`);
+    assert.equal(agent.agenda.active, true);
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'sticks', 'the step goes on');
+    agent.bot.time = { timeOfDay: 1000 }; // the next morning
+    agendaTick(agent, { now: 3 * TICK_MS });
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    assert.equal(agendaTick(agent, { now: 4 * TICK_MS }), 'weapon', 'fresh again at the next dusk');
+    assert.equal(agent.agenda.spentOn('weapon').llm_ms, 0);
+});
+
+test('#470 nit: a giver\'s !agendaStart clears a stuck step\'s saved open-goal window', (t) => {
+    const dir = tempDir(t);
+    const a = new Agenda('FRCFLD', { dir, now: () => 10 });
+    a.start();
+    a.markStuck('stone_axe', '5 min of self-prompting');
+    a.stuck.stone_axe.openGoal = { key: 'stone_axe@10', llmMs: 120_000, starts: 4, lastStartAt: 9, ended: true };
+    a.save();
+    const b = new Agenda('FRCFLD', { dir, now: () => 20 });
+    assert.equal(b.stuck.stone_axe.openGoal.llmMs, 120_000, 'saved');
+    b.start();
+    const c = new Agenda('FRCFLD', { dir, now: () => 30 });
+    assert.deepEqual(c.stuck, {}, 'cleared, with its window');
 });

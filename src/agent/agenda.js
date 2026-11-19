@@ -217,6 +217,30 @@ export const STUCK_RETRY = { cooldownMs: 20 * 60_000, max: 3 };
 /** The open goal's start: not an autonomy prefix (AUTONOMY_PREFIXES), so it counts as the model's own goal. */
 export const OPEN_GOAL_PREFIX = 'Open goal while the agenda waits: ';
 
+/**
+ * Lead decision after soak 3 (rotn-v0.1.5): a weapon before night. After the first death the bot
+ * never held a weapon again; bare hands did not hurt the zombies digging into its shelter, and
+ * they hit for 6-8 (12 deaths). Like the shelter reserve: due in the same window before night,
+ * after the shelter's blocks and before food, with its own budget (spent: not again until the night
+ * is past). Done when the bot holds any weapon threats.hasWeapon counts (a sword or an axe; the
+ * crude axe too: attack 3 on this pack, as the stone axe).
+ */
+export const WEAPON_RESERVE_STEP = {
+    id: 'weapon', short: 'hold a weapon for the night', reserve: true, when: 'before night',
+    due: (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN; },
+    done: (s) => s.hasWeapon?.() !== false,
+    goal: 'Night is near and you hold no weapon. Zombies here hit for 6 to 8 and dig into shelters, and bare hands do not hurt them. '
+        + 'Craft a stone axe at a crafting table with !craftRecipe("stone_axe", 1): 3 rocks and 2 sticks. Rock piles break by hand: !collectBlocks("pyrotech:rock", 3); sticks: !collectBlocks("stick", 2). '
+        + 'With no crafting table near, a crude axe works too (the same attack, but it wears out after about 8 uses): !craftRecipe("pyrotech:crude_axe", 1) from 1 rock and 2 sticks in your inventory grid. The agenda may use the crude axe up on trees: this reserve then makes a new one (1 rock and 2 sticks) before dusk.',
+    goalNow: (s) => {
+        const rocks = s.count?.('pyrotech:rock') ?? 0;
+        const sticks = s.countOre?.('stickWood') ?? 0;
+        const table = !!(s.near?.('crafting_table') || (s.count?.('crafting_table') ?? 0) > 0);
+        const have = `You hold ${rocks} rock${rocks === 1 ? '' : 's'} and ${sticks} stick${sticks === 1 ? '' : 's'}${table ? ', and a crafting table is at hand' : ', and no crafting table is near'}. `;
+        return WEAPON_RESERVE_STEP.goal.replace('Craft a stone axe', `${have}Craft a stone axe`);
+    },
+};
+
 /** After the food reserve's budget is spent, it is not asked again for this long (G4 #5). */
 export const FOOD_RETRY_MS = 10 * 60_000;
 /**
@@ -278,7 +302,7 @@ export class Agenda {
      * @param {{dir?: string, steps?: Array, now?: () => number, reserve?: object|null}} [opts]
      *   reserve: the before-night step (SHELTER_RESERVE_STEP; null for none)
      */
-    constructor(botName, { dir = `./bots/${botName}`, steps = ROTN_EARLY_GAME, now = Date.now, reserve = SHELTER_RESERVE_STEP, food = FOOD_RESERVE_STEP } = {}) {
+    constructor(botName, { dir = `./bots/${botName}`, steps = ROTN_EARLY_GAME, now = Date.now, reserve = SHELTER_RESERVE_STEP, food = FOOD_RESERVE_STEP, weapon = WEAPON_RESERVE_STEP } = {}) {
         this.file = path.join(dir, 'agenda.json');
         this.steps = steps;
         this.now = now;
@@ -287,6 +311,8 @@ export class Agenda {
         this.foodOffUntil = 0; // its budget ran out: not asked again before this time
         this.foodDay = { key: null, runs: 0 }; // its runs this in-game day (FOOD_DAY_RUNS)
         this.reserveOff = false; // its budget ran out: not again until the night is past
+        this.weapon = weapon; // the before-night weapon (WEAPON_RESERVE_STEP; null for none)
+        this.weaponOff = false; // its budget ran out: not again until the night is past
         this.finished = false; // "agenda done": only the reserve runs
         this.active = false;
         this.done_at = {}; // step id -> when it was first seen done
@@ -356,16 +382,36 @@ export class Agenda {
     }
     stop() { if (this.active || this.finished) { this.active = false; this.finished = false; this.save(); } }
     /** All steps done: not active, but the before-night reserve still runs (G3 round 6 B). */
-    finish() { this.active = false; this.finished = !!this.reserve || !!this.food; this.save(); }
+    finish() { this.active = false; this.finished = !!this.reserve || !!this.food || !!this.weapon; this.save(); }
 
-    /** Whether a step id is one of the reserves (the shelter blocks, the food). */
-    isReserveId(id) { return id != null && (id === this.reserve?.id || id === this.food?.id); }
-    /** A reserve, if one is wanted now: the shelter reserve first, then food (G4 #5). */
-    anyReserveWanted(state) { return this.reserveWanted(state) ?? this.foodWanted(state); }
-    /** A reserve's budget is spent: the shelter reserve until the night is past; food for FOOD_RETRY_MS. */
+    /** Whether a step id is one of the reserves (the shelter blocks, the weapon, the food). */
+    isReserveId(id) { return id != null && (id === this.reserve?.id || id === this.weapon?.id || id === this.food?.id); }
+    /** A reserve, if one is wanted now: the shelter reserve first, then the weapon, then food (G4 #5). */
+    anyReserveWanted(state) { return this.reserveWanted(state) ?? this.weaponWanted(state) ?? this.foodWanted(state); }
+    /** A reserve's budget is spent: the shelter reserve and the weapon until the night is past; food for FOOD_RETRY_MS. */
     reserveStuck(id) {
         if (id === this.food?.id) this.foodOffUntil = this.now() + FOOD_RETRY_MS;
+        else if (id === this.weapon?.id) this.weaponOff = true;
         else this.reserveOff = true;
+    }
+
+    /**
+     * The before-night weapon (WEAPON_RESERVE_STEP) when it is wanted now: due, none held, budget
+     * not spent. Once the night is no longer near, its budget is fresh again for the next dusk.
+     */
+    weaponWanted(state, { readOnly = false } = {}) {
+        const r = this.weapon;
+        if (!r) return null;
+        let due = false;
+        try { due = !!r.due(state); } catch { due = false; }
+        if (!due) {
+            if (!readOnly) { this.weaponOff = false; delete this.spent[r.id]; } // #468 review 5: a query changes no budget
+            return null;
+        }
+        if (this.weaponOff) return null;
+        let done = false;
+        try { done = !!r.done(state); } catch { done = false; }
+        return done ? null : r;
     }
 
     /**
@@ -536,8 +582,16 @@ export class Agenda {
         // the driver hands over to the open goal (openGoal).
         // readOnly (#468 review 5, !agenda): the reserves are judged without touching their budgets.
         const blocked = waiting && !step;
-        const pick = this.reserveWanted(state, { readOnly }) ?? this.foodWanted(state, { standing: blocked, readOnly }) ?? step;
+        // Then a weapon before night (soak 3, lead decision), then food (G4 #5).
+        const pick = this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly })
+            ?? this.foodWanted(state, { standing: blocked, readOnly }) ?? step;
         return { step: pick, newlyDone, waiting: blocked };
+    }
+
+    /** The current stuck window's key (#468 review 1: the open goal's budget is per window), or null. */
+    openGoalKey() {
+        const stuck = this.steps.find(s => this.isWaiting(s.id));
+        return stuck ? `${stuck.id}@${this.stuck[stuck.id].at}` : null;
     }
 
     /**
@@ -545,12 +599,6 @@ export class Agenda {
      * waits on a stuck one): which step, what failed, when it is retried; gather what it needs,
      * explore nearby, keep the food and shelter reserves. Null when no step waits.
      */
-    /** The current stuck window's key (#468 review 1: the open goal's budget is per window), or null. */
-    openGoalKey() {
-        const stuck = this.steps.find(s => this.isWaiting(s.id));
-        return stuck ? `${stuck.id}@${this.stuck[stuck.id].at}` : null;
-    }
-
     openGoal(state = null) {
         const stuck = this.steps.find(s => this.isWaiting(s.id));
         if (!stuck) return null;

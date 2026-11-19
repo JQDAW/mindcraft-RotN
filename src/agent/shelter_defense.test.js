@@ -23,7 +23,9 @@ __setRegistryForTest(reg);
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 /** The bot in its shelter at 0 64 0, a wall open to the east, a zombie in the opening (x 1) or farther. */
-function shelter({ zombieAt = 1, label = '', others = [], killAfter = 2 } = {}) {
+// Soak 3, the lead's (b): the bot fights from the shelter only with a weapon (these tests give it a stone axe).
+const AXE = { name: 'stone_axe', metadata: 0, count: 1, type: 275 };
+function shelter({ zombieAt = 1, label = '', others = [], killAfter = 2, weapon = true } = {}) {
     __resetThreatLease();
     const self = { id: 0, name: 'player', type: 'player', position: new Vec3(0.5, 64, 0.5), height: 1.8 };
     const zombie = { id: 1, name: 'zombie', type: 'mob', position: new Vec3(zombieAt + 0.5, 64, 0.5), height: 1.8 };
@@ -33,7 +35,7 @@ function shelter({ zombieAt = 1, label = '', others = [], killAfter = 2 } = {}) 
         registry: reg, version: '1.12.2', health: 20, food: 20, isAlive: true, lastDamageTime: -1e9, lastDamageTaken: 0,
         rotnSheltered: 'open', interrupt_code: false, output: '',
         blockAt: () => null, clearControlStates() {}, setControlState() {},
-        inventory: { items: () => [], slots: [] }, heldItem: null,
+        inventory: { items: () => (weapon ? [AXE] : []), slots: [] }, heldItem: null,
         equip: () => Promise.resolve(),
         lookAt: () => { calls.looks++; return Promise.resolve(); },
         attack: (e) => { calls.attacks.push(e.id); if (calls.attacks.length >= killAfter) delete bot.entities[1]; }, // dies after killAfter hits
@@ -141,7 +143,7 @@ test('decision (1): hurt in the shelter with nothing in reach, the bot eats inst
     bot.food = 10;
     const bread = { name: 'bread', metadata: 0, count: 2, type: 297 };
     const eaten = [];
-    bot.inventory = { items: () => (bread.count > 0 ? [bread] : []), slots: [] };
+    bot.inventory = { items: () => [AXE, ...(bread.count > 0 ? [bread] : [])], slots: [] };
     bot.consume = () => { eaten.push(bot.heldItem?.name); bread.count--; bot.food += 5; return Promise.resolve(); };
     bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
     await selfPreservation(agent);
@@ -382,7 +384,7 @@ test('#355 review 1: leaving a deadly shelter with a zombie in reach, neither se
     bot.food = 10;
     const bread = { name: 'bread', metadata: 0, count: 2, type: 297 };
     const eaten = [];
-    bot.inventory = { items: () => (bread.count > 0 ? [bread] : []), slots: [] };
+    bot.inventory = { items: () => [AXE, ...(bread.count > 0 ? [bread] : [])], slots: [] };
     bot.consume = () => { eaten.push('bread'); bread.count--; return Promise.resolve(); };
     await selfPreservation(agent);
     assert.deepEqual(interrupts, [], 'the leaving build goes on');
@@ -454,7 +456,7 @@ test('CX23 soak: after a fight in place, hurt and too hungry to heal (food below
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
     const { agent, bot } = shelter();
     const bread = { name: 'bread', metadata: 0, count: 2, type: reg.itemsByName.bread.id };
-    bot.inventory = { items: () => [bread].filter(i => i.count > 0), slots: [] };
+    bot.inventory = { items: () => [AXE, bread].filter(i => i.count > 0), slots: [] };
     Object.assign(bot, { health: 14, food: 10 });
     bot.consume = () => { bread.count--; bot.food += 5; return Promise.resolve(); };
     await selfDefense(agent);
@@ -464,7 +466,7 @@ test('CX23 soak: after a fight in place, hurt and too hungry to heal (food below
 
     const fed = shelter();
     const b2 = { name: 'bread', metadata: 0, count: 2, type: reg.itemsByName.bread.id };
-    fed.bot.inventory = { items: () => [b2], slots: [] };
+    fed.bot.inventory = { items: () => [AXE, b2], slots: [] };
     Object.assign(fed.bot, { health: 14, food: 18 });
     let eaten = 0;
     fed.bot.consume = () => { eaten++; return Promise.resolve(); };
@@ -473,3 +475,24 @@ test('CX23 soak: after a fight in place, hurt and too hungry to heal (food below
     assert.equal(eaten, 0);
 });
 
+
+test('soak 3 (b): with no weapon the bot does not fight from the shelter (bare hands did not hurt the zombies); it says so at most every SHELTER_SAY_MS', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { agent, bot, calls } = shelter({ weapon: false });
+    await selfDefense(agent);
+    await selfDefense(agent);
+    await new Promise(r => setTimeout(r, 50));
+    assert.deepEqual(calls.attacks, [], 'no swing');
+    assert.equal(logs.filter(l => l === '[shelter] no weapon: not fighting from the shelter').length, 1);
+    assert.ok(bot.entities[1], 'the zombie is still there');
+});
+
+test('#470 review 2: unarmed, held, low health and no way to back away (agent._night.handFight): it hits back by hand', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { agent, calls } = shelter({ weapon: false });
+    agent._night = { handFight: true };
+    await selfDefense(agent);
+    for (let i = 0; i < 40 && calls.attacks.length === 0; i++) await new Promise(r => setTimeout(r, 25));
+    assert.ok(calls.attacks.length > 0, 'bare hands beat standing still');
+});
