@@ -1241,3 +1241,94 @@ test('#469 review: after a restart in open-goal mode the agenda says the restart
     now += TICK_MS; tick(after);
     assert.equal(after.said.filter(l => l === line).length, 1, 'once');
 });
+
+// Soak 4 (#478): after "agenda done" (11:19:24) the self-prompter stopped 6 s later and never
+// started again. The standing goal: the model's own goal under the open goal's budget, one window
+// per in-game day (a fixed 20 min when the day is unknown), said when it starts and when spent.
+function doneAgent(t, clock, { day = 3 } = {}) {
+    const agent = fakeAgent(t, { agenda: false });
+    agent.agenda = new Agenda('FRCFLD', { dir: agent.dir, now: () => clock.now });
+    agent.agenda.start();
+    agent.agenda.finish();
+    agent.bot = fakeBot([{ name: 'bread', metadata: 0, count: 4 }, { name: 'cobblestone', metadata: 0, count: 10 }, { name: 'stone_pickaxe', metadata: 0, count: 1 }, { name: 'stone_axe', metadata: 0, count: 1 }]);
+    Object.assign(agent.bot, { food: 20, time: { timeOfDay: 1000, day } });
+    agent._night = { state: 'day', lastShelter: { x: -59, y: 65, z: -82 } };
+    return agent;
+}
+const noNight = (t) => { const b = settings.night_shelter; settings.night_shelter = false; t.after(() => { settings.night_shelter = b; }); };
+
+test('#478: a finished agenda hands over to the standing goal (the model\'s own goal): said once a day when it starts, and when its 5 min are spent; a new day, a new budget', (t) => {
+    noNight(t);
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, clock);
+    const sp = agent.self_prompter;
+    let now = 0;
+    const tick = () => { clock.now = 1_000_000 + now; return autonomyTick(agent, { now }); };
+    assert.equal(tick(), 'goal:open');
+    assert.match(sp.prompt, /^Standing goal \(the agenda is done\): keep food worth at least \d+ hunger \(you hold \d+\) and 10 blocks for the night's shelter \(you have 10; cobblestone first\); keep a weapon and a pickaxe/);
+    assert.match(sp.prompt, /explore by day within 64 blocks of your last shelter at -59, 65, -82, away from where you died/);
+    assert.notEqual(sp.prompt, agent._autonomy_prompt, 'the model\'s own goal, not the agenda\'s');
+    assert.deepEqual(agent.said.filter(l => /^agenda standing goal/.test(l)), ['agenda standing goal started (day 3)']);
+    // It runs its 5 min of self-prompting, then none until the next day.
+    let r = null;
+    for (now = TICK_MS; now <= STEP_LLM_MS + 3 * TICK_MS; now += TICK_MS) r = tick();
+    assert.equal(r, 'goal:open:spent');
+    assert.equal(sp.isActive(), false);
+    assert.ok(agent.said.includes('agenda standing goal: its 5 min of self-prompting for day 3 are spent; none until the next day'));
+    for (let k = 0; k < 20; k++) { now += 30_000; assert.equal(tick(), 'goal:open:spent'); }
+    assert.equal(agent.said.filter(l => /spent/.test(l)).length, 1, 'said once');
+    // The next in-game day: a fresh budget, said again.
+    agent.bot.time = { timeOfDay: 1000, day: 4 };
+    now += TICK_MS;
+    assert.equal(tick(), 'goal:open');
+    assert.ok(agent.said.includes('agenda standing goal started (day 4)'));
+    assert.equal(agent.agenda.standing.key, 'done@day 4');
+});
+
+test('#478: with the day unknown the window is a fixed 20 min; the window survives a restart; a giver\'s !endGoal ends it until the next window', async (t) => {
+    noNight(t);
+    const { STANDING } = await import('./agenda.js');
+    const clock = { now: 40 * 60_000 };
+    const agent = doneAgent(t, clock);
+    agent.bot.time = { timeOfDay: 1000 }; // no day
+    let now = 40 * 60_000;
+    const tick = (a = agent) => { clock.now = now; return autonomyTick(a, { now }); };
+    assert.equal(tick(), 'goal:open');
+    const slice = Math.floor(now / STANDING.windowMs);
+    assert.ok(agent.said.includes(`agenda standing goal started (the 20-min window ${slice})`));
+    for (let k = 0; k < 10; k++) { now += TICK_MS; tick(); }
+    const saved = JSON.parse(readFileSync(agent.agenda.file, 'utf8')).standing;
+    assert.equal(saved.key, `done@t ${slice}`);
+    assert.equal(saved.starts, 1);
+    // A restart: the same window and its count.
+    const after = fakeAgent(t, { agenda: false, dir: agent.dir });
+    after.agenda = new Agenda('FRCFLD', { dir: agent.dir, now: () => clock.now });
+    after.bot = agent.bot;
+    after._night = agent._night;
+    assert.equal(after.agenda.standing.key, `done@t ${slice}`);
+    now += TICK_MS;
+    assert.equal(tick(after), 'goal:open:backoff', 'its first start still counts');
+    // A giver's !endGoal: none until the next window.
+    const { getCommand } = await import('./commands/index.js');
+    now += BACKOFF_MS;
+    assert.equal(tick(after), 'goal:open');
+    await getCommand('!endGoal').perform(after, { sender: 'JQDAW' });
+    for (let k = 0; k < 10; k++) { now += 30_000; assert.equal(tick(after), 'goal:open:ended'); }
+    now = (slice + 1) * STANDING.windowMs + 1000; // the next 20-min window
+    assert.equal(tick(after), 'goal:open');
+});
+
+test('#478: a reserve that becomes wanted (the shelter blocks before night) takes the standing goal\'s loop over', (t) => {
+    noNight(t);
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, clock);
+    agent.bot.inventory = { items: () => [{ name: 'bread', metadata: 0, count: 4 }, { name: 'stone_pickaxe', metadata: 0, count: 1 }, { name: 'stone_axe', metadata: 0, count: 1 }], slots: [] };
+    let now = 0;
+    assert.equal(autonomyTick(agent, { now }), 'goal:open');
+    agent.bot.time = { timeOfDay: 12542 - 7 * 1199, day: 3 }; // 7 min before sunset: the shelter reserve is due
+    now += TICK_MS;
+    clock.now += TICK_MS;
+    assert.equal(autonomyTick(agent, { now }), 'shelter_blocks');
+    assert.match(agent.self_prompter.prompt, /^RotN agenda, step shelter_blocks/);
+    assert.equal(agent._agenda_open_goal, null);
+});

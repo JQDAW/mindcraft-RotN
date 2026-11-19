@@ -237,6 +237,14 @@ export const OPEN_GOAL = { maxBackoffMs: 10 * 60_000, minChargeMs: 10_000 };
  */
 function openGoalWindow(agent) {
     const key = agent._agenda_open_key;
+    if (typeof key === 'string' && key.startsWith('done@')) {
+        // The standing goal (#478): its window with the agenda (agenda.json), one per in-game day.
+        const agenda = agent.agenda;
+        if (!agenda) return null;
+        if (agenda.standing?.key !== key) agenda.standing = { key, llmMs: 0, starts: 0, lastStartAt: null, ended: false };
+        if (agent._open_goal_run?.key !== key) agent._open_goal_run = { key, running: false, at: null, elapsed: 0, spentSaid: false, savedAt: null };
+        return agenda.standing;
+    }
     const id = typeof key === 'string' ? key.slice(0, key.lastIndexOf('@')) : null;
     const e = id ? agent.agenda?.stuck?.[id] : null;
     if (!e) return null;
@@ -253,7 +261,14 @@ function saveWindow(agent, now, { force = true } = {}) {
     try { agent.agenda?.save?.(); } catch { /* the agenda logs its own save errors */ }
 }
 
-/** #468 review 1 (iii): a task giver's !endGoal ends the open goal until the retry. */
+/** The standing goal's window as said ("day 7", or "the 20-min window 123"), or null for an open goal's. */
+const standingLabel = (key) => {
+    if (typeof key !== 'string' || !key.startsWith('done@')) return null;
+    const rest = key.slice(5);
+    return rest.startsWith('day ') ? rest : `the 20-min window ${rest.replace(/^t /, '')}`;
+};
+
+/** #468 review 1 (iii): a task giver's !endGoal ends the open goal until the retry (the standing goal until the next day). */
 export function endOpenGoal(agent) {
     const w = openGoalWindow(agent);
     if (!w) return false;
@@ -303,11 +318,15 @@ function openGoalTick(agent, now, open) {
     if (w.llmMs >= budget) {
         if (!run.spentSaid) {
             run.spentSaid = true;
-            say(agent, `agenda open goal: its ${minutes(budget)} of self-prompting for this wait are spent; none until the retry`);
+            say(agent, standingLabel(w.key)
+                ? `agenda standing goal: its ${minutes(budget)} of self-prompting for ${standingLabel(w.key)} are spent; none until the next day`
+                : `agenda open goal: its ${minutes(budget)} of self-prompting for this wait are spent; none until the retry`);
         }
         return 'goal:open:spent';
     }
     if (w.starts > 0 && w.lastStartAt !== null && now < w.lastStartAt + Math.min(BACKOFF_MS * 2 ** (w.starts - 1), OPEN_GOAL.maxBackoffMs)) return 'goal:open:backoff';
+    // #478: the standing goal's first start in its window is said (the soak measures it).
+    if (w.starts === 0 && standingLabel(w.key)) say(agent, `agenda standing goal started (${standingLabel(w.key)})`);
     w.starts++;
     w.lastStartAt = now;
     w.llmMs += OPEN_GOAL.minChargeMs; // #468 nit 2: each start is charged at least this much
@@ -326,7 +345,7 @@ function openGoalTick(agent, now, open) {
  */
 function modelGoalTick(agent, now) {
     const sp = agent.self_prompter;
-    const open = agent.agenda?.active ? agent._agenda_open_goal : null;
+    const open = agent.agenda?.active || agent.agenda?.finished ? agent._agenda_open_goal : null;
     if (open) {
         const r = openGoalTick(agent, now, open);
         if (r !== undefined) return r;
