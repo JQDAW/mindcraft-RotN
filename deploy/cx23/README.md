@@ -286,7 +286,7 @@ Then check each point; **stop and tell the lead if any output differs**:
 | `sudo -l -U rotn-build` | no rule: no line with `NOPASSWD` or `(` |
 | `sudo -l -U deploy` | exactly two `NOPASSWD` lines: `(root) NOPASSWD: /usr/local/sbin/mindcraft-rotn-ctl` and `(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh`; no `SETENV` and no `env_keep` anywhere. (deploy is also in group `sudo`, so the group's own `(ALL : ALL) ALL` line, which needs deploy's password, shows as well: that one is expected.) |
 | `stat -c '%U %G %a' /opt/mindcraft-rotn /opt/mindcraft-rotn/releases` | `rotn-build rotn-release 2750`, twice |
-| `sudo -u mindcraft-rotn test -r /opt/mindcraft-rotn/current/main.js; echo $?` | `0`: the bot user reads the current release (still the one from before) through `rotn-release` |
+| `sudo -u mindcraft-rotn head -c1 /opt/mindcraft-rotn/current/main.js >/dev/null; echo $?` | `0`: the bot user reads the current release (still the one from before) through `rotn-release`. Not `test -r`: on the CX23 `/usr/bin/test` is uutils, which answered 1 for this file although the bot user can read it (bash's `[ -r ]`, `head` and node all can); it seems to ignore supplementary groups. |
 | `stat -c '%U %G %a' /usr/local/lib/mindcraft-rotn/deploy.sh /usr/local/sbin/mindcraft-rotn-ctl` | `root root 755`, twice |
 | `ls /home/deploy/deploy.sh 2>&1` | `No such file or directory` |
 | `find /opt/mindcraft-rotn ! -user rotn-build \| head` | nothing |
@@ -311,7 +311,7 @@ Send the lead the three hashes. They must equal `sha256sum deploy/cx23/mindcraft
 sudo -u deploy sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh check <TAG>
 sudo -u deploy sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy <TAG>; echo "exit $?"
 find /opt/mindcraft-rotn/current/ ! -group rotn-release
-sudo -u mindcraft-rotn test -r /opt/mindcraft-rotn/current/main.js; echo "readable $?"
+sudo -u mindcraft-rotn head -c1 /opt/mindcraft-rotn/current/main.js >/dev/null; echo $?
 sudo -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh status
 sudo -u deploy sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh rollback; echo "exit $?"
 ```
@@ -321,7 +321,7 @@ sudo -u deploy sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh rol
 | `check <TAG>` | `tag=<TAG> commit=<40 hex> on-develop=yes release=<TAG>-<sha12>` |
 | `--no-restart deploy <TAG>` | first `[deploy hh:mm:ss] removing a stale build folder: releases/.tmp-...` once for each build folder older than a day (the one from rotn-v0.1.2, say), then `npm ci` output, then `[deploy hh:mm:ss] deployed <TAG>-<sha12> (bots restarted: none; --no-restart)`; `exit 0` |
 | `find /opt/mindcraft-rotn/current/ ! -group rotn-release` | **nothing**: every file of the new release has the release group (canvas's `build/config.gypi` included) |
-| `test -r .../current/main.js` as `mindcraft-rotn` | `readable 0`: the bot user reads the new release |
+| `head -c1 .../current/main.js` as `mindcraft-rotn` | `0`: the bot user reads the new release (`head`, not `test -r`: see D2) |
 | `ls -d /opt/mindcraft-rotn/releases/.tmp-*` | `No such file or directory` (no build folder left) |
 | `status` | `current=<TAG>-<sha12>`, then `previous=` the release before |
 | `rollback` (as rotn-build) | `[deploy] ERROR: as rotn-build only: status \| check TAG \| --no-restart deploy TAG`; `exit 1` |
