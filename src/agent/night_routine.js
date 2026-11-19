@@ -16,11 +16,11 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, shelterShell, dumpState, isFullDay, replanHold } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE, heldCells, retreatPlan, backAway, BACK_AWAY } from './library/shelter.js';
-import { goToGoal, descendFromTree } from './library/skills.js';
+import { goToGoal, descendFromTree, avoidEnemies } from './library/skills.js';
 import { stowCarried, toolAllows, allowedTool } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
-import { hasWeapon, shelterEnemy } from './library/threats.js';
+import { hasWeapon, shelterEnemy, threatFor, isPlayerZombie, canFightHard } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
 import { say, isGiverGoal, ownsPrompt } from './agenda_driver.js';
@@ -424,6 +424,67 @@ const EXIT_REACH = 4.5;
 /** The walk of an exit (tests pass their own): never digs, bounded by goToGoal. */
 const exitWalk = (bot, goal) => goToGoal(bot, goal, { canDig: false });
 
+/**
+ * Soak 4 (rotn-v0.1.7), the lead's morning rule: a hostile mob still within LEAVE_MOB_RANGE of the
+ * shelter at full day is waited for at most waitMs (2 min). Then the bot fights it through the wall
+ * on its side when it holds a weapon, has fightHealth or more, at most maxFight hostile mobs are
+ * near and nothing that explodes, shoots or must be avoided is within dangerRange; else (or below
+ * fleeHealth in that fight) it leaves by the side away from the mob and walks awayDist from it.
+ * capMs: never later than this, it hands back to the agenda.
+ */
+export const MORNING = { waitMs: 2 * 60_000, capMs: 5 * 60_000, fightHealth: 14, fleeHealth: 10, maxFight: 1, dangerRange: 16, awayDist: 16 };
+
+/** The morning choice with a mob near: {action: 'fight'|'leave', why}. */
+export function morningChoice(bot, site) {
+    const c = site.offset(0.5, 0, 0.5);
+    const mobs = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && shelterEnemy(e));
+    const near = mobs.filter(e => e.position.distanceTo(c) <= LEAVE_MOB_RANGE);
+    const danger = mobs.find(e => e.position.distanceTo(c) <= MORNING.dangerRange && ['avoid', 'keep-distance', 'take-cover'].includes(threatFor(e)?.reaction));
+    const health = Math.round(bot.health ?? 0);
+    if (!hasWeapon(bot)) return { action: 'leave', why: 'no weapon' };
+    if (!(bot.health >= MORNING.fightHealth)) return { action: 'leave', why: `armed, but health ${health}` };
+    if (near.length > MORNING.maxFight) return { action: 'leave', why: `${near.length} hostile mobs near` };
+    if (danger) return { action: 'leave', why: `a ${danger.name} near (${threatFor(danger).reaction})` };
+    if (near[0] && isPlayerZombie(near[0]) && !canFightHard(bot)) return { action: 'leave', why: 'a player zombie, and no weapon or health at half or less' };
+    return { action: 'fight', why: `armed, health ${health}, one ${near[0]?.name ?? 'mob'} near` };
+}
+
+/** The shelter's side facing pos (a mob): the horizontal direction most towards it (x first on a tie). */
+export function sideToward(feet, pos) {
+    const dx = pos.x - (feet.x + 0.5), dz = pos.z - (feet.z + 0.5);
+    return HORIZONTAL.slice().sort((a, b) => (b.x * dx + b.z * dz) - (a.x * dx + a.z * dz))[0];
+}
+
+/** Open the shelter's wall (feet and head) on the side toward pos, so a mob there steps into reach. Returns the open cells, or null. */
+export async function openToward(bot, feet, pos, { walk = exitWalk } = {}) {
+    await stowCarried(bot, (i) => /pickaxe/.test(i.name), { resyncMs: 0 });
+    const d = sideToward(feet, pos);
+    const cells = [feet.plus(d).offset(0, 1, 0), feet.plus(d)];
+    for (const q of cells) {
+        if (bot.interrupt_code) return null;
+        if (!isEmpty(bot.blockAt(q)) && !await digExitCell(bot, q, walk)) return null;
+    }
+    if (!cells.every(q => isEmpty(bot.blockAt(q)))) return null;
+    console.log(`[night] morning: opened the ${sideName(d)} wall (${cells.map(at).join(' and ')})`);
+    return cells;
+}
+
+/**
+ * The mob's state at the end of the morning grace (soak 4: why it stayed): whether it moved, its
+ * health, what it holds and wears on its head, and the sky light where it stands (shade).
+ */
+export function mobStateLine(bot, mob, first, waitedMs) {
+    const moved = first?.pos && mob.position ? mob.position.distanceTo(first.pos) : null;
+    const health = Number.isFinite(mob.health) ? mob.health : Number.isFinite(mob.metadata?.[7]) ? mob.metadata[7] : null;
+    const eq = Array.isArray(mob.equipment) ? mob.equipment : [];
+    const held = mob.heldItem?.name ?? eq[0]?.name ?? 'nothing';
+    const helmet = eq[5]?.name ?? 'none';
+    let sky = null;
+    try { sky = mob.position ? bot.blockAt?.(mob.position.floored?.() ?? mob.position)?.skyLight ?? null : null; } catch { sky = null; }
+    return `[night] morning: after ${Math.round(waitedMs / 1000)} s ${mobText(mob)} ${moved === null ? 'may have moved' : moved < 0.5 ? 'has not moved' : `moved ${Math.round(moved * 10) / 10} blocks`}; `
+        + `health ${health ?? 'unknown'}, holds ${held}, helmet ${helmet}, sky light ${sky ?? 'unknown'}`;
+}
+
 /** Dig one cell of an exit within the per-block limit (#435 review 2, digBudget): true when it is gone or was free. */
 async function digExitCell(bot, q, walk) {
     if (isEmpty(bot.blockAt(q))) return true;
@@ -451,7 +512,7 @@ async function digExitCell(bot, q, walk) {
  * (#435 review 4). Returns the side's lower wall position (stairs: the cell at the top), or null.
  * `walk` is for tests.
  */
-export async function digOut(bot, feet, { walk = exitWalk } = {}) {
+export async function digOut(bot, feet, { walk = exitWalk, away = null } = {}) {
     // The pickaxe must be where breakBlockAt's equipForBlock looks (#229 review).
     const moved = await stowCarried(bot, (i) => /pickaxe/.test(i.name), { resyncMs: 0 }); // no wait: it is night
     if (moved.length) console.log(`[night] moved ${moved.join(' and ')} back into the inventory to dig out`);
@@ -467,7 +528,9 @@ export async function digOut(bot, feet, { walk = exitWalk } = {}) {
     if (plans.length === 0) {
         for (const d of HORIZONTAL) consider(stairsUpPlan(bot, feet, d), d, `no stairs up on the ${sideName(d)} side`);
     }
-    plans.sort((a, b) => (b.byHand - a.byHand) || (a.dig.length - b.dig.length)); // stable: HORIZONTAL order on a tie
+    // Soak 4: away (a mob's position): the side farthest from it first (the morning rule's leave).
+    const from = (plan) => (away ? Math.hypot(feet.x + plan.d.x + 0.5 - away.x, feet.z + plan.d.z + 0.5 - away.z) : 0);
+    plans.sort((a, b) => (from(b) - from(a)) || (b.byHand - a.byHand) || (a.dig.length - b.dig.length)); // stable: HORIZONTAL order on a tie
     for (const plan of plans) {
         let dug = true;
         for (const q of plan.dig) {
@@ -552,7 +615,8 @@ const mobText = (e) => e?.position ? `a ${e.name ?? e.displayName ?? 'hostile mo
 
 /** What the routine does in the world (tests pass their own). */
 export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, onTree: standsOnTree, descend: (bot) => descendFromTree(bot),
-    nightRelocation: nightRelocationPlan, walkAwayAtNight,
+    nightRelocation: nightRelocationPlan, walkAwayAtNight, morningChoice, openToward,
+    awayFromMobs: (bot) => avoidEnemies(bot, MORNING.awayDist, shelterEnemy),
     heldCells, retreatPlan, backAway, hasWeapon };
 
 /**
@@ -864,7 +928,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 bot.rotnSheltered = false;
                 n.state = 'day';
                 n.site = null;
-                Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false });
+                Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
+                    mobFirst: null, mobStateSaid: false, morningAct: null, morningWhy: null });
                 line(agent, text);
             };
             const failedTry = (why) => {
@@ -891,13 +956,64 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             // a fixed 3 min handed back with the mob still there); the bound is below. A mob that
             // leaves ends its wait (mobSince): a later one gets its own, said again.
             const mob = ops.hostileNear?.(bot, LEAVE_MOB_RANGE);
-            if (!mob) Object.assign(n, { mobSince: null, mobSaid: false });
+            if (!mob) Object.assign(n, { mobSince: null, mobSaid: false, mobFirst: null, mobStateSaid: false, morningAct: null, morningWhy: null });
             if (mob) {
                 n.mobSince ??= now;
-                n.exitAt = now + RETRY_MS;
-                const text = `[night] morning: ${mobText(mob)} is within ${LEAVE_MOB_RANGE} blocks of the shelter at ${at(n.site)}; staying in until it leaves (checking every ${RETRY_MS / 1000} s)`;
-                if (n.mobSaid) console.log(text); else { n.mobSaid = true; line(agent, text); }
-                return 'night:inside';
+                n.mobFirst ??= { pos: mob.position?.clone?.() ?? mob.position, id: mob.id };
+                const waited = now - n.mobSince;
+                // Soak 4 (rotn-v0.1.7): a zombie stood 14 min at the shelter's corner (no path in, nothing in
+                // line to dig, in shade) and the bot waited the whole day. Now a grace of MORNING.waitMs,
+                // then fight it through the wall on its side (armed, health, one mob), else leave by the
+                // side away from it; never past MORNING.capMs.
+                if (waited < MORNING.waitMs) {
+                    n.exitAt = now + RETRY_MS;
+                    const text = `[night] morning: ${mobText(mob)} is within ${LEAVE_MOB_RANGE} blocks of the shelter at ${at(n.site)}; staying in until it leaves (checking every ${RETRY_MS / 1000} s, at most ${MORNING.waitMs / 60_000} min)`;
+                    if (n.mobSaid) console.log(text); else { n.mobSaid = true; line(agent, text); }
+                    return 'night:inside';
+                }
+                if (!n.mobStateSaid) { n.mobStateSaid = true; line(agent, mobStateLine(bot, mob, n.mobFirst, waited)); }
+                if (!n.morningAct) {
+                    const choice = (ops.morningChoice ?? morningChoice)(bot, n.site);
+                    n.morningAct = choice.action;
+                    n.morningWhy = choice.why;
+                    if (choice.action === 'fight') {
+                        line(agent, `[night] morning: ${choice.why}: opening the wall toward ${mobText(mob)} to fight it from the shelter`);
+                        startJob(agent, n, 'action:openShelter', () => ops.openToward(bot, n.site, mob.position), (cells) => {
+                            if (cells?.length) { bot.rotnSheltered = 'open'; return; } // the in-shelter fight (self_defense, armed) hits it in reach
+                            n.morningAct = 'leave';
+                            n.morningWhy = 'the wall toward it did not open';
+                            console.warn(`[night] morning: could not open the wall toward ${mobText(mob)}; leaving by the side away from it instead`);
+                        });
+                        return 'night:inside';
+                    }
+                }
+                if (n.morningAct === 'fight' && Number.isFinite(bot.health) && bot.health < MORNING.fleeHealth) {
+                    n.morningAct = 'leave';
+                    n.morningWhy = `health ${Math.round(bot.health)} in the fight`;
+                }
+                if (n.morningAct === 'leave') {
+                    n.morningAct = 'leaving';
+                    line(agent, `[night] morning: ${n.morningWhy}: leaving the shelter at ${at(n.site)} by the side away from ${mobText(mob)}`);
+                    const away = mob.position;
+                    const out = n.pit ? () => ops.pitOut(bot, n.site, { away }) : () => ops.digOut(bot, n.site, { away });
+                    startJob(agent, n, 'action:leaveShelter', async () => {
+                        const side = await out();
+                        if (side) await ops.awayFromMobs?.(bot);
+                        return side;
+                    }, (side) => {
+                        if (side) { handBack(`[night] morning: left the shelter at ${at(side)} on the side away from ${mobText(mob)}; back to work`); return; }
+                        n.morningAct = 'leave'; // the next try, RETRY_MS apart (failedTry)
+                        const here = bot.entity.position.floored();
+                        n.exitLeftAt = here.equals(n.site) ? null : here;
+                        failedTry(`no side of the shelter at ${at(n.site)} away from ${mobText(mob)} to open yet`);
+                    });
+                    return 'night:inside';
+                }
+                if (waited >= MORNING.capMs) {
+                    handBack(`[night] morning: ${mobText(mob)} still near the shelter at ${at(n.site)} after ${MORNING.capMs / 60_000} min; back to work (the agenda and the reflexes decide; the shelter may still be closed)`);
+                    return null;
+                }
+                return 'night:inside'; // the fight goes on (self_defense from the opened shelter)
             }
             const out = n.pit ? () => ops.pitOut(bot, n.site) : () => ops.digOut(bot, n.site);
             startJob(agent, n, 'action:leaveShelter', out, (side) => {

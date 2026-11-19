@@ -247,3 +247,24 @@ test('soak 2: the eating reflex eats rotten flesh at food 5 with nothing else, a
     assert.ok(warns.some(w => /eating: food 5 \(food 0 kills on this pack\): eating minecraft:rotten_flesh:0 although it is avoided/.test(w)), warns.join('\n'));
     assert.deepEqual(await run(6), [], 'food 6: not yet');
 });
+
+// Soak 4 (rotn-v0.1.7): a zombie stood at the corner of the closed shelter all morning; the eating
+// reflex took it for a threat and waited for food 6 (food 20 -> 11 with food held, no eat line).
+test('soak 4: in a closed night shelter a mob outside is no threat to eating (food 12 eats); with a wall open it is', async (t) => {
+    quiet(t);
+    const mode = freshMode();
+    const zombie = { name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5), metadata: [] };
+    const shut = eatBot([stack('rustic:wildberries', 0, 3)], 12);
+    shut.bot.entities = { 1: shut.bot.entity, 2: zombie };
+    shut.bot.rotnSheltered = true;
+    await mode.update(modeAgent(shut.bot));
+    await settled();
+    assert.deepEqual(shut.eaten, ['rustic:wildberries'], 'sealed in: it eats at 12');
+    const open = eatBot([stack('rustic:wildberries', 0, 3)], 12);
+    open.bot.entities = { 1: open.bot.entity, 2: zombie };
+    open.bot.rotnSheltered = 'open';
+    Object.assign(mode, { wait_until: -Infinity });
+    await mode.update(modeAgent(open.bot));
+    await settled();
+    assert.deepEqual(open.eaten, [], 'a wall open: the zombie is a threat, it waits for 6');
+});
