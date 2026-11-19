@@ -36,15 +36,18 @@ Option 2.
 **Release code never runs as `deploy`.**
 - **A build user, `rotn-build`:**
   - a system user with no login shell, no SSH key, no sudo rule, and not in the `sudo` group;
-  - it owns `/opt/mindcraft-rotn` (releases, `current`, the deploy lock and `deploys.log`);
-  - the bot service still reads it (0755).
+  - it has a real home, `/var/lib/rotn-build` (0700), for npm's cache and git; it is listed in `/etc/cron.deny`;
+  - it is **not** in the `mindcraft-rotn` group (so it cannot read the bots' memories);
+  - `/opt/mindcraft-rotn` and `releases` become `rotn-build:mindcraft-rotn` with mode 2750 (setgid), so new files get the bot's group; `deploy.sh`'s `chgrp -R mindcraft-rotn` is then a same-group change, and the bot still reads its release through the group.
 - **A root-owned copy of `deploy.sh`,** `root:root 0755` at `/usr/local/lib/mindcraft-rotn/deploy.sh`.
-- **One narrow sudoers line:** `deploy ALL=(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh`. That is the only way to act as `rotn-build`. sudo resets the environment.
+- **One narrow sudoers line:** `deploy ALL=(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh`, with no `env_keep` and no `SETENV` for it. That is the only way to act as `rotn-build`, and sudo resets the environment. The line allows any arguments, so **`deploy.sh` checks its own arguments**: run as `rotn-build`, it accepts only `status`, `--no-restart deploy TAG` and the no-build check, and refuses `rollback` and any `deploy` without `--no-restart`.
+- **Every deploy goes through the build user, the human's too.** `/home/deploy/deploy.sh` is retired (removed), and the README's manual step becomes `sudo -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy TAG`. Release code never runs as `deploy` again. Restarting enabled bots after G4 becomes a separate ctl step, defined when the bots are enabled.
 - **A build mode in `deploy.sh`** (`--no-restart`) that never calls the ctl. Restarts are not needed, because the gate refuses `deploy` while any bot is enabled. `rotn-build` has no ctl rights, so it could not restart a bot anyway.
 
 **Effect.** As `deploy`, the gate runs only fixed root-owned scripts (the gate itself, `sudo -n` ctl, and `sudo -n -u rotn-build` deploy.sh), and never release code. Release code runs only as `rotn-build`. It can change the release tree (which is the bot's code in any case), but it cannot touch `deploy`'s files or keys, and it cannot run the ctl.
 
-**Not needed with this design, optional hardening:**
+**Optional hardening:**
+- the gate runs the build under `systemd-run --uid=rotn-build --wait --collect` (or kills leftover `rotn-build` processes after it), so release code cannot leave a process behind that changes the tree after the deploy;
 - a root-owned `authorized_keys` (`Match User deploy` / `AuthorizedKeysFile /etc/ssh/authorized_keys/%u`, in its own `sshd_config.d` drop-in ending with `Match all`, checked with `sshd -T -C user=deploy,...`);
 - a root-owned `/home/deploy`.
 
@@ -52,13 +55,15 @@ harness-ops writes the steps into `deploy/cx23/README.md` with a check command f
 - `id rotn-build`;
 - `sudo -l -U rotn-build` showing no rules;
 - `stat` of the copy of deploy.sh;
-- `sudo -l -U deploy` showing exactly the two rules.
+- `sudo -l -U deploy` showing exactly the two rules, and no `env_keep` or `SETENV` on the second;
+- `passwd -S rotn-build` showing a locked password;
+- `stat` of `/opt/mindcraft-rotn` showing `rotn-build mindcraft-rotn 2750`.
 
 ### The new gate requests
 
 | Request | Runs | Checks |
 | --- | --- | --- |
-| `deploy TAG` | `sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy TAG` (sudo gives a clean environment: no `ROOT`, repo URL or timing overrides; the script sets a fixed `PATH` that includes `node`, `npm` and `git`) | TAG matches `^rotn-v[0-9]+\.[0-9]+\.[0-9]+$` exactly (deliberately stricter than `deploy.sh`'s TAG_RE, which allows a suffix: do not align them). The gate **refuses if any bot is enabled** (via `ctl list` / `is-enabled`), because `deploy.sh` restarts, and so starts, enabled bots. `deploy.sh` checks that the tag is on a freshly fetched `develop`. |
+| `deploy TAG` | `sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy TAG` (sudo gives a clean environment: no `ROOT`, repo URL or timing overrides; the script sets a fixed `PATH` that includes `node`, `npm` and `git`) | TAG matches `^rotn-v[0-9]+\.[0-9]+\.[0-9]+$` exactly (deliberately stricter than `deploy.sh`'s TAG_RE, which allows a suffix: do not align them). The gate **refuses if any bot is enabled** (via `ctl list` / `is-enabled`): an enabled bot comes back on its own after a reboot and joins whatever its env file names, which the human's start GO must cover. `deploy.sh` checks that the tag is on a freshly fetched `develop`. |
 | `deploy-check TAG` | the same `sudo -u rotn-build` call in a no-build mode: fetch, then check the tag is on `develop` and print its commit | The same TAG check. A dry run. |
 | `release` | `sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh status` | Read-only. |
 | `reset-state BOT NAME` | `sudo -n mindcraft-rotn-ctl reset-state BOT NAME` | BOT is the unit name (the existing regex). NAME is the Mindcraft profile name, `^[A-Za-z0-9_]{1,16}$` (for this bot, unit `frcfld`, profile `FRCFLD`). |
@@ -112,7 +117,7 @@ No verb reads or writes `/etc/mindcraft-rotn/<bot>.env`. A bot `start` still nee
 - **The human** does the prerequisites above (the build user, the ownership change, the sudoers line), installs the reviewed gate, ctl and root-owned `deploy.sh`, and reports their SHA-256 values and the outputs of the check commands, as in step 0. Until then the new verbs do not exist and the human keeps doing these steps.
 - **Audit.** The human can see every gate request and every deploy result with `journalctl -t rotn-ssh-gate`, and the current release with `release` (or `deploy.sh status`). The lead's STATUS file lists each deploy.
 - **Operations.**
-  - A deploy can take minutes (`npm ci` retries and a health wait). The lead runs it with `ssh -o ServerAliveInterval=30`.
+  - A deploy can take minutes (`npm ci` and its retries). The lead runs it with `ssh -o ServerAliveInterval=30`.
   - If the session drops and leaves a stale `.deploy.lock`, the next deploy reports the lock, and the human clears it (rare).
   - There is no `rollback` verb: deploying the previous tag is the rollback.
 - **Security, stated plainly.**
