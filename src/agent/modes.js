@@ -7,7 +7,7 @@ import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
 import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
-import { REPAIR_LABEL, BACK_AWAY_LABEL, nightPhase, minutesToSunset, replanHold } from './library/night.js';
+import { REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, nightPhase, minutesToSunset, replanHold } from './library/night.js';
 import { RESERVE_LEAD_MIN } from './agenda.js';
 import { huntTarget, knownBases, huntAnimal, skipAnimal, HUNT, tooWeakToHunt } from './library/hunting.js';
 import { forageTarget } from './library/foraging.js';
@@ -105,7 +105,7 @@ export function foodDue(agent) {
 const isDaylight = (agent) => { const t = timeOfDayFor(agent); return t !== null && nightPhase(t) === 'day'; };
 
 function nightRoutineBusy(agent) {
-    return [REPAIR_LABEL, BACK_AWAY_LABEL].includes(agent.actions.currentActionLabel) || (!!agent._night?.leaveFrom && !!agent._night?.job);
+    return [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL].includes(agent.actions.currentActionLabel) || (!!agent._night?.leaveFrom && !!agent._night?.job);
 }
 
 /**

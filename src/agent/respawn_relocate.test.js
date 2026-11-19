@@ -250,3 +250,53 @@ test('soak 3 C: the short walk stops at the first spot 24 blocks from every deat
     assert.equal(r3.stopped, 'time');
     assert.equal(r3.arrived, false);
 });
+
+// #471 nits: the fallbacks, the dimension, the walk's guards.
+test('#471 nit 6: no 48-block spot (water beyond 44): the short walk instead; no dry spot at all: no walk', () => {
+    const now = 1_000_000;
+    const ringed = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now });
+    const centre = new Vec3(-50, 0, -65);
+    ringed.bot.blockAt = (p) => (hdist(p, centre) >= 44 ? { name: 'water', boundingBox: 'empty' } : { name: 'air', boundingBox: 'empty' });
+    const plan = nightRelocationPlan(ringed, now, { night: true, armed: true });
+    assert.equal(plan.mode, 'short');
+    assert.match(plan.line, /, and there is no place 48 blocks away: moving to the first spot at least 24 blocks/);
+    const sea = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now });
+    sea.bot.blockAt = () => ({ name: 'water', boundingBox: 'empty' });
+    assert.equal(nightRelocationPlan(sea, now, { night: true, armed: false }), null, 'a null short target: no walk');
+});
+
+test('#471 nit 5: the spawn point is a place to leave only in the overworld', () => {
+    const now = 1_000_000;
+    const agent = agentAt(new Vec3(0, 64, 0), { deaths: [[0, 64, 0, 60_000]], now });
+    assert.deepEqual(placesToLeave(agent, now).map(p => p.what), ['spawn', 'death spot']);
+    agent.bot.game.dimension = 'the_nether';
+    assert.deepEqual(placesToLeave(agent, now).map(p => p.what), [], 'the death was in the overworld too');
+    agent.bot.game.dimension = 'minecraft:overworld';
+    assert.deepEqual(placesToLeave(agent, now).map(p => p.what), ['spawn'], 'a death spot from another dimension name form is filtered as before');
+});
+
+test('#471 nits 2-4: a full walk stops at 24 once night falls unarmed; a walk that throws is logged; no position is no crash', async (t) => {
+    const saved = { ...NIGHT_RELOCATE };
+    t.after(() => Object.assign(NIGHT_RELOCATE, saved));
+    Object.assign(NIGHT_RELOCATE, { checkMs: 10, walkMs: 1500 });
+    const now = 1_000_000;
+    const death = [[0, 64, 0, 60_000]];
+    const a = agentAt(new Vec3(5, 64, 0), { deaths: death, now });
+    const fp = { mode: 'full', target: { x: 200, z: 0 }, places: placesToLeave(a, now), away: 48 };
+    let nightNow = false;
+    setTimeout(() => { nightNow = true; }, 100); // dusk turns to night during the walk
+    const r = await walkAwayAtNight(a.bot, fp, { walk: stepWalk(), shortNow: () => nightNow });
+    assert.equal(r.stopped, 'night');
+    assert.equal(r.arrived, true);
+    assert.ok(a.bot.entity.position.x >= 24 && a.bot.entity.position.x < 48, `${a.bot.entity.position.x}`);
+
+    const logs = [];
+    const b = agentAt(new Vec3(5, 64, 0), { deaths: death, now });
+    const r2 = await walkAwayAtNight(b.bot, { ...fp, places: placesToLeave(b, now) }, { walk: () => Promise.reject(new Error('No path to the goal!')), log: (l) => logs.push(l) });
+    assert.deepEqual(logs, ['[night] the walk away: Error: No path to the goal!']);
+    assert.equal(r2.arrived, false);
+
+    const c = agentAt(new Vec3(5, 64, 0), { deaths: death, now });
+    const r3 = await walkAwayAtNight(c.bot, { ...fp, places: placesToLeave(c, now) }, { walk: (bot) => new Promise(res => { setTimeout(() => { bot.entity = null; }, 30); setTimeout(() => res(false), 120); }) });
+    assert.deepEqual(r3, { arrived: false, nearest: 0, stopped: null });
+});

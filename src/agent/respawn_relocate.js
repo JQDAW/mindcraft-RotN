@@ -33,7 +33,9 @@ export function placesToLeave(agent, now = Date.now()) {
         .filter(s => s.pos && (s.dimension == null || dim == null || s.dimension === dim))
         .map(s => ({ pos: s.pos, what: 'death spot', at: s.at }));
     const sp = bot?.spawnPoint;
-    if (sp && !(sp.x === 0 && sp.y === 0 && sp.z === 0)) places.unshift({ pos: sp, what: 'spawn' });
+    // #471 nit 5: the spawn point is in the overworld; elsewhere it is no place to leave.
+    const overworld = dim == null || /overworld$/.test(String(dim));
+    if (overworld && sp && !(sp.x === 0 && sp.y === 0 && sp.z === 0)) places.unshift({ pos: sp, what: 'spawn' });
     return places;
 }
 
@@ -212,23 +214,32 @@ export function nightRelocationPlan(agent, now = Date.now(), { night = false, ar
  * The night walk (nightRelocationPlan), bounded by NIGHT_RELOCATE.walkMs. Short: it stops at the first
  * spot at least plan.away from every death spot. Full: it stops early, where it is, once a hostile
  * mob comes within hostilePathRange and the bot is already shortAway from every death spot.
- * Returns {arrived, nearest, stopped: null|'far'|'hostile'|'time'}; nearest: the least distance to
+ * shortNow(): whether it is night now and the bot unarmed (#471 nit 2): a full walk then stops at
+ * shortAway too. Returns {arrived, nearest, stopped: null|'far'|'hostile'|'night'|'time'}; nearest: the least distance to
  * the places left.
  */
-export async function walkAwayAtNight(bot, plan, { walk = (b, t) => goToGoal(b, new pf.goals.GoalNearXZ(t.x, t.z, 4)) } = {}) {
+export async function walkAwayAtNight(bot, plan, { walk = (b, t) => goToGoal(b, new pf.goals.GoalNearXZ(t.x, t.z, 4)), shortNow = () => false, log = (l) => console.warn(l) } = {}) {
     const deaths = plan.places.filter(p => p.what === 'death spot');
-    const farFrom = (list, d) => list.every(p => hdist(p.pos, bot.entity.position) >= d);
+    // #471 nit 4: no position (a death or a respawn under way): not far from anything.
+    const farFrom = (list, d) => { const here = bot.entity?.position; return !!here && list.every(p => hdist(p.pos, here) >= d); };
     let stopped = null, timer, watch;
     const halt = (why) => { stopped = why; try { bot.pathfinder?.stop?.(); } catch { /* best effort */ } };
     const limit = new Promise(resolve => { timer = setTimeout(() => { halt('time'); resolve(); }, NIGHT_RELOCATE.walkMs); });
     watch = setInterval(() => {
         if (stopped) return;
+        const here = bot.entity?.position;
+        if (!here) return;
         if (plan.mode === 'short' && farFrom(deaths, plan.away)) halt('far');
-        else if (plan.mode === 'full' && farFrom(deaths, NIGHT_RELOCATE.shortAway) && hostileNearWay(bot, bot.entity.position, bot.entity.position)) halt('hostile');
+        else if (plan.mode === 'full' && farFrom(deaths, NIGHT_RELOCATE.shortAway)) {
+            if (hostileNearWay(bot, here, here)) halt('hostile');
+            // #471 nit 2: an unarmed walk that began at dusk stops at shortAway once night falls.
+            else if (shortNow()) halt('night');
+        }
     }, NIGHT_RELOCATE.checkMs);
-    try { await Promise.race([Promise.resolve().then(() => walk(bot, plan.target)).catch(() => {}), limit]); } finally { clearTimeout(timer); clearInterval(watch); }
-    const here = bot.entity.position;
-    const nearest = Math.min(...plan.places.map(p => hdist(p.pos, here)));
-    const arrived = nearest >= plan.away || (stopped === 'hostile' && farFrom(deaths, NIGHT_RELOCATE.shortAway));
+    // #471 nit 3: a walk that throws is logged, not swallowed.
+    try { await Promise.race([Promise.resolve().then(() => walk(bot, plan.target)).catch(err => log(`[night] the walk away: ${safeError(err)}`)), limit]); } finally { clearTimeout(timer); clearInterval(watch); }
+    const here = bot.entity?.position;
+    const nearest = here ? Math.min(...plan.places.map(p => hdist(p.pos, here))) : 0;
+    const arrived = nearest >= plan.away || (['hostile', 'night'].includes(stopped) && farFrom(deaths, NIGHT_RELOCATE.shortAway));
     return { arrived, nearest, stopped: arrived && stopped === 'time' ? null : stopped };
 }

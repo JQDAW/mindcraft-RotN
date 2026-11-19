@@ -27,10 +27,10 @@ import { blockMatcher } from './rotn_names.js';
 
 /**
  * depth: blocks dug below the surface; radius: how far from the bot a spot is looked for;
- * awayFrom: how far from the death spot the bot first walks (Epic Siege Mod's awareness radius
- * is 16; the death-spot rule's radius is 24); walkMs and fallMs bound the walks and each drop.
+ * walkMs and fallMs bound the walks and each drop. (The walk away from a death spot is
+ * respawn_relocate.nightRelocationPlan since soak 3's C.)
  */
-export const PIT = { depth: 3, radius: 3, awayFrom: 28, walkMs: 60_000, fallMs: 2000, maxHardness: 1, digSlackMs: 4000 };
+export const PIT = { depth: 3, radius: 3, walkMs: 60_000, fallMs: 2000, maxHardness: 1, digSlackMs: 4000 };
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const at = (p) => `${p.x}, ${p.y}, ${p.z}`;
@@ -284,16 +284,4 @@ export async function pitOut(bot, feet) {
         if (bot.entity.position.floored().equals(s.exit)) return s.exit;
     }
     return null;
-}
-
-/**
- * Walk until at least `dist` from pos (the death spot), bounded by PIT.walkMs. Returns whether the
- * bot is that far now.
- */
-export async function moveAwayFrom(bot, pos, dist = PIT.awayFrom) {
-    const far = () => bot.entity.position.distanceTo(new Vec3(pos.x, pos.y, pos.z)) >= dist;
-    if (far()) return true;
-    const goal = new pf.goals.GoalInvert(new pf.goals.GoalNear(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z), dist));
-    try { await boundedWalk(bot, goToGoal(bot, goal), PIT.walkMs); } catch { /* checked below */ }
-    return far();
 }

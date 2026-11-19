@@ -2004,6 +2004,14 @@ test('#470 review 2: no weapon, held, health 8 or lower: back away (once per she
     assert.ok(back.agent.chat.includes('[night] no weapon, health 8, and a zombie in the opening at 1, 64, 0: backing away into -1, 64, 0'));
     assert.ok(back.agent.chat.includes('[night] backed away: in the shelter at -1, 64, 0, the cells behind sealed'));
     assert.ok(!back.o.builds.slice(1).includes(null), 'never a fresh build');
+    // #471 nit 6: a back-away that closes the shelter clears the hand fight.
+    const flag = heldSetup({ health: 8 });
+    const back2 = flag.o.backAway;
+    flag.o.backAway = (bot, p) => { nightState(flag.agent).handFight = true; return back2(bot, p); }; // as set by an earlier check
+    await breachAt(flag);
+    assert.equal(flag.labels.at(-1), 'action:backAway');
+    assert.equal(flag.agent.bot.rotnSheltered, true);
+    assert.equal(nightState(flag.agent).handFight, false, 'cleared when the back-away closes the shelter');
 
     const hit = heldSetup({ health: 6, plan: false });
     await breachAt(hit);
@@ -2082,4 +2090,59 @@ test('soak 3 C: an interrupted walk away is tried again NIGHT_RELOCATE.waitMs la
     nightTick(late, { now: 1, ops: o2 }); await settle(late);
     nightTick(late, { now: 2, ops: o2 }); await settle(late);
     assert.deepEqual(o2.calls, ['away', 'build'], 'out of time: no second walk, the shelter next');
+});
+
+// Soak 3, the lead's (a): a hole shelter, once closed, moves the bot into a side pocket at its bottom
+// and seals the shaft behind, so a zombie that digs the roof finds a sealed column, not the bot.
+test('soak 3 (a): a closed hole shelter: into a side pocket once (the shaft sealed); a built shelter gets none; no enclosed side: it stays', async (t) => {
+    quiet(t);
+    const P = SITE.offset(0, -3, 0);
+    const holeAgent = ({ plan = true } = {}) => {
+        const agent = fakeAgent({ t: NIGHT });
+        const o = deathOps();
+        o.pockets = [];
+        o.retreatPlan = (bot, site, open) => { o.pockets.push({ site, open }); return plan ? { to: P.offset(-1, 0, 0), dig: [], seal: [P, P.offset(0, 1, 0)] } : null; };
+        o.backAway = (bot, p) => { bot.entity.position = p.to.offset(0.5, 0, 0.5); return Promise.resolve({ site: p.to }); };
+        const labels = [];
+        const run = agent.actions.runAction.bind(agent.actions);
+        agent.actions.runAction = (label, fn) => { labels.push(label); return run(label, fn); };
+        return { agent, o, labels };
+    };
+    const { agent, o, labels } = holeAgent();
+    let now = 0;
+    const run = async (at) => { nightTick(agent, { now: at, ops: o }); await settle(agent); };
+    await run(++now); // build refused: no dirt
+    await run(++now); // the hole, roofed
+    assert.equal(nightState(agent).pit, true);
+    assert.equal(nightState(agent).state, 'inside');
+    agent.bot.entity.position = P.offset(0.5, 0, 0.5);
+    await run(++now); // the first check starts the clock
+    await run(now + CHECK_MS + 1);
+    assert.equal(labels.at(-1), 'action:sidePocket');
+    assert.deepEqual(o.pockets.map(x => x.open), [[]], 'planned with no opening');
+    assert.ok(nightState(agent).site.equals(P.offset(-1, 0, 0)));
+    assert.equal(agent.bot.rotnSheltered, true);
+    assert.ok(agent.chat.includes(`[night] the hole shelter at ${P.x}, ${P.y}, ${P.z}: moving into a side pocket at ${P.x - 1}, ${P.y}, ${P.z} and sealing the shaft behind`));
+    assert.ok(agent.chat.includes(`[night] moved into the side pocket: in the shelter at ${P.x - 1}, ${P.y}, ${P.z}, the cells behind sealed`));
+    await run(now + 3 * CHECK_MS);
+    assert.equal(o.pockets.length, 1, 'once');
+
+    // No enclosed side: it stays under the roof.
+    const none = holeAgent({ plan: false });
+    for (let k = 1; k <= 3; k++) { nightTick(none.agent, { now: k, ops: none.o }); await settle(none.agent); }
+    none.agent.bot.entity.position = P.offset(0.5, 0, 0.5);
+    nightTick(none.agent, { now: 4 + CHECK_MS, ops: none.o }); await settle(none.agent);
+    assert.equal(none.o.pockets.length, 1);
+    assert.ok(nightState(none.agent).site.equals(P));
+    assert.ok(!none.labels.includes('action:sidePocket'));
+
+    // A built shelter (not a hole): no pocket.
+    const built = fakeAgent({ t: NIGHT });
+    const bo = ops();
+    bo.retreatPlan = () => { throw new Error('no pocket for a built shelter'); };
+    bo.backAway = () => Promise.resolve(null);
+    nightTick(built, { now: 0, ops: bo }); await settle(built);
+    nightTick(built, { now: 1, ops: bo });
+    nightTick(built, { now: CHECK_MS + 2, ops: bo }); await settle(built);
+    assert.equal(nightState(built).state, 'inside');
 });
