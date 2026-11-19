@@ -46,7 +46,8 @@ test('#463 review 1: a night death\'s re-plan survives the routine\'s jobs (leav
     const run = agent.actions.runAction.bind(agent.actions);
     agent.actions.runAction = (label, fn, opts) => { labels.push(label); return run(label, fn, opts); };
     const o = { calls: [] };
-    o.moveAwayFrom = () => { o.calls.push('away'); return Promise.resolve(true); };
+    o.nightRelocation = () => ({ mode: 'short', target: { x: 30, z: 0 }, places: [], away: 24, line: '[night] I died near here recently: moving away before sheltering' });
+    o.walkAwayAtNight = () => { o.calls.push('away'); return Promise.resolve({ arrived: true, nearest: 30, stopped: null }); };
     o.buildShelter = (bot, opts = {}) => {
         o.calls.push(opts.site ? 'roof' : 'build');
         return Promise.resolve(opts.site ? { closed: true, feet: opts.site, line: 'Shelter closed' }

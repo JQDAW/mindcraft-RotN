@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { Vec3 } from 'vec3';
 import { setImmediate } from 'node:timers';
 import { DeathReporter } from './library/death_report.js';
-import { RELOCATE, relocateTick, relocationReason, targetAwayFrom, placesToLeave } from './respawn_relocate.js';
+import { RELOCATE, relocateTick, relocationReason, targetAwayFrom, placesToLeave, nightRelocationPlan, walkAwayAtNight, hostileNearWay, NIGHT_RELOCATE } from './respawn_relocate.js';
 import { autonomyTick } from './priority.js';
 
 const SPAWN = new Vec3(-45, 80, -64);
@@ -163,3 +163,90 @@ test('#416 nit: the target is not on water (where loaded): it goes farther out',
     assert.equal(targetAwayFrom(SPAWN.offset(5, 0, 0), places, { surfaceOk: () => false }), null, 'water all the way: none');
 });
 
+
+// Soak 3 (rotn-v0.1.5), the lead's C: at night after a death, the night routine first walks away by
+// this rule, not 28 blocks from the last death spot only.
+const SOAK3_DEATHS = () => [[-60, 60, -66, 4 * 60_000], [-35, 66, -56, 3 * 60_000], [-62, 60, -63, 2 * 60_000], [-29, 72, -86, 60_000]];
+const zombieAt = (x, z) => ({ id: 9, type: 'mob', name: 'zombie', position: new Vec3(x, 64, z) });
+
+test('soak 3 C: armed at night, no mob near the way: at least 48 blocks from the spawn and every recent death spot', () => {
+    const now = 1_000_000;
+    const agent = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now }); // the 20:00:57 respawn
+    const plan = nightRelocationPlan(agent, now, { night: true, armed: true });
+    assert.equal(plan.mode, 'full');
+    assert.equal(plan.away, 48);
+    assert.equal(plan.places.length, 5, 'the spawn and all four death spots, not only the last');
+    for (const p of plan.places) assert.ok(hdist(p.pos, plan.target) >= 48);
+    assert.match(plan.line, /^\[night\] I died near here recently: moving at least 48 blocks from the spawn and 4 recent death spots, towards -?\d+, -?\d+, before sheltering$/);
+    // Dusk, unarmed: still the full walk (not yet night).
+    assert.equal(nightRelocationPlan(agent, now, { night: false, armed: false }).mode, 'full');
+});
+
+test('soak 3 C (the lead\'s change): no weapon at night, or a hostile mob within 16 of the way: the first spot 24 blocks from every recent death spot', () => {
+    const now = 1_000_000;
+    const unarmed = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now });
+    const plan = nightRelocationPlan(unarmed, now, { night: true, armed: false });
+    assert.equal(plan.mode, 'short');
+    assert.equal(plan.away, 24);
+    assert.equal(plan.places.length, 4, 'the death spots only');
+    for (const p of plan.places) assert.ok(hdist(p.pos, plan.target) >= 24);
+    assert.match(plan.line, /, and it is night and I have no weapon: moving to the first spot at least 24 blocks from 4 recent death spots, towards/);
+    // Armed, but a zombie near the full walk's way.
+    const full = nightRelocationPlan(agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now }), now, { night: true, armed: true });
+    const mid = { x: (-52 + full.target.x) / 2, z: (-63 + full.target.z) / 2 };
+    const near = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now, entities: { 9: zombieAt(mid.x + 10, mid.z) } });
+    const p2 = nightRelocationPlan(near, now, { night: true, armed: true });
+    assert.equal(p2.mode, 'short');
+    assert.match(p2.line, /, and a zombie is near the way: moving to the first spot at least 24 blocks/);
+    // 20 blocks off the way: not near.
+    const atStart = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now, entities: { 9: zombieAt(-52, -63 + 0) } });
+    assert.ok(hostileNearWay(atStart.bot, new Vec3(-52, 63, -63), full.target), 'a mob at the start is near the way');
+    assert.equal(hostileNearWay(atStart.bot, new Vec3(-100, 63, -63), new Vec3(-100, 63, 63)), null, '48 blocks off: not near');
+});
+
+test('soak 3 C: no walk when no death is recent (30 min), or the bot is already far enough', () => {
+    const now = 1_000_000;
+    assert.equal(nightRelocationPlan(agentAt(new Vec3(-52, 63, -63), { now }), now, { night: true }), null, 'no death');
+    assert.equal(nightRelocationPlan(agentAt(new Vec3(-52, 63, -63), { deaths: [[-60, 60, -66, NIGHT_RELOCATE.recentMs + 1000]], now }), now, { night: true }), null, 'over 30 min ago');
+    // 30 blocks from the only death spot: far enough for the short rule.
+    assert.equal(nightRelocationPlan(agentAt(new Vec3(-30, 63, -66), { deaths: [[-60, 60, -66, 60_000]], now }), now, { night: true, armed: false }), null);
+    // 60 blocks from it and the spawn: far enough for the full rule.
+    assert.equal(nightRelocationPlan(agentAt(new Vec3(20, 63, -66), { deaths: [[-60, 60, -66, 60_000]], now }), now, { night: true, armed: true }), null);
+});
+
+/** A walk that moves the bot 1 block east every 20 ms until the pathfinder is stopped (or `cap` blocks). */
+function stepWalk(cap = Infinity) {
+    return (bot) => new Promise(resolve => {
+        let moved = 0;
+        const iv = setInterval(() => { if (moved++ < cap) bot.entity.position = bot.entity.position.offset(1, 0, 0); }, 20);
+        bot.pathfinder = { stop: () => { clearInterval(iv); resolve(false); } };
+    });
+}
+
+test('soak 3 C: the short walk stops at the first spot 24 blocks from every death spot; the full walk stops early there once a mob comes near; a walk out of time says so', async (t) => {
+    const saved = { ...NIGHT_RELOCATE };
+    t.after(() => Object.assign(NIGHT_RELOCATE, saved));
+    Object.assign(NIGHT_RELOCATE, { checkMs: 10, walkMs: 3000 });
+    const now = 1_000_000;
+    const death = [[0, 64, 0, 60_000]];
+    const short = agentAt(new Vec3(5, 64, 0), { deaths: death, now });
+    const sp = { mode: 'short', target: { x: 200, z: 0 }, places: placesToLeave(short, now).filter(p => p.what === 'death spot'), away: 24 };
+    const r = await walkAwayAtNight(short.bot, sp, { walk: stepWalk() });
+    assert.equal(r.stopped, 'far');
+    assert.equal(r.arrived, true);
+    assert.ok(short.bot.entity.position.x >= 24 && short.bot.entity.position.x <= 27, `stopped at ${short.bot.entity.position.x}`);
+
+    const full = agentAt(new Vec3(5, 64, 0), { deaths: death, now });
+    const fp = { mode: 'full', target: { x: 200, z: 0 }, places: placesToLeave(full, now), away: 48 };
+    const z = zombieAt(40, 0);
+    full.bot.entities[9] = z;
+    const r2 = await walkAwayAtNight(full.bot, fp, { walk: stepWalk() });
+    assert.equal(r2.stopped, 'hostile');
+    assert.equal(r2.arrived, true, '24 from the death spot already');
+    assert.ok(full.bot.entity.position.x >= 24 && full.bot.entity.position.x < 48);
+
+    const slow = agentAt(new Vec3(5, 64, 0), { deaths: death, now });
+    const r3 = await walkAwayAtNight(slow.bot, { ...sp, places: placesToLeave(slow, now).filter(p => p.what === 'death spot') }, { walk: stepWalk(3) });
+    assert.equal(r3.stopped, 'time');
+    assert.equal(r3.arrived, false);
+});
