@@ -1930,3 +1930,60 @@ test('#468 review 2: the night does not save the open goal (the agenda gives it 
     await settle(agent);
     assert.equal(resumeNightGoal(agent), false, 'nothing to restart');
 });
+
+// Soak 3 (rotn-v0.1.5), the lead's (b): with no weapon, a mob holding the opening is not repaired
+// under: the routine backs away into an enclosed column, once per shelter; with none, it holds still.
+test('soak 3 (b): no weapon and a zombie at the opening: back away (once), else hold still without repairing; with a weapon the repair goes on', async (t) => {
+    quiet(t);
+    const opening = [SITE.offset(1, 0, 0), SITE.offset(1, 1, 0)];
+    const zombie = { id: 7, name: 'zombie', position: new Vec3(1.5, 64, 0.5) };
+    const setup = ({ weapon = false, plan = true } = {}) => {
+        const agent = fakeAgent({ t: NIGHT });
+        const o = ops();
+        o.hasWeapon = () => weapon;
+        o.mobAtOpening = (bot, open) => (open.length ? { mob: zombie, cell: open[0] } : null);
+        o.retreatPlan = () => (plan ? { to: SITE.offset(-1, 0, 0), dig: [], seal: [SITE, SITE.offset(0, 1, 0)] } : null);
+        o.backAway = (bot, p) => { o.backs = (o.backs ?? 0) + 1; o.open = []; return Promise.resolve({ site: p.to }); };
+        const labels = [];
+        const run = agent.actions.runAction.bind(agent.actions);
+        agent.actions.runAction = (label, fn) => { labels.push(label); return run(label, fn); };
+        return { agent, o, labels };
+    };
+    const breach = async ({ agent, o }) => {
+        nightTick(agent, { now: 0, ops: o });
+        await settle(agent);
+        assert.equal(nightState(agent).state, 'inside');
+        o.open = opening;
+        nightTick(agent, { now: 1, ops: o });
+        nightTick(agent, { now: CHECK_MS + 1, ops: o });
+        await settle(agent);
+    };
+
+    const back = setup();
+    await breach(back);
+    assert.deepEqual(back.labels, ['action:buildShelter', 'action:backAway']);
+    assert.equal(back.o.backs, 1);
+    assert.deepEqual(back.o.builds, [null], 'no repair under the zombie');
+    assert.ok(nightState(back.agent).site.equals(SITE.offset(-1, 0, 0)), 'the new shelter');
+    assert.equal(back.agent.bot.rotnSheltered, true);
+    assert.ok(back.agent.chat.includes('[night] no weapon and a zombie at the opening at 1, 64, 0: backing away into -1, 64, 0'));
+    assert.ok(back.agent.chat.includes('[night] backed away: in the shelter at -1, 64, 0, the cells behind sealed'));
+
+    const hold = setup({ plan: false });
+    await breach(hold);
+    nightTick(hold.agent, { now: 2 * CHECK_MS + 2, ops: hold.o });
+    await settle(hold.agent);
+    assert.deepEqual(hold.o.builds, [null], 'held still: no repair into the zombie');
+    assert.equal(hold.agent.bot.rotnSheltered, 'open');
+    assert.equal(hold.agent.chat.filter(l => l === '[night] no weapon and a zombie at the opening at 1, 64, 0: not repairing under it (no enclosed cell to back into); waiting for the cell to clear').length, 1, 'said once');
+    // The zombie leaves the opening: the repair goes on.
+    hold.o.mobAtOpening = () => null;
+    nightTick(hold.agent, { now: 3 * CHECK_MS + 3, ops: hold.o });
+    await settle(hold.agent);
+    assert.deepEqual(hold.o.builds, [null, SITE]);
+
+    const armed = setup({ weapon: true });
+    await breach(armed);
+    assert.deepEqual(armed.o.builds, [null, SITE], 'with a weapon: the repair (and the fight in place) as before');
+    assert.equal(armed.o.backs, undefined);
+});

@@ -634,3 +634,73 @@ async function settleOn(bot, feet, { strict = true } = {}) {
         await sleep(SETTLE.stepMs);
     return onFloorOf(bot, feet, { strict });
 }
+
+/**
+ * Soak 3 (rotn-v0.1.5), the lead's (b): with no weapon, the bot backs away from an opening a hostile
+ * mob holds instead of repairing under it (it placed nothing, "a zombie stands in it", and was hit
+ * for 6-8 until it died). A mob within BACK_AWAY.reach of an open cell's middle (in it, or just
+ * outside it) holds the opening.
+ */
+export const BACK_AWAY = { reach: 1.8, centerMs: 2000 };
+
+/** The hostile mob (threats.shelterEnemy) holding one of the open cells, or null. */
+export function mobAtOpening(bot, open = []) {
+    for (const cell of open) {
+        const c = cell.offset(0.5, 0, 0.5);
+        const mob = Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position && shelterEnemy(e)
+            && Math.hypot(e.position.x - c.x, e.position.z - c.z) <= BACK_AWAY.reach && Math.abs(e.position.y - c.y) <= 2);
+        if (mob) return { mob, cell };
+    }
+    return null;
+}
+
+const wallLike = (b) => !!b && b.boundingBox === 'block' && !isLiquid(b) && !hazardOf(b) && !hurtsOnContact(b);
+const byHand = (b) => isEmpty(b) || (wallLike(b) && handDiggable(b) && !isTreePart(b));
+
+/**
+ * Where to back away to: the 1x2 column next to the shelter on a side with no opening (the side
+ * across from an opening first), dug by hand, whose own other sides, roof and floor are all solid
+ * (a hole shelter or a hillside: never out into the open), with nothing that would fall in; and two
+ * blocks held to seal the shelter's own column behind. Null when there is none.
+ * @returns {{dir: Vec3, to: Vec3, dig: Vec3[], seal: Vec3[]}|null}
+ */
+export function retreatPlan(bot, site, open = []) {
+    const p = new Vec3(Math.floor(site.x), Math.floor(site.y), Math.floor(site.z));
+    const openKeys = new Set(open.map(key));
+    const sides = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
+    const isOpenSide = (d) => openKeys.has(key(p.plus(d))) || openKeys.has(key(p.plus(d).offset(0, 1, 0)));
+    const across = (d) => sides.some(o => isOpenSide(o) && o.x === -d.x && o.z === -d.z);
+    const held = countOf(shelterItems(bot)) + countOf(softItems(bot));
+    if (held < 2) return null;
+    const candidates = sides.filter(d => !isOpenSide(d)).sort((a, b) => across(b) - across(a));
+    for (const d of candidates) {
+        const r0 = p.plus(d), r1 = r0.offset(0, 1, 0);
+        if (![r0, r1].every(c => byHand(bot.blockAt(c)) && !mobIn(bot, c))) continue;
+        if (isFalling(bot.blockAt(r1.offset(0, 1, 0)))) continue;
+        const perp = [new Vec3(d.z, 0, d.x), new Vec3(-d.z, 0, -d.x)];
+        const around = [r0.plus(d), r1.plus(d), ...perp.flatMap(q => [r0.plus(q), r1.plus(q)]), r1.offset(0, 1, 0), r0.offset(0, -1, 0)];
+        if (!around.every(c => !openKeys.has(key(c)) && wallLike(bot.blockAt(c)))) continue;
+        return { dir: d, to: r0, dig: [r1, r0].filter(c => !isEmpty(bot.blockAt(c))), seal: [p, p.offset(0, 1, 0)] };
+    }
+    return null;
+}
+
+/**
+ * Back away (retreatPlan): dig the column by hand, step into its middle, and seal the shelter's
+ * own column behind with held blocks (sturdy first, then dirt). Returns {site} (the new feet) when
+ * the bot is in the new column with both cells behind it filled, else {why}.
+ */
+export async function backAway(bot, plan) {
+    for (const c of plan.dig) {
+        if (!isEmpty(bot.blockAt(c)) && !await breakBlockAt(bot, c.x, c.y, c.z)) return { why: `could not dig ${at(c)}` };
+    }
+    await centerIn(bot, plan.to, { timeoutMs: BACK_AWAY.centerMs });
+    if (!bot.entity.position.floored().equals(plan.to)) return { why: `could not step into ${at(plan.to)}` };
+    const interior = new Set([key(plan.to), key(plan.to.offset(0, 1, 0))]);
+    const mode = { items: (b) => [...shelterItems(b), ...softItems(b)], accept: isWall };
+    for (const c of plan.seal) {
+        if (!await fillCell(bot, c, interior, mode)) return { why: `could not seal ${at(c)}` };
+    }
+    log(bot, `Backed away from the opening into ${at(plan.to)} and sealed ${plan.seal.map(at).join(' and ')} behind.`);
+    return { site: plan.to };
+}

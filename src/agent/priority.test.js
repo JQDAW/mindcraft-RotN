@@ -15,7 +15,7 @@ import { TICK_MS, BACKOFF_MS, STEP_LLM_MS, SAVE_EVERY_MS } from './agenda_driver
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { setImmediate } from 'node:timers';
-import { autonomyTick, taskGoal, finishTask, PREEMPT_GRACE_MS, TYPED_RESUME } from './priority.js';
+import { autonomyTick, taskGoal, finishTask, PREEMPT_GRACE_MS, TYPED_RESUME, OPEN_GOAL } from './priority.js';
 import { Control } from './control.js';
 import { TaskQueue, markUntrusted } from './task_queue.js';
 import { SelfPrompter } from './self_prompter.js';
@@ -1024,7 +1024,7 @@ test('#468 review 1: in the cooldown window the open goal runs as the model\'s o
     assert.notEqual(sp.prompt, agent._autonomy_prompt, 'not the agenda\'s own prompt: the model-goal budget counts it');
     assert.equal(autonomyTick(agent, { now: 3 * TICK_MS }), 'goal:open:running');
     assert.equal(autonomyTick(agent, { now: 4 * TICK_MS }), 'goal:open:running');
-    assert.equal(agent._open_goal.llmMs, 2 * TICK_MS, 'its time counts against the window\'s budget');
+    assert.equal(agent.agenda.stuck.stone_axe.openGoal.llmMs, OPEN_GOAL.minChargeMs, 'its time counts against the window\'s budget: at least the start\'s charge');
     assert.ok(agent.said.includes('agenda open goal: step stone_axe waits; self-prompting on gathering for it'));
 });
 
@@ -1047,7 +1047,8 @@ test('#468 review 1+2: the soak 3 replay over several in-game days: never idle w
         results.set(r, (results.get(r) ?? 0) + 1);
         assert.ok(r !== null && r !== 'waiting', `tick at ${now / 1000} s: ${r}`);
         if (!sp.isActive()) assert.ok(quiet.includes(r), `idle at ${now / 1000} s: ${r}`);
-        if (agent._open_goal) perWindow.set(agent._open_goal.key, agent._open_goal.llmMs);
+        const w = agent.agenda.stuck.stone_axe?.openGoal;
+        if (w) perWindow.set(w.key, w.llmMs);
     }
     const retries = agent.said.filter(l => /^agenda step stone_axe retried/.test(l));
     assert.deepEqual(retries.slice(0, 3), [1, 2, 3].map(n => `agenda step stone_axe retried (${n} of 3): a fresh budget`));
@@ -1056,7 +1057,7 @@ test('#468 review 1+2: the soak 3 replay over several in-game days: never idle w
     assert.ok(!agent.said.includes('agenda done'));
     assert.ok(results.get('goal:open') > 0 && results.get('goal:open:running') > 0, [...results].join(' '));
     assert.ok(perWindow.size >= 5, 'one budget per stuck window');
-    for (const [key, ms] of perWindow) assert.ok(ms <= STEP_LLM_MS, `${key}: ${ms} ms`);
+    for (const [key, ms] of perWindow) assert.ok(ms <= STEP_LLM_MS + OPEN_GOAL.minChargeMs, `${key}: ${ms} ms`);
 });
 
 test('#468 review 1: the model ends the open goal at once, again and again: its starts follow the backoff (doubling, capped at 10 min); a run that takes time stops at the window budget', (t) => {
@@ -1081,8 +1082,7 @@ test('#468 review 1: the model ends the open goal at once, again and again: its 
     const gaps = starts.slice(1).map((s, k) => (s - starts[k]) / 1000);
     assert.deepEqual(gaps.slice(0, 6), [30, 60, 120, 240, 480, 600]);
     assert.ok(gaps.slice(5).every(g => g === 600), `capped at 10 min: ${gaps}`);
-    assert.equal(agent._open_goal.llmMs, starts.length * TICK_MS, 'one tick of self-prompting per start, counted for the window');
-    assert.ok(agent._open_goal.llmMs < STEP_LLM_MS);
+    assert.equal(agent.agenda.stuck.stone_axe.openGoal.llmMs, starts.length * OPEN_GOAL.minChargeMs, '#468 nit 2: each instant run is charged the minimum');
 
     // A model that works 100 s each run: 3 runs spend the window's 5 min; then none until the retry.
     const busy = soak3Agent(t, clock);
@@ -1101,7 +1101,8 @@ test('#468 review 1: the model ends the open goal at once, again and again: its 
         if (bsp.isActive() && runFrom !== null && n - runFrom >= 100_000) { bsp.stop(); runFrom = null; }
     }
     assert.equal(results.filter(r => r === 'goal:open').length, 3);
-    assert.ok(busy._open_goal.llmMs >= STEP_LLM_MS && busy._open_goal.llmMs <= STEP_LLM_MS + TICK_MS, `${busy._open_goal.llmMs}`);
+    const bw = busy.agenda.stuck.stone_axe.openGoal;
+    assert.ok(bw.llmMs >= STEP_LLM_MS && bw.llmMs <= STEP_LLM_MS + TICK_MS, `${bw.llmMs}`);
     assert.ok(results.slice(-100).every(r => r === 'goal:open:spent'));
     assert.equal(busy.said.filter(l => l === 'agenda open goal: its 5 min of self-prompting for this wait are spent; none until the retry').length, 1);
     // The next full day: the retry, then a new window with its own budget.
@@ -1137,3 +1138,56 @@ test('#468 review 1 (iii): a giver\'s !endGoal ends the open goal until the retr
     assert.equal(tick(), 'stone_axe', 'the retry');
 });
 
+
+test('#468 nit 2: a model that stops the open goal at once still spends the window: OPEN_GOAL.minChargeMs a start, then none until the retry', (t) => {
+    const nightBefore = settings.night_shelter;
+    settings.night_shelter = false; // the server time stays put here: the night clock's wall-clock fallback would start the night
+    t.after(() => { settings.night_shelter = nightBefore; });
+    const clock = { now: 1_000_000 };
+    const agent = soak3Agent(t, clock);
+    const sp = agent.self_prompter;
+    let now = 0;
+    const tick = () => { clock.now = 1_000_000 + now; return autonomyTick(agent, { now }); };
+    tick();
+    agent.agenda.spent.stone_axe = { attempts: 1, llm_ms: STEP_LLM_MS };
+    agent.agenda.stuck.stone_axe = { retries: 3 }; // capped: the window lasts until the next full day
+    now += TICK_MS; assert.equal(tick(), 'stuck');
+    let starts = 0, last = null;
+    for (now += TICK_MS; now <= 8 * 60 * 60_000; now += TICK_MS) {
+        last = tick();
+        if (last === 'goal:open') { starts++; sp.stop(); } // the model's !endGoal in its first reply
+    }
+    assert.equal(starts, STEP_LLM_MS / OPEN_GOAL.minChargeMs, `${starts} starts`);
+    assert.equal(last, 'goal:open:spent');
+});
+
+test('#468 nit 1: the open goal\'s window is saved with the stuck record: a process restart keeps its LLM time, starts and backoff', (t) => {
+    const nightBefore = settings.night_shelter;
+    settings.night_shelter = false;
+    t.after(() => { settings.night_shelter = nightBefore; });
+    const clock = { now: 1_000_000 };
+    const agent = soak3Agent(t, clock);
+    let now = 0;
+    const tick = (a) => { clock.now = 1_000_000 + now; return autonomyTick(a, { now }); };
+    tick(agent);
+    agent.agenda.spent.stone_axe = { attempts: 1, llm_ms: STEP_LLM_MS };
+    agent.agenda.stuck.stone_axe = { retries: 3 };
+    now += TICK_MS; assert.equal(tick(agent), 'stuck');
+    now += TICK_MS; assert.equal(tick(agent), 'goal:open');
+    for (let k = 0; k < 7; k++) { now += TICK_MS; tick(agent); } // a 14 s run
+    agent.self_prompter.stop();
+    now += TICK_MS; assert.equal(tick(agent), 'goal:open:backoff');
+    const saved = JSON.parse(readFileSync(agent.agenda.file, 'utf8')).stuck.stone_axe.openGoal;
+    assert.equal(saved.starts, 1);
+    assert.equal(saved.llmMs, 14_000);
+    // The process restarts: a new agent on the same files, a fresh self-prompter.
+    const after = fakeAgent(t, { agenda: false, dir: agent.dir });
+    after.agenda = new Agenda('FRCFLD', { dir: agent.dir, now: () => clock.now });
+    after.bot = agent.bot;
+    now += TICK_MS;
+    assert.equal(tick(after), 'goal:open:backoff', 'the start before the restart still counts: its backoff holds');
+    assert.equal(after.agenda.stuck.stone_axe.openGoal.llmMs, 14_000, 'its LLM time kept');
+    now += BACKOFF_MS;
+    assert.equal(tick(after), 'goal:open');
+    assert.equal(after.agenda.stuck.stone_axe.openGoal.starts, 2);
+});

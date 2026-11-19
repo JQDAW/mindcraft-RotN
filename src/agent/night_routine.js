@@ -14,8 +14,8 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, shelterShell, dumpState, isFullDay, replanHold } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE } from './library/shelter.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, shelterShell, dumpState, isFullDay, replanHold } from './library/night.js';
+import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE, mobAtOpening, retreatPlan, backAway } from './library/shelter.js';
 import { goToGoal, descendFromTree } from './library/skills.js';
 import { stowCarried, toolAllows, allowedTool } from './library/rotn_sources.js';
 import { digPit, pitOut, moveAwayFrom, PIT, quickByHand, digWithin, digBudget } from './library/pit.js';
@@ -528,10 +528,12 @@ export function hostileNear(bot, range = LEAVE_MOB_RANGE) {
 }
 
 /** "a zombie at x, y, z" for hostileNear's mob (tests' ops may return just true). */
+const key3 = (p) => `${p.x},${p.y},${p.z}`;
 const mobText = (e) => e?.position ? `a ${e.name ?? e.displayName ?? 'hostile mob'} at ${at(e.position.floored())}` : 'a hostile mob';
 
 /** What the routine does in the world (tests pass their own). */
-export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, moveAwayFrom, onTree: standsOnTree, descend: (bot) => descendFromTree(bot) };
+export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, moveAwayFrom, onTree: standsOnTree, descend: (bot) => descendFromTree(bot),
+    mobAtOpening, retreatPlan, backAway, hasWeapon };
 
 /**
  * The bot's last death spot when it died less than DEATH_NEAR_MS ago, in this dimension, and is
@@ -760,7 +762,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.pit = pit;
                 n.digAt = null; // digging seen at an earlier shelter is not this one's
                 n.repairStall = null;
-                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null });
+                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, backedAway: false, holdSaid: null });
                 n.checkedAt = null; // set by the next tick, on its clock
                 bot.rotnSheltered = true;
                 // Gate2 B: where the bot was and what it stood on, for the line if it is ever out of it.
@@ -936,6 +938,38 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             return 'night:building';
         }
         if (need.todo.length === 0 && open) { bot.rotnSheltered = true; n.repairStall = null; } // closed again: the shelter's rules are back
+        if (need.todo.length > 0 && !(ops.hasWeapon ?? hasWeapon)(bot)) {
+            // Soak 3, the lead's (b): with no weapon, a mob holding the opening is not repaired under
+            // (it placed nothing, "a zombie stands in it", and hit the bot for 6-8 until it died).
+            // Back away into an enclosed column on the far side, once per shelter; with none, hold
+            // still: no repair into the mob, and no bare-handed fight (modes.fightInShelter).
+            const held = ops.mobAtOpening?.(bot, need.todo);
+            if (held) {
+                bot.rotnSheltered = 'open';
+                const mob = `a ${held.mob.name ?? 'hostile mob'}`;
+                const plan = n.backedAway ? null : ops.retreatPlan?.(bot, n.site, need.todo);
+                if (plan) {
+                    n.backedAway = true;
+                    line(agent, `[night] no weapon and ${mob} at the opening at ${at(held.cell)}: backing away into ${at(plan.to)}`);
+                    startJob(agent, n, BACK_AWAY_LABEL, () => ops.backAway(bot, plan), (r) => {
+                        if (r?.site) {
+                            n.site = r.site;
+                            n.repairStall = null;
+                            n.checkedAt = null;
+                            const still = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody });
+                            bot.rotnSheltered = still && still.todo.length === 0 ? true : 'open';
+                            line(agent, `[night] backed away: in the shelter at ${at(n.site)}, the cells behind sealed`);
+                        } else {
+                            console.warn(`[night] backing away did not work (${r?.why ?? 'no result'}); not repairing under the mob`);
+                        }
+                    });
+                    return 'night:inside';
+                }
+                const text = `[night] no weapon and ${mob} at the opening at ${at(held.cell)}: not repairing under it${n.backedAway ? '' : ' (no enclosed cell to back into)'}; waiting for the cell to clear`;
+                if (n.holdSaid === key3(held.cell)) console.log(text); else { n.holdSaid = key3(held.cell); line(agent, text); }
+                return 'night:inside';
+            }
+        }
         if (need.todo.length > 0) {
             // self_defense fights at the opening, from where the bot stands, and never during the
             // repair (G3 round 9 B: it interrupted the repair and walked out after the zombie).

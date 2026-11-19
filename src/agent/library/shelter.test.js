@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, firmFloor, LATE_UPDATE_MS, SHELTER_SPARE, SHELTER_GAP, SETTLE } from './shelter.js';
+import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, firmFloor, LATE_UPDATE_MS, SHELTER_SPARE, SHELTER_GAP, SETTLE, retreatPlan, backAway, mobAtOpening } from './shelter.js';
 import { getCommand } from '../commands/index.js';
 
 const reg = minecraftData('1.12.2');
@@ -928,3 +928,51 @@ test('CX23 soak: after hitting a mob out of the opening, a hurt bot too hungry t
     assert.equal(eaten, 0);
 });
 
+
+// Soak 3 (rotn-v0.1.5), the lead's (b): with no weapon, back away from an opening a mob holds into an
+// enclosed column on the far side, sealing the shelter's own column behind; never out into the open.
+function holeShelter({ dirt = 4, set = {} } = {}) {
+    // A hole shelter: the bot at 0 61 0 underground (dirt below 64), the east wall dug open.
+    const base = { '0,61,0': 'air', '0,62,0': 'air', '1,61,0': 'air', '1,62,0': 'air', ...set };
+    const f = fakeBot({ cobble: 0, pickaxe: false, at: new Vec3(0.5, 61, 0.5), set: base, items: dirt ? [{ name: 'dirt', metadata: 0, count: dirt }] : [] });
+    f.bot.entities = { 7: { id: 7, type: 'mob', name: 'zombie', position: new Vec3(1.5, 61, 0.5), height: 1.95 } };
+    return f;
+}
+const OPEN_EAST = [new Vec3(1, 61, 0), new Vec3(1, 62, 0)];
+
+test('soak 3 (b): mobAtOpening names the mob holding an open cell; retreatPlan picks the enclosed column across from the opening', () => {
+    const { bot } = holeShelter();
+    const held = mobAtOpening(bot, OPEN_EAST);
+    assert.equal(held.mob.name, 'zombie');
+    assert.equal(key(held.cell), '1,61,0');
+    const plan = retreatPlan(bot, new Vec3(0, 61, 0), OPEN_EAST);
+    assert.deepEqual(plan.dir, new Vec3(-1, 0, 0), 'across from the opening');
+    assert.equal(key(plan.to), '-1,61,0');
+    assert.deepEqual(plan.dig.map(key), ['-1,62,0', '-1,61,0']);
+    assert.deepEqual(plan.seal.map(key), ['0,61,0', '0,62,0']);
+    // A gravel block over the west column would fall in: another enclosed side instead.
+    const gravel = holeShelter({ set: { '-1,63,0': 'gravel' } });
+    assert.ok(['0,61,1', '0,61,-1'].includes(key(retreatPlan(gravel.bot, new Vec3(0, 61, 0), OPEN_EAST).to)));
+    // Fewer than two blocks to seal with: none.
+    assert.equal(retreatPlan(holeShelter({ dirt: 1 }).bot, new Vec3(0, 61, 0), OPEN_EAST), null);
+    // A surface shelter (open air outside the walls): never out into the open.
+    const surface = fakeBot({ cobble: 4, set: { ...shellAt({ '1,64,0': 'air', '1,65,0': 'air' }) } });
+    assert.equal(retreatPlan(surface.bot, new Vec3(0, 64, 0), [new Vec3(1, 64, 0), new Vec3(1, 65, 0)]), null);
+    // No mob near the opening: nothing holds it.
+    const quiet = holeShelter();
+    quiet.bot.entities[7].position = new Vec3(5.5, 61, 0.5);
+    assert.equal(mobAtOpening(quiet.bot, OPEN_EAST), null);
+});
+
+test('soak 3 (b): backAway digs the column by hand, steps in and seals the shelter\'s column behind with held dirt', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, dug, placed, world } = holeShelter();
+    const plan = retreatPlan(bot, new Vec3(0, 61, 0), OPEN_EAST);
+    const r = await backAway(bot, plan);
+    assert.deepEqual(r, { site: new Vec3(-1, 61, 0) }, bot.output);
+    assert.deepEqual(dug, ['-1,62,0', '-1,61,0']);
+    assert.deepEqual(placed, ['0,61,0', '0,62,0']);
+    assert.equal(world.get('0,61,0').name, 'dirt');
+    assert.ok(bot.entity.position.floored().equals(new Vec3(-1, 61, 0)));
+    assert.match(bot.output, /Backed away from the opening into -1, 61, 0 and sealed 0, 61, 0 and 0, 62, 0 behind\./);
+});
