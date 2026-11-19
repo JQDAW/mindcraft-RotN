@@ -130,7 +130,12 @@ case $name in
   systemctl)
     # is-active: 3 (inactive) when FAKE_SSH_INACTIVE is set, else 0. cat: 1 when FAKE_NO_SSH_UNIT is set.
     if [[ ${1:-} == is-active ]]; then [[ -n ${FAKE_SSH_INACTIVE:-} ]] && exit 3; exit 0; fi
-    if [[ ${1:-} == cat ]]; then [[ -n ${FAKE_NO_SSH_UNIT:-} ]] && exit 1; exit 0; fi ;;
+    if [[ ${1:-} == cat ]]; then [[ -n ${FAKE_NO_SSH_UNIT:-} ]] && exit 1; exit 0; fi
+    # list-units: $FAKE_UNITS (printf %b), exit $FAKE_LIST_UNITS_RC
+    if [[ ${1:-} == list-units ]]; then printf '%b' "${FAKE_UNITS-}"; exit "${FAKE_LIST_UNITS_RC:-0}"; fi ;;
+  pgrep)
+    # 1 (no process) unless FAKE_RC_pgrep says otherwise
+    exit "${FAKE_RC_pgrep:-1}" ;;
   ufw)
     # State in $ROOT/.fake-ufw: the added rules (one "ufw allow ..." line each) and whether it is enabled.
     # FAKE_UFW_DROP_RULES: allow does not take (show added lists nothing); FAKE_UFW_NO_ENABLE: enable

@@ -248,13 +248,20 @@ bash /root/cx23-<TAG>/bootstrap.sh build-user
 ```
 
 It creates `rotn-build` (system user, `/usr/sbin/nologin`, a locked password, home `/var/lib/rotn-build` 0700, listed in `/etc/cron.deny` and `/etc/at.deny`; its primary group stays `rotn-build`); `mindcraft-rotn` is listed in both files too. It also:
-- creates the system group `rotn-release` if missing and adds `rotn-build` and `mindcraft-rotn` to it (`usermod --append --groups`); it stops if the group then has any other member, or if `rotn-build` is in `sudo`, `admin` or `mindcraft-rotn`, or its primary group is not `rotn-build`;
-- runs `chown -R -P rotn-build:rotn-release /opt/mindcraft-rotn` (repo.git, releases, `current`, state, deploys.log: `deploy`'s from before ADR 0011, partly `rotn-build`'s), then sets `/opt/mindcraft-rotn` and `releases` to 2750;
+- creates the system group `rotn-release` if missing and adds `rotn-build` and `mindcraft-rotn` to it (`usermod --append --groups`); it stops if the group then has any other member, if any user in `/etc/passwd` has `rotn-release` as its **primary** group, if `rotn-build` is in `sudo`, `admin` or `mindcraft-rotn`, or if its primary group is not `rotn-build`;
+- runs `chown -R -h -P rotn-build:rotn-release` and then `chmod -R -P g-w,o-rwx` on `/opt/mindcraft-rotn` (repo.git, releases, `current`, state, deploys.log: `deploy`'s from before ADR 0011, partly `rotn-build`'s; files `deploy` made under umask 002 were group-writable), never following a link, then sets `/opt/mindcraft-rotn` and `releases` to 2750;
 - installs root's copies of `deploy.sh` (`/usr/local/lib/mindcraft-rotn/deploy.sh`) and the ctl (`/usr/local/sbin/mindcraft-rotn-ctl`, with `reset-state`);
 - writes deploy's two sudo rules and checks them with `visudo -c` and `sudo -l` (it removes them and stops if `sudo -l` shows anything else);
 - removes the retired `/home/deploy/deploy.sh`.
 
 It ends with `build-user done: rotn-build owns /opt/mindcraft-rotn; ...`.
+
+**It refuses, before changing anything, if** (#491 review):
+- any `mindcraft-rotn@` unit is not `inactive` or `failed` (`... is active: stop every bot first ...`). FRCFLD is stopped; if a bot runs, stop it and run `build-user` again;
+- `rotn-build` has a running process (`rotn-build has a running process (pgrep -u rotn-build -a) ...`): a deploy is still running; let it end, then run it again;
+- a file under `/opt/mindcraft-rotn` is a hard link, link count > 1 (`... holds a hard link (<path>, link count > 1) ...`): root's `chown` and `chmod` would change the file it shares. **Stop and tell the lead.**
+
+The group checks above stop it after the group and members are set but before `/opt` changes; in all these cases tell the lead the line.
 
 **If it stops at the sudo check** (`... does not show exactly the two rules ...` or `... shows SETENV or env_keep ...`), it has **removed `/etc/sudoers.d/mindcraft-rotn`**, both rules. From then on **every gate request fails** (`sudo -n` refuses without a rule), the old ones too, until the cause is fixed and `build-user` runs again. Tell the lead before changing anything else.
 
@@ -265,6 +272,7 @@ Then check each point; **stop and tell the lead if any output differs**:
 | `id rotn-build` | `uid=<n>(rotn-build) gid=<n>(rotn-build) groups=<n>(rotn-build),<n>(rotn-release)`: no `sudo`, no `mindcraft-rotn` |
 | `id -gn rotn-build` | `rotn-build` (its primary group stays its own) |
 | `getent group rotn-release` | `rotn-release:x:<n>:rotn-build,mindcraft-rotn`: exactly these two |
+| `awk -F: -v g="$(getent group rotn-release \| cut -d: -f3)" '$4 == g' /etc/passwd` | nothing: no user has `rotn-release` as its primary group |
 | `id -nG mindcraft-rotn` | includes `rotn-release` |
 | `id -nG deploy` | does **not** include `rotn-release` (by design, see below) |
 | `getent passwd rotn-build` | `rotn-build:x:<n>:<n>::/var/lib/rotn-build:/usr/sbin/nologin` |
@@ -283,6 +291,8 @@ Then check each point; **stop and tell the lead if any output differs**:
 | `ls /home/deploy/deploy.sh 2>&1` | `No such file or directory` |
 | `find /opt/mindcraft-rotn ! -user rotn-build \| head` | nothing |
 | `find /opt/mindcraft-rotn ! -group rotn-release \| head` | nothing |
+| `find /opt/mindcraft-rotn ! -type l -perm /027 \| head` | nothing: no group write and nothing for others (links themselves always show `777`, hence `! -type l`) |
+| `find /opt/mindcraft-rotn ! -type d -links +1 \| head` | nothing: no hard links |
 
 **`deploy` is in neither `rotn-release` nor `rotn-build`, by design** (ADR 0011): it loses read access to `/opt/mindcraft-rotn`, and `ls /opt/mindcraft-rotn` as `deploy` says `Permission denied`. That is intended: the gate's `release` and `deploy-check` run as `rotn-build`. Do not add `deploy` to `rotn-release`. A bot reads its release through the group too; systemd gives the unit `mindcraft-rotn`'s supplementary groups when it starts, so a bot started after `build-user` has it (FRCFLD is stopped now).
 

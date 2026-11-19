@@ -34,7 +34,7 @@ function findBash() {
 const BASH = findBash();
 
 const FAKES = ['id', 'getent', 'useradd', 'usermod', 'groupadd', 'passwd', 'chown', 'chmod', 'chgrp', 'apt-get', 'curl', 'gpg', 'node',
-    'swapon', 'fallocate', 'mkswap', 'sysctl', 'ufw', 'visudo', 'sshd', 'systemctl', 'npm', 'sudo', 'ln', 'journalctl'];
+    'swapon', 'fallocate', 'mkswap', 'sysctl', 'ufw', 'visudo', 'sshd', 'systemctl', 'npm', 'sudo', 'ln', 'journalctl', 'pgrep'];
 const ACCEPTED = 'Accepted publickey for deploy from 203.0.113.5 port 50122 ssh2: ED25519 SHA256:AAAAfakefakefake';
 
 let tmp, ROOT, bin, logFile;
@@ -751,6 +751,9 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         fs.mkdirSync(rootFile('etc/ssh'), { recursive: true });
         fs.writeFileSync(rootFile('etc/os-release'), `NAME="Ubuntu"\nID=ubuntu\nVERSION_ID="${version}"\n`);
         fs.writeFileSync(rootFile('etc/ssh/sshd_config'), sshdConfig);
+        // the fake getent gives rotn-release gid 999: nobody has it as the primary group here
+        fs.writeFileSync(rootFile('etc/passwd'), 'root:x:0:0:root:/root:/bin/bash\ndeploy:x:1000:1000::/home/deploy:/bin/bash\n'
+            + 'mindcraft-rotn:x:998:998::/var/lib/mindcraft-rotn:/usr/sbin/nologin\nrotn-build:x:997:997::/var/lib/rotn-build:/usr/sbin/nologin\n');
     };
     let keyN = 0;
     const keyFile = (content = KEY) => {
@@ -1018,6 +1021,7 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
 
     test('ADR 0011 release group: build-user refuses a rotn-release with anyone else in it, or a rotn-build whose primary group changed', () => {
         const prep = () => {
+            fs.rmSync(logFile, { force: true });   // each run's own calls
             ubuntu();
             fs.mkdirSync(rootFile('opt/mindcraft-rotn/releases'), { recursive: true });
             fs.mkdirSync(rootFile('home/deploy'), { recursive: true });
@@ -1037,10 +1041,68 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         const prim = boot(['build-user'], { FAKE_RC_getent: '0', FAKE_ID_GN: 'rotn-release' });
         assert.equal(prim.code, 1);
         assert.match(prim.stderr, /rotn-build's primary group is not rotn-build/);
-        // a fresh host: the group is made, then both join it
+        // the group exists (getent finds it, so no groupadd) and rotn-build is in its own group only: usermod adds it,
+        // and the id -nG check after it sees rotn-release
         prep();
-        const fresh = boot(['build-user'], { FAKE_RC_getent: '0', FAKE_ID_GROUPS_rotn_build: 'rotn-build' });
-        assert.equal(fresh.code, 0, fresh.all);
+        const joined = boot(['build-user'], { FAKE_RC_getent: '0', FAKE_ID_GROUPS_rotn_build: 'rotn-build' });
+        assert.equal(joined.code, 0, joined.all);
+        assert.equal(called('groupadd').length, 0);
+        assert.ok(called('usermod').some((c) => c.join(' ') === 'usermod --append --groups rotn-release rotn-build'));
+        // #491 review (3): a user whose PRIMARY group is rotn-release (gid 999 in the fakes) is refused too
+        prep();
+        fs.appendFileSync(rootFile('etc/passwd'), 'sneaky:x:1500:999::/home/sneaky:/bin/bash\n');
+        const primary = boot(['build-user'], { FAKE_RC_getent: '0' });
+        assert.equal(primary.code, 1, primary.all);
+        assert.match(primary.stderr, /the users 'sneaky' have rotn-release as their primary group; nobody may/);
+        assert.ok(!called('chown').some((c) => c.includes('-R')), 'stopped before the tree changes');
+    });
+
+    test('#491 review: build-user refuses, before changing anything, while a bot unit runs, while rotn-build runs a process, or with a hard link under /opt/mindcraft-rotn', () => {
+        const prep = () => {
+            fs.rmSync(logFile, { force: true });   // each run's own calls
+            ubuntu();
+            fs.mkdirSync(rootFile('opt/mindcraft-rotn/releases/rotn-v0.1.7-abc'), { recursive: true });
+            fs.mkdirSync(rootFile('home/deploy'), { recursive: true });
+        };
+        const untouched = (what) => {
+            assert.ok(!called('chown').some((c) => c.includes('-R')) && !called('chmod').some((c) => c.includes('-R')), `${what}: no chown -R or chmod -R`);
+        };
+        // (4) the bot units: printed state must be inactive or failed
+        for (const st of ['active', 'activating', 'deactivating', 'reloading']) {
+            prep();
+            const r = boot(['build-user'], { FAKE_RC_getent: '0', FAKE_UNITS: `mindcraft-rotn@frcfld.service loaded inactive dead FRCFLD\nmindcraft-rotn@bot-2.service loaded ${st} running bot-2\n` });
+            assert.equal(r.code, 1, st);
+            assert.match(r.stderr, new RegExp(`mindcraft-rotn@bot-2\\.service is ${st}: stop every bot first`), st);
+            assert.equal(called('usermod').length + called('groupadd').length, 0, `${st}: nothing changed`);
+            untouched(st);
+        }
+        prep();
+        const lu = boot(['build-user'], { FAKE_RC_getent: '0', FAKE_LIST_UNITS_RC: '1' });
+        assert.equal(lu.code, 1);
+        assert.match(lu.stderr, /systemctl list-units failed/);
+        prep();
+        const stopped = boot(['build-user'], { FAKE_RC_getent: '0', FAKE_UNITS: 'mindcraft-rotn@frcfld.service loaded inactive dead FRCFLD\nmindcraft-rotn@x.service loaded failed failed x\n' });
+        assert.equal(stopped.code, 0, stopped.all);
+        assert.ok(called('systemctl').some((c) => c.join(' ') === 'systemctl list-units --all --plain --no-legend --no-pager mindcraft-rotn@*'));
+        // (1) a process of rotn-build's, or pgrep failing
+        for (const [rc, re] of [['0', /rotn-build has a running process \(pgrep -u rotn-build -a\)/], ['2', /pgrep -u rotn-build failed \(exit 2\)/]]) {
+            prep();
+            const r = boot(['build-user'], { FAKE_RC_getent: '0', FAKE_RC_pgrep: rc });
+            assert.equal(r.code, 1, rc);
+            assert.match(r.stderr, re);
+            untouched(`pgrep ${rc}`);
+        }
+        // (1) a hard link under the tree (here to a file outside it): refused, and the outside file keeps its mode
+        prep();
+        const outside = path.join(tmp, 'outside-file');
+        fs.writeFileSync(outside, 'x');
+        fs.chmodSync(outside, 0o644);
+        fs.linkSync(outside, rootFile('opt/mindcraft-rotn/releases/rotn-v0.1.7-abc/linked'));
+        const h = boot(['build-user'], { FAKE_RC_getent: '0' });
+        assert.equal(h.code, 1, h.all);
+        assert.match(h.stderr, /opt\/mindcraft-rotn holds a hard link \(releases\/rotn-v0\.1\.7-abc\/linked, link count > 1\)/);
+        untouched('hard link');
+        assert.equal(fs.statSync(outside).mode & 0o777, 0o644);
     });
 
     test('ADR 0011: rotn-build in group sudo, admin or mindcraft-rotn stops setup', () => {
@@ -1069,6 +1131,10 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         assert.equal(r.code, 0, r.all);
         assert.ok(called('chown').some((c) => c.join(' ') === `chown -R -h -P rotn-build:rotn-release ${fwd(rootFile('opt/mindcraft-rotn'))}`),
             'the existing tree (deploy\'s, partly rotn-build\'s) moves to rotn-build:rotn-release');
+        const chownAt = callIndex((c) => c[0] === 'chown' && c.includes('-R'));
+        const chmodAt = callIndex((c) => c.join(' ') === `chmod -R -P g-w,o-rwx ${fwd(rootFile('opt/mindcraft-rotn'))}`);
+        assert.ok(chownAt >= 0 && chmodAt > chownAt, '#491 review: then no group write and nothing for others (umask 002 files), links never followed');
+        assert.ok(called('pgrep').some((c) => c.join(' ') === 'pgrep -u rotn-build') && callIndex((c) => c[0] === 'pgrep') < chownAt, 'no rotn-build process, checked first');
         assert.equal(called('groupadd').length, 0, 'getent finds the group: no groupadd');
         assert.deepEqual(called('usermod').map((c) => c.join(' ')), ['usermod --append --groups rotn-release rotn-build', 'usermod --append --groups rotn-release mindcraft-rotn']);
         assert.ok(called('chmod').some((c) => c[1] === '2750' && c[2].endsWith('/opt/mindcraft-rotn')));
