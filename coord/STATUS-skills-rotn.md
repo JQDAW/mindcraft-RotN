@@ -2,14 +2,14 @@
 
 Updated: 2026-11-19T03:27Z (from `date -u`)
 
-## 2026-11-19: soak 3 fixes for rotn-v0.1.6 (summary, 2026-11-19T03:27Z by `date -u`)
+## 2026-11-19: soak 3 fixes for rotn-v0.1.7 (summary, 2026-11-19T03:27Z by `date -u`)
 
-Soak 3 (rotn-v0.1.5, #464) failed 6 of 9: 12 deaths in two night cascades, the agenda stuck at stone_axe, food down to 2. Every fix the lead asked for is merged and in rotn-v0.1.6. No PR is open apart from this STATUS-only one. I'm idle until soak 4.
+Soak 3 (rotn-v0.1.5, #464) failed 6 of 9: 12 deaths in two night cascades, the agenda stuck at stone_axe, food down to 2. Every fix the lead asked for is merged and in rotn-v0.1.7 (d6a34e9b), which soak 4 runs: #474 is new in v0.1.7, and the rest was already in v0.1.6. No PR is open apart from this STATUS-only one. I'm idle until soak 4.
 
 ### Merged since the 2026-11-18 summary
 | PR | What |
 | --- | --- |
-| #457 | The #453 nits: each provoked animal is judged by its own rule; the ownership checks moved to `library/ownership.js` (no import cycle); the fall detection's live-order note |
+| #457 | (already in v0.1.5) The #453 nits: each provoked animal is judged by its own rule; the ownership checks moved to `library/ownership.js` (no import cycle); the fall detection's live-order note |
 | #460 | `foraging.js` reads `OWNERSHIP` directly; `HUNT` names it as its source of truth |
 | #462 | The hurt line's source: only entities that can hurt (no scent markers or souls); the one that swung in the last 1 s, else the nearest hostile |
 | #463 | Night safety: the item pickup skips death spots and mobs near (a provoked one too); a re-plan prompt is held while the night routine runs and until full day, survives the routine's jobs (`runAction` `keepReplan`) and is sent once; `!buildShelter` is refused before it interrupts the routine; a paused agenda keeps its reserves; the model's goal from dusk resumes after full day |
@@ -17,12 +17,12 @@ Soak 3 (rotn-v0.1.5, #464) failed 6 of 9: 12 deaths in two night cascades, the a
 | #470 | A weapon before night (a stone axe at a table, else a crude axe). With no weapon: no fight from the shelter; a cell a mob holds (its body in the cell) is left out of the repair; at health 8 or lower the bot backs away into an enclosed column, else hits back by hand; a failed seal keeps the new spot. "agenda paused for task" and the restart line work in open-goal mode. The #468 nits |
 | #471 | C: at night after a death, the bot walks 48 blocks from the spawn and every recent death spot, or to the first spot 24 blocks from the death spots when a mob is near the way or it is night and the bot has no weapon. Interrupted walks are retried 3 times, 5 s apart |
 | #472 | (a) A closed hole shelter moves the bot into a side pocket and seals the shaft behind. (c) Wall, roof and seal blocks that the nearby diggers can't break come first (rotn-data `canMobDig`, the tools the mobs hold). The #471 nits |
-| #474 | The #472 follow-ups: the hole-shelter night chained on real geometry (dirt piles count for the seal and are crafted into dirt before any dig); the digger warning names the mob and how; an unnamed modded dimension is recorded as `unknown:<id>`, never the overworld; `heldTools` without duplicates |
+| #474 | (new in v0.1.7) The #472 follow-ups: the hole-shelter night chained on real geometry (dirt piles count for the seal and are crafted into dirt before any dig); the digger warning names the mob and how; an unnamed modded dimension is recorded as `unknown:<id>`, never the overworld; `heldTools` without duplicates |
 
 ### Open
 - None, apart from this STATUS-only PR.
 
-### To check in soak 4 (all of this is tested offline only)
+### To check in soak 4, on rotn-v0.1.7 (all of this is tested offline only)
 - **The night after a death:** the `[night] I died near here recently …` walk lines (full or short), `the walk away is done …` and its retries. Is the bot ever left without dirt where a hole is refused? (The lead accepted leaving out a dirt stop on the walk.)
 - **The shelter:**
   - `moving into a side pocket` and `moved into the side pocket`;
