@@ -38,7 +38,7 @@ Option 2.
   - a system user with no login shell, no SSH key, no sudo rule, and not in the `sudo` group;
   - it has a real home, `/var/lib/rotn-build` (0700), for npm's cache and git; it is listed in `/etc/cron.deny`;
   - it is **not** in the `mindcraft-rotn` group (so it cannot read the bots' memories);
-  - `/opt/mindcraft-rotn` and `releases` become `rotn-build:mindcraft-rotn` with mode 2750 (setgid), so new files get the bot's group; `deploy.sh`'s `chgrp -R mindcraft-rotn` is then a same-group change, and the bot still reads its release through the group.
+  - **A release group, `rotn-release`,** with two members: `rotn-build` and the bot user `mindcraft-rotn`. `/opt/mindcraft-rotn` and `releases` become `rotn-build:rotn-release` with mode 2750, and `deploy.sh` sets every file of a build to `rotn-release`. The bot reads its release through that group. (Changed on 2026-11-19 after the human's install: the first design, `rotn-build:mindcraft-rotn` with setgid, failed because canvas's build resets a folder's mode, which drops setgid when a non-member does it, and a non-member can never set the group back. Putting `rotn-build` into `mindcraft-rotn` would also have worked, but would let it read the bots' state.)
 - **A root-owned copy of `deploy.sh`,** `root:root 0755` at `/usr/local/lib/mindcraft-rotn/deploy.sh`.
 - **One narrow sudoers line:** `deploy ALL=(rotn-build) NOPASSWD: /usr/local/lib/mindcraft-rotn/deploy.sh`, with no `env_keep` and no `SETENV` for it. That is the only way to act as `rotn-build`, and sudo resets the environment. The line allows any arguments, so **`deploy.sh` checks its own arguments**: run as `rotn-build`, it accepts only `status`, `--no-restart deploy TAG` and the no-build check, and refuses `rollback` and any `deploy` without `--no-restart`.
 - **Every deploy goes through the build user, the human's too.** `/home/deploy/deploy.sh` is retired (removed), and the README's manual step becomes `sudo -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh --no-restart deploy TAG`. Release code never runs as `deploy` again. Restarting enabled bots after G4 becomes a separate ctl step, defined when the bots are enabled.
@@ -57,7 +57,11 @@ harness-ops writes the steps into `deploy/cx23/README.md` with a check command f
 - `stat` of the copy of deploy.sh;
 - `sudo -l -U deploy` showing exactly the two rules, and no `env_keep` or `SETENV` on the second;
 - `passwd -S rotn-build` showing a locked password;
-- `stat` of `/opt/mindcraft-rotn` showing `rotn-build mindcraft-rotn 2750`.
+- `stat` of `/opt/mindcraft-rotn` showing `rotn-build rotn-release 2750`;
+- `getent group rotn-release` listing exactly `rotn-build,mindcraft-rotn`, and `id -gn rotn-build` showing `rotn-build` (its primary group stays its own);
+- `sudo -u mindcraft-rotn test -r /opt/mindcraft-rotn/current/main.js` succeeding.
+
+**Migration of an existing tree** (the first install already ran): `build-user` runs `chown -R -P rotn-build:rotn-release /opt/mindcraft-rotn` (releases and `repo.git` from earlier deploys are owned by `deploy` or part by `rotn-build`), so `prune`, `state`, `deploys.log` and `repo.git` stay writable for `rotn-build`. `deploy` itself is in neither group and loses read access to `/opt`; that is intended (`release` runs as `rotn-build`), so do not add `deploy` to `rotn-release`.
 
 ### The new gate requests
 
