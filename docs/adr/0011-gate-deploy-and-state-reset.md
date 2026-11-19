@@ -89,7 +89,7 @@ No verb reads or writes `/etc/mindcraft-rotn/<bot>.env`. A bot `start` still nee
 
 ### When the lead uses the new verbs
 
-- `deploy`: under a written lead GO naming the tag, for a tag the lead created on `develop` after CI passed (or, as a rollback, an earlier tag), with no bot enabled. Afterwards it runs `release`, and records the tag, the SHA and the time in `coord/STATUS-rotn-lead.md`.
+- `deploy`: under a written lead GO naming the tag, for a tag the lead created on `develop` after CI passed (or, as a rollback, an earlier tag), with no bot enabled or running. Afterwards it runs `release`, and records the tag, the SHA and the time in `coord/STATUS-rotn-lead.md`.
 - `reset-state`: under the soak's GO, with the bot stopped.
 - A refused request in the gate's log is still an incident, reported to the human.
 
@@ -104,7 +104,7 @@ No verb reads or writes `/etc/mindcraft-rotn/<bot>.env`. A bot `start` still nee
 
   The unit tests use fakes and cover:
   - word counts, the tag, bot and name regexes, and no `eval` or expansion;
-  - `deploy` refused while any bot is enabled;
+  - `deploy` refused while any bot is enabled or running (the printed `is-active` state compared exactly with `inactive` or `failed`; `activating`, `deactivating`, empty output or a ctl error refused);
   - the clean environment, so `MINDCRAFT_ROTN_REPO_URL` is ignored;
   - the result logged;
   - `reset-state`:
