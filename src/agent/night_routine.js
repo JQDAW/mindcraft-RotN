@@ -131,7 +131,7 @@ export function resetNight(agent, why) {
     Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {} });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
-    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0 });
+    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0, ...MORNING_CLEAR });
     n.gen++;
 }
 
@@ -140,13 +140,19 @@ export function resetNight(agent, why) {
  * it may walk the bot out, so the shelter's rules end (cowardice and self_defense act again), and
  * the shelter is built again (or found closed) once the giver's work is done.
  */
+/**
+ * The morning rule's state (#477 review 1: resetNight, leaveShelterFor and the hand-back clear it all;
+ * a stale "leaving" would silence the shelter fight, the hurt-eating and the hand fight a whole night).
+ */
+const MORNING_CLEAR = { morningAct: null, morningWhy: null, morningLeaving: false, mobFirst: null, mobStateSaid: false, mobGoneAt: null };
+
 export function leaveShelterFor(agent, why) {
     const n = agent?._night;
     if (!n || n.state !== 'inside') return false;
     if (agent.bot) agent.bot.rotnSheltered = false;
     console.log(`[night] ${why} takes over: the shelter's rules are off until it is done`);
     Object.assign(n, { state: 'building', attempts: 0, nextAt: 0, site: null, digAt: null, repairStall: null });
-    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false });
+    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, ...MORNING_CLEAR });
     return true;
 }
 
@@ -948,7 +954,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.state = 'day';
                 n.site = null;
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
-                    mobFirst: null, mobStateSaid: false, morningAct: null, morningWhy: null, mobGoneAt: null });
+                    ...MORNING_CLEAR });
                 line(agent, text);
             };
             const failedTry = (why) => {
@@ -976,12 +982,12 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             // leaves ends its wait (mobSince): a later one gets its own, said again.
             const mob = ops.hostileNear?.(bot, LEAVE_MOB_RANGE);
             if (mob) n.mobGoneAt = null;
-            else if (n.mobSince != null && n.morningAct !== 'leaving') {
+            else if (n.mobSince != null && !n.morningLeaving) {
                 // #477 nit: out of range for less than MORNING.goneMs, the wait's start (and the cap) stay.
                 n.mobGoneAt ??= now;
                 if (now - n.mobGoneAt < MORNING.goneMs) { n.exitAt = n.mobGoneAt + MORNING.goneMs; return 'night:inside'; }
             }
-            if (!mob) Object.assign(n, { mobSince: null, mobSaid: false, mobFirst: null, mobStateSaid: false, morningAct: null, morningWhy: null, mobGoneAt: null });
+            if (!mob) Object.assign(n, { mobSince: null, mobSaid: false, ...MORNING_CLEAR });
             if (mob) {
                 n.mobSince ??= now;
                 n.mobFirst ??= { pos: mob.position?.clone?.() ?? mob.position, id: mob.id };
@@ -1023,6 +1029,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 }
                 if (n.morningAct === 'leave') {
                     n.morningAct = 'leaving';
+                    n.morningLeaving = true; // #477 review 2: busy from the first leave decision until the hand-back
                     line(agent, `[night] morning: ${n.morningWhy}: leaving the shelter at ${at(n.site)} by the side away from ${mobText(mob)}`);
                     const away = mob.position;
                     const out = n.pit ? () => ops.pitOut(bot, n.site, { away }) : () => ops.digOut(bot, n.site, { away });
@@ -1133,6 +1140,9 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // hand (n.handFight lets modes.fightInShelter swing with no weapon).
         let skip = [];
         n.handFight = false;
+        // #477 review 3: the wall opened for the morning fight is not rebuilt (also in the 30 s the
+        // mob is out of range): the fight's opening stays until it ends.
+        if (need.todo.length > 0 && n.morningAct === 'fight') { bot.rotnSheltered = 'open'; return 'night:inside'; }
         if (need.todo.length > 0 && !(ops.hasWeapon ?? hasWeapon)(bot)) {
             const held = ops.heldCells?.(bot, n.site, need.todo) ?? [];
             if (held.length) {

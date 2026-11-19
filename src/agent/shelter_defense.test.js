@@ -16,7 +16,7 @@ import './agent.js'; // the real import order (commands/index.js first)
 import { __modeForTest, __resetThreatLease } from './modes.js';
 import { SHELTER_FIGHT } from './library/skills.js';
 import { HEAD_DIG } from './modes.js';
-import { REPAIR_LABEL } from './night_routine.js';
+import { REPAIR_LABEL, resetNight } from './night_routine.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -497,12 +497,24 @@ test('#470 review 2: unarmed, held, low health and no way to back away (agent._n
     assert.ok(calls.attacks.length > 0, 'bare hands beat standing still');
 });
 
-test('#477 review 2: while the morning rule leaves the shelter (a crowd or a creeper), no melee in the opening', async (t) => {
+test('#477 review 2: from the first leave decision until the hand-back (between failed tries too), no melee of a creeper in the opening', async (t) => {
     t.mock.method(console, 'log', () => {});
     const creeper = { id: 5, name: 'creeper', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.7 };
     const { agent, calls } = shelter({ others: [creeper] });
-    agent._night = { morningAct: 'leaving' };
+    agent._night = { morningAct: 'leave', morningLeaving: true }; // between two failed leave tries (#477 review 2)
     await selfDefense(agent);
     await new Promise(r => setTimeout(r, 50));
     assert.deepEqual(calls.attacks, []);
+});
+
+test('#477 review 1: resetNight (a death, a new night) during a morning leave clears it: the next night\'s shelter fight swings', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { agent, calls } = shelter();
+    agent._night = { state: 'inside', gen: 0, morningAct: 'leaving', morningLeaving: true, morningWhy: 'no weapon', mobFirst: {}, mobStateSaid: true, mobGoneAt: 5 };
+    resetNight(agent, 'death');
+    assert.deepEqual([agent._night.morningAct, agent._night.morningLeaving, agent._night.morningWhy, agent._night.mobFirst, agent._night.mobStateSaid, agent._night.mobGoneAt], [null, false, null, null, false, null]);
+    agent.bot.rotnSheltered = 'open'; // the next night: a wall open, the zombie in reach
+    await selfDefense(agent);
+    for (let i = 0; i < 40 && calls.attacks.length === 0; i++) await new Promise(r => setTimeout(r, 25));
+    assert.ok(calls.attacks.length > 0, 'the shelter fight is back');
 });
