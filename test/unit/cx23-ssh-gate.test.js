@@ -40,6 +40,8 @@ beforeEach(() => {
     const sudo = fake('sudo', sudoLog, [
         // fd 9 (the ctl's lock, held by the gate) open in this call or not, by verb
         'if [[ -n ${FAKE_FD_LOG-} ]]; then v=${4:-$3}; [[ $* == *" deploy "* ]] && v=deploy; [[ -e /proc/self/fd/9 ]] && echo "$v fd9=open" >> "$FAKE_FD_LOG" || echo "$v fd9=closed" >> "$FAKE_FD_LOG"; fi',
+        // the working folder of each call (sudo keeps it): one line "ARGS|PWD"
+        'if [[ -n ${FAKE_CWD_LOG-} ]]; then echo "$*|$PWD" >> "$FAKE_CWD_LOG"; fi',
         'case "$*" in',
         `  "-n ${CTL} list") printf '%b' "\${FAKE_LIST-}"; exit "\${FAKE_LIST_RC:-0}" ;;`,
         `  "-n ${CTL} is-enabled "*) v="FAKE_EN_\${4//-/_}"; s=\${!v-disabled}; [[ -n $s ]] && echo "$s"; [[ $s == enabled ]] && exit 0; exit 1 ;;`,
@@ -63,11 +65,11 @@ beforeEach(() => {
 });
 
 /** Run the gate as sshd would: SSH_ORIGINAL_COMMAND set (or not), with an environment a client could influence. */
-function gate(cmd, extraEnv = {}) {
+function gate(cmd, extraEnv = {}, cwd = undefined) {
     for (const f of [sudoLog, loggerLog, pathSudoLog]) fs.rmSync(f, { force: true });   // each call's own record
     const env = { PATH: `${path.join(tmp, 'evil')}:/usr/bin:/bin`, HOME: tmp, ...extraEnv };
     if (cmd !== undefined) env.SSH_ORIGINAL_COMMAND = cmd;
-    const r = spawnSync(BASH, ['-p', copy], { env, encoding: 'utf8', timeout: 20000 });
+    const r = spawnSync(BASH, ['-p', copy], { env, cwd, encoding: 'utf8', timeout: 20000 });
     const calls = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => l.split('\0').slice(0, -1)) : []);
     return { code: r.status, stdout: r.stdout, stderr: r.stderr, sudo: calls(sudoLog), logger: calls(loggerLog), pathSudo: calls(pathSudoLog) };
 }
@@ -362,6 +364,22 @@ describe('mindcraft-rotn-ssh-gate: ADR 0011 (deploy, deploy-check and release as
             assert.deepEqual(lines, ['allowed: deploy rotn-v0.1.8', `deploy rotn-v0.1.8 interrupted by SIG${short}; passing TERM to the build`,
                 `deploy rotn-v0.1.8 exit=143 (after SIG${short})`], sig);
         }
+    });
+
+    test('ADR 0011 install: every sudo call runs in /, not in deploy\'s home (sudo keeps the folder; rotn-build cannot read it)', () => {
+        const home = path.join(tmp, 'deploy-home');
+        fs.mkdirSync(home, { mode: 0o700 });
+        const cwdLog = path.join(tmp, 'cwd.log');
+        for (const req of ['deploy rotn-v0.1.8', 'deploy-check rotn-v0.1.8', 'release', 'status frcfld', 'reset-state frcfld FRCFLD']) {
+            fs.rmSync(cwdLog, { force: true });
+            const r = gate(req, { FAKE_LIST: 'frcfld\\n', FAKE_CWD_LOG: cwdLog }, home);
+            assert.equal(r.code, 0, `${req}: ${r.stderr}`);
+            const lines = fs.readFileSync(cwdLog, 'utf8').split('\n').filter(Boolean);
+            assert.ok(lines.length >= 1, req);
+            for (const l of lines) assert.equal(l.slice(l.lastIndexOf('|') + 1), '/', `${req}: ${l}`);
+        }
+        assert.match(SRC, /^cd \/ \|\| exit 2$/m);
+        assert.ok(SRC.indexOf('\ncd / || exit 2') < SRC.indexOf('\nreadonly SUDO='), 'before anything runs');
     });
 
     test('deploy-check TAG and release run as rotn-build (exec\'ed: their exit code comes back); neither asks the ctl', () => {

@@ -297,10 +297,13 @@ sudo -u deploy sudo -n -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh rol
 | Command | Expected |
 | --- | --- |
 | `check <TAG>` | `tag=<TAG> commit=<40 hex> on-develop=yes release=<TAG>-<sha12>` |
-| `--no-restart deploy <TAG>` | `npm ci` output, then `[deploy hh:mm:ss] deployed <TAG>-<sha12> (bots restarted: none; --no-restart)`; `exit 0` |
+| `--no-restart deploy <TAG>` | first `[deploy hh:mm:ss] removing a stale build folder: releases/.tmp-...` once for each build folder older than a day (the one from rotn-v0.1.2, say), then `npm ci` output, then `[deploy hh:mm:ss] deployed <TAG>-<sha12> (bots restarted: none; --no-restart)`; `exit 0` |
 | `find /opt/mindcraft-rotn/current/ ! -group mindcraft-rotn` | **nothing**: every file of the new release has the bots' group |
+| `ls -d /opt/mindcraft-rotn/releases/.tmp-*` | `No such file or directory` (no build folder left) |
 | `status` | `current=<TAG>-<sha12>`, then `previous=` the release before |
 | `rollback` (as rotn-build) | `[deploy] ERROR: as rotn-build only: status \| check TAG \| --no-restart deploy TAG`; `exit 1` |
+
+If the deploy was refused with `part of the release is not in group mindcraft-rotn` and `find: Failed to restore initial working directory: Permission denied` just before it: that deploy.sh still ran in the caller's folder (`/root` here), which `rotn-build` cannot read. Install deploy.sh and the gate from a tag with the fix (D1, D3, compare the hashes), then run D4 again.
 
 ### D5. The gate's new requests, without SSH (as root)
 
@@ -375,6 +378,8 @@ sudo -u rotn-build /usr/local/lib/mindcraft-rotn/deploy.sh status
 - `--no-restart` never calls the ctl (`rotn-build` has no sudo rule): no bot is restarted or health-checked. During G4 no bot is enabled. Restarting enabled bots after a deploy becomes a separate ctl step, defined when the bots are enabled (`sudo mindcraft-rotn-ctl restart <bot>`, as `deploy`).
 - As `rotn-build`, deploy.sh ignores `ROOT`, `MINDCRAFT_ROTN_REPO_URL` and the timing variables (sudo removes them anyway), fixes `PATH` to `/usr/bin:/bin`, and takes `HOME` from the passwd database (`/var/lib/rotn-build`, npm's cache).
 - **The release's group.** `/opt/mindcraft-rotn` and `releases/` are `rotn-build:mindcraft-rotn` **2750** (setgid), so what the build creates gets the bots' group, and the bot reads its release through it. `rotn-build` is not in that group, so a `chmod` by it clears a folder's setgid bit (the kernel drops it for a non-member); files made in such a folder would get `rotn-build`'s own group. deploy.sh therefore refuses a release with anything outside `mindcraft-rotn` (before its `chgrp`), and never runs `chmod g+s`.
+- **The working folder is `/`.** sudo keeps the caller's folder (`/root`, `/home/deploy`), which `rotn-build` cannot read, so deploy.sh and the gate both change to `/` first; GNU `find` fails in a folder it cannot return to.
+- **Stale build folders.** A build happens in `releases/.tmp-<release>-<pid>` and is renamed when complete; a failed build removes its folder. One killed outright (SIGKILL, a reboot) leaves it behind. Each deploy removes `.tmp-*` folders older than a day (under the deploy lock, so none is in use) and logs `removing a stale build folder: releases/...`. `status` never lists them. If one stays (the log says `could not remove`), as root, with no deploy running (`ls /opt/mindcraft-rotn/.deploy.lock` shows nothing): `ls -ld /opt/mindcraft-rotn/releases/.tmp-*`, then `rm -r` exactly the folder that names, e.g. `rm -r /opt/mindcraft-rotn/releases/.tmp-rotn-v0.1.2-<sha12>-<pid>`.
 - `repo.git` is a bare clone of the public repo, holding only `develop` and the tags.
 - **Only this fork's release tags:** `rotn-vX.Y.Z`, optionally with a suffix (`rotn-v0.1.0-rc.1`). Anything else is refused before the clone.
   - The repo also carries upstream Mindcraft's `v0.x` tags, and upstream `v0.1.0` is an ancestor of `develop`.
