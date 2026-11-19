@@ -1,13 +1,13 @@
 # Status: rotn-lead
 
-Updated: 2026-11-18 17:34 UTC (from `date -u`)
+Updated: 2026-11-19 23:42 UTC (from `date -u`)
 
 
 ## CX23 deploy record (ADR 0011)
 
 | Time (UTC) | Tag | Commit | By | Notes |
 | --- | --- | --- | --- | --- |
-| 2026-11-19 23:38 | rotn-v0.1.11 | 272ff9b9 | the human (README D4, the ADR 0011 install) | previous: rotn-v0.1.7; gate `release` read by the lead 2026-11-19 (G-GATE-CHECK-20261119) |
+| 2026-11-19 23:38 | rotn-v0.1.11 | 272ff9b92232 (272ff9b9223239a9017994476779e2efb467311f) | the human (README D4, the ADR 0011 install) | previous: rotn-v0.1.7; gate `release` read by the lead 2026-11-19 (G-GATE-CHECK-20261119) |
 
 ## Snapshot (2026-11-18 17:40 UTC): development resumed; the pause list is done; rotn-v0.1.5 next
 
