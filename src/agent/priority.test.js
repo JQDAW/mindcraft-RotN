@@ -1461,3 +1461,49 @@ test('#481 nit: a model !goal swapped in mid-run is carried across the day bound
     assert.ok(!g.said.some(l => /carried over/.test(l)), g.said.join('\n'));
     assert.equal(g.agenda.standing?.key === 'done@day 4' ? g.agenda.standing.starts : 0, 0);
 });
+
+// Soak 5 (00:56-00:59): up the spawn tree by day, ~30 commands failed until the model broke the
+// trunk. The bot climbs down before the agenda or the model's goal goes on.
+test('soak 5: up on a tree by day, the bot climbs down before the agenda (not while an action or a reflex runs); retryMs counts from the end of a failed try', async () => {
+    const { treeTick, TREE_TICK } = await import('./priority.js');
+    assert.deepEqual(TREE_TICK, { retryMs: 60_000 });
+    const runs = [];
+    let executing = false, active = false, up = true, ok = false, clock = 0;
+    let finish = null; // the climb down runs until the test finishes it
+    const agent = {
+        bot: { modes: { anyActive: () => active } },
+        self_prompter: { on: true, isActive() { return this.on; }, stop() { this.on = false; } },
+        actions: { get executing() { return executing; }, runAction(label, fn) { runs.push(label); return Promise.resolve(fn()).then(() => ({ interrupted: false })); } },
+    };
+    const logs = [];
+    const flush = async () => { for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r)); };
+    const opts = (now) => ({ now, clock: () => clock, onTree: () => up, log: (l) => logs.push(l),
+        descend: () => new Promise((resolve) => { finish = () => resolve(ok); }) });
+    executing = true;
+    assert.equal(treeTick(agent, opts(0)), null, 'an action runs: wait for a gap');
+    executing = false; active = true;
+    assert.equal(treeTick(agent, opts(0)), null, 'a reflex runs');
+    active = false;
+    assert.equal(treeTick(agent, opts(0)), 'tree');
+    assert.equal(agent.self_prompter.on, false, 'its self-prompting stops (a command would stop the climb)');
+    assert.equal(agent._agenda_paused, true);
+    await flush();
+    assert.deepEqual(runs, ['action:descendFromTree']);
+    // #499 review 3: a climb down longer than retryMs: still 'tree' while it runs, and the next try
+    // waits retryMs from its end, so the agenda runs in between.
+    clock = TREE_TICK.retryMs + 5_000;
+    assert.equal(treeTick(agent, opts(clock)), 'tree', 'while the climb runs, however long');
+    finish();
+    await flush();
+    assert.deepEqual(logs, ['[tree] up on a tree: climbing down before the agenda goes on', '[tree] still up on the tree; the agenda goes on, another try in 60 s']);
+    assert.equal(treeTick(agent, opts(clock + 1000)), null, 'just after a failed try: the agenda runs');
+    assert.equal(treeTick(agent, opts(clock + TREE_TICK.retryMs - 1)), null, 'still within retryMs of its end');
+    ok = true;
+    assert.equal(treeTick(agent, opts(clock + TREE_TICK.retryMs)), 'tree', 'retryMs after the end: tried again');
+    await flush();
+    finish();
+    await flush();
+    assert.equal(logs.at(-1), '[tree] down from the tree; the agenda goes on');
+    up = false;
+    assert.equal(treeTick(agent, opts(10 * TREE_TICK.retryMs)), null, 'on the ground: nothing');
+});

@@ -124,16 +124,35 @@ async function selfPreservation(agent) {
 }
 const hurt = (bot) => Object.assign(bot, { health: 3, lastDamageTime: Date.now(), lastDamageTaken: 2, setControlState() {}, clearControlStates() {} });
 
-test('decision (1): hurt in the open shelter, the bot hits the mob in reach in place instead of fleeing out', async (t) => {
+test('decision (1): hurt in the open shelter and cornered, the bot hits the mob in reach in place instead of fleeing out', async (t) => {
     t.mock.method(console, 'log', () => {});
     const { agent, bot, calls, ran, self } = shelter();
     hurt(bot);
+    // Soak 5 (death 4): at health 8 or less only a cornered bot hits back (the night routine found
+    // no way to back away and set handFight).
+    agent._night = { handFight: true };
     const before = self.position.clone();
     await selfPreservation(agent);
     assert.deepEqual(ran, ['mode:self_preservation']);
     assert.deepEqual(calls.gotos, [], 'no walk (moveAway walked 20 blocks out)');
     assert.deepEqual(calls.attacks, [1, 1], 'hit in place');
     assert.ok(self.position.equals(before));
+});
+
+test('soak 5 (death 4): armed but at health 8 or less and not cornered, the bot does not fight from the shelter (the night routine backs away)', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    for (const health of [8, 3]) {
+        const { agent, bot, calls } = shelter();
+        bot.health = health;
+        await selfDefense(agent);
+        assert.deepEqual(calls.attacks, [], `health ${health}: no swing`);
+    }
+    assert.ok(logs.includes('[shelter] health 8, 8 or less: not fighting from the shelter unless cornered'));
+    const fit = shelter();
+    fit.bot.health = 9;
+    await selfDefense(fit.agent);
+    assert.deepEqual(fit.calls.attacks, [1, 1], 'health 9, armed: fought as before');
 });
 
 test('decision (1): hurt in the shelter with nothing in reach, the bot eats instead of fleeing; it never interrupts the repair', async (t) => {
@@ -476,6 +495,43 @@ test('CX23 soak: after a fight in place, hurt and too hungry to heal (food below
 });
 
 
+test('soak 5 (00:46, the troll): from the shelter a troll, a creeper or a skeleton in reach is never hit; a zombie still is', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    for (const name of ['iceandfire:if_troll', 'creeper', 'skeleton']) {
+        const s = shelter({ zombieAt: 6, others: [mob(2, name, 1)] });
+        await selfDefense(s.agent);
+        assert.deepEqual(s.calls.attacks, [], `${name}: no swing`);
+        s.agent._night = { handFight: true }; // nor when cornered
+        await selfDefense(s.agent);
+        assert.deepEqual(s.calls.attacks, [], `${name}: no swing when cornered`);
+    }
+    const both = shelter({ zombieAt: 2, others: [mob(3, 'iceandfire:if_troll', 1)] });
+    await selfDefense(both.agent);
+    assert.ok(both.calls.attacks.length > 0 && both.calls.attacks.every(id => id === 1), 'the zombie behind the troll is hit, the troll never');
+});
+
+test('#497 review 4: a fight from the shelter stops once health falls to 8; cornered (handFight) it goes on', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // The mode is shared by the tests in this file: wait (bounded) for an earlier fight to end, and
+    // for this fight's own end line, so a fight still running elsewhere cannot cut the wait short.
+    const until = async (ok, ms = 8000) => { const end = Date.now() + ms; while (!ok()) { if (Date.now() > end) throw new Error('timed out'); await new Promise(r => setTimeout(r, 20)); } };
+    const run = async (cornered) => {
+        await until(() => !__modeForTest('self_defense').active);
+        const s = shelter({ killAfter: 3 }); // the zombie dies at the third hit
+        if (cornered) s.agent._night = { handFight: true };
+        const attack = s.bot.attack;
+        s.bot.attack = (e) => { attack(e); s.bot.health = 8; }; // the zombie hits back
+        await selfDefense(s.agent);
+        await until(() => /Fought from inside the shelter/.test(s.bot.output));
+        return { hits: s.calls.attacks.length, output: s.bot.output };
+    };
+    const free = await run(false);
+    assert.equal(free.hits, 1, 'one swing, then health 8: it stops');
+    assert.match(free.output, /stopped: the situation changed/);
+    const cornered = await run(true);
+    assert.equal(cornered.hits, 3, `cornered: it fights on until the zombie dies (hits ${cornered.hits}: ${cornered.output})`);
+});
+
 test('soak 3 (b): with no weapon the bot does not fight from the shelter (bare hands did not hurt the zombies); it says so at most every SHELTER_SAY_MS', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
@@ -484,7 +540,7 @@ test('soak 3 (b): with no weapon the bot does not fight from the shelter (bare h
     await selfDefense(agent);
     await new Promise(r => setTimeout(r, 50));
     assert.deepEqual(calls.attacks, [], 'no swing');
-    assert.equal(logs.filter(l => l === '[shelter] no weapon: not fighting from the shelter').length, 1);
+    assert.equal(logs.filter(l => l === '[shelter] no weapon: not fighting from the shelter unless cornered').length, 1);
     assert.ok(bot.entities[1], 'the zombie is still there');
 });
 
@@ -517,4 +573,55 @@ test('#477 review 1: resetNight (a death, a new night) during a morning leave cl
     await selfDefense(agent);
     for (let i = 0; i < 40 && calls.attacks.length === 0; i++) await new Promise(r => setTimeout(r, 25));
     assert.ok(calls.attacks.length > 0, 'the shelter fight is back');
+});
+
+// Soak 5 (death 5): the bot chased a rabbit into water and drowned; with a walk going (a goal set)
+// self_preservation never let it swim up. Out of air it now stops the walk and swims up.
+test('soak 5 (death 5): under water with a walk going and 15 of 20 air or less, the walk stops and the bot swims up; with air left, nothing', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { DROWNING } = await import('./modes.js');
+    assert.deepEqual(DROWNING, { surfaceAt: 15, swimMs: 6000 });
+    const under = (air) => {
+        const s = shelter({ zombieAt: 30 });
+        Object.assign(s.bot, { rotnSheltered: false, oxygenLevel: air });
+        s.self.position = new Vec3(0.5, 64, 0.5);
+        s.bot.blockAt = (p) => ({ name: Math.floor(p.y) >= 64 && Math.floor(p.y) <= 65 ? 'water' : 'air', position: p });
+        s.bot.pathfinder.goal = { chase: 'rabbit' };
+        const controls = [];
+        let stops = 0;
+        s.bot.pathfinder.stop = () => { stops++; };
+        s.bot.setControlState = (c, on) => { controls.push(`${c}:${on}`); if (c === 'jump' && on) s.self.position = new Vec3(0.5, 65, 0.5); };
+        return { ...s, controls, stops: () => stops };
+    };
+    const low = under(8);
+    await selfPreservation(low.agent);
+    assert.deepEqual(low.ran, ['mode:self_preservation']);
+    assert.ok(low.stops() >= 1, 'the walk stops');
+    assert.deepEqual(low.controls, ['jump:true', 'jump:false']);
+    assert.ok(logs.includes('[reflex] under water with 8 of 20 air: stopping and swimming up'));
+    assert.match(low.bot.output, /Swam up: head out of the water\./);
+    const fine = under(16);
+    await selfPreservation(fine.agent);
+    assert.deepEqual(fine.ran, [], 'air left: the walk goes on');
+});
+
+// Soak 5 (00:46:52): the fight's eat-between-fights ate the bread first; then "could not eat bread
+// (food 20)". The hold checks again when its action runs.
+test('soak 5: the hold in the shelter checks the food again when it runs: fed or the food gone meanwhile, it does not try', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { agent, bot } = shelter({ zombieAt: 6 });
+    hurt(bot);
+    bot.food = 10;
+    const bread = { name: 'bread', metadata: 0, count: 1, type: 297 };
+    bot.inventory = { items: () => [AXE, ...(bread.count > 0 ? [bread] : [])], slots: [] };
+    let tried = 0;
+    bot.consume = () => { tried++; return Promise.resolve(); };
+    bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+    const run = agent.actions.runAction.bind(agent.actions);
+    agent.actions.runAction = (label, fn, o) => { bread.count = 0; bot.food = 20; return run(label, fn, o); }; // eaten elsewhere first
+    await selfPreservation(agent);
+    assert.equal(tried, 0, 'no second try');
+    assert.ok(logs.includes('[reflex] hurt in the shelter: no need to eat minecraft:bread:0 now (food 20)'), logs.join('\n'));
 });

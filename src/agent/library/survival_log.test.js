@@ -220,7 +220,7 @@ test('soak 2: a hurt line when health falls by 4 or more within 2 s, with the li
     const lines = [];
     t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
     assert.equal(hurtLine(6, 20, 14, 'zombie'), '[survival] hurt 6 health 20->14 (by zombie)');
-    assert.deepEqual(HURT, { minDrop: 4, windowMs: 2000, mobRange: 5, swingMs: 1000 });
+    assert.deepEqual(HURT, { minDrop: 4, windowMs: 2000, mobRange: 5, swingMs: 1000, fallingRange: 4, detailRange: 16, detailMobs: 3 });
     const here = new Vec3(0, 64, 0);
     const bot = { health: 20, food: 12, entity: { position: here, velocity: { y: 0 } }, entities: {} };
     const state = {};
@@ -237,7 +237,9 @@ test('soak 2: a hurt line when health falls by 4 or more within 2 s, with the li
     const s2 = {};
     hurtCheck(s2, fall, 0);
     fall.health = 12; assert.equal(hurtCheck(s2, fall, 100), '[survival] hurt 8 health 20->12 (by fall)');
-    assert.equal(lines.length, 3);
+    // Soak 5: each hurt line is followed by its detail line.
+    assert.equal(lines.length, 6);
+    assert.equal(lines[1], '[survival] hurt-detail drops 2@+0.5s,3@+0.9s at 0,64,0 vy 0 unknown cause none near slime@2m');
 });
 
 test('#432 review 1: a single hit, a fall or starving after a quiet spell is caught (the window starts from the last health seen)', async (t) => {
@@ -324,4 +326,50 @@ test('soak 3: bindSurvivalLog notes arm swings, and the hurt line names the swin
     bot.health = 14;
     bot.emit('health');
     assert.ok(logs.includes('[survival] hurt 6 health 20->14 (by zombie_players:zombie_player)'), logs.join('\n'));
+});
+
+// Soak 5 (rotn-v0.1.11): 01:42:52 "hurt 17 (by unknown)" was the landing after a 24-block drop;
+// 00:59:54 "hurt 18.5 (by zombie)" was several zombies within the 2 s window. The damage record's
+// fall comes first, a falling block or tree is named, and a detail line lists each drop, where the
+// bot is and the nearest entities that can hurt (up to 16 blocks: an attacker out of the 5-block range).
+test('soak 5: a landing after a big drop is a fall (damage_record), even with a mob near; a falling tree is named; the detail line', async (t) => {
+    const { hurtCheck, hurtSource, hurtDetail } = await import('./survival_log.js');
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
+    const here = new Vec3(8.5, 61, -117.5);
+    const zombie = { id: 4, type: 'mob', name: 'zombie', position: here.offset(2, 0, 0) };
+    const bot = { health: 20, food: 13, entity: { position: here, velocity: { y: 0 }, onGround: true }, entities: { 4: zombie } };
+    const state = {};
+    hurtCheck(state, bot, 1000);
+    Object.assign(bot, { health: 3, lastDamageCause: 'fall', lastDamageTime: 1100 });
+    assert.equal(hurtCheck(state, bot, 1100), '[survival] hurt 17 health 20->3 (by fall)', 'the landing, not the zombie near');
+    assert.equal(lines.at(-1), '[survival] hurt-detail drops 17@+0.1s at 8.5,61,-117.5 vy 0 ground cause fall near zombie@2m');
+    // An old fall record does not count.
+    assert.equal(hurtSource({ ...bot, lastDamageTime: 1100 - 5000 }, { now: 1100 }), 'zombie');
+    // A falling tree right over the bot.
+    const tree = { id: 9, type: 'object', name: 'dynamictrees:falling_tree', position: here.offset(0, 2, 0) };
+    assert.equal(hurtSource({ ...bot, lastDamageCause: null, entities: { 9: tree, 4: zombie } }, { now: 1100 }), 'dynamictrees:falling_tree');
+    // Several zombies in one window: each drop and each zombie, with its last swing.
+    const z = (id, d) => ({ id, type: 'mob', name: 'zombie', position: here.offset(d, 0, 0) });
+    const swings = new Map([[11, 900], [12, 1200]]);
+    const crowd = { health: 1.5, food: 12, entity: { position: here, velocity: { y: -0.08 }, onGround: true }, entities: { 11: z(11, 1), 12: z(12, 1.5), 13: z(13, 3), 14: z(14, 20) } };
+    assert.equal(hurtDetail(crowd, [{ at: 1000, amount: 6 }, { at: 1500, amount: 6.5 }, { at: 1900, amount: 6 }], { swings, now: 2000, start: 1000 }),
+        '[survival] hurt-detail drops 6@+0s,6.5@+0.5s,6@+0.9s at 8.5,61,-117.5 vy -0.1 ground cause none near zombie@1m/swung-1.1s,zombie@1.5m/swung-0.8s,zombie@3m');
+    // An attacker beyond the 5-block source range shows up in the detail ("by unknown" explained).
+    const far = { health: 3, food: 13, entity: { position: here, velocity: { y: 0 }, onGround: true }, entities: { 7: { id: 7, type: 'mob', name: 'iceandfire:if_troll', position: here.offset(7, 0, 0) } } };
+    assert.equal(hurtSource(far, { now: 0 }), 'unknown');
+    assert.match(hurtDetail(far, [], { now: 0 }), /near iceandfire:if_troll@7m$/);
+});
+
+// #502 nit 1: a falling block or tree counts only when it is above the bot (at or over its feet,
+// within 2 blocks sideways), never one below it or beside it.
+test('#502 nit 1: the falling-block source is only one above the bot', async () => {
+    const { hurtSource } = await import('./survival_log.js');
+    const here = new Vec3(0.5, 64, 0.5);
+    const at = (dx, dy, dz) => ({ health: 10, food: 12, entity: { position: here, velocity: { y: 0 } },
+        entities: { 9: { id: 9, type: 'object', name: 'falling_block', position: here.offset(dx, dy, dz) } } });
+    assert.equal(hurtSource(at(0, 2, 0), { now: 0 }), 'falling_block', 'right above');
+    assert.equal(hurtSource(at(1, 0.5, 1), { now: 0 }), 'falling_block', 'at head height, beside');
+    assert.equal(hurtSource(at(0, -2, 0), { now: 0 }), 'unknown', 'below the bot');
+    assert.equal(hurtSource(at(3, 1, 0), { now: 0 }), 'unknown', '3 blocks sideways');
 });

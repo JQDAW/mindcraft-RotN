@@ -21,7 +21,7 @@ import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe, equipHighestAttack } from './skills.js';
 import { eatToHeal } from './food.js';
-import { shelterEnemy } from './threats.js';
+import { shelterEnemy, shelterTarget, OPEN_FIGHT } from './threats.js';
 import { isTreePart } from './fall_safety.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -312,6 +312,17 @@ const BODY_TYPES = ['player', 'mob', 'hostile', 'animal', 'passive', 'ambient', 
  * A mob or player (not the bot) standing in the cell, which a block cannot be placed into.
  * Dropped items, XP orbs and arrows do not count (#204 re-review 2).
  */
+/** Soak 5: entities (not the bot) whose box overlaps the cell (width from entity.width, else 0.6). */
+export function overlapping(bot, cell) {
+    return Object.values(bot.entities ?? {}).filter(e => {
+        // #502 nit 2: bodies only (as mobIn's BODY_TYPES): never an item, an XP orb or an arrow.
+        if (!e || e === bot.entity || !e.position || !BODY_TYPES.includes(e.type)) return false;
+        const w = (e.width ?? 0.6) / 2, h = e.height ?? 1.8;
+        return e.position.x + w > cell.x && e.position.x - w < cell.x + 1 && e.position.z + w > cell.z && e.position.z - w < cell.z + 1
+            && e.position.y + h > cell.y && e.position.y < cell.y + 1;
+    });
+}
+
 export function mobIn(bot, cell) {
     return Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position && BODY_TYPES.includes(e.type)
         && Math.floor(e.position.x) === cell.x && Math.floor(e.position.z) === cell.z
@@ -350,14 +361,15 @@ async function placeOnce(bot, target, interior, mode, why = () => {}) {
  * G3 round 9 B (fix d): a hostile mob standing in a cell to close is hit from where the bot stands,
  * at most SHELTER_GAP.hits times, until it is out of the cell. No walk. Never a player, and never a
  * mob rotn-data says to leave alone (#333 review: a wolf or a bear, a tool-free digger, would only
- * be angered; an enderman is never looked at): threats.shelterEnemy. Returns the number of hits.
+ * be angered; an enderman is never looked at), and (soak 5) only a melee mob, never a troll, a
+ * creeper or a skeleton: threats.shelterTarget. Returns the number of hits.
  */
 async function hitOutOf(bot, cell) {
     let hits = 0;
     const start = Date.now(), fight = {};
     const same = { id: null, health: null, hits: 0 };
     const healthOf = (e) => (Number.isFinite(e?.health) ? e.health : Number.isFinite(e?.metadata?.[7]) ? e.metadata[7] : null);
-    for (let mob = mobIn(bot, cell); mob && shelterEnemy(mob); mob = mobIn(bot, cell)) {
+    for (let mob = mobIn(bot, cell); mob && shelterTarget(mob); mob = mobIn(bot, cell)) {
         if (bot.interrupt_code || typeof bot.attack !== 'function') break;
         if (Date.now() - start >= SHELTER_GAP.maxMs) break;
         const health = healthOf(mob);
@@ -390,7 +402,12 @@ async function fillCell(bot, target, interior, mode, reasons = null) {
         await sleep(LATE_UPDATE_MS);
         if (mode.accept(bot.blockAt(target))) return true;
     }
-    if (reasons && !reasons.has(key(target))) why('the block did not stay (placed twice)');
+    // Soak 5: say what is there now and any body over the cell (a troll's wide box stops a placement).
+    if (reasons && !reasons.has(key(target))) {
+        const now = bot.blockAt(target)?.name ?? 'unknown';
+        const over = overlapping(bot, target).map(e => e.name ?? e.type ?? 'entity');
+        why(`the block did not stay (placed twice; now ${now}${over.length ? `; ${over.join(', ')} over the cell` : ''})`);
+    }
     return false;
 }
 
@@ -587,13 +604,14 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     const roof = feet.offset(0, 2, 0);
     let placed = 0;
     const reasons = new Map(); // cell key -> why it stays open (CX23 soak)
+    const seenWall = new Set(); // soak 5 (01:27): cells that were a wall when the loop came to them
     // Building keeps the bot in its cell on purpose: unstuck leaves it alone meanwhile (modes.js).
     bot.rotnStationary = true;
     try {
         for (const pos of wallsAndRoof(feet)) {
             if (bot.interrupt_code) { reasons.stopped = true; break; }
             const b = bot.blockAt(pos);
-            if (mode.accept(b)) continue;
+            if (mode.accept(b)) { seenWall.add(key(pos)); continue; }
             if (skipKeys.has(key(pos))) { reasons.set(key(pos), 'a mob holds it (left for later)'); continue; }
             if (!isEmpty(b) && !isLiquid(b)) {
                 if (!await breakBlockAt(bot, pos.x, pos.y, pos.z)) { reasons.set(key(pos), `could not break the ${b.name} in it`); continue; }
@@ -625,7 +643,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
         ? `Shelter closed at ${at(feet)}: placed ${placed} blocks.${softNote}${floorNote}`
         : missing.length === 0
             ? `Shelter at ${at(feet)} is built but you are not standing on its floor (at ${exactAt(bot)}); placed ${placed}.`
-            : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(q => `${at(q)}: ${reasons.get(key(q)) ?? (reasons.stopped ? 'stopped before it' : 'not tried')}`).join('; ')}); placed ${placed}.`;
+            : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(q => `${at(q)}: ${reasons.get(key(q)) ?? (reasons.stopped ? 'stopped before it' : seenWall.has(key(q)) ? 'opened during the repair (a wall when checked)' : 'not tried')}`).join('; ')}); placed ${placed}.`;
     log(bot, line);
     // Round 9 B (fix d): dirt walls can be dug by any zombie; keep dirt ready, so a repair only places.
     if (closed && soft > 0) {
@@ -650,7 +668,7 @@ async function settleOn(bot, feet, { strict = true } = {}) {
  * the roof or the floor. lowHealth (#470 review 2): unarmed and held at this health or lower, back
  * away if possible, else hit back by hand.
  */
-export const BACK_AWAY = { margin: 0.15, lowHealth: 8, centerMs: 2000 };
+export const BACK_AWAY = { margin: 0.15, lowHealth: OPEN_FIGHT.maxLowHealth, centerMs: 2000 }; // #497 review 5: one low-health threshold
 
 /** The open cells a hostile mob (threats.shelterEnemy) holds: [{cell, mob}]. */
 export function heldCells(bot, site, open = []) {

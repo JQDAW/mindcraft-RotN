@@ -10,7 +10,7 @@ import { hasAutonomyPrefix } from '../agenda_driver.js';
 import { nightPhase, nightRoutineActive } from '../library/night.js';
 import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
-import { threatFor, hurtBy } from '../library/threats.js';
+import { threatFor, hurtBy, hasWeapon } from '../library/threats.js';
 import { mayBelongToPlayer, retaliationRisk, knownBases, isHuntableAnimal, tooWeakToHunt, HUNT_MIN_FOOD } from '../library/hunting.js';
 import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
@@ -584,6 +584,18 @@ export const actionsList = [
                 skills.log(agent.bot, `Not hunting ${type}: your food is ${agent.bot.food}, and at ${HUNT_MIN_FOOD} or lower you are too weak to hurt it (weakness). Eat anything you hold, or !forage nearby; food 0 kills you at once on this pack.`);
                 return;
             }
+            // Soak 5 (#500 follow-up 2): no hunt with no weapon (the model chased a sow bare-handed
+            // after a death, with zombies near). A task giver who types it may, with a warning; the
+            // ownership refusal below still holds.
+            // #501 decision (reviewer nit 1): also a provoked one that hurt the bot (unarmed, #497 flees
+            // from it); a giver may still override.
+            if (mob && isHuntableAnimal(mob) && !hasWeapon(agent.bot)) {
+                if (!giver) {
+                    skills.log(agent.bot, `Not hunting ${type}: you hold no weapon. Forage for food first (!forage); make a weapon (a crude axe from 1 rock and 2 sticks, or a stone axe) before you hunt.`);
+                    return;
+                }
+                skills.log(agent.bot, `Warning: ${giver} asked for it, so hunting ${type} with no weapon.`);
+            }
             if (mob && threatFor(mob)?.reaction === 'ignore-unless-provoked' && !hurtBy(agent.bot, mob) && !(giver && never?.fightBack === false)) {
                 skills.log(agent.bot, `Not attacking ${type}: it attacks only when hurt, and it has not hurt you. Leave it alone; if it attacks you, the bot defends itself.`);
                 return;
@@ -606,7 +618,9 @@ export const actionsList = [
                 let riskyOne = null;
                 const bases = knownBases(agent);
                 // #448: nor one whose hunt brings a bull or a herd down on the bot (retaliationRisk).
-                let free = world.getNearbyEntities(agent.bot, 24).filter(e => e.name === type)
+                // Soak 5: not one an attack just gave up on (no closer, no hit; skills.isUnreachable).
+                const ofType = world.getNearbyEntities(agent.bot, 24).filter(e => e.name === type);
+                let free = ofType.filter(e => !skills.isUnreachable(agent.bot, e))
                     .find(e => {
                         const why = mayBelongToPlayer(agent.bot, e, { bases });
                         if (why) { skipped.push(why); return false; }
@@ -622,10 +636,11 @@ export const actionsList = [
                 if (!free) {
                     // #453 review 3: every reason, when the candidates were refused for different ones.
                     const why = [];
+                    if (ofType.some(e => skills.isUnreachable(agent.bot, e))) why.push(`the ones it could not reach in the last ${skills.ATTACK_PROGRESS.skipMs / 60_000} min are left alone`);
                     if (skipped.length) why.push(`it may belong to a player (${[...new Set(skipped)].join('; ')})`);
                     if (risky.length) why.push([...new Set(risky)].join('; '));
                     const hint = skipped.length && risky.length ? 'Find a lone, wild one away from bulls, fences, farms and houses.'
-                        : skipped.length ? 'Find a wild one away from fences, farms and houses.' : 'Find a lone one, away from bulls.';
+                        : skipped.length ? 'Find a wild one away from fences, farms and houses.' : risky.length ? 'Find a lone one, away from bulls.' : 'Try another one, another place, or !forage.';
                     skills.log(agent.bot, `Not attacking ${type}: ${why.join('; and ')}. ${hint}`);
                     return;
                 }

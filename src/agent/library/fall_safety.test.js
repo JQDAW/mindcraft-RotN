@@ -12,6 +12,7 @@ import { __setRegistryForTest } from '../../utils/mcdata.js';
 import {
     isLiquid, hazardOf, isLethal, isFirmGround, installWalkSafety,
     MAX_SAFE_DROP, PATHFINDER_MAX_DROP_DOWN, fallSafe, treeSafe, standsOnTree, leafFromGround, itemOnGround, isTreePart,
+    supportBlock, avoidsWater, WATER_AVOID,
 } from './fall_safety.js';
 import { ROTN_EARLY_GAME } from '../agenda.js';
 import { moveAwayWithin } from '../modes.js';
@@ -53,6 +54,7 @@ const key = (p) => `${p.x},${p.y},${p.z}`;
  * pathfinder records every movements object it is given; goto moves the bot to `arrive(goal)`
  * (default: stays), so a test decides where a walk ends.
  */
+const fakeBotRaw = (o) => fakeBot(o);
 function fakeBot({ blocks = {}, start = at(0), arrive = null, items = [], entities = {} } = {}) {
     const world = new Map(Object.entries(blocks));
     const blockAt = (p) => {
@@ -584,4 +586,249 @@ test('soak 2: no walk sprints, except while a survival mode flees or fights (bot
     }
     await execute({ name: 'hunting', active: false }, agent, walk);
     assert.equal(set.at(-1).allowSprinting, false, 'a hunt walks');
+});
+
+// ---- Soak 5 (rotn-v0.1.11) ----
+
+// 01:42:51: the unstuck walk from the edge of a tree fell 24 blocks. Off the middle of its cell, a
+// tree part under a corner of the footprint is the tree the bot stands on.
+test('soak 5: standsOnTree sees the bot on the edge of the leaves (nothing under its centre, leaves under a corner); firm ground under the centre is never a tree', () => {
+    const edge = fakeBot({ blocks: { '1,63,0': LEAVES, '0,63,0': 'air', '0,62,0': 'air' }, start: at(0) });
+    edge.entity.position = new Vec3(0.85, 64, 0.5); // the right side of its footprint over x 1
+    assert.equal(standsOnTree(edge), true, 'leaves under a corner, air under the centre');
+    edge.entity.position = new Vec3(0.5, 64, 0.5);
+    assert.equal(standsOnTree(edge), false, 'in the middle of the cell: nothing under any corner');
+    const ground = fakeBot({ blocks: { '1,63,0': LEAVES }, start: at(0) });
+    ground.entity.position = new Vec3(0.85, 64, 0.5);
+    assert.equal(standsOnTree(ground), false, 'dirt under the centre: on the ground, leaves beside it');
+});
+
+// 00:16: at y 83.50 the bot rested on a lower block in its own cell.
+test('soak 5: supportBlock is the block in the feet cell when the bot stands above its floor, else the one below', () => {
+    const bot = fakeBot({ blocks: { '0,67,0': 'snow_layer', '0,66,0': LEAVES }, start: at(0, 67) });
+    bot.entity.position = new Vec3(0.5, 67.5, 0.5);
+    assert.equal(supportBlock(bot).name, 'snow_layer');
+    bot.entity.position = new Vec3(0.5, 67, 0.5);
+    assert.equal(supportBlock(bot).name, LEAVES, 'at the cell floor: the block below');
+});
+
+test('soak 5: digDownThroughLeaves digs a snow layer in its own cell first, then the leaves below', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bot = fakeBot({ blocks: { '0,67,0': 'snow_layer', '0,66,0': LEAVES, '0,65,0': LEAVES, '0,64,0': LEAVES }, start: at(0, 67) });
+    bot.entity.position = new Vec3(0.5, 67.5, 0.5);
+    const dig = bot.dig;
+    bot.dig = (b) => { const r = dig(b); if (b.name === 'snow_layer') bot.entity.position = new Vec3(0.5, 67, 0.5); return r; };
+    assert.equal(await skills.digDownThroughLeaves(bot), true);
+    assert.deepEqual(bot.calls.digs, ['0,67,0', '0,66,0', '0,65,0', '0,64,0'], 'the snow layer first');
+    // A bot that does not settle after that dig stops, and says why (bot.rotnTreeWhy).
+    const stuck = fakeBot({ blocks: { '0,67,0': 'snow_layer', '0,66,0': LEAVES }, start: at(0, 67) });
+    stuck.entity.position = new Vec3(0.5, 67.5, 0.5);
+    const saved = { ...skills.CANOPY_DESCENT };
+    Object.assign(skills.CANOPY_DESCENT, { landMs: 100 });
+    t.after(() => Object.assign(skills.CANOPY_DESCENT, saved));
+    assert.equal(await skills.digDownThroughLeaves(stuck), false);
+    assert.match(stuck.rotnTreeWhy, /did not settle after digging the snow_layer \(you stand at 67\.50\)/);
+});
+
+test('soak 5: on the edge of the leaves over an open drop over 3, the bot does not step off into it', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const air = Object.fromEntries([...Array(10).keys()].map(i => [`0,${72 - i},0`, 'air']));
+    const bot = fakeBot({ blocks: { '1,72,0': LEAVES, ...air }, start: at(0, 73) });
+    bot.entity.position = new Vec3(0.85, 73, 0.5);
+    const controls = [];
+    bot.setControlState = (c, on) => controls.push(`${c}:${on}`);
+    assert.equal(await skills.digDownThroughLeaves(bot), false);
+    assert.deepEqual(controls, [], 'no sneak to the middle');
+    assert.deepEqual(bot.calls.digs, []);
+    assert.match(bot.rotnTreeWhy, /the middle of your cell is open below \(a fall of 10 blocks\); not stepping off/);
+});
+
+test('soak 5: leafColumnOk and leafColumnSpots: a column of leaves to firm ground within 6 blocks, by the climb-down rules', () => {
+    // The bot on a trunk shell at x 0 (no dig there); leaves at x 3 down to the ground; leaves at x -3 over lava.
+    const col = (x, from, to) => Object.fromEntries([...Array(from - to + 1).keys()].map(i => [`${x},${from - i},0`, LEAVES]));
+    const bot = fakeBot({ blocks: { '0,69,0': 'dynamictrees:trunkshell', ...col(3, 69, 64), '-3,69,0': LEAVES, '-3,63,0': 'lava' }, start: at(0, 70) });
+    bot.health = 20;
+    assert.equal(skills.leafColumnOk(bot, at(3, 69)), true, 'leaves all the way down');
+    assert.equal(skills.leafColumnOk(bot, at(-3, 69)), false, 'it would land in lava');
+    const spots = skills.leafColumnSpots(bot);
+    assert.deepEqual(spots.map(p => key(p)), ['3,70,0']);
+    // One big drop is allowed while health stays at least 10, as in the dig itself.
+    const tall = fakeBot({ blocks: { '2,72,0': LEAVES }, start: at(0, 73) });
+    tall.health = 20;
+    assert.equal(skills.leafColumnOk(tall, at(2, 72)), true, 'a fall of 9 at health 20');
+    tall.health = 12;
+    assert.equal(skills.leafColumnOk(tall, at(2, 72)), false, 'the same at health 12 would leave 6');
+});
+
+test('soak 5: with no column under it, descendFromTree walks over the canopy (no dig) to one and digs down there; with none, the journal names why', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const col = (x, from, to) => Object.fromEntries([...Array(from - to + 1).keys()].map(i => [`${x},${from - i},0`, LEAVES]));
+    const blocks = { '0,69,0': 'dynamictrees:trunkshell', ...col(3, 69, 64) };
+    const bot = fakeBot({ blocks, start: at(0, 70), arrive: (goal) => (goal.constructor?.name === 'GoalBlock' ? at(goal.x, goal.y, goal.z) : null) });
+    bot.health = 20;
+    assert.equal(await skills.descendFromTree(bot), true);
+    const walk = bot.calls.gotos.at(-1);
+    assert.equal(walk.goal.constructor.name, 'GoalBlock');
+    assert.deepEqual([walk.goal.x, walk.goal.y, walk.goal.z], [3, 70, 0]);
+    assert.equal(walk.moves.canDig, false, 'no dig on the canopy walk');
+    assert.equal(walk.moves.rotnFallSafe, true);
+    assert.deepEqual(bot.calls.digs, ['3,69,0', '3,68,0', '3,67,0', '3,66,0', '3,65,0', '3,64,0']);
+    assert.match(bot.output, /Walking over the canopy to 3, 70, 0/);
+
+    const none = fakeBot({ blocks: { '0,69,0': 'dynamictrees:trunkshell' }, start: at(0, 70) });
+    assert.equal(await skills.descendFromTree(none), false);
+    assert.deepEqual(none.calls.digs, []);
+    assert.match(none.rotnTreeWhy, /dynamictrees:trunkshell is under you.*; no leaves within 6 blocks to dig down through either/);
+    assert.match(none.output, /staying put\. Last: Not digging down: dynamictrees:trunkshell is under you/);
+});
+
+// 00:59: the model's !digDown broke 8 trunk shells of the giant spruce it stood on.
+test('soak 5: digDown never breaks a trunk shell or a branch (it fells the tree); leaves it digs', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bot = fakeBot({ blocks: { '0,69,0': 'dynamictrees:trunkshell', '0,68,0': 'dynamictrees:trunkshell' }, start: at(0, 70) });
+    bot.blockAt = ((orig) => (p) => orig(p))(bot.blockAt);
+    assert.equal(await skills.digDown(bot, 4), false);
+    assert.deepEqual(bot.calls.digs, []);
+    assert.match(bot.output, /Not digging down: dynamictrees:trunkshell at 0, 69, 0 is part of a tree trunk or branch, and breaking it fells the whole tree\. Dug down 0 blocks\./);
+    const branch = fakeBot({ blocks: { '0,69,0': BRANCH }, start: at(0, 70) });
+    assert.equal(await skills.digDown(branch, 2), false);
+    assert.deepEqual(branch.calls.digs, []);
+});
+
+// 01:42:51: the unstuck walk never steps above, nor breaks, a tree part.
+test('soak 5: offTreeParts and the unstuck walk: no step onto a place above leaves, a branch or a trunk shell, no tree part broken', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bot = fakeBot({ blocks: { '2,63,0': LEAVES, '3,63,0': BRANCH } });
+    const m = skills.offTreeParts(bot, fallSafe(new pf.Movements(bot)));
+    const step = (b) => Math.max(0, ...m.exclusionAreasStep.map(f => f(b)));
+    const brk = (b) => Math.max(0, ...m.exclusionAreasBreak.map(f => f(b)));
+    assert.ok(step(bot.blockAt(at(2, 64))) >= 100, 'above leaves: never');
+    assert.ok(step(bot.blockAt(at(3, 64))) >= 100, 'above a branch: never');
+    assert.equal(step(bot.blockAt(at(5, 64))), 0, 'above dirt: fine');
+    assert.ok(brk(bot.blockAt(at(2, 63))) >= 100, 'never break leaves');
+    assert.equal(skills.offTreeParts(bot, m), m, 'once');
+    // The unstuck reflex's walk away (not on a tree) uses them.
+    const free = fakeBot();
+    await moveAwayWithin(free, 5, 1000);
+    assert.ok(free.calls.paths.length > 0 && free.calls.paths.every(mv => mv.rotnOffTrees === true), 'every path the walk tried kept off the trees');
+});
+
+// Death 5: at health 3 the bot chased a rabbit into water and drowned.
+test('soak 5: at health 12 or less a walk never steps into water, unless it is in water already', () => {
+    assert.deepEqual(WATER_AVOID, { maxHealth: 12 });
+    const bot = fakeBot({ blocks: { '2,64,0': 'water', '2,63,0': 'water' } });
+    const m = fallSafe(new pf.Movements(bot));
+    const water = bot.blockAt(at(2, 64));
+    const step = () => Math.max(0, ...m.exclusionAreasStep.map(f => f(water)));
+    bot.health = 20;
+    assert.equal(avoidsWater(bot), false);
+    assert.equal(step(), 0, 'health 20: water as before (#264 review 1)');
+    bot.health = 12;
+    assert.equal(avoidsWater(bot), true);
+    assert.ok(step() >= 100, 'health 12: never into water');
+    bot.entity.position = at(2, 64).offset(0.5, 0, 0.5);
+    assert.equal(avoidsWater(bot), false, 'in water already: it may swim out');
+    assert.equal(step(), 0);
+    bot.health = undefined;
+    assert.equal(avoidsWater(bot), false, 'health unknown: no rule');
+});
+
+// #499 review 1 (BLOCKER): mineflayer-pathfinder takes a drop into water of any height
+// (getLandingBlock returns the first liquid; infiniteLiquidDropdownDistance; getMoveDown never
+// checks). 01:42:51: 24 blocks down to sea-level water, 20 -> 3. These drive the real neighbours.
+/** The pathfinder's dig cost needs a tool choice and a dig time; the fake bot gets both. */
+function diggable(bot) {
+    bot.pathfinder.bestHarvestTool = () => null;
+    const blockAt = bot.blockAt;
+    bot.blockAt = (p) => Object.assign(blockAt(p), { digTime: () => 500 });
+    return bot;
+}
+
+test('#499 review 1: a drop into water is a fall like any other (at most 3, getMoveDropDown and getMoveDown), and none at all at health 12 or less', () => {
+    const fakeBot = (o) => diggable(fakeBotRaw(o));
+    const column = (x, from, to, name = 'air') => Object.fromEntries([...Array(from - to + 1).keys()].map(i => [`${x},${from - i},0`, name]));
+    const east = { x: 1, z: 0 };
+    const drops = (bot, y, { off = false } = {}) => {
+        const node = { x: 0, y, z: 0, remainingBlocks: 0 };
+        const m = fallSafe(new pf.Movements(bot));
+        if (off) skills.offTreeParts(bot, m);
+        const out = [];
+        m.getMoveDropDown(node, east, out);
+        m.getMoveDown(node, out);
+        return out.map(mv => `${mv.x},${mv.y},${mv.z}`);
+    };
+    const raw = (bot, y) => {
+        const node = { x: 0, y, z: 0, remainingBlocks: 0 };
+        const m = new pf.Movements(bot);
+        const out = [];
+        m.getMoveDropDown(node, east, out);
+        m.getMoveDown(node, out);
+        return out.map(mv => `${mv.x},${mv.y},${mv.z}`);
+    };
+    // 22 blocks of air at x 0 and x 1 down to water at y 63 (the bot stands at 85 on a leaf).
+    const deep = fakeBot({ blocks: { '0,84,0': LEAVES, ...column(1, 84, 64), '1,63,0': 'water', ...column(0, 83, 64), '0,63,0': 'water' }, start: at(0, 85) });
+    deep.health = 20;
+    assert.deepEqual(raw(deep, 85), ['1,63,0', '0,63,0'], 'the raw pathfinder drops 22 blocks into the water, beside it and (digging the leaf) straight down');
+    assert.deepEqual(drops(deep, 85), [], 'fall-safe: no drop into water of 22 blocks');
+    const down = fakeBot({ blocks: { ...column(0, 84, 64), '0,63,0': 'water' }, start: at(0, 85) });
+    down.health = 20;
+    assert.ok(raw(down, 85).includes('0,63,0'), 'getMoveDown too, in the raw pathfinder');
+    assert.deepEqual(drops(down, 85).filter(k => k === '0,63,0'), [], 'fall-safe: getMoveDown never lands in water 22 below');
+    // Beside the bot only (straight down at x 0 is a drop of 2 onto dirt, a move of its own).
+    const beside = (bot, y) => drops(bot, y).filter(k => k.startsWith('1,'));
+    // A drop of 3 into water: allowed at full health; a drop of 4: not.
+    const three = fakeBot({ blocks: { ...column(1, 65, 64), '1,63,0': 'water' }, start: at(0, 66) });
+    three.health = 20;
+    assert.deepEqual(beside(three, 66), ['1,63,0'], 'a fall of 3 into water');
+    const four = fakeBot({ blocks: { ...column(1, 66, 64), '1,63,0': 'water' }, start: at(0, 67) });
+    four.health = 20;
+    assert.deepEqual(beside(four, 67), [], 'a fall of 4 into water: refused');
+    // At health 12 or less: no water landing at all, even of 3.
+    three.health = 12;
+    assert.deepEqual(beside(three, 66), [], 'health 12: no drop into water');
+    // A drop onto ground is unchanged (3 fine, 4 refused).
+    const ground3 = fakeBot({ blocks: column(1, 65, 63), start: at(0, 66) });
+    assert.deepEqual(beside(ground3, 66), ['1,63,0'], 'a fall of 3 onto dirt');
+    const ground4 = fakeBot({ blocks: column(1, 66, 63), start: at(0, 67) });
+    assert.deepEqual(beside(ground4, 67), []);
+});
+
+// #499 review 2: the unstuck walk's drop down never lands on a tree part; no parkour.
+test('#499 review 2: offTreeParts: a drop down never lands on leaves, a branch or a trunk shell; parkour is off', () => {
+    const fakeBot = (o) => diggable(fakeBotRaw(o));
+    const east = { x: 1, z: 0 };
+    const land = (under, off) => {
+        const bot = fakeBot({ blocks: { '1,67,0': 'air', '1,66,0': 'air', '1,65,0': under }, start: at(0, 68) });
+        const node = { x: 0, y: 68, z: 0, remainingBlocks: 0 };
+        const m = fallSafe(new pf.Movements(bot));
+        if (off) skills.offTreeParts(bot, m);
+        const out = [];
+        m.getMoveDropDown(node, east, out);
+        return { moves: out.map(mv => `${mv.x},${mv.y},${mv.z}`), parkour: m.allowParkour };
+    };
+    assert.deepEqual(land(LEAVES, false).moves, ['1,66,0'], 'fall-safe alone: a drop of 2 onto leaves');
+    assert.deepEqual(land(LEAVES, true).moves, [], 'off trees: not onto leaves');
+    assert.deepEqual(land(BRANCH, true).moves, [], 'nor a branch');
+    assert.deepEqual(land('dynamictrees:trunkshell', true).moves, [], 'nor a trunk shell');
+    assert.deepEqual(land('dirt', true).moves, ['1,66,0'], 'onto dirt: fine');
+    assert.equal(land('dirt', true).parkour, false);
+    assert.equal(land('dirt', false).parkour, true, 'parkour stays as it was for other walks');
+});
+
+// The 01:42:51 setting with the real neighbour search: the bot at y 85 on the edge of a canopy over
+// sea-level water; no neighbour of the unstuck walk lands more than 3 below.
+test('#499 review 1 and 2: the unstuck walk\'s neighbours from a canopy edge 22 above water never land more than 3 below', () => {
+    const fakeBot = (o) => diggable(fakeBotRaw(o));
+    const blocks = { '0,84,0': LEAVES, '-1,84,0': LEAVES };
+    for (const [x, z] of [[1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1], [-2, 0]]) {
+        for (let y = 84; y >= 64; y--) blocks[`${x},${y},${z}`] = 'air';
+        blocks[`${x},63,${z}`] = 'water';
+    }
+    const bot = fakeBot({ blocks, start: at(0, 85) });
+    bot.health = 20;
+    const m = skills.offTreeParts(bot, fallSafe(new pf.Movements(bot)));
+    const ys = m.getNeighbors({ x: 0, y: 85, z: 0, remainingBlocks: 0 }).map(mv => mv.y);
+    assert.ok(ys.every(y => y >= 82), `no neighbour more than 3 below: ${ys}`);
+    const rawYs = new pf.Movements(bot).getNeighbors({ x: 0, y: 85, z: 0, remainingBlocks: 0 }).map(mv => mv.y);
+    assert.ok(rawYs.includes(63), 'the raw pathfinder would drop into the water');
 });
