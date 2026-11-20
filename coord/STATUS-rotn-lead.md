@@ -1,6 +1,6 @@
 # Status: rotn-lead
 
-Updated: 2026-11-20 06:36 UTC (from `date -u`)
+Updated: 2026-11-20 21:40 UTC (from `date -u`)
 
 
 ## CX23 deploy record (ADR 0011)
@@ -9,6 +9,7 @@ Updated: 2026-11-20 06:36 UTC (from `date -u`)
 | --- | --- | --- | --- | --- |
 | 2026-11-19 23:38 | rotn-v0.1.11 | 272ff9b92232 (272ff9b9223239a9017994476779e2efb467311f) | the human (README D4, the ADR 0011 install) | previous: rotn-v0.1.7; gate `release` read by the lead 2026-11-19 (G-GATE-CHECK-20261119) |
 | 2026-11-20 06:36 | rotn-v0.1.12 | 29b0ce72212a (29b0ce72212a10f1c11bd4840efd8e126be7115e) | the lead, through the gate (GO G-DEPLOY-v0.1.12-20261120) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.12-29b0ce72212a, previous=rotn-v0.1.11-272ff9b92232; no bot restarted |
+| 2026-11-20 21:39 | rotn-v0.1.13 | 9955b0f48803 (9955b0f48803a4809cea1734a0944031873125e6) | the lead, through the gate (GO G-DEPLOY-v0.1.13-20261120) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.13-9955b0f48803, previous=rotn-v0.1.12-29b0ce72212a; pruned rotn-v0.1.2; no bot restarted |
 
 ## Snapshot (2026-11-18 17:40 UTC): development resumed; the pause list is done; rotn-v0.1.5 next
 
