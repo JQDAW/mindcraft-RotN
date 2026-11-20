@@ -28,7 +28,7 @@ export const UNKNOWN_MELEE = 18;
  *   reach: blocks from its position to a player's feet (for a player target), checked with nothing
  *   else (no line of sight, no block in between); width, height: its hitbox;
  *   hitsThroughWalls: reach > width / 2 + 1 + 0.3 (a 1-block wall, the bot against its far side; with
- *   the bot in the middle of its block use + 0.5); wallBlocks: the thickest such wall;
+ *   the bot in the middle of its block use + 0.5); wallBlocks: the thickest such wall (0 when none);
  *   hitsThroughFloor: it hits a bot on a 1-block floor from directly below (reach > 1 + ceil(height));
  *   hitsThroughRoof: from on top of a 1-block roof over a 2-high room (reach > 3);
  *   attack: absent for melee; 'spell' when the damage is a spell's, at reach; 'none' when it does no
