@@ -9,6 +9,7 @@ import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
 import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, firmFloor, LATE_UPDATE_MS, SHELTER_SPARE, SHELTER_GAP, SETTLE, retreatPlan, backAway, heldCells, BACK_AWAY, wallItems, mobProof, nearbyDiggers, heldTools, blockDefeat } from './shelter.js';
 import { getCommand } from '../commands/index.js';
+import { burrowsFrom, burrowRanges, burrowThreat, burrowStep, takeBurrowStep, burrowAway, BURROW } from './burrow.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -1126,4 +1127,97 @@ test('#502 nit 2: overlapping skips XP orbs, arrows and items', async (t) => {
     bot.placeBlock = () => Promise.resolve(); // never kept
     const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
     assert.match(r.line, /1, 64, 0: the block did not stay \(placed twice; now air\)/);
+});
+
+// Soak 5 Fix B (PR 5), the lead's rule: an avoid mob that digs through anything (the troll: rotn-data
+// #496, a blast that breaks every block below explosion resistance 8.37 from 1.73 to 5.47 blocks) is
+// burrowed away from, never fought: a 1x2 column beside the bot (or two blocks down) that takes it
+// farther, in ground enclosed on every other side, sealed behind; a pickaxe it holds may dig stone.
+const troll = (x, y, z) => ({ id: 9, type: 'mob', name: 'iceandfire:if_troll', position: new Vec3(x, y, z), height: 3.5, width: 1.2 });
+const withTroll = (f, t) => { f.bot.entities = { ...(f.bot.entities ?? {}), 9: t }; return f; };
+/** Digging the block under the bot drops it onto the next solid block (as the server would). */
+const withGravity = (f) => {
+    const dig = f.bot.dig;
+    f.bot.dig = async (b) => {
+        await dig(b);
+        const feet = f.bot.entity.position.floored();
+        let y = feet.y;
+        while (y > 0 && f.bot.blockAt(new Vec3(feet.x, y - 1, feet.z)).boundingBox === 'empty') y--;
+        if (y !== feet.y) f.bot.entity.position = new Vec3(f.bot.entity.position.x, y, f.bot.entity.position.z);
+    };
+    return f;
+};
+
+test('PR 5: burrowsFrom: the troll (a blaster, avoid); never a zombie (needs tools for rock) or a creeper; its ranges and burrowThreat', () => {
+    assert.equal(burrowsFrom(troll(0, 0, 0)), true);
+    assert.equal(burrowsFrom({ name: 'zombie', type: 'mob' }), false);
+    assert.equal(burrowsFrom({ name: 'creeper', type: 'mob' }), false);
+    const r = burrowRanges(troll(0, 0, 0));
+    assert.deepEqual([BURROW.startMargin, BURROW.stopMargin, BURROW.maxSteps, BURROW.maxMs], [1.5, 2.5, 16, 60_000]);
+    assert.ok(Math.abs(r.start - 6.97) < 1e-9 && Math.abs(r.stop - 7.97) < 1e-9, JSON.stringify(r));
+    const near = withTroll(holeShelter(), troll(6.5, 61, 0.5));
+    assert.equal(burrowThreat(near.bot).mob.id, 9, '6 blocks: within ~7');
+    assert.equal(burrowThreat(withTroll(holeShelter(), troll(7.6, 61, 0.5)).bot), null, '7.1 blocks: not yet');
+    assert.equal(burrowThreat(holeShelter().bot), null, 'a zombie in the opening: no burrow');
+});
+
+test('PR 5: burrowStep picks the enclosed side column farthest from the troll; stone only with a pickaxe; never into water, under gravel, or into the open', () => {
+    const t = troll(4.5, 61, 0.5); // east, 4 blocks
+    const step = burrowStep(withTroll(holeShelter(), t).bot, t);
+    assert.deepEqual([step.kind, key(step.to), step.dig.map(key), step.seal.map(key)], ['side', '-1,61,0', ['-1,62,0', '-1,61,0'], ['0,61,0', '0,62,0']]);
+    assert.ok(Math.abs(step.d - 5) < 1e-9, 'its new cell\'s middle 5 blocks from the troll (4 now)');
+    // Stone to the west: not by hand; a held pickaxe digs it.
+    const stone = { '-1,61,0': 'stone', '-1,62,0': 'stone' };
+    const bare = burrowStep(withTroll(holeShelter({ set: stone }), t).bot, t);
+    assert.equal(bare.to, undefined);
+    assert.match(bare.why, /-1,0: stone at -1, 62, 0 cannot be dug/);
+    const pick = withTroll(holeShelter({ set: stone }), t);
+    pick.items.push({ name: 'stone_pickaxe', metadata: 0, count: 1 });
+    assert.equal(key(burrowStep(pick.bot, t).to), '-1,61,0', 'with a pickaxe');
+    // Water beyond the column, gravel over it, a cave beside it: no.
+    for (const [set, why] of [[{ '-2,61,0': 'water' }, /-1,0: water at -2, 61, 0: not enclosed/], [{ '-1,63,0': 'gravel' }, /-1,0: gravel above would fall in/], [{ '-1,61,1': 'air' }, /-1,0: air at -1, 61, 1: not enclosed/]]) {
+        const r = burrowStep(withTroll(holeShelter({ set }), t).bot, t);
+        assert.equal(r.to, undefined, JSON.stringify(set));
+        assert.match(r.why, why);
+    }
+    // Nothing to seal with: no step.
+    assert.deepEqual(burrowStep(withTroll(holeShelter({ dirt: 0 }), t).bot, t), { why: 'no blocks to seal with' });
+});
+
+test('PR 5 (the surface-shelter escape): in a surface shelter the first step is two blocks down, sealed above', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const tr = troll(3.5, 64, 0.5);
+    const f = withGravity(withTroll(fakeBot({ cobble: 4, set: shellAt() }), tr));
+    const step = burrowStep(f.bot, tr);
+    assert.deepEqual([step.kind, key(step.to), step.dig.map(key), step.seal.map(key)], ['down', '0,62,0', ['0,63,0', '0,62,0'], ['0,64,0']]);
+    const r = await takeBurrowStep(f.bot, step);
+    assert.deepEqual(r, { site: new Vec3(0, 62, 0) }, f.bot.output);
+    assert.deepEqual(f.dug, ['0,63,0', '0,62,0']);
+    assert.deepEqual(f.placed, ['0,64,0'], 'sealed above');
+    assert.ok(f.bot.entity.position.floored().equals(new Vec3(0, 62, 0)));
+});
+
+test('PR 5: burrowAway tunnels until the troll is ~8 blocks off, sealing behind each step; bounded by the night\'s steps; never a hit', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const tr = troll(3.5, 61, 0.5); // 3 blocks east of the hole shelter at 0 61 0
+    const f = withTroll(holeShelter({ dirt: 12 }), tr);
+    let hits = 0;
+    f.bot.attack = () => { hits++; };
+    const r = await burrowAway(f.bot, tr);
+    // The stop is measured from where the bot stands (it steps in to within 0.15 of a cell's middle,
+    // from the east): 7.9 at -5 61 0, so one more step.
+    assert.deepEqual([r.stopped, r.steps, key(r.site)], ['far', 6, '-6,61,0'], f.bot.output);
+    assert.ok(tr.position.distanceTo(f.bot.entity.position) >= burrowRanges(tr).stop);
+    assert.deepEqual(f.placed, ['0,61,0', '0,62,0', '-1,61,0', '-1,62,0', '-2,61,0', '-2,62,0', '-3,61,0', '-3,62,0', '-4,61,0', '-4,62,0', '-5,61,0', '-5,62,0'], 'each cell left is sealed');
+    assert.equal(hits, 0);
+    assert.match(f.bot.output, /Burrowed aside into -1, 61, 0, 4\.0 blocks from the iceandfire:if_troll, and sealed 0, 61, 0 and 0, 62, 0 behind\./);
+    // The night's budget.
+    const b = withTroll(holeShelter({ dirt: 12 }), troll(3.5, 61, 0.5));
+    assert.deepEqual(await burrowAway(b.bot, b.bot.entities[9], { maxSteps: 2 }).then(x => [x.stopped, x.steps]), ['budget', 2]);
+    // Gone: it stops at once.
+    const g = holeShelter({ dirt: 12 });
+    assert.deepEqual(await burrowAway(g.bot, troll(3.5, 61, 0.5)).then(x => [x.stopped, x.steps]), ['gone', 0]);
+    // Cornered: the reason, no step.
+    const c = withTroll(holeShelter({ dirt: 0 }), troll(3.5, 61, 0.5));
+    assert.deepEqual(await burrowAway(c.bot, c.bot.entities[9]), { steps: 0, site: null, stopped: 'cornered', why: 'no blocks to seal with' });
 });

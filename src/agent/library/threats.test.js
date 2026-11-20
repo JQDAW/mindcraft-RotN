@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
-import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES, shelterTarget, shelterEnemy, fightRefusal, OPEN_FIGHT } from './threats.js';
+import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES, shelterTarget, shelterEnemy, fightRefusal, maxHitOf } from './threats.js';
 import { __modeForTest, __resetThreatLease } from '../modes.js';
 
 let nextId = 1;
@@ -14,7 +14,7 @@ function fakeBot(entities, extra = {}) {
     const self = { id: 0, name: 'player', type: 'player', position: new Vec3(0, 64, 0) };
     const all = { 0: self };
     for (const e of entities) all[e.id] = e;
-    // Soak 5: a fight in the open needs a weapon and health above 8 (threats.fightRefusal); the fake
+    // Soak 5: a fight in the open needs a weapon and health above the mob's maxDamage (threats.fightRefusal); the fake
     // bot holds an iron sword at full health unless a case says otherwise.
     return { entity: self, entities: all, lastDamageTime: 0, health: 20, inventory: { items: () => [{ name: 'iron_sword', count: 1 }], slots: [] }, ...extra };
 }
@@ -469,22 +469,40 @@ test('soak 5: shelterTarget is a melee mob only (never a troll, a creeper, a ske
 
 // Soak 5 (rotn-v0.1.11), the lead's rule after deaths 2 and 3: at health 1.5 the bot fought a zombie
 // in the open and died within a second; respawned with no weapon, it fought one by hand for 15 s and
-// died. In the open a melee mob is fled from with no weapon or at health OPEN_FIGHT.maxLowHealth or less.
-test('soak 5: in the open a melee mob is fled from with no weapon or at health 8 or less; armed above 8 it is fought', () => {
-    assert.deepEqual(OPEN_FIGHT, { maxLowHealth: 8 });
+// died. In the open a melee mob is fled from with no weapon or at a health one hit of it may take:
+// PR 5, that mob's maxDamage (rotn-data #496 mob-melee.json; a zombie 12.5 with Rough Mobs' stone
+// axe), UNKNOWN_MELEE (18) with no entry. Fix G used 8 for every mob.
+test('PR 5: in the open a melee mob is fled from with no weapon or at a health its maxDamage may take; armed above it it is fought', () => {
     const sword = { name: 'iron_sword', count: 1 };
     const zombie = mob('zombie', 3);
-    const plan = ({ items = [sword], health = 20 } = {}) => threatPlan(fakeBot([zombie], { health, inventory: { items: () => items, slots: [] } }));
+    const plan = ({ items = [sword], health = 20, of = zombie } = {}) => threatPlan(fakeBot([of], { health, inventory: { items: () => items, slots: [] } }));
     const bare = plan({ items: [] });
     assert.deepEqual([bare.action, bare.why, bare.from, bare.away, bare.isEnemy(zombie)], ['flee', 'melee, and no weapon', zombie, RANGES.fight.away, true]);
-    const low = plan({ health: 8 });
-    assert.deepEqual([low.action, low.why], ['flee', 'melee, and health 8, 8 or less']);
-    assert.equal(plan({ health: 1.5 }).why, 'melee, and health 1.5, 8 or less', 'death 2');
-    assert.equal(plan({ health: 9 }).action, 'fight');
+    assert.equal(maxHitOf(zombie), 12.5);
+    const low = plan({ health: 12 });
+    assert.deepEqual([low.action, low.why], ['flee', 'melee, and health 12, a zombie hits up to 12.5'], 'the lead accepted it: armed at 12, a zombie is fled from');
+    assert.equal(plan({ health: 12.5 }).action, 'flee', 'equal: one hit may kill');
+    assert.equal(plan({ health: 1.5 }).why, 'melee, and health 1.5, a zombie hits up to 12.5', 'death 2');
+    assert.equal(plan({ health: 13 }).action, 'fight');
+    // A spider hits for 2: fought down to health 2.1.
+    const spider = mob('spider', 3);
+    assert.equal(maxHitOf(spider), 2);
+    assert.equal(plan({ of: spider, health: 3 }).action, 'fight');
+    assert.deepEqual([plan({ of: spider, health: 2 }).action, plan({ of: spider, health: 2 }).why], ['flee', 'melee, and health 2, a spider hits up to 2']);
+    // No melee entry (rats:illager_piper; an unknown hostile mob): UNKNOWN_MELEE, never zero.
+    for (const name of ['rats:illager_piper', 'somemod:unknown_beast']) {
+        const m = mob(name, 3);
+        assert.equal(maxHitOf(m), 18, name);
+        assert.equal(plan({ of: m, health: 18 }).action, 'flee', `${name} at 18`);
+        assert.equal(plan({ of: m, health: 18.5 }).action, 'fight', `${name} at 18.5`);
+    }
+    assert.equal(maxHitOf(null), 18, 'no mob: unknown');
     assert.equal(plan({ items: [{ name: 'pyrotech:crude_axe', count: 1 }] }).action, 'fight', 'a crude axe is a weapon');
     assert.equal(plan({ items: [{ name: 'stone_pickaxe', count: 1 }] }).action, 'flee', 'a pickaxe is not');
-    assert.equal(fightRefusal({ health: 20, inventory: { items: () => [sword], slots: [] } }), null);
-    assert.equal(fightRefusal({ health: undefined, inventory: { items: () => [sword], slots: [] } }), null, 'health unknown: no refusal for it');
+    assert.equal(fightRefusal({ health: 20, inventory: { items: () => [sword], slots: [] } }), null, 'above UNKNOWN_MELEE');
+    assert.equal(fightRefusal({ health: 20, inventory: { items: () => [sword], slots: [] } }, zombie), null);
+    assert.equal(fightRefusal({ health: 18, inventory: { items: () => [sword], slots: [] } }), 'health 18, an unknown mob hits up to 18', 'no mob named: UNKNOWN_MELEE');
+    assert.equal(fightRefusal({ health: undefined, inventory: { items: () => [sword], slots: [] } }, zombie), null, 'health unknown: no refusal for it');
     // A provoked animal that fights back (a rooster's own hit) is not fought bare-handed either.
     const now = 100_000;
     const rooster = { ...mob('animania:rooster_leghorn', 1.2), metadata: { 7: 8 } };
@@ -501,24 +519,24 @@ test('soak 5: modes: unarmed, a lone zombie makes cowardice back off, not self_d
     assert.deepEqual(a.ran, ['mode:cowardice']);
     assert.match(a.bot.modes.behavior_log, /Backing off: zombie \(melee, and no weapon\)!/);
     const low = modeAgent([mob('zombie', 4)]);
-    low.bot.health = 6;
+    low.bot.health = 12;
     await tick(low);
-    assert.deepEqual(low.ran, ['mode:cowardice'], 'armed at health 6: back off');
+    assert.deepEqual(low.ran, ['mode:cowardice'], 'armed at health 12: back off (a zombie hits up to 12.5)');
 });
 
-test('soak 5: a fight that drops to health 8 ends, and the bot backs off from the same zombie', async (t) => {
+test('soak 5 / PR 5: a fight that drops to health 12 (a zombie hits up to 12.5) ends, and the bot backs off from the same zombie', async (t) => {
     t.mock.method(console, 'log', () => {});
     const zombie = mob('zombie', 3);
     const bot = fightBot([zombie]);
     bot.health = 20;
     const attack = bot.pvp.attack.bind(bot.pvp);
-    bot.pvp.attack = (e) => { attack(e); bot.health = 8; }; // one exchange of hits
+    bot.pvp.attack = (e) => { attack(e); bot.health = 12; }; // one exchange of hits
     const agent = { bot, shut_up: true, openChat() {}, actions: { currentActionLabel: '', resume_func: null,
         runAction: async (label, fn) => { await fn(); return { message: 'ok', interrupted: false }; } } };
     await __modeForTest('self_defense').update(agent);
     await untilIdle('self_defense');
     assert.deepEqual(bot.pvp.attacks, ['zombie'], 'one round, then it stopped');
-    assert.match(bot.modes.behavior_log, /Fighting zombie!\nBacking off: zombie \(melee, and health 8, 8 or less\)!/);
+    assert.match(bot.modes.behavior_log, /Fighting zombie!\nBacking off: zombie \(melee, and health 12, a zombie hits up to 12\.5\)!/);
     assert.equal(bot.pathfinder.goals.length, 1, 'it moved away');
 });
 
@@ -574,8 +592,8 @@ test('#497 review 2: the morning leave never swings at a troll or a creeper, eve
     assert.ok((await run('zombie')).hits.length >= 1, 'a blocked zombie is hit');
 });
 
-// #497 review 5: one low-health threshold for the open fight and the shelter's back-away.
-test('#497 review 5: BACK_AWAY.lowHealth is OPEN_FIGHT.maxLowHealth', async () => {
+// #497 review 5 / PR 5: one low-health rule for the open fight and the shelter: the mob's maxDamage.
+test('PR 5: BACK_AWAY has no fixed lowHealth any more (threats.maxHitOf per mob)', async () => {
     const { BACK_AWAY } = await import('./shelter.js');
-    assert.equal(BACK_AWAY.lowHealth, OPEN_FIGHT.maxLowHealth);
+    assert.equal(BACK_AWAY.lowHealth, undefined);
 });

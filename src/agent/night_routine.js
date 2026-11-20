@@ -14,13 +14,14 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, shelterShell, dumpState, isFullDay, replanHold } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE, heldCells, retreatPlan, backAway, BACK_AWAY } from './library/shelter.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, shelterShell, isFullDay, replanHold } from './library/night.js';
+import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
 import { goToGoal, descendFromTree, avoidEnemies, inShelterReach } from './library/skills.js';
-import { stowCarried, toolAllows, allowedTool } from './library/rotn_sources.js';
+import { stowCarried, toolAllows } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
+import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
-import { hasWeapon, shelterEnemy, shelterTarget, threatFor, isPlayerZombie, canFightHard } from './library/threats.js';
+import { hasWeapon, shelterEnemy, shelterTarget, threatFor, isPlayerZombie, canFightHard, maxHitOf } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
 import { say, isGiverGoal, ownsPrompt } from './agenda_driver.js';
@@ -115,6 +116,8 @@ export function nightState(agent) {
         mobSince: null, // #364 follow-up (b): when the morning wait for a hostile mob near the shelter began
         mobSaid: false, // that wait was said in chat (then only logged)
         cowardiceOn: false, // the routine turned cowardice on while exposed with no weapon
+        burrowSteps: 0, // soak 5 Fix B: burrow steps taken this night (BURROW.maxSteps)
+        burrowNoneAt: null, // when the last burrow ended short of far enough (the next waits CHECK_MS)
         gen: 0, // bumped by resetNight, so a job that ends after a reset changes nothing
     };
 }
@@ -128,7 +131,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     restoreCowardice(agent, n);
-    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {} });
+    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0, ...MORNING_CLEAR });
@@ -222,6 +225,44 @@ function startBackAway(agent, n, ops, plan, tolerateBody, label, done) {
         if (bot.rotnSheltered === true) n.handFight = false; // #470 nit
         line(agent, r?.site ? `[night] ${done}: in the shelter at ${at(n.site)}, the cells behind sealed`
             : `[night] ${done} into ${at(n.site)}, but ${r?.why ?? 'the seal failed'}; holding or repairing there`);
+    });
+}
+
+/**
+ * Soak 5 Fix B (PR 5): burrow away from threat.mob (burrow.burrowAway) as a job. Where the bot ends
+ * up is the shelter now (as after a back-away): held or repaired there, never built afresh beside
+ * the mob. Every step counts against the night's BURROW.maxSteps.
+ */
+function startBurrow(agent, n, ops, threat, now) {
+    const bot = agent.bot, mob = threat.mob, name = mob.name ?? 'hostile mob';
+    line(agent, `[night] ${aMob(name)} (digs through anything) ${threat.d.toFixed(1)} blocks from the shelter at ${at(n.site)}: burrowing away from it`);
+    startJob(agent, n, BURROW_LABEL, () => ops.burrowAway(bot, mob, { maxSteps: BURROW.maxSteps - (n.burrowSteps ?? 0) }), (r) => {
+        n.burrowSteps = (n.burrowSteps ?? 0) + (r?.steps ?? 0);
+        const here = bot.entity.position.floored();
+        if (n.site && !here.equals(n.site)) {
+            n.site = here;
+            n.repairStall = null;
+            n.checkedAt = null;
+            n.pocketTried = true; // the hole's side pocket is no longer under the bot's roof
+            n.closedOn = { at: exactAt(bot), floor: bot.blockAt?.(here.offset(0, -1, 0))?.name ?? 'unknown' };
+            const still = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody: n.tolerated });
+            bot.rotnSheltered = still && still.todo.length === 0 ? true : 'open';
+        }
+        const far = r?.stopped === 'far' || r?.stopped === 'gone';
+        n.burrowNoneAt = far ? null : now;
+        const steps = r?.steps ?? 0;
+        const moved = steps ? `burrowed ${steps} step${steps === 1 ? '' : 's'} into ${at(here)}` : `did not burrow (still at ${at(here)})`;
+        const m = bot.entities?.[mob.id];
+        const dist = m?.position ? `, ${m.position.distanceTo(bot.entity.position).toFixed(1)} blocks from ${aMob(name)}` : '';
+        const end = {
+            far: 'far enough; sealed behind',
+            gone: `${aMob(name)} is gone`,
+            cornered: `no step further (${r?.why}); not hitting it`,
+            budget: `the night's ${BURROW.maxSteps} burrow steps are used; not hitting it`,
+            time: `${BURROW.maxMs / 1000} s up; trying again in ${CHECK_MS / 1000} s`,
+            failed: `${r?.why}; not hitting it`,
+        }[r?.stopped] ?? `the burrow ended (${r?.why ?? 'no result'})`;
+        line(agent, `[night] ${moved}${dist}: ${end}`);
     });
 }
 
@@ -380,21 +421,6 @@ function exitPlan(bot, feet, d) {
 }
 
 /**
- * #435 review: the tool rule for breaking b, from rotn-data's dump, as shelter.js judges its walls:
- * {type, minLevel} when the dump says a tool is required, null when the hand will do, false when
- * nothing breaks it (negative hardness, or a tool required but none named: bedrock), undefined
- * when the dump does not know the block. The registry's canHarvest is no guide on this pack:
- * forge-bridge leaves harvestTools unset for modded blocks, so it says yes to modded rock by hand.
- */
-function toolRule(b) {
-    const st = dumpState(b);
-    if (!st) return undefined;
-    if (st.hardness < 0 || (st.toolRequired && !st.harvestTool)) return false;
-    if (!st.toolRequired) return null;
-    return { type: st.harvestTool, minLevel: Number.isInteger(st.harvestLevel) ? Math.max(0, st.harvestLevel) : 0 };
-}
-
-/**
  * #435 review 1: the block among the plan's blocks that no tool the bot carries can break, or null
  * when all of them can be. By the dump (toolAllows: toolLevels against the harvest level); a block
  * the dump does not know, by the registry's rule with the hand or a pickaxe carried.
@@ -403,31 +429,13 @@ function unharvestable(bot, plan) {
     if (bot.game?.gameMode === 'creative') return null;
     const picks = [null, ...(bot.inventory?.items?.() ?? []).filter(i => /pickaxe/.test(i.name)).map(i => i.type)];
     const breakable = (b) => {
-        const rule = toolRule(b);
+        const rule = digRule(b);
         if (rule === null) return true;
         if (rule === false) return false;
         if (rule) return toolAllows(bot, rule);
         return typeof b?.canHarvest !== 'function' || picks.some(t => b.canHarvest(t));
     };
     return plan.dig.map(q => bot.blockAt(q)).find(b => !breakable(b)) ?? null;
-}
-
-/**
- * #435 review 2: the equip for an exit dig, when the dump knows the block: a tool it requires is put
- * in hand explicitly (the best one the rule allows; false when none is carried); otherwise
- * equipForBlock picks, and the hand is good enough. Undefined: digWithin's own equip and check.
- */
-function exitEquip(bot, block) {
-    const rule = toolRule(block);
-    if (rule === undefined) return undefined;
-    if (rule === false) return () => Promise.resolve(false);
-    if (rule === null) return async () => { try { await bot.tool?.equipForBlock?.(block); } catch { /* the hand will do */ } return true; };
-    return async () => {
-        const tool = allowedTool(bot, rule);
-        if (!tool) return false;
-        if (bot.heldItem?.name !== tool.name || (bot.heldItem?.metadata ?? 0) !== (tool.metadata ?? 0)) await bot.equip(tool, 'hand');
-        return true;
-    };
 }
 
 /** How near a block must be to break it (as breakBlockAt): the higher steps are walked up to. */
@@ -525,7 +533,7 @@ async function digExitCell(bot, q, walk) {
     }
     const block = bot.blockAt(q);
     const { limitMs } = digBudget(bot, block);
-    const equip = exitEquip(bot, block);
+    const equip = digEquip(bot, block);
     const dug = await digWithin(bot, block, limitMs, equip ? { equip } : {});
     if (dug === false) console.log(`[night] dig out: could not break ${block.name} at ${at(q)}${equip ? ' (no tool it needs in hand)' : ''}`);
     if (dug === 'timeout') console.log(`[night] dig out: ${block.name} at ${at(q)} was not dug within ${(limitMs / 1000).toFixed(1)} s`);
@@ -671,7 +679,8 @@ export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSp
     nightRelocation: nightRelocationPlan, walkAwayAtNight, morningChoice, openToward,
     // #497 review 2: away from every threat; cornered, it may hit a melee mob only, never a troll or a creeper.
     awayFromMobs: (bot) => avoidEnemies(bot, MORNING.awayDist, shelterEnemy, shelterTarget),
-    heldCells, retreatPlan, backAway, hasWeapon, mobInReach, dangerInReach: (bot) => mobInReach(bot, notMelee) };
+    heldCells, retreatPlan, backAway, hasWeapon, mobInReach, dangerInReach: (bot) => mobInReach(bot, notMelee),
+    burrowThreat, burrowAway };
 
 /**
  * Exposed with no weapon (round 9 B, fix h): keep away from mobs rather than fight bare-handed.
@@ -829,7 +838,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (spent) n.lastShelter = spent.clone?.() ?? spent;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -988,7 +997,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.state = 'day';
                 n.site = null;
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
-                    ...MORNING_CLEAR });
+                    burrowSteps: 0, burrowNoneAt: null, ...MORNING_CLEAR });
                 line(agent, text);
             };
             const failedTry = (why) => {
@@ -1109,6 +1118,16 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             Object.assign(n, { mobSince: null, mobSaid: false, exitTries: 0, exitAt: null, ...MORNING_CLEAR }); // #477 nit
         }
         if (n.checkedAt === null) n.checkedAt = now;
+        // Soak 5 Fix B (PR 5), the lead's rule: at night, a mob that digs through anything (the troll)
+        // within its blast range + BURROW.startMargin of the bot in its shelter, closed or open:
+        // burrow away from it (burrow.js), never a hit at it. Checked every tick, not every CHECK_MS
+        // (a troll closes 10 blocks in a few seconds). After a burrow that did not get it far enough
+        // (cornered, the time up, a step that failed), not again for CHECK_MS.
+        if (!isFullDay(t) && n.site && bot.entity.position.floored().equals(n.site) && (n.burrowSteps ?? 0) < BURROW.maxSteps
+            && (n.burrowNoneAt == null || now - n.burrowNoneAt >= CHECK_MS)) {
+            const threat = ops.burrowThreat?.(bot) ?? null;
+            if (threat) { startBurrow(agent, n, ops, threat, now); return 'night:inside'; }
+        }
         // #331 review 4: while a wall is known open (a repair did not close it, or a fight in place
         // held it up), every tick checks and repairs, not every CHECK_MS.
         const open = bot.rotnSheltered === 'open';
@@ -1171,14 +1190,15 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // Soak 3, the lead's (b), #470 review: with no weapon, a cell a mob holds (heldCells) is left
         // out of the repair and the other open cells are repaired.
         // Soak 5 (death 4: a zombie dug into the dirt shelter and hit the bot from 20 to 0 in 8 s while
-        // it fought back from the opening), the lead's rule: with no weapon, or at health
-        // BACK_AWAY.lowHealth or lower (armed or not), and a melee mob in the opening or in reach
+        // it fought back from the opening), the lead's rule: with no weapon, or at a health one hit of
+        // the mob may take (armed or not; PR 5: maxHitOf), and a melee mob in the opening or in reach
         // through it, the bot backs away into an enclosed column on the far side (once per shelter);
         // only cornered (no way to back away) does it hit back (n.handFight lets
         // modes.fightInShelter swing, by hand or with its weapon).
         // #497 review 1: a threat the shelter never hits (notMelee: a troll, a creeper, a skeleton)
         // in the opening or in reach starts the back-away too, armed or not, at any health; cornered,
-        // the bot never hits it and waits for the burrow plan (Fix B).
+        // the bot never hits it. A mob that digs through anything (the troll) is burrowed away from
+        // first (above, PR 5); this is what is left when no burrow step was found.
         let skip = [];
         n.handFight = false;
         // #477 review 3: the wall opened for the morning fight is not rebuilt (also in the 30 s the
@@ -1186,13 +1206,15 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (need.todo.length > 0 && n.morningAct === 'fight') { bot.rotnSheltered = 'open'; return 'night:inside'; }
         if (need.todo.length > 0) {
             const armed = (ops.hasWeapon ?? hasWeapon)(bot);
-            const refused = !armed || (Number.isFinite(bot.health) && bot.health <= BACK_AWAY.lowHealth);
+            // PR 5, the lead's rule: low is a health one hit of that mob may take (threats.maxHitOf:
+            // its maxDamage, UNKNOWN_MELEE when rotn-data has none; Fix G used 8).
+            const low = (mob) => Number.isFinite(bot.health) && bot.health <= maxHitOf(mob);
             const held = ops.heldCells?.(bot, n.site, need.todo) ?? [];
             const heldOther = held.find(h => !shelterTarget(h.mob));
             const other = heldOther ? { mob: heldOther.mob, cell: heldOther.cell } : (() => { const m = ops.dangerInReach?.(bot) ?? null; return m ? { mob: m } : null; })();
             const heldMelee = held.find(h => shelterTarget(h.mob));
-            const melee = !refused ? null : heldMelee && !armed ? { mob: heldMelee.mob, cell: heldMelee.cell }
-                : (() => { const m = ops.mobInReach?.(bot) ?? null; return m ? { mob: m } : null; })();
+            const melee = heldMelee && !armed ? { mob: heldMelee.mob, cell: heldMelee.cell }
+                : (() => { const m = ops.mobInReach?.(bot) ?? null; return m && (!armed || low(m)) ? { mob: m } : null; })();
             const reaching = other ?? melee;
             if (reaching) {
                 bot.rotnSheltered = 'open';
@@ -1210,7 +1232,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 // Cornered: a melee mob is hit back; any other threat never is.
                 n.handFight = !other;
                 const text = other
-                    ? `[night] ${why}, and no way to back away: not hitting it; waiting for the burrow plan`
+                    ? `[night] ${why}, and no way to back away${burrowsFrom(other.mob) ? ' or burrow' : ''}: not hitting it`
                     : `[night] ${armed ? '' : 'no weapon, '}health ${Math.round(bot.health)}, and no way to back away from ${aMob(name)} ${where}: ${armed ? 'hitting back' : 'hitting back by hand'}`;
                 const said = reaching.cell ? key3(reaching.cell) : `reach:${reaching.mob.id ?? ''}`;
                 if (n.handSaid === said) console.log(text); else { n.handSaid = said; line(agent, text); }
