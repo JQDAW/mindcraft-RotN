@@ -214,6 +214,9 @@ function startBackAway(agent, n, ops, plan, tolerateBody, label, done) {
         n.site = plan.to.clone?.() ?? plan.to;
         n.repairStall = null;
         n.checkedAt = null;
+        // Soak 5 (00:46:55): the "out of the shelter" line named the hole's closing spot, not the
+        // pocket's: where the bot stands now, in the new cell.
+        n.closedOn = { at: exactAt(bot), floor: bot.blockAt?.(n.site.offset(0, -1, 0))?.name ?? 'unknown' };
         const still = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody });
         bot.rotnSheltered = still && still.todo.length === 0 ? true : 'open';
         if (bot.rotnSheltered === true) n.handFight = false; // #470 nit
@@ -1230,7 +1233,9 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             const text = `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`;
             if (open) console.log(text); else line(agent, text); // said once, then logged (T1: chat volume)
             startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody, ...(skip.length ? { skip } : {}) }), (r) => {
-                if (r?.closed) { bot.rotnSheltered = true; n.repairStall = null; n.handFight = false; return; } // #470 nit: no hand fight once closed
+                // Soak 5 (00:31:47): a repair that closed the shelter said nothing; the journal could not
+                // show the roof was closed before the troll came.
+                if (r?.closed) { bot.rotnSheltered = true; n.repairStall = null; n.handFight = false; console.log(`[night] the repair closed the shelter at ${at(n.site)}`); return; } // #470 nit: no hand fight once closed
                 // CX23 soak: why cells stay open, in the journal (r.line names each cell and its reason).
                 if ((r?.placed ?? 0) > 0) { console.log(`[night] the repair placed ${r.placed} but left some open (${r.line})`); n.repairStall = null; return; } // progress: the next tick tries again
                 // Nothing placed: back to every CHECK_MS until a fight in place ends (#331 re-review).

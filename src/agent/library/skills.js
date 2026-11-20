@@ -658,12 +658,28 @@ export async function attackNearest(bot, mobType, kill=true) {
     // #424 review: self_preservation is never paused, not even for a water mob (squid, fish): the
     // pause lasted the whole action, so the model's !attack("squid") turned off the drowning, fire
     // and lava escapes. The bot fights from where it can; drowning still pulls it up.
-    const mob = world.getNearbyEntities(bot, 24).find(entity => entity.name === mobType);
+    const all = world.getNearbyEntities(bot, 24).filter(entity => entity.name === mobType);
+    const mob = all.find(entity => !isUnreachable(bot, entity));
     if (mob) {
         return await attackEntity(bot, mob, kill);
     }
+    if (all.length) { log(bot, `Not attacking ${mobType}: the ones near could not be reached in the last ${ATTACK_PROGRESS.skipMs / 60_000} min. Try another one, another place, or !forage.`); return false; }
     log(bot, 'Could not find any '+mobType+' to attack.');
     return false;
+}
+
+/**
+ * Soak 5: an attack chase that gets no closer (by a block) and lands no hit for stallMs gives up;
+ * that entity is left alone for skipMs (isUnreachable). tickMs: how often the chase is checked.
+ */
+export const ATTACK_PROGRESS = { stallMs: 10_000, skipMs: 5 * 60_000, tickMs: 1000 };
+function markUnreachable(bot, entity) {
+    (bot.rotnUnreachable ??= new Map()).set(entity.id, Date.now() + ATTACK_PROGRESS.skipMs);
+}
+/** Whether an attack on this entity gave up within ATTACK_PROGRESS.skipMs (soak 5). */
+export function isUnreachable(bot, entity, now = Date.now()) {
+    const until = bot?.rotnUnreachable?.get(entity?.id);
+    return Number.isFinite(until) && now < until;
 }
 
 export async function attackEntity(bot, entity, kill=true) {
@@ -689,10 +705,28 @@ export async function attackEntity(bot, entity, kill=true) {
     }
     else {
         bot.pvp.attack(entity);
+        // Soak 5 (00:21-00:31): !attack on a sow it could not reach ran ~50 s each time until the
+        // unstuck reflex ended it, 8 times. Now: no closer by a block and no hit for stallMs, and
+        // it gives up on that animal, which is left alone for skipMs.
+        let best = bot.entity.position.distanceTo(entity.position);
+        let health = healthOf(entity);
+        let progressAt = Date.now();
         while (world.getNearbyEntities(bot, 24).includes(entity)) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, ATTACK_PROGRESS.tickMs));
             if (bot.interrupt_code) {
                 bot.pvp.stop();
+                return false;
+            }
+            const d = bot.entity.position.distanceTo(entity.position);
+            const h = healthOf(entity);
+            if (d <= best - 1 || (h !== null && health !== null && h < health) || (h === null && d <= 3)) progressAt = Date.now();
+            best = Math.min(best, d);
+            if (h !== null) health = h;
+            if (Date.now() - progressAt >= ATTACK_PROGRESS.stallMs) {
+                bot.pvp.stop();
+                markUnreachable(bot, entity);
+                const p = entity.position;
+                log(bot, `Could not reach the ${entity.name} at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}: no closer and no hit for ${ATTACK_PROGRESS.stallMs / 1000} s; leaving it alone for ${ATTACK_PROGRESS.skipMs / 60_000} min. Try another one, or !forage.`);
                 return false;
             }
         }

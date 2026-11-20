@@ -312,6 +312,16 @@ const BODY_TYPES = ['player', 'mob', 'hostile', 'animal', 'passive', 'ambient', 
  * A mob or player (not the bot) standing in the cell, which a block cannot be placed into.
  * Dropped items, XP orbs and arrows do not count (#204 re-review 2).
  */
+/** Soak 5: entities (not the bot) whose box overlaps the cell (width from entity.width, else 0.6). */
+export function overlapping(bot, cell) {
+    return Object.values(bot.entities ?? {}).filter(e => {
+        if (!e || e === bot.entity || !e.position || e.name === 'item') return false;
+        const w = (e.width ?? 0.6) / 2, h = e.height ?? 1.8;
+        return e.position.x + w > cell.x && e.position.x - w < cell.x + 1 && e.position.z + w > cell.z && e.position.z - w < cell.z + 1
+            && e.position.y + h > cell.y && e.position.y < cell.y + 1;
+    });
+}
+
 export function mobIn(bot, cell) {
     return Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position && BODY_TYPES.includes(e.type)
         && Math.floor(e.position.x) === cell.x && Math.floor(e.position.z) === cell.z
@@ -391,7 +401,12 @@ async function fillCell(bot, target, interior, mode, reasons = null) {
         await sleep(LATE_UPDATE_MS);
         if (mode.accept(bot.blockAt(target))) return true;
     }
-    if (reasons && !reasons.has(key(target))) why('the block did not stay (placed twice)');
+    // Soak 5: say what is there now and any body over the cell (a troll's wide box stops a placement).
+    if (reasons && !reasons.has(key(target))) {
+        const now = bot.blockAt(target)?.name ?? 'unknown';
+        const over = overlapping(bot, target).map(e => e.name ?? e.type ?? 'entity');
+        why(`the block did not stay (placed twice; now ${now}${over.length ? `; ${over.join(', ')} over the cell` : ''})`);
+    }
     return false;
 }
 
@@ -588,13 +603,14 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     const roof = feet.offset(0, 2, 0);
     let placed = 0;
     const reasons = new Map(); // cell key -> why it stays open (CX23 soak)
+    const seenWall = new Set(); // soak 5 (01:27): cells that were a wall when the loop came to them
     // Building keeps the bot in its cell on purpose: unstuck leaves it alone meanwhile (modes.js).
     bot.rotnStationary = true;
     try {
         for (const pos of wallsAndRoof(feet)) {
             if (bot.interrupt_code) { reasons.stopped = true; break; }
             const b = bot.blockAt(pos);
-            if (mode.accept(b)) continue;
+            if (mode.accept(b)) { seenWall.add(key(pos)); continue; }
             if (skipKeys.has(key(pos))) { reasons.set(key(pos), 'a mob holds it (left for later)'); continue; }
             if (!isEmpty(b) && !isLiquid(b)) {
                 if (!await breakBlockAt(bot, pos.x, pos.y, pos.z)) { reasons.set(key(pos), `could not break the ${b.name} in it`); continue; }
@@ -626,7 +642,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
         ? `Shelter closed at ${at(feet)}: placed ${placed} blocks.${softNote}${floorNote}`
         : missing.length === 0
             ? `Shelter at ${at(feet)} is built but you are not standing on its floor (at ${exactAt(bot)}); placed ${placed}.`
-            : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(q => `${at(q)}: ${reasons.get(key(q)) ?? (reasons.stopped ? 'stopped before it' : 'not tried')}`).join('; ')}); placed ${placed}.`;
+            : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(q => `${at(q)}: ${reasons.get(key(q)) ?? (reasons.stopped ? 'stopped before it' : seenWall.has(key(q)) ? 'opened during the repair (a wall when checked)' : 'not tried')}`).join('; ')}); placed ${placed}.`;
     log(bot, line);
     // Round 9 B (fix d): dirt walls can be dug by any zombie; keep dirt ready, so a repair only places.
     if (closed && soft > 0) {

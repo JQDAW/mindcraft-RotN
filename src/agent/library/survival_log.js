@@ -7,6 +7,8 @@
 //   [survival] flee <mob> (<why>)
 //   [survival] food <food> health <health> (<reason>)    reason: check (at most once a minute) | low (fell to food.EAT_AT, 12, or below; at most once a minute)
 //   [survival] hurt <amount> health <before>-><after> (by <source>)   soak 2: health fell by HURT.minDrop or more within HURT.windowMs
+//   [survival] hurt-detail drops <amount>@+<s>s,... at <x>,<y>,<z> vy <v> ground|air cause <fall|starving|none> near <mob>@<d>m[/swung-<s>s],...
+//                                                                     soak 5: right after each hurt line
 //
 // Soak 2 (rotn-v0.1.4): the server sends no death messages, and two deaths had no cause in the
 // journal. The hurt line names the likely source: 'starving' (food 0: Hunger Overhaul's
@@ -46,7 +48,9 @@ export const fightEndLine = (mob, outcome, ms) => {
 };
 export const fleeLine = (mob, why) => `${SURVIVAL_TAG} flee ${token(mob)} (${String(why ?? 'unknown').replace(/[()\n\r]/g, ' ').trim() || 'unknown'})`;
 export const hurtLine = (amount, before, after, source) => `${SURVIVAL_TAG} hurt ${num(amount)} health ${num(before)}->${num(after)} (by ${token(source)})`;
-export const HURT = { minDrop: 4, windowMs: 2000, mobRange: 5, swingMs: 1000 };
+export const HURT = { minDrop: 4, windowMs: 2000, mobRange: 5, swingMs: 1000, fallingRange: 4, detailRange: 16, detailMobs: 3 };
+/** A falling block or a falling Dynamic Trees tree (entity names). */
+const FALLING = /falling/;
 
 /** Swings kept per bot (bindSurvivalLog): older ones are dropped once there are more than this many. */
 const SWINGS_KEPT = 64;
@@ -71,7 +75,14 @@ const isHostileThreat = (e) => e.type !== 'player' && ['hostile', 'dangerous'].i
  */
 export function hurtSource(bot, { swings = null, now = Date.now() } = {}) {
     if (Number.isFinite(bot?.food) && bot.food <= 0) return 'starving';
+    // Soak 5 (01:42:52, "hurt 17 (by unknown)"): the bot had landed after a 24-block drop. The damage
+    // record (damage_record.js) names a landing after a drop over 3 as the fall: that first.
+    if (bot?.lastDamageCause === 'fall' && now - (bot.lastDamageTime ?? -Infinity) <= HURT.windowMs) return 'fall';
     const here = bot?.entity?.position;
+    // A falling block or tree (an object entity, which mayHurt leaves out) right over the bot.
+    const falling = here ? Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position
+        && FALLING.test(e.name ?? '') && e.position.distanceTo(here) <= HURT.fallingRange) : null;
+    if (falling) return token(falling.name);
     if (here) {
         const near = Object.values(bot.entities ?? {})
             .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(here) <= HURT.mobRange && mayHurt(e))
@@ -104,14 +115,44 @@ export function hurtCheck(state, bot, now = Date.now()) {
     if (!Number.isFinite(h)) return null;
     const last = Number.isFinite(state.lastHealth) ? state.lastHealth : h;
     state.lastHealth = h;
+    // Soak 5 (00:59:54, "hurt 18.5 by zombie"): several zombies' hits in one window read as one
+    // hit. Each drop is kept for the detail line.
+    const drop = h < last ? { at: now, amount: last - h } : null;
     let w = state.hurt;
-    if (!w || h > w.from) { state.hurt = { from: h, at: now }; return null; }
-    if (now - w.at > HURT.windowMs) w = state.hurt = { from: last, at: now };
+    if (!w || h > w.from) { state.hurt = { from: h, at: now }; state.drops = []; return null; }
+    if (now - w.at > HURT.windowMs) { w = state.hurt = { from: last, at: now }; state.drops = []; }
+    if (drop) (state.drops ??= []).push(drop);
     if (w.from - h < HURT.minDrop) return null;
     const text = hurtLine(w.from - h, w.from, h, hurtSource(bot, { swings: state.swings, now }));
+    const detail = hurtDetail(bot, state.drops ?? [], { swings: state.swings, now, start: w.at });
     state.hurt = { from: h, at: now };
+    state.drops = [];
     console.log(text);
+    console.log(detail);
     return text;
+}
+
+/**
+ * Soak 5: the line under each hurt line, to check its source afterwards: each drop in the window
+ * (its amount and its time from the window's start), where the bot is (position, vertical speed, on
+ * the ground or not, the damage record's cause), and the HURT.detailMobs nearest entities that can
+ * hurt within HURT.detailRange (type, distance, the last arm swing). Tokens only: never a name.
+ */
+export function hurtDetail(bot, drops, { swings = null, now = Date.now(), start = now } = {}) {
+    const p = bot?.entity?.position;
+    const where = p ? `${num(p.x)},${num(p.y)},${num(p.z)}` : 'unknown';
+    const vy = bot?.entity?.velocity?.y;
+    const ground = bot?.entity?.onGround === true ? 'ground' : bot?.entity?.onGround === false ? 'air' : 'unknown';
+    const ds = drops.length ? drops.map(d => `${num(d.amount)}@+${num((d.at - start) / 1000)}s`).join(',') : 'none';
+    const near = p ? Object.values(bot.entities ?? {})
+        .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(p) <= HURT.detailRange && (mayHurt(e) || FALLING.test(e.name ?? '')))
+        .sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))
+        .slice(0, HURT.detailMobs)
+        .map(e => {
+            const swung = swings?.get(e.id);
+            return `${mobName(e)}@${num(e.position.distanceTo(p))}m${Number.isFinite(swung) ? `/swung-${num((now - swung) / 1000)}s` : ''}`;
+        }) : [];
+    return `${SURVIVAL_TAG} hurt-detail drops ${ds} at ${where} vy ${num(vy)} ${ground} cause ${token(bot?.lastDamageCause ?? 'none')} near ${near.length ? near.join(',') : 'none'}`;
 }
 
 export const foodLine = (food, health, reason) => `${SURVIVAL_TAG} food ${num(food)} health ${num(health)} (${reason === 'low' ? 'low' : 'check'})`;

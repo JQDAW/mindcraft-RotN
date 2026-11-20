@@ -175,6 +175,12 @@ function holdInShelter(mode, agent) {
     const item = Number.isFinite(bot.food) && bot.food < 20 ? food.chooseFood(bot) : null;
     if (!item) return;
     execute(mode, agent, async () => {
+        // Soak 5 (00:46:52): the fight's eat-between-fights ate this bread first; "could not eat
+        // bread (food 20)" followed. Checked again when it runs.
+        if (!(bot.food < 20) || !bot.inventory?.items?.().some(i => i === item || (i.name === item.name && (i.metadata ?? 0) === (item.metadata ?? 0)))) {
+            console.log(`[reflex] hurt in the shelter: no need to eat ${food.foodKey(item)} now (food ${bot.food})`);
+            return;
+        }
         const r = await food.eatFood(bot, item);
         console.log(`[reflex] hurt in the shelter: ${r.ate ? 'ate' : 'could not eat'} ${food.foodKey(item)} (health ${bot.health}, food ${r.before})`);
     }).catch(err => reportModeError(mode.name, err));

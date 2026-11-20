@@ -12,6 +12,7 @@ import { __modeForTest, __resetThreatLease } from './modes.js';
 import { executeCommand } from './commands/index.js';
 import { NIGHT_START, NightClock } from './library/night.js';
 import { HUNT } from './library/hunting.js';
+import { ATTACK_PROGRESS } from './library/skills.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -465,4 +466,61 @@ test('#500 follow-up 2: the model\'s !attack on a food animal with no weapon is 
     assert.match(r.out, /it may belong to a player/);
     r = await run([cow(1, 3)], undefined, { armed: true });
     assert.deepEqual(r.hit, [1], 'armed: hunted as before');
+});
+
+// #501 decision (reviewer nit 1): unarmed, the model's !attack is refused for a provoked food animal
+// too (#497 flees from it unarmed); a task giver may still override.
+test('#501 decision: unarmed, !attack on a food animal that just hurt the bot is refused for the model; a giver may, warned', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const run = async (context) => {
+        const agent = huntAgent({ armed: false, animals: [cow(1, 1)] });
+        Object.assign(agent.bot, { lastDamageTime: Date.now(), lastDamageTaken: 5 });
+        const hit = [];
+        agent.bot.pvp = { attack: (e) => { hit.push(e.id); delete agent.bot.entities[e.id]; }, stop() {} };
+        agent.bot.equip = () => Promise.resolve();
+        agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }));
+        await executeCommand(agent, '!attack("animania:cow_holstein")', context);
+        return { out: agent.bot.output, hit };
+    };
+    let r = await run();
+    assert.deepEqual(r.hit, [], 'provoked, unarmed, the model: refused');
+    assert.match(r.out, /Not hunting animania:cow_holstein: you hold no weapon\./);
+    r = await run({ sender: 'JQDAW' });
+    assert.deepEqual(r.hit, [1]);
+    assert.match(r.out, /Warning: JQDAW asked for it, so hunting animania:cow_holstein with no weapon\./);
+});
+
+// Soak 5 (00:21-00:31): !attack on a sow it could not reach ran ~50 s each time until the unstuck
+// reflex ended it, 8 times. Now it gives up after ATTACK_PROGRESS.stallMs with no closer step and no
+// hit, and that animal is left alone for skipMs; a chase that gets closer goes on.
+test('soak 5: an !attack chase with no progress gives up after stallMs and leaves that animal alone; one that closes in goes on', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    assert.deepEqual(ATTACK_PROGRESS, { stallMs: 10_000, skipMs: 5 * 60_000, tickMs: 1000 });
+    const saved = { ...ATTACK_PROGRESS };
+    Object.assign(ATTACK_PROGRESS, { stallMs: 300, tickMs: 50 });
+    t.after(() => Object.assign(ATTACK_PROGRESS, saved));
+    const sow = { id: 5, name: 'animania:sow_old_spot', type: 'mob', position: new Vec3(10.5, 64, 0.5), height: 1, metadata: { 7: 10 } };
+    const agent = huntAgent({ animals: [sow] });
+    let stops = 0;
+    agent.bot.pvp = { attack() {}, stop() { stops++; } }; // it never gets there
+    agent.bot.equip = () => Promise.resolve();
+    agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }));
+    await executeCommand(agent, '!attack("animania:sow_old_spot")');
+    assert.equal(stops, 1);
+    assert.match(agent.bot.output, /Could not reach the animania:sow_old_spot at 10, 64, 0: no closer and no hit for 0\.3 s; leaving it alone for 5 min\. Try another one, or !forage\./);
+    agent.bot.output = '';
+    await executeCommand(agent, '!attack("animania:sow_old_spot")');
+    assert.match(agent.bot.output, /Not attacking animania:sow_old_spot: the ones it could not reach in the last 5 min are left alone\. Try another one, another place, or !forage\./);
+    // A chase that closes in (a block per tick) is not stopped; it ends when the animal dies.
+    const pig = { id: 6, name: 'animania:sow_old_spot', type: 'mob', position: new Vec3(12.5, 64, 0.5), height: 1, metadata: { 7: 10 } };
+    const near = huntAgent({ animals: [pig] });
+    let ticks = 0;
+    near.bot.pvp = { attack() {}, stop() { assert.fail('not stopped'); } };
+    near.bot.equip = () => Promise.resolve();
+    const timer = setInterval(() => { ticks++; pig.position = pig.position.offset(-1, 0, 0); if (ticks === 10) delete near.bot.entities[6]; }, 50);
+    t.after(() => clearInterval(timer));
+    near.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: near.bot.output, interrupted: false }));
+    await executeCommand(near, '!attack("animania:sow_old_spot")');
+    clearInterval(timer);
+    assert.match(near.bot.output, /Successfully killed animania:sow_old_spot\./);
 });
