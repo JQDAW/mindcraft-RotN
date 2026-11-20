@@ -295,7 +295,8 @@ test('threatOf carries melee; nightThreats carries damage; the uncovered night t
     const night = pack.nightThreats({ limit: 1000 });
     assert.equal(night.find((t) => t.name === 'iceandfire:if_troll').damage, 18);
     // Hostile night threats to fight or avoid whose damage was not read (no plain ATTACK_DAMAGE literal); listed so a gap is deliberate.
-    const NOT_READ = ['ancientbeasts:ghost', 'ancientbeasts:nekros', 'ancientbeasts:sandy', 'ancientbeasts:zealot', 'betteranimalsplus:tarantula', 'defiledlands:scuttler', 'mowziesmobs:barakoana', 'rats:illager_piper'];
+    // The fight ones were read later (test/melee-gaps.test.js); these three are 'avoid'.
+    const NOT_READ = ['ancientbeasts:sandy', 'betteranimalsplus:tarantula', 'mowziesmobs:barakoana'];
     const gaps = night.filter((t) => ['fight', 'avoid'].includes(t.reaction) && t.damage == null).map((t) => t.name).sort();
     assert.deepEqual(gaps, NOT_READ);
 });
@@ -396,7 +397,7 @@ test('UNKNOWN_MELEE: the worst listed hit, exported; null melee means unknown', 
     const worst = Math.max(...Object.values(MM.mobs).map((m) => Math.max(m.damage, m.maxDamage ?? 0)));
     assert.equal(UNKNOWN_MELEE, worst);
     assert.equal(UNKNOWN_FROM_INDEX, 18);
-    assert.equal(pack.mobMelee('rats:illager_piper'), null);
+    assert.equal(pack.mobMelee('ancientbeasts:sandy'), null);
     assert.equal(pack.fallingTreeDamage(), 0, 'default argument');
     const readme = fs.readFileSync(path.join(HERE, '../README.md'), 'utf8');
     assert.match(readme, /UNKNOWN_MELEE/);

@@ -1,0 +1,93 @@
+# Config lines from the pinned pack zip (default configs, ADR 0005), path:line: text.
+
+
+## ancientbeasts.cfg
+config/ancientbeasts.cfg:50:     D:"Global Damage Multiplier"=1.0
+
+## Special_AI.cfg
+config/Special_AI.cfg:16:     D:depacify_aggressive_chance=1.0
+config/Special_AI.cfg:24:     S:depacify_list <
+config/Special_AI.cfg:25:         minecraft:skeleton_horse 1.0
+config/Special_AI.cfg:26:         minecraft:zombie_horse 1.0
+config/Special_AI.cfg:1002:     S:mount_list <
+config/Special_AI.cfg:1008:         minecraft:skeleton_horse
+config/Special_AI.cfg:1009:         minecraft:zombie_horse
+
+## hordes.cfg
+config/hordes.cfg:131:     B:aggressiveZombieHorses=true
+
+## roughmobsrevamped.cfg
+config/roughmobsrevamped.cfg:142:         minecraft:skeleton_horse;generic.movementSpeed;0;0.1
+config/roughmobsrevamped.cfg:143:         minecraft:skeleton_horse;generic.maxHealth;1;1.0
+config/roughmobsrevamped.cfg:144:         minecraft:skeleton_horse;generic.armor;0;1
+config/roughmobsrevamped.cfg:145:         minecraft:zombie_horse;generic.movementSpeed;0;0.1
+config/roughmobsrevamped.cfg:146:         minecraft:zombie_horse;generic.maxHealth;1;1.0
+config/roughmobsrevamped.cfg:147:         minecraft:zombie_horse;generic.armor;0;2
+config/roughmobsrevamped.cfg:224:         rats:illager_piper;generic.maxHealth;0;35
+config/roughmobsrevamped.cfg:1057:     S:hostileHorseEntities <
+config/roughmobsrevamped.cfg:1058:         minecraft:zombie_horse
+config/roughmobsrevamped.cfg:1059:         minecraft:skeleton_horse
+config/roughmobsrevamped.cfg:1060:      >
+config/roughmobsrevamped.cfg:1542:     S:spiderEntities <
+config/roughmobsrevamped.cfg:1543:         specialmobs:hungryspider
+config/roughmobsrevamped.cfg:1544:         specialmobs:palespider
+config/roughmobsrevamped.cfg:1545:         specialmobs:desertspider
+config/roughmobsrevamped.cfg:1546:         specialmobs:witchspider
+config/roughmobsrevamped.cfg:1547:         specialmobs:poisonspider
+config/roughmobsrevamped.cfg:1548:         specialmobs:webspider
+config/roughmobsrevamped.cfg:1549:         specialmobs:giantspider
+config/roughmobsrevamped.cfg:1550:         specialmobs:flyingspider
+config/roughmobsrevamped.cfg:1551:         specialmobs:motherspider
+config/roughmobsrevamped.cfg:1552:         minecraft:spider
+config/roughmobsrevamped.cfg:1553:         minecraft:cave_spider
+config/roughmobsrevamped.cfg:1554:         betteranimalsplus:tarantula
+config/roughmobsrevamped.cfg:1555:         netherex:coolmar_spider
+config/roughmobsrevamped.cfg:1556:         betterwithmods:bwm_jungle_spider
+config/roughmobsrevamped.cfg:1557:         twilightforest:swarm_spider
+config/roughmobsrevamped.cfg:1558:         twilightforest:hedge_spider
+config/roughmobsrevamped.cfg:1559:         twilightforest:king_spider
+config/roughmobsrevamped.cfg:1560:      >
+
+## esm/epicsiegemod.cfg
+config/esm/epicsiegemod.cfg:5:     S:"AI Blacklist" <
+config/esm/epicsiegemod.cfg:457:         defiledlands:scuttler
+
+## esm/entity_ai.json (rats:illager_piper)
+config/esm/entity_ai.json:98:     "rats:illager_piper": {
+config/esm/entity_ai.json:99:       "Pillaring": true,
+config/esm/entity_ai.json:100:       "Pillar Block": "contenttweaker:scaffolding",
+config/esm/entity_ai.json:101:       "Requires Tools": true
+config/esm/entity_ai.json:102:     },
+
+## dmgcontrol.cfg
+config/dmgcontrol.cfg:171:     S:"MaxHealth_defiledlands:scuttler"=16.0
+config/dmgcontrol.cfg:247:     S:"MaxHealth_minecraft:skeleton_horse"=15.0
+config/dmgcontrol.cfg:259:     S:"MaxHealth_minecraft:zombie_horse"=15.0
+config/dmgcontrol.cfg:336:     S:"MaxHealth_rats:illager_piper"=20.0
+
+## thiccentities.cfg
+config/thiccentities.cfg:556:     ghost {
+config/thiccentities.cfg:561:         D:damage=1.0
+config/thiccentities.cfg:582:     zealot {
+config/thiccentities.cfg:587:         D:damage=1.0
+config/thiccentities.cfg:920:     nekros {
+config/thiccentities.cfg:925:         D:damage=1.0
+config/thiccentities.cfg:6502:     scuttler {
+config/thiccentities.cfg:6507:         D:damage=1.0
+config/thiccentities.cfg:9336:     skeleton_horse {
+config/thiccentities.cfg:9341:         D:damage=1.0
+config/thiccentities.cfg:9362:     zombie_horse {
+config/thiccentities.cfg:9367:         D:damage=1.0
+config/thiccentities.cfg:13021:     illager_piper {
+config/thiccentities.cfg:13026:         D:damage=1.0
+
+## rotm.cfg (every line naming one of the seven: the drown list only, none in Mob Offense)
+config/rotm.cfg:124:             minecraft:skeleton_horse;drown
+config/rotm.cfg:125:             minecraft:zombie_horse;drown
+
+## Special_Mobs.cfg (random scaling: render only)
+config/Special_Mobs.cfg:20:     # When greater than 0, mobs will have a random render scale applied. This is a visual effect only.
+config/Special_Mobs.cfg:21:     # With a value of 0.2, mob scale can vary by 20% (+/- 10% from normal size).
+config/Special_Mobs.cfg:22:     # This only affects special variants and vanilla-replacement mobs.
+config/Special_Mobs.cfg:23:     #    >> Float:[ Range={ 0.0, Infinity }, Default=0.15 ]
+config/Special_Mobs.cfg:24:     D:random_scaling=0.20
