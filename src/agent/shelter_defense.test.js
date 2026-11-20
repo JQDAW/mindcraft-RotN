@@ -128,7 +128,7 @@ test('decision (1): hurt in the open shelter and cornered, the bot hits the mob 
     t.mock.method(console, 'log', () => {});
     const { agent, bot, calls, ran, self } = shelter();
     hurt(bot);
-    // Soak 5 (death 4): at health 8 or less only a cornered bot hits back (the night routine found
+    // Soak 5 (death 4): at a health a zombie's hit may take (12.5, PR 5) only a cornered bot hits back (the night routine found
     // no way to back away and set handFight).
     agent._night = { handFight: true };
     const before = self.position.clone();
@@ -139,20 +139,20 @@ test('decision (1): hurt in the open shelter and cornered, the bot hits the mob 
     assert.ok(self.position.equals(before));
 });
 
-test('soak 5 (death 4): armed but at health 8 or less and not cornered, the bot does not fight from the shelter (the night routine backs away)', async (t) => {
+test('soak 5 (death 4) / PR 5: armed but at a health the zombie may take in one hit (12.5) and not cornered, the bot does not fight from the shelter (the night routine backs away)', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
-    for (const health of [8, 3]) {
+    for (const health of [12, 3]) {
         const { agent, bot, calls } = shelter();
         bot.health = health;
         await selfDefense(agent);
         assert.deepEqual(calls.attacks, [], `health ${health}: no swing`);
     }
-    assert.ok(logs.includes('[shelter] health 8, 8 or less: not fighting from the shelter unless cornered'));
+    assert.ok(logs.includes('[shelter] health 12, a zombie hits up to 12.5: not fighting from the shelter unless cornered'), logs.join('\n'));
     const fit = shelter();
-    fit.bot.health = 9;
+    fit.bot.health = 13;
     await selfDefense(fit.agent);
-    assert.deepEqual(fit.calls.attacks, [1, 1], 'health 9, armed: fought as before');
+    assert.deepEqual(fit.calls.attacks, [1, 1], 'health 13, armed: fought as before');
 });
 
 test('decision (1): hurt in the shelter with nothing in reach, the bot eats instead of fleeing; it never interrupts the repair', async (t) => {
@@ -624,4 +624,60 @@ test('soak 5: the hold in the shelter checks the food again when it runs: fed or
     await selfPreservation(agent);
     assert.equal(tried, 0, 'no second try');
     assert.ok(logs.includes('[reflex] hurt in the shelter: no need to eat minecraft:bread:0 now (food 20)'), logs.join('\n'));
+});
+
+// PR 5 (rotn-data #496: the troll hits by distance alone, through a 1-block wall when the bot stands
+// against it), the lead's decision: in the shelter, with such a mob within its reach + 1.5, the bot
+// stands on the side of its cell away from it (0.3-0.7), in the middle of an axis with such mobs on
+// both sides of it; never while the night routine's own work runs.
+test('PR 5: a troll near the shelter: the bot steps to the far side of its cell (closed shelter too); the middle with trolls on both sides; not during the repair', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { __resetWallHitters } = await import('./modes.js');
+    const { WALL_HITTERS, farSpot, wallHitters } = await import('./library/shelter.js');
+    const troll = (id, x, z) => ({ id, name: 'iceandfire:if_troll', type: 'mob', position: new Vec3(x, 64, z), height: 3.5, width: 1.2 });
+    const walking = (bot) => {
+        let looking = null;
+        bot.lookAt = (p) => { looking = p; return Promise.resolve(); };
+        bot.setControlState = (k, on) => {
+            if (k !== 'forward' || !on || !looking) return;
+            const p = bot.entity.position, dx = looking.x - p.x, dz = looking.z - p.z, d = Math.hypot(dx, dz);
+            if (d > 0) bot.entity.position = p.offset(dx / d * Math.min(0.05, d), 0, dz / d * Math.min(0.05, d));
+        };
+    };
+    // A troll east, against the wall outside (1.6 from the middle): to x 0.3.
+    __resetWallHitters();
+    const east = shelter({ zombieAt: 9, others: [troll(5, 2.1, 0.5)] });
+    east.bot.rotnSheltered = true;
+    walking(east.bot);
+    assert.deepEqual(wallHitters(east.bot).map(e => e.id), [5]);
+    await selfPreservation(east.agent);
+    assert.deepEqual(east.ran, ['mode:self_preservation']);
+    assert.ok(Math.abs(east.bot.entity.position.x - WALL_HITTERS.near) <= WALL_HITTERS.tolerance + 1e-9, String(east.bot.entity.position));
+    assert.ok(Math.abs(east.bot.entity.position.z - 0.5) <= WALL_HITTERS.tolerance + 1e-9);
+    assert.ok(east.bot.entity.position.distanceTo(east.bot.entities[5].position) > 1.7, 'farther than against the wall');
+    assert.ok(logs.some(l => /^\[shelter\] iceandfire:if_troll \(hits through walls\) at 2\.1, 64\.0, 0\.5: standing at 0\.30, 0\.50 in the cell, away from it$/.test(l)), logs.join('\n'));
+    // Trolls east and west: the middle on x; one also north: away from it on z.
+    const both = shelter({ zombieAt: 9, others: [troll(5, 2.1, 0.5), troll(6, -1.1, 0.5), troll(7, 0.5, -1.1)] });
+    assert.deepEqual([farSpot(both.bot, Object.values(both.bot.entities).filter(e => e.id >= 5)).x, farSpot(both.bot, Object.values(both.bot.entities).filter(e => e.id >= 5)).z], [0.5, WALL_HITTERS.far]);
+    // Too far (reach 2 + 1.5): nothing.
+    __resetWallHitters();
+    const far = shelter({ zombieAt: 9, others: [troll(5, 4.6, 0.5)] });
+    far.bot.rotnSheltered = true;
+    await selfPreservation(far.agent);
+    assert.deepEqual(far.ran, []);
+    // Not while the repair runs; a zombie (no through-wall hit) moves nothing.
+    __resetWallHitters();
+    const busy = shelter({ zombieAt: 9, label: REPAIR_LABEL, others: [troll(5, 2.1, 0.5)] });
+    await selfPreservation(busy.agent);
+    assert.deepEqual(busy.interrupts, []);
+    // #507 review 5: nor during the morning's opening or dig-out.
+    for (const label of ['action:openShelter', 'action:leaveShelter']) {
+        __resetWallHitters();
+        const morning = shelter({ zombieAt: 9, label, others: [troll(5, 2.1, 0.5)] });
+        morning.bot.rotnSheltered = true;
+        await selfPreservation(morning.agent);
+        assert.deepEqual(morning.interrupts, [], label);
+    }
+    assert.deepEqual(wallHitters(shelter({ zombieAt: 1 }).bot), [], 'a zombie in the opening: no step');
 });

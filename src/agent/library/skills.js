@@ -819,7 +819,8 @@ const healthOf = (e) => (Number.isFinite(e?.health) ? e.health : Number.isFinite
 
 /**
  * Fight from where the bot stands (G3 round 9 B, its night shelter with a wall open): hit the
- * nearest enemy within SHELTER_FIGHT.reach while one is in reach and keepFighting() holds, at
+ * nearest enemy within SHELTER_FIGHT.reach while one is in reach and keepFighting(enemy) holds (PR 5:
+ * the mob in reach, for its maxDamage), at
  * most SHELTER_FIGHT.maxMs and maxSwings, and at most sameTargetSwings hits on one mob whose
  * health does not go down (when it is known). No walk and no mineflayer-pvp (pvp.attack follows
  * its target, which took the bot out of the shelter). While it runs, bot.rotnFightingInPlace is
@@ -852,7 +853,7 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
             same.hits++;
             await new Promise(resolve => setTimeout(resolve, SHELTER_FIGHT.swingMs));
             if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
-            if (!keepFighting()) { why = 'the situation changed'; outcome = 'stopped'; break; }
+            if (!keepFighting(nearest() ?? enemy)) { why = 'the situation changed'; outcome = 'stopped'; break; }
         }
     } finally {
         bot.rotnFightingInPlace = false;

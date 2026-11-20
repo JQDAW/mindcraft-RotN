@@ -2056,9 +2056,10 @@ test('#470 review 3: a back-away whose seal fails with the bot in plan.to keeps 
 });
 
 // Soak 5 (death 4: a zombie dug into the dirt shelter and hit the bot from 20 to 0 while it fought
-// back from the opening), the lead's rule: unarmed at any health, or at health 8 or less armed or
-// not, with a melee mob in the opening or in reach through it, the bot backs away; only cornered
-// does it hit back. Armed above health 8 it fights from the shelter as before.
+// back from the opening), the lead's rule: unarmed at any health, or at a health one hit of the mob
+// may take armed or not (PR 5: its maxDamage, a zombie 12.5, a spider 2; Fix G used 8), with a melee
+// mob in the opening or in reach through it, the bot backs away; only cornered does it hit back.
+// Armed above that health it fights from the shelter as before.
 test('soak 5 (death 4): unarmed at full health or armed at health 8 or less, a mob in the opening or in reach: back away; cornered: hit back; armed and healthy: the whole repair', async (t) => {
     quiet(t);
     const unarmed = heldSetup({ health: 20 });
@@ -2083,17 +2084,26 @@ test('soak 5 (death 4): unarmed at full health or armed at health 8 or less, a m
     assert.deepEqual(nobody.labels.filter(l => l === 'action:backAway'), [], 'nothing in reach: no back-away, the repair');
     assert.deepEqual(nobody.o.repairs, [{ site: SITE, skip: [] }]);
 
-    const healthy = reach(heldSetup({ weapon: true, health: 9 }));
+    const twelve = reach(heldSetup({ weapon: true, health: 12 }));
+    await breachAt(twelve);
+    assert.deepEqual(twelve.labels, ['action:buildShelter', 'action:backAway'], 'PR 5: armed at health 12, a zombie (up to 12.5): backed away');
+
+    const spider = heldSetup({ weapon: true, health: 6 });
+    spider.o.mobInReach = () => ({ id: 11, name: 'spider', position: new Vec3(1.5, 64, 1.5) });
+    await breachAt(spider);
+    assert.deepEqual(spider.labels.filter(l => l === 'action:backAway'), [], 'PR 5: armed at health 6, a spider (up to 2): no back-away');
+
+    const healthy = reach(heldSetup({ weapon: true, health: 13 }));
     await breachAt(healthy);
-    assert.deepEqual(healthy.labels.filter(l => l === 'action:backAway'), [], 'armed at health 9: no back-away');
+    assert.deepEqual(healthy.labels.filter(l => l === 'action:backAway'), [], 'armed at health 13: no back-away');
     assert.equal(nightState(healthy.agent).handFight, false);
     assert.deepEqual(healthy.o.repairs, [{ site: SITE, skip: [] }]);
 });
 
 // #497 review 1: a threat the shelter never hits (a troll, a creeper, a skeleton) in the opening or
-// in reach starts the back-away, armed or not, at any health; cornered, the bot never hits it and
-// waits for the burrow plan; a cell it holds is left out of the repair.
-test('#497 review 1: an armed bot at full health backs away from a troll (or a creeper) in reach or in the opening; cornered, it never hits it and waits for the burrow plan', async (t) => {
+// in reach starts the back-away, armed or not, at any health; cornered, the bot never hits it (a
+// troll: when no burrow step was found either, PR 5); a cell it holds is left out of the repair.
+test('#497 review 1: an armed bot at full health backs away from a troll (or a creeper) in reach or in the opening; cornered, it never hits it', async (t) => {
     quiet(t);
     const troll = { id: 9, name: 'iceandfire:if_troll', type: 'mob', position: new Vec3(1.5, 64, 1.5) };
     const near = heldSetup({ weapon: true, health: 20, held: 'none' });
@@ -2106,7 +2116,7 @@ test('#497 review 1: an armed bot at full health backs away from a troll (or a c
     cornered.o.dangerInReach = () => troll;
     await breachAt(cornered);
     assert.equal(nightState(cornered.agent).handFight, false, 'never a hit at the troll');
-    assert.ok(cornered.agent.chat.includes('[night] an iceandfire:if_troll (avoid) in reach at 1, 64, 1, and no way to back away: not hitting it; waiting for the burrow plan'));
+    assert.ok(cornered.agent.chat.includes('[night] an iceandfire:if_troll (avoid) in reach at 1, 64, 1, and no way to back away or burrow: not hitting it'));
     assert.deepEqual(cornered.o.repairs, [{ site: SITE, skip: [] }], 'nothing in the opening: the repair goes on');
 
     const inIt = heldSetup({ weapon: true, health: 20, plan: false });
@@ -2114,7 +2124,7 @@ test('#497 review 1: an armed bot at full health backs away from a troll (or a c
     inIt.o.heldCells = (bot, site, open) => open.filter(c => c.equals(inIt.opening[0])).map(cell => ({ cell, mob: creeper }));
     await breachAt(inIt);
     assert.equal(nightState(inIt.agent).handFight, false);
-    assert.ok(inIt.agent.chat.includes('[night] a creeper (keep-distance) in the opening at 1, 64, 0, and no way to back away: not hitting it; waiting for the burrow plan'));
+    assert.ok(inIt.agent.chat.includes('[night] a creeper (keep-distance) in the opening at 1, 64, 0, and no way to back away: not hitting it'));
     assert.ok(inIt.agent.chat.includes('[night] a creeper in the opening at 1, 64, 0: not repairing under it; repairing the other open cells'));
     assert.deepEqual(inIt.o.repairs, [{ site: SITE, skip: ['1,64,0'] }], 'armed: the creeper\'s cell is still left out');
 
@@ -2123,7 +2133,7 @@ test('#497 review 1: an armed bot at full health backs away from a troll (or a c
     unarmed.o.heldCells = (bot, site, open) => open.filter(c => c.equals(unarmed.opening[0])).map(cell => ({ cell, mob: big }));
     await breachAt(unarmed);
     assert.equal(nightState(unarmed.agent).handFight, false, 'unarmed: no hand fight at a troll either');
-    assert.ok(unarmed.agent.chat.includes('[night] an iceandfire:if_troll (avoid) in the opening at 1, 64, 0, and no way to back away: not hitting it; waiting for the burrow plan'));
+    assert.ok(unarmed.agent.chat.includes('[night] an iceandfire:if_troll (avoid) in the opening at 1, 64, 0, and no way to back away or burrow: not hitting it'));
 });
 
 test('#497 review 6: mobInReach finds the nearest melee mob within the shelter fight\'s reach (3); dangerInReach the nearest troll, creeper or skeleton', async () => {
@@ -2565,4 +2575,92 @@ test('#479 nit 3: lastShelter is kept on the no-shelter morning path (where the 
     nightTick(inside, { now: 0, ops: ops() }); await settle(inside);
     assert.equal(leaveShelterFor(inside, "a task giver's command"), true);
     assert.ok(nightState(inside).lastShelter.equals(SITE));
+});
+
+// Soak 5 Fix B (PR 5), the lead's rule: at night a mob that digs through anything (the troll) within
+// ~7 blocks of the bot in its shelter, closed or open, starts the burrow at once (not CHECK_MS later);
+// where it ends up is the shelter; the night has BURROW.maxSteps steps; never a hit at the troll.
+test('PR 5 (Fix B): a troll near the closed shelter: the burrow starts at once; the new cell is the shelter; the night\'s steps run out; cornered, retried only after CHECK_MS', async (t) => {
+    quiet(t);
+    const { BURROW } = await import('./library/burrow.js');
+    const s = heldSetup({ weapon: true });
+    const tr = { id: 9, name: 'iceandfire:if_troll', type: 'mob', position: new Vec3(4.5, 64, 0.5) };
+    s.agent.bot.entities = { 9: tr };
+    let near = false;
+    const asked = [];
+    let result = { steps: 5, stopped: 'far' };
+    s.o.burrowThreat = () => (near ? { mob: tr, d: 4, ranges: { start: 6.97, stop: 7.97 } } : null);
+    s.o.burrowAway = (bot, mob, opts) => {
+        asked.push(opts.maxSteps);
+        if (result.steps) bot.entity.position = bot.entity.position.offset(-result.steps, 0, 0);
+        return Promise.resolve({ steps: result.steps, site: null, stopped: result.stopped, why: result.why });
+    };
+    nightTick(s.agent, { now: 0, ops: s.o });
+    await settle(s.agent);
+    assert.equal(nightState(s.agent).state, 'inside');
+    near = true;
+    nightTick(s.agent, { now: 1, ops: s.o }); // closed, 1 ms after the last check: still at once
+    await settle(s.agent);
+    assert.ok(s.labels.includes('action:burrowAway'), s.labels.join(','));
+    assert.deepEqual(asked, [BURROW.maxSteps]);
+    assert.ok(s.agent.chat.includes('[night] an iceandfire:if_troll (digs through anything) 4.0 blocks from the shelter at 0, 64, 0: burrowing away from it'), s.agent.chat.join('\n'));
+    assert.ok(s.agent.chat.includes('[night] burrowed 5 steps into -5, 64, 0, 9.0 blocks from an iceandfire:if_troll: far enough; sealed behind'), s.agent.chat.join('\n'));
+    const n = nightState(s.agent);
+    assert.deepEqual([n.site, n.burrowSteps, s.agent.bot.rotnSheltered], [new Vec3(-5, 64, 0), 5, true]);
+    assert.equal(n.handFight ?? false, false);
+    // It comes again: the rest of the night's steps; then none are left.
+    result = { steps: 11, stopped: 'budget' };
+    nightTick(s.agent, { now: 2, ops: s.o });
+    await settle(s.agent);
+    assert.deepEqual(asked, [16, 11]);
+    assert.ok(s.agent.chat.includes(`[night] burrowed 11 steps into -16, 64, 0, 20.0 blocks from an iceandfire:if_troll: the night's ${BURROW.maxSteps} burrow steps are used; not hitting it`), s.agent.chat.join('\n'));
+    nightTick(s.agent, { now: 3 + CHECK_MS, ops: s.o });
+    await settle(s.agent);
+    assert.deepEqual(asked, [16, 11], 'budget used: no more burrows tonight');
+
+    // Cornered: said, and not tried again until CHECK_MS has passed.
+    const c = heldSetup({ weapon: true });
+    c.agent.bot.entities = { 9: tr };
+    const tries = [];
+    c.o.burrowThreat = () => (tries.length >= 0 && c.go ? { mob: tr, d: 4 } : null);
+    c.o.burrowAway = () => { tries.push(1); return Promise.resolve({ steps: 0, site: null, stopped: 'cornered', why: 'no blocks to seal with' }); };
+    // #507 review 4: the wait counts from when the burrow ended (the ops clock), not from its start.
+    c.o.now = () => 5_000;
+    nightTick(c.agent, { now: 0, ops: c.o });
+    await settle(c.agent);
+    c.go = true;
+    nightTick(c.agent, { now: 1, ops: c.o });
+    await settle(c.agent);
+    assert.ok(c.agent.chat.includes('[night] did not burrow (still at 0, 64, 0), 4.0 blocks from an iceandfire:if_troll: no step further (no blocks to seal with); not hitting it'), c.agent.chat.join('\n'));
+    nightTick(c.agent, { now: 2, ops: c.o });
+    await settle(c.agent);
+    assert.equal(tries.length, 1, 'not again within CHECK_MS');
+    nightTick(c.agent, { now: 2 + CHECK_MS, ops: c.o });
+    await settle(c.agent);
+    assert.equal(tries.length, 1, 'CHECK_MS after the start, but not after the end (5 s): not yet');
+    nightTick(c.agent, { now: 5_000 + CHECK_MS, ops: c.o });
+    await settle(c.agent);
+    assert.equal(tries.length, 2, 'again CHECK_MS after the burrow ended');
+});
+
+// #507 review 3: pitOut assumes the hole's 3 below the surface; a burrow that changed the bot's level
+// leaves the hole shelter, and the morning digs out with digOut from the new cell.
+test('#507 review 3: a burrow down from a hole shelter clears n.pit (the morning uses digOut); a level burrow keeps it', async (t) => {
+    quiet(t);
+    for (const [dy, pit] of [[-2, false], [0, true]]) {
+        const s = heldSetup({ weapon: true });
+        const tr = { id: 9, name: 'iceandfire:if_troll', type: 'mob', position: new Vec3(4.5, 64, 0.5) };
+        s.agent.bot.entities = { 9: tr };
+        let near = false;
+        s.o.burrowThreat = () => (near ? { mob: tr, d: 4 } : null);
+        s.o.burrowAway = (bot) => { bot.entity.position = bot.entity.position.offset(dy ? 0 : -1, dy, 0); return Promise.resolve({ steps: 1, site: null, stopped: 'far' }); };
+        nightTick(s.agent, { now: 0, ops: s.o });
+        await settle(s.agent);
+        nightState(s.agent).pit = true;
+        near = true;
+        nightTick(s.agent, { now: 1, ops: s.o });
+        await settle(s.agent);
+        assert.equal(nightState(s.agent).site.y, 64 + dy);
+        assert.equal(nightState(s.agent).pit, pit, `dy ${dy}`);
+    }
 });
