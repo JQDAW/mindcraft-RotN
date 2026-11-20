@@ -671,5 +671,13 @@ test('PR 5: a troll near the shelter: the bot steps to the far side of its cell 
     const busy = shelter({ zombieAt: 9, label: REPAIR_LABEL, others: [troll(5, 2.1, 0.5)] });
     await selfPreservation(busy.agent);
     assert.deepEqual(busy.interrupts, []);
+    // #507 review 5: nor during the morning's opening or dig-out.
+    for (const label of ['action:openShelter', 'action:leaveShelter']) {
+        __resetWallHitters();
+        const morning = shelter({ zombieAt: 9, label, others: [troll(5, 2.1, 0.5)] });
+        morning.bot.rotnSheltered = true;
+        await selfPreservation(morning.agent);
+        assert.deepEqual(morning.interrupts, [], label);
+    }
     assert.deepEqual(wallHitters(shelter({ zombieAt: 1 }).bot), [], 'a zombie in the opening: no step');
 });

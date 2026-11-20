@@ -506,8 +506,12 @@ test('PR 5: in the open a melee mob is fled from with no weapon or at a health i
     // A provoked animal that fights back (a rooster's own hit) is not fought bare-handed either.
     const now = 100_000;
     const rooster = { ...mob('animania:rooster_leghorn', 1.2), metadata: { 7: 8 } };
-    const peck = (items) => threatPlan(fakeBot([rooster], { lastDamageTime: now - 500, lastDamageTaken: 2, food: 12, inventory: { items: () => items, slots: [] } }), { now });
+    const peck = (items, health = 20) => threatPlan(fakeBot([rooster], { health, lastDamageTime: now - 500, lastDamageTaken: 2, food: 12, inventory: { items: () => items, slots: [] } }), { now });
     assert.equal(peck([sword]).action, 'fight');
+    // #507 review 2: no melee entry, but its provoked damage (2): not the unknown 18.
+    assert.deepEqual([maxHitOf(rooster), maxHitOf(mob('wolf', 2)), maxHitOf(mob('llama', 2))], [2, 2, 1]);
+    assert.equal(peck([sword], 15).action, 'fight', 'a rooster at health 15: fought back');
+    assert.equal(peck([sword], 2).action, 'flee', 'at 2: one peck may take it');
     assert.deepEqual([peck([]).action, peck([]).why], ['flee', 'provoked, and no weapon']);
 });
 

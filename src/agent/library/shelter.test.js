@@ -1182,6 +1182,16 @@ test('PR 5: burrowStep picks the enclosed side column farthest from the troll; s
     }
     // Nothing to seal with: no step.
     assert.deepEqual(burrowStep(withTroll(holeShelter({ dirt: 0 }), t).bot, t), { why: 'no blocks to seal with' });
+    // #507 review 1: gravel as the floor of the west column (it falls when the bot stands on it over
+    // a cave): no; the next best side is not farther, so no step at all.
+    const gravelFloor = burrowStep(withTroll(holeShelter({ set: { '-1,60,0': 'gravel' } }), t).bot, t);
+    assert.equal(gravelFloor.to, undefined);
+    assert.match(gravelFloor.why, /-1,0: no firm floor at -1, 60, 0 \(gravel\)/);
+    assert.match(burrowStep(withTroll(holeShelter({ set: { '-1,60,0': 'sand' } }), t).bot, t).why, /-1,0: no firm floor at -1, 60, 0 \(sand\)/);
+    // Gravel beyond the column with air under it would fall into the tunnel: no; on dirt it stays: yes.
+    const loose = burrowStep(withTroll(holeShelter({ set: { '-2,61,0': 'gravel', '-2,60,0': 'air' } }), t).bot, t);
+    assert.match(loose.why, /-1,0: gravel at -2, 61, 0 has nothing solid under it and would fall in/);
+    assert.equal(key(burrowStep(withTroll(holeShelter({ set: { '-2,61,0': 'gravel' } }), t).bot, t).to), '-1,61,0', 'gravel on dirt beside it: fine');
 });
 
 test('PR 5 (the surface-shelter escape): in a surface shelter the first step is two blocks down, sealed above', async (t) => {

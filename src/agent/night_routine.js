@@ -233,13 +233,16 @@ function startBackAway(agent, n, ops, plan, tolerateBody, label, done) {
  * up is the shelter now (as after a back-away): held or repaired there, never built afresh beside
  * the mob. Every step counts against the night's BURROW.maxSteps.
  */
-function startBurrow(agent, n, ops, threat, now) {
+function startBurrow(agent, n, ops, threat) {
     const bot = agent.bot, mob = threat.mob, name = mob.name ?? 'hostile mob';
     line(agent, `[night] ${aMob(name)} (digs through anything) ${threat.d.toFixed(1)} blocks from the shelter at ${at(n.site)}: burrowing away from it`);
     startJob(agent, n, BURROW_LABEL, () => ops.burrowAway(bot, mob, { maxSteps: BURROW.maxSteps - (n.burrowSteps ?? 0) }), (r) => {
         n.burrowSteps = (n.burrowSteps ?? 0) + (r?.steps ?? 0);
         const here = bot.entity.position.floored();
         if (n.site && !here.equals(n.site)) {
+            // #507 review 3: pitOut assumes the hole's 3 below the surface; after a burrow that changed
+            // the bot's level, the morning digs out with digOut from where it is.
+            if (here.y !== n.site.y) n.pit = false;
             n.site = here;
             n.repairStall = null;
             n.checkedAt = null;
@@ -249,7 +252,8 @@ function startBurrow(agent, n, ops, threat, now) {
             bot.rotnSheltered = still && still.todo.length === 0 ? true : 'open';
         }
         const far = r?.stopped === 'far' || r?.stopped === 'gone';
-        n.burrowNoneAt = far ? null : now;
+        // #507 review 4: when the burrow ended (up to BURROW.maxMs after the tick that started it).
+        n.burrowNoneAt = far ? null : (ops.now ?? Date.now)();
         const steps = r?.steps ?? 0;
         const moved = steps ? `burrowed ${steps} step${steps === 1 ? '' : 's'} into ${at(here)}` : `did not burrow (still at ${at(here)})`;
         const m = bot.entities?.[mob.id];
@@ -1126,7 +1130,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (!isFullDay(t) && n.site && bot.entity.position.floored().equals(n.site) && (n.burrowSteps ?? 0) < BURROW.maxSteps
             && (n.burrowNoneAt == null || now - n.burrowNoneAt >= CHECK_MS)) {
             const threat = ops.burrowThreat?.(bot) ?? null;
-            if (threat) { startBurrow(agent, n, ops, threat, now); return 'night:inside'; }
+            if (threat) { startBurrow(agent, n, ops, threat); return 'night:inside'; }
         }
         // #331 review 4: while a wall is known open (a repair did not close it, or a fight in place
         // held it up), every tick checks and repairs, not every CHECK_MS.

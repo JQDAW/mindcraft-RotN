@@ -128,7 +128,8 @@ const sealBlocks = (bot) => countOf(shelterItems(bot)) + placeableDirt(bot.inven
  * new distance)}. side: the 1x2 column beside the bot, its far side, both flanks, roof and floor
  * solid ground, nothing that falls above it; seal: the bot's two cells. down: the two blocks under
  * its feet, each one's four sides and the floor below solid ground; seal: the bot's feet cell (the
- * new roof). Each cell to dig must be diggable (burrowDiggable) with no body in it, and the step must
+ * new roof). #507 review 1: the floor never a block that falls; a falling block beside the new cell
+ * only on solid ground that is not dug. Each cell to dig must be diggable (burrowDiggable) with no body in it, and the step must
  * take the bot BURROW.minGain farther from the mob; the farthest wins.
  */
 export function burrowStep(bot, mob) {
@@ -139,12 +140,12 @@ export function burrowStep(bot, mob) {
     for (const d of HORIZONTAL) {
         const r0 = p.plus(d), r1 = r0.offset(0, 1, 0);
         const perp = [new Vec3(d.z, 0, d.x), new Vec3(-d.z, 0, -d.x)];
-        steps.push({ kind: 'side', dir: d, to: r0, dig: [r1, r0], seal: [p, p.offset(0, 1, 0)], fallsFrom: r1.offset(0, 1, 0),
-            around: [r0.plus(d), r1.plus(d), ...perp.flatMap(q => [r0.plus(q), r1.plus(q)]), r1.offset(0, 1, 0), r0.offset(0, -1, 0)] });
+        steps.push({ kind: 'side', dir: d, to: r0, dig: [r1, r0], seal: [p, p.offset(0, 1, 0)], fallsFrom: r1.offset(0, 1, 0), floor: r0.offset(0, -1, 0),
+            around: [r0.plus(d), r1.plus(d), ...perp.flatMap(q => [r0.plus(q), r1.plus(q)]), r1.offset(0, 1, 0)] });
     }
     const d1 = p.offset(0, -1, 0), d2 = p.offset(0, -2, 0);
-    steps.push({ kind: 'down', to: d2, dig: [d1, d2], seal: [p], fallsFrom: null,
-        around: [...HORIZONTAL.flatMap(h => [d1.plus(h), d2.plus(h)]), d2.offset(0, -1, 0)] });
+    steps.push({ kind: 'down', to: d2, dig: [d1, d2], seal: [p], fallsFrom: null, floor: d2.offset(0, -1, 0),
+        around: HORIZONTAL.flatMap(h => [d1.plus(h), d2.plus(h)]) });
     const why = new Map();
     let best = null;
     for (const s of steps) {
@@ -153,7 +154,15 @@ export function burrowStep(bot, mob) {
         if (bad) { why.set(name, `${bot.blockAt(bad)?.name ?? 'unloaded'} at ${at(bad)} cannot be dug`); continue; }
         const open = s.around.find(c => !solid(bot.blockAt(c)));
         if (open) { why.set(name, `${bot.blockAt(open)?.name ?? 'unloaded'} at ${at(open)}: not enclosed`); continue; }
+        // #507 review 1 (pit.js pitProblem, #337 review 4): never a floor that falls (gravel, sand), and
+        // no falling block beside the new cell without solid ground under it that stays.
+        const floor = bot.blockAt(s.floor);
+        if (!solid(floor) || isFalling(floor)) { why.set(name, `no firm floor at ${at(s.floor)} (${floor?.name ?? 'unloaded'})`); continue; }
         if (s.fallsFrom && isFalling(bot.blockAt(s.fallsFrom))) { why.set(name, `${bot.blockAt(s.fallsFrom).name} above would fall in`); continue; }
+        const digKeys = new Set(s.dig.map(key));
+        const loose = s.around.find(c => isFalling(bot.blockAt(c))
+            && (digKeys.has(key(c.offset(0, -1, 0))) || !solid(bot.blockAt(c.offset(0, -1, 0)))));
+        if (loose) { why.set(name, `${bot.blockAt(loose).name} at ${at(loose)} has nothing solid under it and would fall in`); continue; }
         if (sealBlocks(bot) < s.seal.length) { why.set(name, `${s.seal.length} blocks to seal with, ${sealBlocks(bot)} held`); continue; }
         const d = s.to.offset(0.5, 0, 0.5).distanceTo(mob.position);
         if (d < now + BURROW.minGain) { why.set(name, `not farther from it (${d.toFixed(1)})`); continue; }

@@ -202,12 +202,17 @@ export const canFightHard = (bot) => hasWeapon(bot) && bot?.health > 10;
 
 /**
  * The most a mob hits for (rotn-data #496, mob-melee.json maxDamage: with the strongest item it may
- * be given, a zombie's stone axe), or UNKNOWN_MELEE (18, the troll's) when rotn-data has no entry
- * for it, or for no mob: null means unknown, never zero.
+ * be given, a zombie's stone axe), else its provoked damage (an animal that fights back), else
+ * UNKNOWN_MELEE (18, the troll's) when rotn-data has neither, or for no mob: null means unknown,
+ * never zero.
  */
 export function maxHitOf(entity) {
-    const m = entity ? threatFor(entity)?.melee : null;
-    return Number.isFinite(m?.maxDamage) ? m.maxDamage : UNKNOWN_MELEE;
+    const t = entity ? threatFor(entity) : null;
+    if (Number.isFinite(t?.melee?.maxDamage)) return t.melee.maxDamage;
+    // #507 review 2: an animal that fights back has its hit in its provoked block (a rooster 2, a
+    // wolf 2, a llama 1): not the unknown 18.
+    if (Number.isFinite(t?.provoked?.damage)) return t.provoked.damage;
+    return UNKNOWN_MELEE;
 }
 
 const round1 = (v) => Math.round(v * 10) / 10;

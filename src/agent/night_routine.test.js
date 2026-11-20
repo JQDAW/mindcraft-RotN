@@ -2624,6 +2624,8 @@ test('PR 5 (Fix B): a troll near the closed shelter: the burrow starts at once; 
     const tries = [];
     c.o.burrowThreat = () => (tries.length >= 0 && c.go ? { mob: tr, d: 4 } : null);
     c.o.burrowAway = () => { tries.push(1); return Promise.resolve({ steps: 0, site: null, stopped: 'cornered', why: 'no blocks to seal with' }); };
+    // #507 review 4: the wait counts from when the burrow ended (the ops clock), not from its start.
+    c.o.now = () => 5_000;
     nightTick(c.agent, { now: 0, ops: c.o });
     await settle(c.agent);
     c.go = true;
@@ -2635,5 +2637,30 @@ test('PR 5 (Fix B): a troll near the closed shelter: the burrow starts at once; 
     assert.equal(tries.length, 1, 'not again within CHECK_MS');
     nightTick(c.agent, { now: 2 + CHECK_MS, ops: c.o });
     await settle(c.agent);
-    assert.equal(tries.length, 2, 'again after CHECK_MS');
+    assert.equal(tries.length, 1, 'CHECK_MS after the start, but not after the end (5 s): not yet');
+    nightTick(c.agent, { now: 5_000 + CHECK_MS, ops: c.o });
+    await settle(c.agent);
+    assert.equal(tries.length, 2, 'again CHECK_MS after the burrow ended');
+});
+
+// #507 review 3: pitOut assumes the hole's 3 below the surface; a burrow that changed the bot's level
+// leaves the hole shelter, and the morning digs out with digOut from the new cell.
+test('#507 review 3: a burrow down from a hole shelter clears n.pit (the morning uses digOut); a level burrow keeps it', async (t) => {
+    quiet(t);
+    for (const [dy, pit] of [[-2, false], [0, true]]) {
+        const s = heldSetup({ weapon: true });
+        const tr = { id: 9, name: 'iceandfire:if_troll', type: 'mob', position: new Vec3(4.5, 64, 0.5) };
+        s.agent.bot.entities = { 9: tr };
+        let near = false;
+        s.o.burrowThreat = () => (near ? { mob: tr, d: 4 } : null);
+        s.o.burrowAway = (bot) => { bot.entity.position = bot.entity.position.offset(dy ? 0 : -1, dy, 0); return Promise.resolve({ steps: 1, site: null, stopped: 'far' }); };
+        nightTick(s.agent, { now: 0, ops: s.o });
+        await settle(s.agent);
+        nightState(s.agent).pit = true;
+        near = true;
+        nightTick(s.agent, { now: 1, ops: s.o });
+        await settle(s.agent);
+        assert.equal(nightState(s.agent).site.y, 64 + dy);
+        assert.equal(nightState(s.agent).pit, pit, `dy ${dy}`);
+    }
 });

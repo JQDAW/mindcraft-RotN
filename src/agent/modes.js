@@ -175,11 +175,15 @@ export function __resetWallHitters() { wallMoveAt = -Infinity; wallSaidAt = -Inf
  * PR 5 (rotn-data #496: the troll hits through a 1-block wall by distance alone): in the shelter, a
  * mob that hits through walls within its reach + slack moves the bot to the side of its cell away
  * from it (shelter.farSpot), a short sneak step, at most every WALL_HITTERS.everyMs; never while
- * the night routine's own work runs (the repair, the back-away, the burrow). Returns whether it moved.
+ * the night routine's own work runs (the repair, the back-away, the burrow, the morning's opening
+ * and dig-out). Returns whether it moved.
  */
+/** #507 review 5: the morning's own jobs (opening a side, digging out) are not stepped out of either. */
+const MORNING_LABELS = ['action:openShelter', 'action:leaveShelter'];
+
 function keepFromWallHitters(mode, agent) {
     const bot = agent.bot;
-    if (nightRoutineBusy(agent)) return false;
+    if (nightRoutineBusy(agent) || MORNING_LABELS.includes(agent.actions.currentActionLabel)) return false;
     const mobs = wallHitters(bot);
     if (!mobs.length) return false;
     const now = Date.now();
