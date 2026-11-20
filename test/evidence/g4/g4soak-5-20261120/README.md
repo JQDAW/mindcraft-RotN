@@ -26,7 +26,7 @@ Every address is redacted (`<ip>`): the CX23's, the dev server's and the test se
 ## The measurements
 | Measure | Value |
 | --- | --- |
-| **Peak memory** | **679 MiB** (`MemoryPeak`), target 850. In `notes.samples`, memory rose while the bot worked: 357 MiB at the join, about 430–480 in the first half-hour, 525–584 in minutes 35–76, then 600–640. It held at 640 from minute 96 to the end. The peak came between the samples at minutes 45.5 and 55.7. Soak 4 (the idle bot): 467 MiB; soak 2: 622 |
+| **Peak memory** | **679 MiB** (`MemoryPeak`), target 850. In `notes.samples`, memory rose while the bot worked: 357 MiB at the join, about 430–480 in the first half-hour, 525–584 in minutes 35–86 (600 at minute 81), then 628 at minute 91 and 640 from minute 96 to the end. The peak (`peakMb` 679) came between the samples at minutes 50.6 and 55.7 (`peakMb` 671 at 50.6). Soak 4 (the idle bot): 467 MiB; soak 2: 622 |
 | **NRestarts** | **0** at all 25 samples. `ActiveState` was active at every sample |
 | **LLM spend** | See the next section |
 
@@ -42,7 +42,7 @@ All figures sum `cost_usd` over the bot's `[openrouter] usage …` lines in `dri
 | – day 3: 01:36:24 to 01:50:46 | 14.4 | 103 | 0.065 |
 | For reference: the first to the last usage line (00:16:21 to 01:50:44; it includes the first two nights) | 94.4 | 304 | 0.0297 |
 
-- The nights made no LLM calls. The self-prompter stopped at or just before each sunset (00:31:08, 01:09:26, 01:50:46). It started again only at the morning: at 00:56:18 and, after the second night, at 01:36:29. The third night ran past the end of the soak.
+- The nights made no LLM calls. The self-prompter stopped at or just before each sunset (00:31:08, 01:09:26, 01:50:46). It started again only at the morning: at 00:56:18 and, after the second night, at 01:36:29. The third night ended with `morning: back to work` at 02:16:18, 8 s before the ctl stop, so no day 4 began.
 - The three nights, each from its `sunset is near` line to its `morning` line, were 25.2, 25.7 and 25.5 min: **76.4 min of the 120 had no LLM call**. The no-call gaps between usage lines are slightly longer: 26.3 min (00:30:05–00:56:25), 27.1 min (01:09:24–01:36:29) and 25.7 min from the last call to the ctl stop.
 - So the 2-hour figure mixes about 44 min of work with about 76 min of night. A bot that works for a larger share of the soak spends more per hour: about USD 0.064/h at this run's working rate (7 completions per minute on average, between 5.3 and 8.5 per day). Soak 4's 11 working minutes came to about USD 0.084/h.
 
@@ -57,7 +57,7 @@ All figures sum `cost_usd` over the bot's `[openrouter] usage …` lines in `dri
 | `agenda_done` (#4) | PASS: `agenda done` in chat at 00:29:53, 13.6 min after the server's join line |
 | `food_floor` (#5) | PASS: lowest food 12 (floor 6), over 123 food lines |
 | `ate_when_low` (#5) | **FAIL**: 2 of 5 `low` food lines had no eat within 5 food lines after them (below) |
-| `deaths_reported` (#5, as #6) | PASS: each of the 6 deaths was reported in chat (`I died at …; lost …`) |
+| `deaths_reported` (#5, as #6) | PASS: each of the 6 deaths was reported in the journal (`[death] died at …; lost …`). **5 were also reported in chat** (`I died at …; lost …`). The report of the 01:00:40 death (journal 01:00:47) was not repeated in chat: `CHAT_GAP_MS` (60 s) had not passed since the 01:00:17 chat report |
 
 ## What happened
 Sources: the bot's `[survival]`, `[night]`, `[respawn]` and `[death]` lines in `driver.log`, and agenda and death lines from `server.log`.
@@ -73,16 +73,27 @@ Sources: the bot's `[survival]`, `[night]`, `[respawn]` and `[death]` lines in `
   - Death at 00:46:56 (`slain by Troll`). It respawned with no pickaxe and no food; all three shelter tries failed (`Found no place for a shelter within 4 blocks`). It stayed out until `morning: back to work` at 00:56:18.
 - **Day 2 (00:56–01:10): two deaths by day, then back to work.**
   - At the morning (00:56:18) the respawn walk `got only 4 blocks from the spawn and 1 recent death spot`, and the agenda resumed there.
-  - Zombies killed it at 01:00:11 (at -24, 71, -70) and at 01:00:40 (at -66, 64, -52).
+  - Zombies killed it twice, both by day: at 01:00:11 (at -24, 71, -70) and at 01:00:40 (at -66, 64, -52).
+  - Before the first of those deaths: `flee zombie (outnumbered)` at 00:59:53, then `hurt 18.5 health 20->1.5 (by zombie)` at 00:59:54. That 18.5 is several zombie hits summed inside the survival log's 2 s hurt window (`HURT.windowMs`), not one hit and not an explosion. The second death came from four zombie hits (4, 7, 4, 4) from 01:00:33 to 01:00:40.
   - After the second death it walked 51 blocks away and gathered dirt piles, a crude axe and food.
   - Its own memory notes record the death spots, and why to keep away from them.
 - **Night 2 (01:10–01:36): a zombie dug in.**
   - At 01:10:44 the bot held food worth 10 hunger and sat in a shelter at 01:10:50.
   - At 01:27:12: `zombie is digging the shelter`. The repair placed nothing (`nothing to place a block against`), and the bot died at 01:27:23 (`slain by Zombie`).
   - It walked 25 blocks away, dug a hole shelter (01:27:40) and stayed in it to the morning, 01:36:24.
-- **Day 3 (01:36–01:50): a flee at health 3 ended in drowning.** `flee unknown (low health 3)` at 01:42:54, then `drowned` at 01:43:53. After the respawn it gathered dirt piles again. The food step was `stuck` again at 01:45:22.
+- **Day 3 (01:36–01:50): the unstuck reflex dropped the bot 24 blocks; it then drowned.**
+  - At 01:42:51 the unstuck reflex interrupted an `!attack` with `Moved away from (6, 85, -116) to (8, 61, -118)`, from y 85 to y 61.
+  - At 01:42:52 came `hurt 17 health 20->3 (by unknown)`: fall damage from that move, with no mob behind it.
+  - At 01:42:54 came `flee unknown (low health 3)`, and at 01:43:53 the server logged `drowned`.
+  - After the respawn it gathered dirt piles again. The food step was `stuck` again at 01:45:22.
 - **Night 3 (01:50 to the end): a zombie villager dug in.** In a shelter at 01:50:58. At 02:11:45 a `zombie_villager is digging the shelter`; four repairs followed, then death at 02:12:23. After that, every shelter try failed (`the block did not stay (placed twice)`), and the morning came at 02:16:18, 8 s before the stop.
-- **Deaths: 6**, each reported in chat: troll (in the shelter), zombie, zombie (by day), zombie (dug in), drowned (fleeing at health 3), zombie villager (dug in). There were 13 fights (6 capped, 4 interrupted, 2 died, 1 stopped), 6 flees and 10 eats.
+- **Deaths: 6**, each in the journal and 5 in chat (see `deaths_reported`). The killers, from `server.log`:
+  - 00:46:56 `slain by Troll` (in the shelter, night 1);
+  - 01:00:11 `slain by Zombie` (by day);
+  - 01:00:40 `slain by Zombie` (by day);
+  - 01:27:23 `slain by Zombie` (it dug into the shelter, night 2);
+  - 01:43:53 `drowned` (after the fall at health 3, day 3);
+  - 02:12:23 `slain by Zombie Villager` (it dug into the shelter, night 3). There were 13 fights (6 capped, 4 interrupted, 2 died, 1 stopped), 6 flees and 10 eats.
 - **Food.**
   - The five `low` lines were `food 12 health 20 (low)` at 00:47:00, 01:27:06, 01:43:57, 02:09:04 and 02:12:27.
   - The bot ate after three of them: radish 01:27:08, wildberries 01:46:29 and 02:09:05.
@@ -112,6 +123,7 @@ Sources: the bot's `[survival]`, `[night]`, `[respawn]` and `[death]` lines in `
   - The troll took no damage from the bot (`4 hits did not hurt`).
 - **skills-rotn: `ate_when_low` right after a respawn.** RotN respawns the bot with food 12, which is the `low` level, and with an empty inventory. Both failures are that case. Whether the check or the bot should handle it is for the lead and skills-rotn.
 - **skills-rotn: the respawn walk.** After the first death, the walk away `got only 4 blocks` (00:56:18). The next two deaths followed within 5 min, both by day.
+- **skills-rotn: the unstuck reflex's move can be a deadly fall.** At 01:42:51 it moved the bot from y 85 to y 61 (`Moved away from (6, 85, -116) to (8, 61, -118)`, `driver.log` near line 4291). The fall cost 17 health (20 to 3), and the bot drowned a minute later. Its `moveAway` path does not seem to limit the drop.
 - **skills-rotn: the food step.** It got `stuck` twice (00:26:10, 01:45:22): the unstuck reflex kept interrupting the hunts, and the sows were out of reach.
 - **harness-ops (`naming`):** the scan near spawn saw 2 kinds because the bot spawned in a tree. The names themselves were all RotN names (unknown 0). A check that needs 3 kinds depends on where the bot spawns. I can raise this as its own item if the lead wants.
 
