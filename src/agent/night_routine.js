@@ -857,7 +857,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             n.descended = true;
             line(agent, '[night] up on a tree: climbing down before sheltering');
             startJob(agent, n, 'action:descendFromTree', () => ops.descend(bot), (down) => {
-                if (!down) console.warn('[night] still on the tree; sheltering from here');
+                // Soak 5 (00:47): the journal said nothing about why; the descent's last refusal now.
+                if (!down) console.warn(`[night] still on the tree${bot.rotnTreeWhy ? ` (${bot.rotnTreeWhy})` : ''}; sheltering from here`);
                 n.nextAt = 0;
             });
             return 'night:building';

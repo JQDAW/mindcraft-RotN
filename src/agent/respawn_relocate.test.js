@@ -334,3 +334,42 @@ test('#474 review 1: a death in an unnamed (modded) dimension is recorded as unk
     try { bot.emit('death'); } finally { console.log = orig; }
     assert.equal(agent._death.pending.dimension, 'unknown:7');
 });
+
+// Soak 5 (00:56:18): respawned up the spawn tree, the walk away found no path and "got only 4 blocks";
+// the agenda resumed up there. Now: down from the tree first; a failed walk is tried again.
+test('soak 5: up on a tree, the walk away climbs down first; a failed climb down or walk is tried again (3 walks), then said', async () => {
+    const now = 1_000_000;
+    let clock = now;
+    const agent = agentAt(SPAWN.offset(2, 0, 3), { deaths: [[-80, 66, -38, 60_000]], now });
+    const logs = [];
+    let up = true, descents = 0, walks = 0;
+    const opts = () => ({ now: clock, clock: () => clock, log: (l) => logs.push(l), onTree: () => up,
+        descend: (bot) => { descents++; bot.rotnTreeWhy = 'Not digging down: dynamictrees:trunkshell is under you'; return Promise.resolve(false); },
+        walk: () => { walks++; return Promise.resolve({ failed: true, why: 'NoPath' }); } });
+    assert.equal(relocateTick(agent, opts()), 'relocating');
+    await flush(); await flush();
+    assert.ok(logs.includes('[respawn] up on a tree: climbing down before the walk away'));
+    assert.equal(descents, 1);
+    assert.equal(walks, 0, 'no walk from the tree');
+    assert.match(logs.at(-1), /^\[respawn\] the walk away failed \(still up on the tree: Not digging down: dynamictrees:trunkshell is under you\) at \d+ blocks \(try 1 of 3\); trying again in 5 s$/);
+    // Down now; the walk fails (no path): tried again.
+    up = false;
+    clock += RELOCATE.waitMs;
+    assert.equal(relocateTick(agent, opts()), 'relocating');
+    await flush(); await flush();
+    assert.equal(walks, 1);
+    assert.match(logs.at(-1), /the walk away failed \(NoPath\) at \d+ blocks \(try 2 of 3\)/);
+    clock += RELOCATE.waitMs;
+    assert.equal(relocateTick(agent, opts()), 'relocating');
+    await flush(); await flush();
+    assert.match(logs.at(-1), /^\[respawn\] the walk away failed at \d+ blocks from the spawn and 1 recent death spot \(NoPath\) after 3 tries; the agenda resumes$/);
+    clock += RELOCATE.waitMs;
+    assert.equal(relocateTick(agent, opts()), null, 'no fourth walk for this death');
+    // On the ground, a walk that arrives: as before.
+    const fine = agentAt(SPAWN.offset(2, 0, 3), { deaths: [[-80, 66, -38, 60_000]], now });
+    const logs2 = [];
+    relocateTick(fine, { now, log: (l) => logs2.push(l), onTree: () => false, descend: () => { throw new Error('not on a tree'); },
+        walk: (bot, target) => { bot.entity.position = new Vec3(target.x, 70, target.z); return Promise.resolve(null); } });
+    await flush(); await flush();
+    assert.match(logs2.at(-1), /^\[respawn\] now \d+ blocks from/);
+});

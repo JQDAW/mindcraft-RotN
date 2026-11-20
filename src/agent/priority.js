@@ -30,6 +30,8 @@ import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget,
 import { quoteData, isTaskGiver } from './task_queue.js';
 import { nightTick, leaveShelterFor, resumeNightGoal } from './night_routine.js';
 import { relocateTick } from './respawn_relocate.js';
+import { descendFromTree } from './library/skills.js';
+import { standsOnTree } from './library/fall_safety.js';
 import { parseStandOn, standCheck, describeTarget } from './library/stand_on.js';
 
 /**
@@ -207,6 +209,11 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
     const away = relocateTick(agent, { now });
     if (away) return away;
 
+    // 3b'. Soak 5 (00:56-00:59): up the spawn tree by day, ~30 commands failed (every walk, every
+    // collect) until the model broke the trunk. Down first; the agenda and the model's goal wait.
+    const tree = treeTick(agent, { now });
+    if (tree) return tree;
+
     // 3c. #463 rework (soak 3): the model's own goal the night stopped runs again (the agenda's
     // resumes below, through agendaTick).
     if (resumeNightGoal(agent)) return 'night-goal';
@@ -217,6 +224,42 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
     // as the model's own goal.
     if (res === null && (!agent.agenda?.active || agent._agenda_open_goal)) return modelGoalTick(agent, now);
     return res;
+}
+
+/**
+ * Soak 5: the bot up on a tree by day climbs down (skills.descendFromTree) before the agenda or the
+ * model's own goal goes on: never while an action or a reflex runs (it waits for a gap), nor under a
+ * goal a task giver typed; a failed climb down is tried again after retryMs, and meanwhile the
+ * agenda runs (the model may find its own way down).
+ */
+export const TREE_TICK = { retryMs: 60_000 };
+
+/** One check: 'tree' while the climb down runs, else null. Never throws. */
+export function treeTick(agent, { now = Date.now(), onTree = standsOnTree, descend = (bot) => descendFromTree(bot), log = (l) => console.log(l) } = {}) {
+    const t = agent._tree ??= { job: null, triedAt: -Infinity };
+    if (t.job) return 'tree';
+    const bot = agent.bot;
+    let up = false;
+    try { up = !!bot && onTree(bot); } catch { up = false; }
+    if (!up) return null;
+    if (agent.actions?.executing || bot.modes?.anyActive?.()) return null;
+    if (agent.self_prompter && isGiverGoal(agent)) return null;
+    if (now - t.triedAt < TREE_TICK.retryMs) return null;
+    t.triedAt = now;
+    log('[tree] up on a tree: climbing down before the agenda goes on');
+    // Its self-prompting waits (as for the walk away): a command would stop the climb.
+    if (agent.self_prompter?.isActive?.()) agent.self_prompter.stop(false);
+    agent._agenda_paused = true;
+    let down = false;
+    t.job = Promise.resolve()
+        .then(() => agent.actions.runAction('action:descendFromTree', async () => { down = await descend(bot); }, { keepReplan: true }))
+        .catch((err) => { log(`[tree] the climb down failed: ${err?.message ?? err}`); })
+        .then(() => {
+            t.job = null;
+            log(down ? '[tree] down from the tree; the agenda goes on'
+                : `[tree] still up on the tree${bot.rotnTreeWhy ? ` (${bot.rotnTreeWhy})` : ''}; the agenda goes on, another try in ${TREE_TICK.retryMs / 1000} s`);
+        });
+    return 'tree';
 }
 
 /**

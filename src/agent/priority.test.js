@@ -1461,3 +1461,38 @@ test('#481 nit: a model !goal swapped in mid-run is carried across the day bound
     assert.ok(!g.said.some(l => /carried over/.test(l)), g.said.join('\n'));
     assert.equal(g.agenda.standing?.key === 'done@day 4' ? g.agenda.standing.starts : 0, 0);
 });
+
+// Soak 5 (00:56-00:59): up the spawn tree by day, ~30 commands failed until the model broke the
+// trunk. The bot climbs down before the agenda or the model's goal goes on.
+test('soak 5: up on a tree by day, the bot climbs down before the agenda (not while an action or a reflex runs); a failed try waits TREE_TICK.retryMs', async () => {
+    const { treeTick, TREE_TICK } = await import('./priority.js');
+    assert.deepEqual(TREE_TICK, { retryMs: 60_000 });
+    const runs = [];
+    let executing = false, active = false, up = true, ok = false;
+    const agent = {
+        bot: { modes: { anyActive: () => active } },
+        self_prompter: { on: true, isActive() { return this.on; }, stop() { this.on = false; } },
+        actions: { get executing() { return executing; }, runAction(label, fn) { runs.push(label); return Promise.resolve(fn()).then(() => ({ interrupted: false })); } },
+    };
+    const logs = [];
+    const opts = (now) => ({ now, onTree: () => up, descend: () => Promise.resolve(ok), log: (l) => logs.push(l) });
+    executing = true;
+    assert.equal(treeTick(agent, opts(0)), null, 'an action runs: wait for a gap');
+    executing = false; active = true;
+    assert.equal(treeTick(agent, opts(0)), null, 'a reflex runs');
+    active = false;
+    assert.equal(treeTick(agent, opts(0)), 'tree');
+    assert.equal(agent.self_prompter.on, false, 'its self-prompting stops (a command would stop the climb)');
+    assert.equal(agent._agenda_paused, true);
+    assert.equal(treeTick(agent, opts(10)), 'tree', 'while the climb runs');
+    await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r));
+    assert.deepEqual(runs, ['action:descendFromTree']);
+    assert.deepEqual(logs, ['[tree] up on a tree: climbing down before the agenda goes on', '[tree] still up on the tree; the agenda goes on, another try in 60 s']);
+    assert.equal(treeTick(agent, opts(1000)), null, 'failed: the agenda runs meanwhile');
+    ok = true;
+    assert.equal(treeTick(agent, opts(TREE_TICK.retryMs + 1)), 'tree', 'tried again after retryMs');
+    await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r));
+    assert.equal(logs.at(-1), '[tree] down from the tree; the agenda goes on');
+    up = false;
+    assert.equal(treeTick(agent, opts(10 * TREE_TICK.retryMs)), null, 'on the ground: nothing');
+});

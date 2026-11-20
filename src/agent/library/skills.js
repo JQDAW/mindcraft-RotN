@@ -7,7 +7,7 @@ import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
 import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTrunkShell, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
 import { oreMemberNames } from "../agenda_driver.js";
-import { fallSafe, treeSafe, standsOnTree, isFirmGround, isUnsafeBlock, isLeafBlock, leafFromGround, itemOnGround, firstBelow, MAX_SAFE_DROP } from "./fall_safety.js";
+import { fallSafe, treeSafe, standsOnTree, supportBlock, isFirmGround, isUnsafeBlock, isLeafBlock, isTreePart, leafFromGround, itemOnGround, firstBelow, MAX_SAFE_DROP } from "./fall_safety.js";
 import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
@@ -1803,7 +1803,7 @@ export const TREE_SAFETY = { descendMs: 20_000, leafWalkMs: 20_000, leafReach: 4
  * as a last resort, and only when health stays at least minHealthAfterDrop (1.12 fall damage: one
  * per block over 3). At most maxDigs leaves.
  */
-export const CANOPY_DESCENT = { maxDigs: 40, minHealthAfterDrop: 10, landMs: 2000 };
+export const CANOPY_DESCENT = { maxDigs: 40, minHealthAfterDrop: 10, landMs: 2000, shiftRadius: 6, shiftTries: 4, shiftMs: 10_000 };
 
 /**
  * Off a tree, safely (G3 round 4 B): walk to the nearest place on firm ground (not leaves, not a
@@ -1816,6 +1816,7 @@ export const CANOPY_DESCENT = { maxDigs: 40, minHealthAfterDrop: 10, landMs: 200
  */
 export async function descendFromTree(bot, run = currentRun(bot)) {
     if (!standsOnTree(bot)) return true;
+    bot.rotnTreeWhy = null;
     const moves = fallSafe(new pf.Movements(bot));
     moves.allow1by1towers = false;
     moves.allowParkour = false;
@@ -1829,9 +1830,94 @@ export async function descendFromTree(bot, run = currentRun(bot)) {
     try { await within(bot.pathfinder.goto(ground), TREE_SAFETY.descendMs, () => stopWalking(bot)); }
     catch { /* no path: checked below */ }
     if (run.aborted) return !standsOnTree(bot);
-    const down = !standsOnTree(bot) || await digDownThroughLeaves(bot, run);
-    if (!down && !run.aborted) log(bot, 'Found no safe way down from the tree (no walk with falls of 3 or less, and no leaves it could dig down through); staying put.');
+    let down = !standsOnTree(bot) || await digDownThroughLeaves(bot, run);
+    // Soak 5 (the spawn tree): no column under the bot to dig down: walk on the canopy (no dig, no
+    // drop over 3) to one that has one, and dig down there.
+    if (!down && !run.aborted && !bot.interrupt_code) down = await shiftToLeafColumn(bot, run);
+    if (!down && !run.aborted) {
+        const why = bot.rotnTreeWhy ? ` Last: ${bot.rotnTreeWhy}` : '';
+        log(bot, `Found no safe way down from the tree (no walk with falls of 3 or less, and no leaves it could dig down through); staying put.${why}`);
+    }
     return down;
+}
+
+/** A refusal in the climb down: logged, and kept as bot.rotnTreeWhy for the journal (soak 5). */
+function treeRefusal(bot, text) {
+    log(bot, text);
+    bot.rotnTreeWhy = text.replace(/\.$/, '');
+    return false;
+}
+
+/**
+ * Soak 5: whether the bot, standing on the leaves block at leafPos, can dig down from there to firm
+ * ground by digDownThroughLeaves' rules: only leaves in the column (never a branch or a trunk
+ * shell), each fall at most MAX_SAFE_DROP but one, which must leave at least minHealthAfterDrop,
+ * and never a landing in a liquid or a hazard.
+ */
+export function leafColumnOk(bot, leafPos, health = bot.health ?? 0) {
+    let y = leafPos.y, big = false, hp = health;
+    for (let i = 0; i <= CANOPY_DESCENT.maxDigs; i++) {
+        const land = firstBelow(bot, new Vec3(leafPos.x, y, leafPos.z), 64);
+        if (!land || isUnsafeBlock(bot, land.block)) return false;
+        const fall = land.depth;
+        if (fall > MAX_SAFE_DROP) {
+            if (big || hp - (fall - MAX_SAFE_DROP) < CANOPY_DESCENT.minHealthAfterDrop) return false;
+            big = true;
+            hp -= fall - MAX_SAFE_DROP;
+        }
+        if (isFirmGround(bot, land.block)) return true;
+        if (!isLeafBlock(land.block) || isBranch(land.block) || isTrunkShell(land.block)) return false;
+        y = land.block.position.y;
+    }
+    return false;
+}
+
+/**
+ * Soak 5: places on the canopy within CANOPY_DESCENT.shiftRadius where the bot could stand on leaves
+ * (its 1x2 space free) over a column leafColumnOk accepts, nearest first.
+ */
+export function leafColumnSpots(bot) {
+    const here = bot.entity.position.floored();
+    const r = CANOPY_DESCENT.shiftRadius;
+    const free = (p) => { const b = bot.blockAt(p); return !b || b.boundingBox === 'empty' && !isUnsafeBlock(bot, b); };
+    const spots = [];
+    for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) for (let dy = -2; dy <= 1; dy++) {
+        if (!dx && !dz) continue;
+        const stand = here.offset(dx, dy, dz);
+        const under = bot.blockAt(stand.offset(0, -1, 0));
+        if (!isLeafBlock(under) || isBranch(under) || isTrunkShell(under)) continue;
+        if (!free(stand) || !free(stand.offset(0, 1, 0))) continue;
+        if (leafColumnOk(bot, under.position)) spots.push(stand);
+    }
+    return spots.sort((a, b) => a.distanceTo(here) - b.distanceTo(here));
+}
+
+/** Soak 5: walk on the canopy (fall-safe, no dig, no tower, no parkour) to a leafColumnSpots place, then dig down there. */
+async function shiftToLeafColumn(bot, run) {
+    const spots = leafColumnSpots(bot).slice(0, CANOPY_DESCENT.shiftTries);
+    if (!spots.length) {
+        const text = `no leaves within ${CANOPY_DESCENT.shiftRadius} blocks to dig down through either`;
+        log(bot, `Found ${text}.`);
+        bot.rotnTreeWhy = bot.rotnTreeWhy ? `${bot.rotnTreeWhy}; ${text}` : text;
+        return false;
+    }
+    for (const spot of spots) {
+        if (run.aborted || bot.interrupt_code) return false;
+        const moves = fallSafe(new pf.Movements(bot));
+        moves.canDig = false;
+        moves.allow1by1towers = false;
+        moves.allowParkour = false;
+        moves.scafoldingBlocks = [];
+        bot.pathfinder.setMovements(moves);
+        log(bot, `Walking over the canopy to ${spot.x}, ${spot.y}, ${spot.z} to dig down through the leaves there.`);
+        try { await within(bot.pathfinder.goto(new pf.goals.GoalBlock(spot.x, spot.y, spot.z)), CANOPY_DESCENT.shiftMs, () => stopWalking(bot)); }
+        catch { /* checked below */ }
+        if (run.aborted) return false;
+        if (!bot.entity.position.floored().equals(spot)) continue;
+        if (await digDownThroughLeaves(bot, run)) return true;
+        if (!standsOnTree(bot)) return true;
+    }
+    return false;
 }
 
 /**
@@ -1840,34 +1926,60 @@ export async function descendFromTree(bot, run = currentRun(bot)) {
  * under it (breaking one fells the tree), a landing that is a liquid or a hazard, nothing below, a
  * drop over MAX_SAFE_DROP after the one last-resort drop is used or that would leave the bot with
  * less than minHealthAfterDrop health, a stop, or maxDigs leaves. Returns whether it is off the tree.
+ * Soak 5: a block lower than a full cube in the bot's own cell (a snow layer on the leaves) is dug
+ * first, and a bot on the edge of the leaves over an open cell never steps off into a fall over 3.
+ * Each refusal is kept as bot.rotnTreeWhy.
  */
 export async function digDownThroughLeaves(bot, run = currentRun(bot)) {
     let bigDrop = false;
     for (let i = 0; i < CANOPY_DESCENT.maxDigs && standsOnTree(bot); i++) {
         if (run.aborted || bot.interrupt_code) return false;
+        // Soak 5 (01:42:51): resting on the edge of the leaves, the middle of the cell over an open
+        // drop: centring would step off into it.
+        const cell = bot.entity.position.floored();
+        const under = bot.blockAt(cell.offset(0, -1, 0));
+        if (!under || under.boundingBox === 'empty' && !isUnsafeBlock(bot, under)) {
+            const land = firstBelow(bot, cell, 64);
+            const fall = land ? land.depth - 1 : Infinity;
+            if (fall > MAX_SAFE_DROP) return treeRefusal(bot, `Not digging down: the middle of your cell is open below (a fall of ${Number.isFinite(fall) ? fall : 'over 64'} blocks); not stepping off.`);
+        }
         // #415 review 2: standsOnTree looks at the block under the centre only; a bot off the
         // middle of its cell may stand on the next block too, and would not fall. Sneak to the middle.
         await centreOnCell(bot, run);
         if (run.aborted || bot.interrupt_code) return false;
         const feet = bot.entity.position.floored();
+        // Soak 5 (00:16): the bot at 83.50 rested on a lower block in its own cell; that one first.
+        const support = supportBlock(bot);
+        if (support?.position && support.position.y === feet.y) {
+            if (isBranch(support) || isTrunkShell(support))
+                return treeRefusal(bot, `Not digging down: you stand on ${support.name} (a branch or trunk would fell the tree).`);
+            try { await bot.dig(support, true); }
+            catch (err) {
+                if (run.aborted) return false;
+                return treeRefusal(bot, `Could not dig the ${support.name} you stand on (${safeError(err)}).`);
+            }
+            for (let waited = 0; bot.entity.position.y > feet.y + 0.01 && waited < CANOPY_DESCENT.landMs && !run.aborted; waited += 50)
+                await new Promise(resolve => setTimeout(resolve, 50));
+            if (run.aborted) return false;
+            if (bot.entity.position.y > feet.y + 0.01)
+                return treeRefusal(bot, `Not digging down further: you did not settle after digging the ${support.name} (you stand at ${bot.entity.position.y.toFixed(2)}).`);
+            continue;
+        }
         const below = bot.blockAt(feet.offset(0, -1, 0));
         if (!isLeafBlock(below) || isBranch(below) || isTrunkShell(below)) {
-            log(bot, `Not digging down: ${below?.name ?? 'nothing'} is under you, not leaves (a branch or trunk would fell the tree).`);
-            return false;
+            return treeRefusal(bot, `Not digging down: ${below?.name ?? 'nothing'} is under you, not leaves (a branch or trunk would fell the tree).`);
         }
         // Where the bot lands once that leaf is gone: on the first block below it.
         const land = firstBelow(bot, below.position, 64);
-        if (!land) { log(bot, 'Not digging down: no ground below the leaves.'); return false; }
+        if (!land) return treeRefusal(bot, 'Not digging down: no ground below the leaves.');
         if (isUnsafeBlock(bot, land.block)) {
-            log(bot, `Not digging down: it would land in ${land.block.name} at ${land.block.position.x}, ${land.block.position.y}, ${land.block.position.z}.`);
-            return false;
+            return treeRefusal(bot, `Not digging down: it would land in ${land.block.name} at ${land.block.position.x}, ${land.block.position.y}, ${land.block.position.z}.`);
         }
         const drop = land.depth; // the fall, in blocks
         if (drop > MAX_SAFE_DROP) {
             const after = (bot.health ?? 0) - (drop - MAX_SAFE_DROP);
             if (bigDrop || after < CANOPY_DESCENT.minHealthAfterDrop) {
-                log(bot, `Not digging down: a fall of ${drop} blocks would leave you ${after} health (at least ${CANOPY_DESCENT.minHealthAfterDrop}, and only one such drop).`);
-                return false;
+                return treeRefusal(bot, `Not digging down: a fall of ${drop} blocks would leave you ${after} health (at least ${CANOPY_DESCENT.minHealthAfterDrop}, and only one such drop).`);
             }
             bigDrop = true;
             log(bot, `Digging down through the leaves: one fall of ${drop} blocks as the last resort (health ${bot.health} -> about ${after}).`);
@@ -1876,8 +1988,7 @@ export async function digDownThroughLeaves(bot, run = currentRun(bot)) {
             await bot.dig(below, true);
         } catch (err) {
             if (run.aborted) return false;
-            log(bot, `Could not dig the leaves under you (${safeError(err)}).`);
-            return false;
+            return treeRefusal(bot, `Could not dig the leaves under you (${safeError(err)}).`);
         }
         // Wait for the landing (the bot falls once the leaf is gone).
         const landY = land.block.position.y + 1;
@@ -1886,8 +1997,7 @@ export async function digDownThroughLeaves(bot, run = currentRun(bot)) {
         if (run.aborted) return false;
         // #415 review 2: it must really be down there; still up means it stands on something else.
         if (bot.entity.position.y > landY + 0.01) {
-            log(bot, `Not digging down further: you did not fall (you stand at ${bot.entity.position.y.toFixed(2)}, not ${landY}).`);
-            return false;
+            return treeRefusal(bot, `Not digging down further: you did not fall (you stand at ${bot.entity.position.y.toFixed(2)}, not ${landY}).`);
         }
     }
     if (!standsOnTree(bot)) log(bot, 'Dug down through the leaves: on the ground.');
@@ -2642,12 +2752,14 @@ export async function giveToPlayer(bot, itemType, username, num=1) {
     return false;
 }
 
-export async function goToGoal(bot, goal, { canDig = true } = {}) {
+export async function goToGoal(bot, goal, { canDig = true, offTrees = false } = {}) {
     /**
      * Navigate to the given goal. Use doors and attempt minimally destructive movements.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {pf.goals.Goal} goal, the goal to navigate to.
-     * @param {{canDig?: boolean}} options, canDig false: never dig (no destructive fallback).
+     * @param {{canDig?: boolean, offTrees?: boolean}} options, canDig false: never dig (no
+     *   destructive fallback). offTrees (soak 5, the unstuck walk): never a step onto a place above
+     *   a tree part (leaves, a branch, a trunk shell) and never a tree part broken.
      **/
 
     // Every walk is fall-safe (G3 round 4 B, fall_safety.js): no drop over 3 blocks, and never a
@@ -2665,6 +2777,7 @@ export async function goToGoal(bot, goal, { canDig = true } = {}) {
     if (!canDig) nonDestructiveMovements.canDig = false;
 
     const destructiveMovements = canDig ? plantSafe(fallSafe(new pf.Movements(bot))) : nonDestructiveMovements;
+    if (offTrees) for (const m of new Set([nonDestructiveMovements, destructiveMovements])) offTreeParts(bot, m);
 
     let final_movements = destructiveMovements;
 
@@ -2704,6 +2817,21 @@ export async function goToGoal(bot, goal, { canDig = true } = {}) {
         // we need to catch so we can clean up the door check interval, then rethrow the error
         throw err;
     }
+}
+
+/**
+ * Soak 5 (01:42:51): the unstuck walk "Moved away from (6, 85, -116) to (8, 61, -118)", a fall of
+ * 24 blocks on a fall-safe path: the bot stood at the edge of a tree, and the leaves it walked on did
+ * not hold. These movements never step onto a place above a tree part, nor break one.
+ */
+const NEVER_COST = 1000;
+export function offTreeParts(bot, movements) {
+    if (!movements || movements.rotnOffTrees) return movements;
+    const below = (b) => (b?.position ? bot.blockAt(b.position.offset(0, -1, 0)) : null);
+    movements.exclusionAreasStep.push((b) => (isTreePart(below(b)) ? NEVER_COST : 0));
+    movements.exclusionAreasBreak.push((b) => (isTreePart(b) ? NEVER_COST : 0));
+    movements.rotnOffTrees = true;
+    return movements;
 }
 
 let _doorInterval = null;
@@ -3112,11 +3240,12 @@ export async function followPlayer(bot, username, distance=4) {
 }
 
 
-export async function moveAway(bot, distance) {
+export async function moveAway(bot, distance, { offTrees = false } = {}) {
     /**
      * Move away from current position in any direction.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {number} distance, the distance to move away.
+     * @param {{offTrees?: boolean}} options, offTrees: never step above or break a tree part (goToGoal).
      * @returns {Promise<boolean>} true if the bot moved away, false otherwise.
      * @example
      * await skills.moveAway(bot, 8);
@@ -3141,7 +3270,7 @@ export async function moveAway(bot, distance) {
         }
     }
 
-    if (!await goToGoal(bot, inverted_goal)) return false; // stopped: an interrupt (round 2)
+    if (!await goToGoal(bot, inverted_goal, { offTrees })) return false; // stopped: an interrupt (round 2)
     let new_pos = bot.entity.position;
     log(bot, `Moved away from ${pos.floored()} to ${new_pos.floored()}.`);
     return true;
@@ -3227,6 +3356,25 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
     bot.pathfinder.stop();
     log(bot, `Moved ${distance} away from enemies.`);
     return true;
+}
+
+/**
+ * Soak 5 (death 5): stop walking and swim up (hold jump) until the head is out of the water, at most
+ * ms. Returns whether the head is out.
+ */
+export async function swimUp(bot, ms = 6000) {
+    try { bot.pathfinder?.stop?.(); } catch { /* best effort */ }
+    const headWet = () => names112.isWater(bot.blockAt(bot.entity.position.offset(0, 1, 0))?.name ?? '');
+    bot.setControlState('jump', true);
+    try {
+        for (let waited = 0; headWet() && waited < ms && !bot.interrupt_code; waited += 100)
+            await new Promise(resolve => setTimeout(resolve, 100));
+    } finally {
+        bot.setControlState('jump', false);
+    }
+    const out = !headWet();
+    log(bot, out ? 'Swam up: head out of the water.' : 'Still under water after swimming up.');
+    return out;
 }
 
 export async function stay(bot, seconds=30, { pauseSelfDefense = true } = {}) {
@@ -3806,6 +3954,12 @@ export async function digDown(bot, distance = 10) {
             return false;
         }
 
+        // Soak 5 (00:59): the model's !digDown broke 8 trunk shells of the giant spruce it stood on
+        // (a trunk shell or branch fells the whole tree); the tree descent digs leaves only.
+        if (isBranch(targetBlock) || isTrunkShell(targetBlock)) {
+            log(bot, `Not digging down: ${targetBlock.name} at ${targetBlock.position.x}, ${targetBlock.position.y}, ${targetBlock.position.z} is part of a tree trunk or branch, and breaking it fells the whole tree. Dug down ${i-1} blocks. Dig only leaves to get down; the bot also climbs down a tree by itself before the agenda goes on.`);
+            return false;
+        }
         if (targetBlock.name === 'air') { // 1.12 has no cave_air (B1b)
             log(bot, 'Skipping air block');
             console.log(targetBlock.position);
