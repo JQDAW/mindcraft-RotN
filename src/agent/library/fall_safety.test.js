@@ -54,6 +54,7 @@ const key = (p) => `${p.x},${p.y},${p.z}`;
  * pathfinder records every movements object it is given; goto moves the bot to `arrive(goal)`
  * (default: stays), so a test decides where a walk ends.
  */
+const fakeBotRaw = (o) => fakeBot(o);
 function fakeBot({ blocks = {}, start = at(0), arrive = null, items = [], entities = {} } = {}) {
     const world = new Map(Object.entries(blocks));
     const blockAt = (p) => {
@@ -730,4 +731,104 @@ test('soak 5: at health 12 or less a walk never steps into water, unless it is i
     assert.equal(step(), 0);
     bot.health = undefined;
     assert.equal(avoidsWater(bot), false, 'health unknown: no rule');
+});
+
+// #499 review 1 (BLOCKER): mineflayer-pathfinder takes a drop into water of any height
+// (getLandingBlock returns the first liquid; infiniteLiquidDropdownDistance; getMoveDown never
+// checks). 01:42:51: 24 blocks down to sea-level water, 20 -> 3. These drive the real neighbours.
+/** The pathfinder's dig cost needs a tool choice and a dig time; the fake bot gets both. */
+function diggable(bot) {
+    bot.pathfinder.bestHarvestTool = () => null;
+    const blockAt = bot.blockAt;
+    bot.blockAt = (p) => Object.assign(blockAt(p), { digTime: () => 500 });
+    return bot;
+}
+
+test('#499 review 1: a drop into water is a fall like any other (at most 3, getMoveDropDown and getMoveDown), and none at all at health 12 or less', () => {
+    const fakeBot = (o) => diggable(fakeBotRaw(o));
+    const column = (x, from, to, name = 'air') => Object.fromEntries([...Array(from - to + 1).keys()].map(i => [`${x},${from - i},0`, name]));
+    const east = { x: 1, z: 0 };
+    const drops = (bot, y, { off = false } = {}) => {
+        const node = { x: 0, y, z: 0, remainingBlocks: 0 };
+        const m = fallSafe(new pf.Movements(bot));
+        if (off) skills.offTreeParts(bot, m);
+        const out = [];
+        m.getMoveDropDown(node, east, out);
+        m.getMoveDown(node, out);
+        return out.map(mv => `${mv.x},${mv.y},${mv.z}`);
+    };
+    const raw = (bot, y) => {
+        const node = { x: 0, y, z: 0, remainingBlocks: 0 };
+        const m = new pf.Movements(bot);
+        const out = [];
+        m.getMoveDropDown(node, east, out);
+        m.getMoveDown(node, out);
+        return out.map(mv => `${mv.x},${mv.y},${mv.z}`);
+    };
+    // 22 blocks of air at x 0 and x 1 down to water at y 63 (the bot stands at 85 on a leaf).
+    const deep = fakeBot({ blocks: { '0,84,0': LEAVES, ...column(1, 84, 64), '1,63,0': 'water', ...column(0, 83, 64), '0,63,0': 'water' }, start: at(0, 85) });
+    deep.health = 20;
+    assert.deepEqual(raw(deep, 85), ['1,63,0', '0,63,0'], 'the raw pathfinder drops 22 blocks into the water, beside it and (digging the leaf) straight down');
+    assert.deepEqual(drops(deep, 85), [], 'fall-safe: no drop into water of 22 blocks');
+    const down = fakeBot({ blocks: { ...column(0, 84, 64), '0,63,0': 'water' }, start: at(0, 85) });
+    down.health = 20;
+    assert.ok(raw(down, 85).includes('0,63,0'), 'getMoveDown too, in the raw pathfinder');
+    assert.deepEqual(drops(down, 85).filter(k => k === '0,63,0'), [], 'fall-safe: getMoveDown never lands in water 22 below');
+    // Beside the bot only (straight down at x 0 is a drop of 2 onto dirt, a move of its own).
+    const beside = (bot, y) => drops(bot, y).filter(k => k.startsWith('1,'));
+    // A drop of 3 into water: allowed at full health; a drop of 4: not.
+    const three = fakeBot({ blocks: { ...column(1, 65, 64), '1,63,0': 'water' }, start: at(0, 66) });
+    three.health = 20;
+    assert.deepEqual(beside(three, 66), ['1,63,0'], 'a fall of 3 into water');
+    const four = fakeBot({ blocks: { ...column(1, 66, 64), '1,63,0': 'water' }, start: at(0, 67) });
+    four.health = 20;
+    assert.deepEqual(beside(four, 67), [], 'a fall of 4 into water: refused');
+    // At health 12 or less: no water landing at all, even of 3.
+    three.health = 12;
+    assert.deepEqual(beside(three, 66), [], 'health 12: no drop into water');
+    // A drop onto ground is unchanged (3 fine, 4 refused).
+    const ground3 = fakeBot({ blocks: column(1, 65, 63), start: at(0, 66) });
+    assert.deepEqual(beside(ground3, 66), ['1,63,0'], 'a fall of 3 onto dirt');
+    const ground4 = fakeBot({ blocks: column(1, 66, 63), start: at(0, 67) });
+    assert.deepEqual(beside(ground4, 67), []);
+});
+
+// #499 review 2: the unstuck walk's drop down never lands on a tree part; no parkour.
+test('#499 review 2: offTreeParts: a drop down never lands on leaves, a branch or a trunk shell; parkour is off', () => {
+    const fakeBot = (o) => diggable(fakeBotRaw(o));
+    const east = { x: 1, z: 0 };
+    const land = (under, off) => {
+        const bot = fakeBot({ blocks: { '1,67,0': 'air', '1,66,0': 'air', '1,65,0': under }, start: at(0, 68) });
+        const node = { x: 0, y: 68, z: 0, remainingBlocks: 0 };
+        const m = fallSafe(new pf.Movements(bot));
+        if (off) skills.offTreeParts(bot, m);
+        const out = [];
+        m.getMoveDropDown(node, east, out);
+        return { moves: out.map(mv => `${mv.x},${mv.y},${mv.z}`), parkour: m.allowParkour };
+    };
+    assert.deepEqual(land(LEAVES, false).moves, ['1,66,0'], 'fall-safe alone: a drop of 2 onto leaves');
+    assert.deepEqual(land(LEAVES, true).moves, [], 'off trees: not onto leaves');
+    assert.deepEqual(land(BRANCH, true).moves, [], 'nor a branch');
+    assert.deepEqual(land('dynamictrees:trunkshell', true).moves, [], 'nor a trunk shell');
+    assert.deepEqual(land('dirt', true).moves, ['1,66,0'], 'onto dirt: fine');
+    assert.equal(land('dirt', true).parkour, false);
+    assert.equal(land('dirt', false).parkour, true, 'parkour stays as it was for other walks');
+});
+
+// The 01:42:51 setting with the real neighbour search: the bot at y 85 on the edge of a canopy over
+// sea-level water; no neighbour of the unstuck walk lands more than 3 below.
+test('#499 review 1 and 2: the unstuck walk\'s neighbours from a canopy edge 22 above water never land more than 3 below', () => {
+    const fakeBot = (o) => diggable(fakeBotRaw(o));
+    const blocks = { '0,84,0': LEAVES, '-1,84,0': LEAVES };
+    for (const [x, z] of [[1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1], [-2, 0]]) {
+        for (let y = 84; y >= 64; y--) blocks[`${x},${y},${z}`] = 'air';
+        blocks[`${x},63,${z}`] = 'water';
+    }
+    const bot = fakeBot({ blocks, start: at(0, 85) });
+    bot.health = 20;
+    const m = skills.offTreeParts(bot, fallSafe(new pf.Movements(bot)));
+    const ys = m.getNeighbors({ x: 0, y: 85, z: 0, remainingBlocks: 0 }).map(mv => mv.y);
+    assert.ok(ys.every(y => y >= 82), `no neighbour more than 3 below: ${ys}`);
+    const rawYs = new pf.Movements(bot).getNeighbors({ x: 0, y: 85, z: 0, remainingBlocks: 0 }).map(mv => mv.y);
+    assert.ok(rawYs.includes(63), 'the raw pathfinder would drop into the water');
 });

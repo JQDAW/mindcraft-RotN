@@ -577,11 +577,11 @@ test('#477 review 1: resetNight (a death, a new night) during a morning leave cl
 
 // Soak 5 (death 5): the bot chased a rabbit into water and drowned; with a walk going (a goal set)
 // self_preservation never let it swim up. Out of air it now stops the walk and swims up.
-test('soak 5 (death 5): under water with a walk going and 10 of 20 air or less, the walk stops and the bot swims up; with air left, nothing', async (t) => {
+test('soak 5 (death 5): under water with a walk going and 15 of 20 air or less, the walk stops and the bot swims up; with air left, nothing', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
     const { DROWNING } = await import('./modes.js');
-    assert.deepEqual(DROWNING, { surfaceAt: 10, swimMs: 6000 });
+    assert.deepEqual(DROWNING, { surfaceAt: 15, swimMs: 6000 });
     const under = (air) => {
         const s = shelter({ zombieAt: 30 });
         Object.assign(s.bot, { rotnSheltered: false, oxygenLevel: air });
@@ -601,7 +601,7 @@ test('soak 5 (death 5): under water with a walk going and 10 of 20 air or less, 
     assert.deepEqual(low.controls, ['jump:true', 'jump:false']);
     assert.ok(logs.includes('[reflex] under water with 8 of 20 air: stopping and swimming up'));
     assert.match(low.bot.output, /Swam up: head out of the water\./);
-    const fine = under(15);
+    const fine = under(16);
     await selfPreservation(fine.agent);
     assert.deepEqual(fine.ran, [], 'air left: the walk goes on');
 });

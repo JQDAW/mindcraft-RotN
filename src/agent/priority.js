@@ -235,7 +235,7 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
 export const TREE_TICK = { retryMs: 60_000 };
 
 /** One check: 'tree' while the climb down runs, else null. Never throws. */
-export function treeTick(agent, { now = Date.now(), onTree = standsOnTree, descend = (bot) => descendFromTree(bot), log = (l) => console.log(l) } = {}) {
+export function treeTick(agent, { now = Date.now(), clock = Date.now, onTree = standsOnTree, descend = (bot) => descendFromTree(bot), log = (l) => console.log(l) } = {}) {
     const t = agent._tree ??= { job: null, triedAt: -Infinity };
     if (t.job) return 'tree';
     const bot = agent.bot;
@@ -244,8 +244,8 @@ export function treeTick(agent, { now = Date.now(), onTree = standsOnTree, desce
     if (!up) return null;
     if (agent.actions?.executing || bot.modes?.anyActive?.()) return null;
     if (agent.self_prompter && isGiverGoal(agent)) return null;
+    // #499 review 3: retryMs counts from the end of the last climb, so the agenda runs in between.
     if (now - t.triedAt < TREE_TICK.retryMs) return null;
-    t.triedAt = now;
     log('[tree] up on a tree: climbing down before the agenda goes on');
     // Its self-prompting waits (as for the walk away): a command would stop the climb.
     if (agent.self_prompter?.isActive?.()) agent.self_prompter.stop(false);
@@ -256,6 +256,7 @@ export function treeTick(agent, { now = Date.now(), onTree = standsOnTree, desce
         .catch((err) => { log(`[tree] the climb down failed: ${err?.message ?? err}`); })
         .then(() => {
             t.job = null;
+            t.triedAt = clock();
             log(down ? '[tree] down from the tree; the agenda goes on'
                 : `[tree] still up on the tree${bot.rotnTreeWhy ? ` (${bot.rotnTreeWhy})` : ''}; the agenda goes on, another try in ${TREE_TICK.retryMs / 1000} s`);
         });

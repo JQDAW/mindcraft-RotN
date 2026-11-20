@@ -2830,6 +2830,14 @@ export function offTreeParts(bot, movements) {
     const below = (b) => (b?.position ? bot.blockAt(b.position.offset(0, -1, 0)) : null);
     movements.exclusionAreasStep.push((b) => (isTreePart(below(b)) ? NEVER_COST : 0));
     movements.exclusionAreasBreak.push((b) => (isTreePart(b) ? NEVER_COST : 0));
+    // #499 review 2: a drop down lands where no step exclusion looks: never onto a tree part either;
+    // and no parkour jump (its landing is not checked).
+    const landing = movements.getLandingBlock.bind(movements);
+    movements.getLandingBlock = (node, dir) => {
+        const land = landing(node, dir);
+        return land && !land.liquid && isTreePart(below(land)) ? null : land;
+    };
+    movements.allowParkour = false;
     movements.rotnOffTrees = true;
     return movements;
 }

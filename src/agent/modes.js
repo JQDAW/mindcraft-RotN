@@ -70,8 +70,11 @@ export function shelterQuiet(name, bot) {
     return false;
 }
 
-/** Soak 5 (death 5): under water with this much air left (of 20) or less, a walk stops and the bot swims up, for at most swimMs. */
-export const DROWNING = { surfaceAt: 10, swimMs: 6000 };
+/**
+ * Soak 5 (death 5): under water with this much air left (of 20) or less, a walk stops and the bot
+ * swims up, for at most swimMs. #499 nit: 15 of 20 (about 11 s of air left), not 10.
+ */
+export const DROWNING = { surfaceAt: 15, swimMs: 6000 };
 
 /** A mob in reach is named in chat at most this often from the shelter (T1: up to 24 lines a minute). */
 export const SHELTER_SAY_MS = 30_000;

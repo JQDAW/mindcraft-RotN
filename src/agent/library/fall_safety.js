@@ -203,6 +203,19 @@ export function fallSafe(movements) {
     liquidAndHazardSafe(movements);
     // Soak 5 (death 5): at low health no step into water (avoidsWater, read at each step).
     if (bot) movements.exclusionAreasStep.push((b) => (isWater(b) && avoidsWater(bot) ? NEVER : 0));
+    // #499 review 1 (01:42:51): the pathfinder takes a drop into water of any height
+    // (getLandingBlock returns the first liquid; infiniteLiquidDropdownDistance; getMoveDown never
+    // checks), and no step exclusion sees the landing cell. A water landing is a fall like any other:
+    // at most MAX_SAFE_DROP; and none at all while avoidsWater.
+    movements.infiniteLiquidDropdownDistance = false;
+    const landing = movements.getLandingBlock.bind(movements);
+    movements.getLandingBlock = (node, dir) => {
+        const land = landing(node, dir);
+        if (!land?.liquid) return land;
+        if (node.y - land.position.y > MAX_SAFE_DROP) return null;
+        if (bot && avoidsWater(bot)) return null;
+        return land;
+    };
     movements.rotnFallSafe = true;
     return movements;
 }
