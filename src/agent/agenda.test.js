@@ -1002,3 +1002,23 @@ test('#500 follow-ups 4 and 5: unarmed, the standing and open goals say forage, 
     assert.doesNotMatch(FOOD_RESERVE_STEP.goal, /!attack/);
     assert.match(FOOD_RESERVE_STEP.goal, /with no weapon, do not hunt: make a weapon first/);
 });
+
+// #502 nit 4: the weapon's window is kept in agenda.json, so a budget spent by day still gets its
+// fresh dusk budget after a restart (weaponOff itself is rebuilt from the saved spent budget).
+test('#502 nit 4: after a restart, a weapon spent by day still gets a fresh budget at dusk', (t) => {
+    const dir = tempDir(t);
+    const agent = hFixAgent(t, [stack('dirt', 0, SHELTER_RESERVE)]);
+    agent.agenda = new Agenda('FRCFLD', { dir, weapon: WEAPON_RESERVE_STEP });
+    agent.agenda.finish();
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    agent.agenda.spent.weapon = { attempts: 1, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
+    agent.agenda.save();
+    // The restart: a new Agenda from the same file, at dusk.
+    const after = hFixAgent(t, [stack('dirt', 0, SHELTER_RESERVE)], { timeOfDay: dayAt(7) });
+    after.agenda = new Agenda('FRCFLD', { dir, weapon: WEAPON_RESERVE_STEP });
+    assert.equal(after.agenda.weaponWindow, 'no weapon, before food', 'the window came back');
+    assert.ok(after.agenda.spentOn('weapon').llm_ms >= STEP_LLM_MS, 'and the spent budget');
+    assert.equal(agendaTick(after, { now: 0 }), 'weapon', 'a fresh dusk budget, not stuck at once');
+    assert.equal(after.agenda.spentOn('weapon').llm_ms, 0);
+});

@@ -360,3 +360,16 @@ test('soak 5: a landing after a big drop is a fall (damage_record), even with a 
     assert.equal(hurtSource(far, { now: 0 }), 'unknown');
     assert.match(hurtDetail(far, [], { now: 0 }), /near iceandfire:if_troll@7m$/);
 });
+
+// #502 nit 1: a falling block or tree counts only when it is above the bot (at or over its feet,
+// within 2 blocks sideways), never one below it or beside it.
+test('#502 nit 1: the falling-block source is only one above the bot', async () => {
+    const { hurtSource } = await import('./survival_log.js');
+    const here = new Vec3(0.5, 64, 0.5);
+    const at = (dx, dy, dz) => ({ health: 10, food: 12, entity: { position: here, velocity: { y: 0 } },
+        entities: { 9: { id: 9, type: 'object', name: 'falling_block', position: here.offset(dx, dy, dz) } } });
+    assert.equal(hurtSource(at(0, 2, 0), { now: 0 }), 'falling_block', 'right above');
+    assert.equal(hurtSource(at(1, 0.5, 1), { now: 0 }), 'falling_block', 'at head height, beside');
+    assert.equal(hurtSource(at(0, -2, 0), { now: 0 }), 'unknown', 'below the bot');
+    assert.equal(hurtSource(at(3, 1, 0), { now: 0 }), 'unknown', '3 blocks sideways');
+});

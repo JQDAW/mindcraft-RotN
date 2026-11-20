@@ -673,12 +673,17 @@ export async function attackNearest(bot, mobType, kill=true) {
  * that entity is left alone for skipMs (isUnreachable). tickMs: how often the chase is checked.
  */
 export const ATTACK_PROGRESS = { stallMs: 10_000, skipMs: 5 * 60_000, tickMs: 1000 };
-function markUnreachable(bot, entity) {
-    (bot.rotnUnreachable ??= new Map()).set(entity.id, Date.now() + ATTACK_PROGRESS.skipMs);
+function markUnreachable(bot, entity, now = Date.now()) {
+    const m = (bot.rotnUnreachable ??= new Map());
+    // #502 nit 3: expired entries go (an entity id is not reused soon, but the map would only grow).
+    for (const [id, until] of m) if (until <= now) m.delete(id);
+    m.set(entity.id, now + ATTACK_PROGRESS.skipMs);
 }
 /** Whether an attack on this entity gave up within ATTACK_PROGRESS.skipMs (soak 5). */
+export { markUnreachable };
 export function isUnreachable(bot, entity, now = Date.now()) {
     const until = bot?.rotnUnreachable?.get(entity?.id);
+    if (Number.isFinite(until) && now >= until) bot.rotnUnreachable.delete(entity.id); // #502 nit 3
     return Number.isFinite(until) && now < until;
 }
 

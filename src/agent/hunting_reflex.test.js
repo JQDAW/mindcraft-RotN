@@ -12,7 +12,7 @@ import { __modeForTest, __resetThreatLease } from './modes.js';
 import { executeCommand } from './commands/index.js';
 import { NIGHT_START, NightClock } from './library/night.js';
 import { HUNT } from './library/hunting.js';
-import { ATTACK_PROGRESS } from './library/skills.js';
+import { ATTACK_PROGRESS, isUnreachable, markUnreachable } from './library/skills.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -523,4 +523,17 @@ test('soak 5: an !attack chase with no progress gives up after stallMs and leave
     await executeCommand(near, '!attack("animania:sow_old_spot")');
     clearInterval(timer);
     assert.match(near.bot.output, /Successfully killed animania:sow_old_spot\./);
+});
+
+// #502 nit 3: expired "could not reach" entries are pruned (the map never only grows).
+test('#502 nit 3: rotnUnreachable drops expired entries when one is marked or looked up', () => {
+    const bot = {};
+    markUnreachable(bot, { id: 1 }, 0);
+    markUnreachable(bot, { id: 2 }, 1000);
+    assert.deepEqual([...bot.rotnUnreachable.keys()], [1, 2]);
+    assert.equal(isUnreachable(bot, { id: 1 }, ATTACK_PROGRESS.skipMs - 1), true);
+    assert.equal(isUnreachable(bot, { id: 1 }, ATTACK_PROGRESS.skipMs), false, 'expired');
+    assert.deepEqual([...bot.rotnUnreachable.keys()], [2], 'and gone from the map');
+    markUnreachable(bot, { id: 3 }, 1000 + ATTACK_PROGRESS.skipMs);
+    assert.deepEqual([...bot.rotnUnreachable.keys()], [3], 'marking prunes the expired ones');
 });

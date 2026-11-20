@@ -79,9 +79,11 @@ export function hurtSource(bot, { swings = null, now = Date.now() } = {}) {
     // record (damage_record.js) names a landing after a drop over 3 as the fall: that first.
     if (bot?.lastDamageCause === 'fall' && now - (bot.lastDamageTime ?? -Infinity) <= HURT.windowMs) return 'fall';
     const here = bot?.entity?.position;
-    // A falling block or tree (an object entity, which mayHurt leaves out) right over the bot.
+    // A falling block or tree (an object entity, which mayHurt leaves out) right over the bot:
+    // #502 nit 1: at or above its feet, within 2 blocks sideways.
     const falling = here ? Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position
-        && FALLING.test(e.name ?? '') && e.position.distanceTo(here) <= HURT.fallingRange) : null;
+        && FALLING.test(e.name ?? '') && e.position.distanceTo(here) <= HURT.fallingRange
+        && e.position.y >= here.y && Math.hypot(e.position.x - here.x, e.position.z - here.z) <= 2) : null;
     if (falling) return token(falling.name);
     if (here) {
         const near = Object.values(bot.entities ?? {})
