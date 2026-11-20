@@ -98,7 +98,9 @@ export function agendaGoal(agenda, step, state = null) {
     if (state && typeof step.goalNow === 'function') {
         try { text = step.goalNow(state, { finished: !!agenda.finished }) || step.goal; } catch { text = step.goal; }
     }
-    if (step.reserve) return `RotN agenda, step ${step.id} (${step.when ?? 'before night'}): ${text} When you hold enough, the agenda moves on by itself.`;
+    let when = step.when ?? 'before night';
+    if (state && typeof step.whenNow === 'function') { try { when = step.whenNow(state) || when; } catch { /* the plain label */ } }
+    if (step.reserve) return `RotN agenda, step ${step.id} (${when}): ${text} When you hold enough, the agenda moves on by itself.`;
     return `RotN agenda, step ${n} of ${agenda.steps.length} (${step.id}): ${text} `
         + 'When this step is done, the agenda moves on by itself.';
 }
@@ -298,7 +300,11 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         if (sp.isActive()) sp.stop(false);
         agenda.reserveStuck(step.id);
         agent._agenda_step = null;
-        say(agent, `agenda step ${step.id} stuck: ${why}; going on without it ${step.id === agenda.food?.id ? `for ${Math.round(FOOD_RETRY_MS / 60_000)} min` : 'until the night'}`);
+        // Soak 5 (Fix H): the weapon asked by day (before food) is off while food stays short.
+        let byDay = false;
+        try { byDay = step.id === agenda.weapon?.id && step.whenNow?.(state) !== 'before night'; } catch { byDay = false; }
+        const until = step.id === agenda.food?.id ? `for ${Math.round(FOOD_RETRY_MS / 60_000)} min` : byDay ? 'while food is short (food first)' : 'until the night';
+        say(agent, `agenda step ${step.id} stuck: ${why}; going on without it ${until}`);
         return 'stuck';
     }
     if (why) {
