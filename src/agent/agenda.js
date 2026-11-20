@@ -344,8 +344,9 @@ export class Agenda {
         this.reserveOff = false; // its budget ran out: not again until the night is past
         this.weapon = weapon; // the before-night weapon (WEAPON_RESERVE_STEP; null for none)
         this.weaponOff = false; // its budget ran out: not again until the night is past
-        // #500 follow-up 3: the window (whenNow) it was last judged in. In memory like weaponOff
-        // (neither is in agenda.json; a restart rebuilds both from the saved spent budget).
+        // #500 follow-up 3: the window (whenNow) it was last judged in. #502 nit 4: saved in
+        // agenda.json (weaponOff is not: a restart rebuilds it from the saved spent budget), so a
+        // budget spent by day still gets its fresh dusk budget after a restart.
         this.weaponWindow = null;
         this.finished = false; // "agenda done": only the reserve runs
         this.active = false;
@@ -380,6 +381,7 @@ export class Agenda {
             }
             this.finished = data.finished === true;
             this.standing = data.standing && typeof data.standing.key === 'string' ? data.standing : null;
+            this.weaponWindow = typeof data.weaponWindow === 'string' ? data.weaponWindow : null;
             this.existed = true;
             this.loadState = 'present';
         } catch (err) {
@@ -395,7 +397,7 @@ export class Agenda {
         try {
             mkdirSync(path.dirname(this.file), { recursive: true });
             const tmp = `${this.file}.tmp`;
-            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, standing: this.standing, updated_at: this.now() }, null, 2));
+            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, standing: this.standing, weaponWindow: this.weaponWindow, updated_at: this.now() }, null, 2));
             renameSync(tmp, this.file);
             this.existed = true; // a later spawn (a respawn) must not autostart it either
         } catch (err) {
@@ -441,7 +443,10 @@ export class Agenda {
         let due = false;
         try { due = !!r.due(state, { foodDue }); } catch { due = false; }
         if (!due) {
-            if (!readOnly) { this.weaponOff = false; delete this.spent[r.id]; this.weaponWindow = null; } // #468 review 5: a query changes no budget
+            if (!readOnly) {
+                this.weaponOff = false; delete this.spent[r.id]; // #468 review 5: a query changes no budget
+                if (this.weaponWindow !== null) { this.weaponWindow = null; this.save(); }
+            }
             return null;
         }
         // #500 follow-up 3: asked by day (before food) and spent, it gets a fresh budget once its
@@ -450,7 +455,7 @@ export class Agenda {
         try { window = r.whenNow?.(state) ?? null; } catch { window = null; }
         if (!readOnly && window) {
             if (this.weaponWindow && this.weaponWindow !== window && window === 'before night') { this.weaponOff = false; delete this.spent[r.id]; }
-            this.weaponWindow = window;
+            if (this.weaponWindow !== window) { this.weaponWindow = window; this.save(); } // #502 nit 4: kept across a restart
         }
         if (this.weaponOff) return null;
         let done = false;
