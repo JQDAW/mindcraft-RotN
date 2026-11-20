@@ -21,7 +21,7 @@ import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe, equipHighestAttack } from './skills.js';
 import { eatToHeal } from './food.js';
-import { shelterEnemy, shelterTarget, OPEN_FIGHT } from './threats.js';
+import { shelterEnemy, shelterTarget, threatFor } from './threats.js';
 import { isTreePart } from './fall_safety.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -145,7 +145,7 @@ export function softItems(bot) {
         .sort((a, b) => b.count - a.count);
 }
 
-const countOf = (items) => items.reduce((n, i) => n + i.count, 0);
+export const countOf = (items) => items.reduce((n, i) => n + i.count, 0);
 
 /** The walls (4 sides x 2, lower first) and the roof of the 1x2 space at feet, in build order. */
 function wallsAndRoof(p) {
@@ -287,13 +287,17 @@ function exitLevel(bot, feet) {
 }
 
 /** Walk (sneaking) to the middle of the cell, so a wall placed next to the bot does not hit it. */
-async function centerIn(bot, p, { timeoutMs = 2000 } = {}) {
-    const c = p.offset(0.5, 0, 0.5);
+export function centerIn(bot, p, { timeoutMs = 2000 } = {}) {
+    return stepTo(bot, p.offset(0.5, 0, 0.5), { timeoutMs });
+}
+
+/** Walk (sneaking) to a point (x and z; within tolerance) in or next to the bot's cell. Returns whether it got there. */
+export async function stepTo(bot, c, { tolerance = 0.15, timeoutMs = 2000 } = {}) {
     const off = () => Math.hypot(bot.entity.position.x - c.x, bot.entity.position.z - c.z);
-    if (off() <= 0.15) return true;
+    if (off() <= tolerance) return true;
     try {
         bot.setControlState('sneak', true);
-        for (let waited = 0; off() > 0.15 && waited < timeoutMs; waited += 50) {
+        for (let waited = 0; off() > tolerance && waited < timeoutMs; waited += 50) {
             await bot.lookAt(new Vec3(c.x, bot.entity.position.y + 1.62, c.z), true);
             bot.setControlState('forward', true);
             await sleep(50);
@@ -302,7 +306,41 @@ async function centerIn(bot, p, { timeoutMs = 2000 } = {}) {
         bot.setControlState('forward', false);
         bot.setControlState('sneak', false);
     }
-    return off() <= 0.15;
+    return off() <= tolerance;
+}
+
+/**
+ * Soak 5 / rotn-data #496: the Ice and Fire troll hits by distance alone (feet to feet, below its
+ * reach 2, no line of sight): through a 1-block wall when the bot stands against it (1.9 apart),
+ * not with the bot in the middle of its cell (2.1). PR 5, the lead's decision: in the shelter, with
+ * a mob that hits through walls within its reach + slack, the bot stands on the side of its cell
+ * away from it (near/far: the 0.3-0.7 band its 0.6 width allows; 2.3 then), on each axis; with such
+ * mobs on opposite sides of an axis, in the middle of it. A troll in an open diagonal corner still
+ * reaches the bot (1.56 from the middle): only the burrow (burrowPlan) gets the bot away from that.
+ */
+export const WALL_HITTERS = { slack: 1.5, near: 0.3, far: 0.7, tolerance: 0.1, everyMs: 1000, moveMs: 1000 };
+
+/** The mobs that hit through walls (rotn-data melee.hitsThroughWalls) within their reach + slack of the bot, nearest first. */
+export function wallHitters(bot) {
+    const here = bot?.entity?.position;
+    if (!here) return [];
+    return Object.values(bot.entities ?? {})
+        .filter(e => e && e !== bot.entity && e.position)
+        .map(e => ({ e, m: threatFor(e)?.melee, d: e.position.distanceTo(here) }))
+        .filter(x => x.m?.hitsThroughWalls && x.d <= (x.m.reach ?? 2) + WALL_HITTERS.slack)
+        .sort((a, b) => a.d - b.d)
+        .map(x => x.e);
+}
+
+/** Where in its cell the bot stands away from these mobs (x, z; the feet's y). */
+export function farSpot(bot, mobs) {
+    const here = bot.entity.position, cell = here.floored();
+    const axis = (a) => {
+        const sides = new Set(mobs.map(e => e.position[a] - (cell[a] + 0.5)).filter(d => Math.abs(d) >= 0.5).map(Math.sign));
+        if (sides.size !== 1) return cell[a] + 0.5;
+        return cell[a] + (sides.has(1) ? WALL_HITTERS.near : WALL_HITTERS.far);
+    };
+    return new Vec3(axis('x'), here.y, axis('z'));
 }
 
 /** Entity types that block a placement: mobs and players (mineflayer's 1.12 'mob', and the newer names). */
@@ -389,7 +427,7 @@ async function hitOutOf(bot, cell) {
  * Make one cell a wall: place, and when the block is not there, wait for a late update, look
  * again and try once more (#195 review 4). A mob in the cell is hit out of it first (round 9 B).
  */
-async function fillCell(bot, target, interior, mode, reasons = null) {
+export async function fillCell(bot, target, interior, mode, reasons = null) {
     // CX23 soak: why a cell stays open, for the journal (the repair said only "placed 0").
     let hits = 0;
     const why = (text) => { if (reasons) reasons.set(key(target), hits ? `${text} (hit ${hits} times)` : text); };
@@ -452,7 +490,7 @@ function planProblem(plan, site, radius, handExit, bot = null) {
  * 32 dirt piles were held at dusk): cobblestone from rocks (each rock kind makes its own), dirt
  * from dirt piles. The caller counts again afterwards.
  */
-async function craftMore(bot, what, short, craft, { spare = false } = {}) {
+export async function craftMore(bot, what, short, craft, { spare = false } = {}) {
     if (short <= 0) return;
     try {
         if (what === 'cobblestone' && cobbleChoices(bot).length > 0) {
@@ -665,10 +703,10 @@ async function settleOn(bot, feet, { strict = true } = {}) {
  * an open cell (it placed nothing, "a zombie stands in it", and was hit for 6-8 until it died).
  * #470 review 1: a cell is held when the mob's body is in it (mobIn); for a wall cell only, also when
  * the mob's body reaches within `margin` past the cell's outer face (about to step in). Never for
- * the roof or the floor. lowHealth (#470 review 2): unarmed and held at this health or lower, back
- * away if possible, else hit back by hand.
+ * the roof or the floor. The low-health rule that starts a back-away is per mob (threats.maxHitOf,
+ * PR 5; it was BACK_AWAY.lowHealth, 8): back away if possible, else hit back.
  */
-export const BACK_AWAY = { margin: 0.15, lowHealth: OPEN_FIGHT.maxLowHealth, centerMs: 2000 }; // #497 review 5: one low-health threshold
+export const BACK_AWAY = { margin: 0.15, centerMs: 2000 };
 
 /** The open cells a hostile mob (threats.shelterEnemy) holds: [{cell, mob}]. */
 export function heldCells(bot, site, open = []) {

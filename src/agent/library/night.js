@@ -29,6 +29,8 @@ export const REPAIR_LABEL = 'action:repairShelter';
 export const BACK_AWAY_LABEL = 'action:backAway';
 /** The move into a hole shelter's side pocket (soak 3, the lead's (a)). */
 export const POCKET_LABEL = 'action:sidePocket';
+/** The burrow away from a mob that digs through anything (soak 5 Fix B, PR 5: the troll). */
+export const BURROW_LABEL = 'action:burrowAway';
 export const NIGHT_START = 12542;
 export const NIGHT_END = 23460;
 export const MORNING_FREEZE = 3001;

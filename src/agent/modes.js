@@ -6,13 +6,13 @@ import convoManager from './conversation.js';
 import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
 import * as food from './library/food.js';
-import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
-import { REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, nightPhase, minutesToSunset, replanHold } from './library/night.js';
+import { standsOnTree, isLethal, hazardOf, walkStart } from './library/fall_safety.js';
+import { REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, nightPhase, minutesToSunset, replanHold } from './library/night.js';
 import { RESERVE_LEAD_MIN } from './agenda.js';
 import { huntTarget, knownBases, huntAnimal, skipAnimal, HUNT, tooWeakToHunt } from './library/hunting.js';
 import { forageTarget } from './library/foraging.js';
 import { actionProgress } from './library/progress.js';
-import { isFalling } from './library/shelter.js';
+import { isFalling, centerIn, stepTo, wallHitters, farSpot, WALL_HITTERS } from './library/shelter.js';
 import { fallingTreeNear } from './library/felling.js';
 
 /**
@@ -113,7 +113,7 @@ const isDaylight = (agent) => { const t = timeOfDayFor(agent); return t !== null
 
 function nightRoutineBusy(agent) {
     // #477 review 2: and the morning leave (away from a crowd or a creeper): no melee in the opening meanwhile.
-    return [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL].includes(agent.actions.currentActionLabel) || (!!agent._night?.leaveFrom && !!agent._night?.job)
+    return [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL].includes(agent.actions.currentActionLabel) || (!!agent._night?.leaveFrom && !!agent._night?.job)
         || agent._night?.morningLeaving === true;
 }
 
@@ -130,21 +130,22 @@ function fightInShelter(mode, agent, { override = false } = {}) {
     if (nightRoutineBusy(agent)) return false;
     // Soak 3, the lead's (b): from the shelter only with a weapon. Bare hands did not hurt the zombies
     // ("4 hits did not hurt the zombie") while they hit for 6-8; the night routine backs away instead.
-    // Soak 5 (death 4), the lead's rule: nor at health 8 or less (threats.fightRefusal), armed or not.
+    // Soak 5 (death 4), the lead's rule: nor at a health one hit of the target may take
+    // (threats.fightRefusal: its maxDamage, PR 5; 8 before), armed or not.
     // #470 review 2: cornered (no way to back away), the night routine lets it hit back
     // (agent._night.handFight): hitting back beats standing still.
-    const refused = threats.fightRefusal(bot);
+    if (Date.now() - (bot.rotnFightEndedAt ?? -Infinity) < skills.SHELTER_FIGHT.restMs) return false;
+    const target = world.getNearestEntityWhere(bot, (e) => threats.shelterTarget(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
+    const refused = threats.fightRefusal(bot, target);
     if (refused && !agent._night?.handFight) {
         const kind = refused === 'no weapon' ? refused : 'health';
-        if (Date.now() - noWeaponSaidAt >= SHELTER_SAY_MS || noWeaponSaid !== kind) {
+        if (target && (Date.now() - noWeaponSaidAt >= SHELTER_SAY_MS || noWeaponSaid !== kind)) {
             noWeaponSaidAt = Date.now();
             noWeaponSaid = kind;
             console.log(`[shelter] ${refused}: not fighting from the shelter unless cornered`);
         }
         return false;
     }
-    if (Date.now() - (bot.rotnFightEndedAt ?? -Infinity) < skills.SHELTER_FIGHT.restMs) return false;
-    const target = world.getNearestEntityWhere(bot, (e) => threats.shelterTarget(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
     if (!target) return false;
     if (!claimThreat(mode.name, Date.now(), { override })) return false;
     if (Date.now() - shelterSaidAt >= SHELTER_SAY_MS) {
@@ -152,14 +153,52 @@ function fightInShelter(mode, agent, { override = false } = {}) {
         Promise.resolve(say(agent, `Fighting ${target.name} from the shelter!`)).catch(err => reportModeError(mode.name, err));
     }
     execute(mode, agent, async () => {
-        // #497 review 4: the fight stops once health falls to 8 (fightRefusal), unless cornered.
-        await skills.defendInPlace(bot, threats.shelterTarget, () => !threats.fightRefusal(bot) || !!agent._night?.handFight);
+        // #497 review 4: the fight stops once health falls to what the mob in reach may hit for
+        // (fightRefusal; PR 5: its maxDamage), unless cornered.
+        await skills.defendInPlace(bot, threats.shelterTarget, (enemy) => !threats.fightRefusal(bot, enemy) || !!agent._night?.handFight);
         // CX23 soak: between fights, hurt and too hungry to heal (food below REGEN_FOOD): eat.
         if (!bot.interrupt_code) {
             const ate = await food.eatToHeal(bot);
             if (ate?.ate) console.log(`[reflex] ate between fights in the shelter (health ${bot.health}, food ${ate.before} -> ${bot.food})`);
         }
     }).catch(err => reportModeError(mode.name, err));
+    return true;
+}
+
+let wallMoveAt = -Infinity;
+let wallSaidAt = -Infinity;
+
+/** Tests only. */
+export function __resetWallHitters() { wallMoveAt = -Infinity; wallSaidAt = -Infinity; }
+
+/**
+ * PR 5 (rotn-data #496: the troll hits through a 1-block wall by distance alone): in the shelter, a
+ * mob that hits through walls within its reach + slack moves the bot to the side of its cell away
+ * from it (shelter.farSpot), a short sneak step, at most every WALL_HITTERS.everyMs; never while
+ * the night routine's own work runs (the repair, the back-away, the burrow, the morning's opening
+ * and dig-out). Returns whether it moved.
+ */
+/** #507 review 5: the morning's own jobs (opening a side, digging out) are not stepped out of either. */
+const MORNING_LABELS = ['action:openShelter', 'action:leaveShelter'];
+
+function keepFromWallHitters(mode, agent) {
+    const bot = agent.bot;
+    if (nightRoutineBusy(agent) || MORNING_LABELS.includes(agent.actions.currentActionLabel)) return false;
+    const mobs = wallHitters(bot);
+    if (!mobs.length) return false;
+    const now = Date.now();
+    if (now - wallMoveAt < WALL_HITTERS.everyMs) return false;
+    const spot = farSpot(bot, mobs);
+    const p = bot.entity.position;
+    if (Math.hypot(spot.x - p.x, spot.z - p.z) <= WALL_HITTERS.tolerance) return false;
+    wallMoveAt = now;
+    if (now - wallSaidAt >= SHELTER_SAY_MS) {
+        wallSaidAt = now;
+        const m = mobs[0].position;
+        console.log(`[shelter] ${mobs[0].name} (hits through walls) at ${m.x.toFixed(1)}, ${m.y.toFixed(1)}, ${m.z.toFixed(1)}: standing at ${spot.x.toFixed(2)}, ${spot.z.toFixed(2)} in the cell, away from it`);
+    }
+    execute(mode, agent, async () => { await stepTo(bot, spot, { tolerance: WALL_HITTERS.tolerance, timeoutMs: WALL_HITTERS.moveMs }); })
+        .catch(err => reportModeError(mode.name, err));
     return true;
 }
 
@@ -319,6 +358,10 @@ const modes_list = [
                         await skills.moveAway(bot, 5);
                     });
                 }
+            }
+            // PR 5: in the shelter, away from a mob that hits through walls (the troll) first.
+            else if (bot.rotnSheltered && keepFromWallHitters(this, agent)) {
+                return;
             }
             else if (bot.health > 0 && bot.isAlive !== false // not while dead (it fled from the death hit)
                 && Date.now() - bot.lastDamageTime < 3000 && (bot.health < 5 || bot.lastDamageTaken >= bot.health)) {
@@ -503,7 +546,7 @@ const modes_list = [
     },
     {
         name: 'self_defense',
-        description: 'Fight nearby melee mobs (never creepers, endermen or dangerous mobs), only with a weapon and health above 8. Interrupts all actions.',
+        description: 'Fight nearby melee mobs (never creepers, endermen or dangerous mobs), only with a weapon and more health than one hit of that mob can take. Interrupts all actions.',
         interrupts: ['all'],
         on: true,
         active: false,
@@ -758,6 +801,21 @@ const modes_list = [
     }
 ];
 
+const cellText = (c) => `${c.x}, ${c.y}, ${c.z}`;
+
+// #499 review 4 (PR 5): overhanging an edge with nothing under its centre, the bot steps onto the
+// nearest cell with a floor first (fall_safety.walkStart), so the walk's first move is no drop;
+// with none, it does not walk (an error: the unstuck reflex logs it).
+async function fromFloor(bot) {
+    const start = walkStart(bot);
+    const here = bot.entity.position.floored();
+    if (!start) throw new Error(`no floor under the start cell ${cellText(here)} or next to it`);
+    if (!start.shift) return;
+    console.log(`[reflex] unstuck: overhanging an edge at ${cellText(here)} (nothing under the centre); stepping onto ${cellText(start.cell)} first`);
+    await centerIn(bot, start.cell);
+    if (!bot.entity.position.floored().equals(start.cell)) throw new Error(`could not step onto ${cellText(start.cell)} from the overhang at ${cellText(here)}`);
+}
+
 // { outcome: 'freed' } if skills.moveAway finished within timeoutMs, { outcome: 'timeout' }
 // if it did not, { outcome: 'failed', error } if it gave up first (no path, or anything else).
 export async function moveAwayWithin(bot, distance, timeoutMs) {
@@ -777,7 +835,7 @@ export async function moveAwayWithin(bot, distance, timeoutMs) {
     // Every walk away is fall-safe too (skills.goToGoal).
     const free = standsOnTree(bot)
         ? skills.descendFromTree(bot, run).then((down) => { if (!down) throw new Error('no safe way down from the tree'); })
-        : skills.moveAway(bot, distance, { offTrees: true }); // soak 5: never onto leaves that may not hold
+        : fromFloor(bot).then(() => skills.moveAway(bot, distance, { offTrees: true })); // soak 5: never onto leaves that may not hold
     const moved = free.then(() => ({ outcome: 'freed' }), (error) => ({ outcome: 'failed', error }));
     try {
         return await Promise.race([moved, timedOut]);

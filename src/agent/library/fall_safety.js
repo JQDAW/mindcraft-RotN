@@ -148,6 +148,33 @@ export function supportBlock(bot) {
 }
 
 /**
+ * #499 review 4 (the overhang start cell, PR 5): the bot can stand overhanging an edge that is not a
+ * tree, resting on the next block with nothing under its centre. standsOnTree is false, and the
+ * pathfinder plans from the floored start cell without checking that cell has a floor, so the first
+ * move of the unstuck walk could be a drop. Where to start a walk from: the bot's own cell when it
+ * rests on something there, or the block under it is not loaded ({cell, shift: false}); else the nearest cell under its footprint with
+ * firm ground below and room for its body ({cell, shift: true}: step onto it first); else null.
+ */
+export function walkStart(bot) {
+    const feet = bot?.entity?.position;
+    if (!feet) return null;
+    const cell = feet.floored ? feet.floored() : new Vec3(Math.floor(feet.x), Math.floor(feet.y), Math.floor(feet.z));
+    // Only a block known to be empty is no floor: an unloaded one (null) keeps the walk as it was.
+    const under = supportBlock(bot);
+    if (!under || !isEmpty(bot, under)) return { cell, shift: false };
+    const room = (c) => isEmpty(bot, blockAt(bot, c)) && isEmpty(bot, blockAt(bot, offset(c, 1)));
+    let best = null, bestD = Infinity;
+    for (const dx of [-HALF_WIDTH, HALF_WIDTH]) for (const dz of [-HALF_WIDTH, HALF_WIDTH]) {
+        const c = new Vec3(Math.floor(feet.x + dx), cell.y, Math.floor(feet.z + dz));
+        if (c.x === cell.x && c.z === cell.z) continue;
+        if (!isFirmGround(bot, blockAt(bot, offset(c, -1))) || !room(c)) continue;
+        const d = Math.hypot(c.x + 0.5 - feet.x, c.z + 0.5 - feet.z);
+        if (d < bestD) { best = c; bestD = d; }
+    }
+    return best ? { cell: best, shift: true } : null;
+}
+
+/**
  * Soak 5 (01:43, death 5): at health 3 the bot chased a rabbit into water and drowned. A walk at
  * health WATER_AVOID.maxHealth or less never enters water, unless the bot is in water already
  * (#264 review 1: a bot in a lake must still find its way out).

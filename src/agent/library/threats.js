@@ -22,7 +22,7 @@
 // rotn-data's sources (documented, vanilla, verified, inferred class rules) are treated the
 // same: the inferred rules lean cautious (every creeper variant keeps its distance, skeleton
 // variants take cover), so acting on them never makes the bot bolder (#186 review nit).
-import { threatOf, nightThreats } from '../../../packages/rotn-data/index.js';
+import { threatOf, nightThreats, UNKNOWN_MELEE } from '../../../packages/rotn-data/index.js';
 import * as mc from '../../utils/mcdata.js';
 import { mayBelongToPlayer } from './ownership.js';
 
@@ -107,12 +107,16 @@ export function threatFor(entity) {
             // rotn-data #448: an animal that hits back when hurt ({damage, reach?, callsForHelp,
             // fightBack, ...}; fightBack false: never fight it, get away), or null.
             provoked: t.provoked ?? null,
+            // rotn-data #496 (mob-melee.json): {damage, maxDamage, hitsThroughWalls?, reach?}, or null
+            // when unknown (never zero: maxHitOf assumes UNKNOWN_MELEE).
+            melee: t.melee ? { damage: t.melee.damage, maxDamage: t.melee.maxDamage ?? t.melee.damage,
+                hitsThroughWalls: !!t.melee.hitsThroughWalls, reach: Number.isFinite(t.melee.reach) ? t.melee.reach : null } : null,
         } : null);
     }
     const known = cache.get(entity.name);
     if (known) return known;
     return mc.isHostile(entity)
-        ? { name: entity.name, reaction: 'fight', level: 'hostile', explodes: false, ranged: false, doNotLook: false }
+        ? { name: entity.name, reaction: 'fight', level: 'hostile', explodes: false, ranged: false, doNotLook: false, melee: null }
         : null;
 }
 
@@ -197,26 +201,46 @@ export function hasWeapon(bot) {
 export const canFightHard = (bot) => hasWeapon(bot) && bot?.health > 10;
 
 /**
- * Soak 5 (rotn-v0.1.11), the lead's rule for a fight in the open: at health 1.5 the bot started a
- * fight with a zombie and died within a second (01:00:11); respawned with no weapon, it fought a
- * zombie by hand for 15 s and died (01:00:40). A melee mob is fled from, not fought, with no weapon
- * or at health OPEN_FIGHT.maxLowHealth or less (later: that mob's damage, from rotn-data). Only a
- * cornered bot hits back: skills.avoidEnemies hits a fight mob that keeps within 3 blocks while it
- * tries to get away.
+ * The most a mob hits for (rotn-data #496, mob-melee.json maxDamage: with the strongest item it may
+ * be given, a zombie's stone axe), else its provoked damage (an animal that fights back), else
+ * UNKNOWN_MELEE (18, the troll's) when rotn-data has neither, or for no mob: null means unknown,
+ * never zero.
  */
-export const OPEN_FIGHT = { maxLowHealth: 8 };
+export function maxHitOf(entity) {
+    const t = entity ? threatFor(entity) : null;
+    if (Number.isFinite(t?.melee?.maxDamage)) return t.melee.maxDamage;
+    // #507 review 2: an animal that fights back has its hit in its provoked block (a rooster 2, a
+    // wolf 2, a llama 1): not the unknown 18.
+    if (Number.isFinite(t?.provoked?.damage)) return t.provoked.damage;
+    return UNKNOWN_MELEE;
+}
 
-/** Why the bot must not start or go on with a fight in the open now ('no weapon', 'health 6, 8 or less'), or null. */
-export function fightRefusal(bot) {
+const round1 = (v) => Math.round(v * 10) / 10;
+const shortName = (e) => (typeof e?.name === 'string' ? e.name.replace(/^minecraft:/, '') : null);
+
+/**
+ * Soak 5 (rotn-v0.1.11), the lead's rule for a fight: at health 1.5 the bot started a fight with a
+ * zombie and died within a second (01:00:11); respawned with no weapon, it fought a zombie by hand
+ * for 15 s and died (01:00:40). A melee mob is fled from, not fought, with no weapon or at a health
+ * that one hit of it may take (PR 5, the lead's rule: health <= maxHitOf(mob); Fix G used 8). Only
+ * a cornered bot hits back: skills.avoidEnemies hits a fight mob that keeps within 3 blocks while it
+ * tries to get away.
+ *
+ * Why the bot must not start or go on with a fight against `mob` now ('no weapon', 'health 12, a
+ * zombie hits up to 12.5'), or null. Without a mob, the unknown mob's UNKNOWN_MELEE.
+ */
+export function fightRefusal(bot, mob = null) {
     if (!hasWeapon(bot)) return 'no weapon';
-    const h = bot?.health;
-    if (Number.isFinite(h) && h <= OPEN_FIGHT.maxLowHealth) return `health ${Math.round(h * 10) / 10}, ${OPEN_FIGHT.maxLowHealth} or less`;
-    return null;
+    const h = bot?.health, max = maxHitOf(mob);
+    if (!Number.isFinite(h) || h > max) return null;
+    const name = shortName(mob);
+    const who = name ? `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}` : 'an unknown mob';
+    return `health ${round1(h)}, ${who} hits up to ${round1(max)}`;
 }
 
 /** A 'fight' plan becomes a flee from the same mobs when fightRefusal says so. */
 function unlessRefused(bot, plan) {
-    const why = fightRefusal(bot);
+    const why = fightRefusal(bot, plan.from);
     if (!why) return plan;
     return { action: 'flee', why: `${plan.why}, and ${why}`, from: plan.from, away: RANGES.fight.away, isEnemy: plan.isEnemy };
 }
@@ -254,7 +278,7 @@ export function isAngry(entity) {
  * What to do about the mobs around the bot now. First match wins:
  * flee a dangerous mob, back off from one that explodes, retreat when outnumbered, get out of
  * a ranged mob's range, fight a melee mob, fight back a provoked one. A fight is a flee instead
- * with no weapon or at low health (fightRefusal, soak 5).
+ * with no weapon or at a health one hit of that mob may take (fightRefusal, soak 5, PR 5).
  * @returns {{action: 'flee'|'fight', why: string, from: object, away?: number, isEnemy: (e) => boolean}|null}
  *   isEnemy: the mobs the action is about (for skills.avoidEnemies / defendSelf).
  */
