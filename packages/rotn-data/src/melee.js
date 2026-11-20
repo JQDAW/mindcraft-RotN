@@ -9,7 +9,15 @@
 // DramaticTrees-1.12.2-0.13.4.jar): a felled trunk hits each living entity it touches once.
 
 /**
- * A mob's melee hit, or null when mob-melee.json has no entry for it (not read, or no melee).
+ * The conservative melee damage to assume for a mob whose hit is unknown (mobMelee returns null):
+ * the worst hit in mob-melee.json (the Ice and Fire troll's 18). null means unknown, never zero:
+ * a planner comparing health with a mob's damage uses UNKNOWN_MELEE for it.
+ */
+export const UNKNOWN_MELEE = 18;
+
+/**
+ * A mob's melee hit, or null when mob-melee.json has no entry for it: null means unknown (not read,
+ * or no melee), never zero; assume UNKNOWN_MELEE.
  * @param {import('./catalog.js').RotnData} catalog
  * @param {string} entityName a registry name ("minecraft:zombie")
  * @returns {{name: string, damage: number, maxDamage: number, hitsToKill: number|null,
@@ -50,7 +58,7 @@ export function fallingTree(catalog) {
  *   `angle` degrees it is about sqrt(2 x 0.1 / massCenterHeight x angle): a continuous estimate of the
  *   per-tick sum, a little high.
  */
-export function fallingTreeDamage(catalog, { woodVolume, massCenterHeight, angle = 90 }) {
+export function fallingTreeDamage(catalog, { woodVolume, massCenterHeight, angle = 90 } = {}) {
     const t = catalog.fallingTreesData;
     if (!t?.enabled || !(woodVolume > 0) || !(massCenterHeight > 0)) return 0;
     const speed = Math.sqrt((2 * 0.1 * Math.min(Math.max(angle, 0), 90)) / massCenterHeight);

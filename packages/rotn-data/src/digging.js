@@ -89,7 +89,7 @@ export function canMobDig(catalog, entityName, blockName, { meta, held = [] } = 
     const no = (reason, needs = null) => ({ canDig: false, byHand: false, needs, ticksByHand: null, uncertain, reason: why(reason) });
     const yes = (byHand, needs, ticksByHand, reason) => ({ canDig: true, byHand, needs, ticksByHand: uncertain ? null : ticksByHand, uncertain, reason: why(reason) });
     if (mob.mechanism === 'blast') {
-        if (!solid) return no('not solid');
+        if (!solid) return no('not a wall block');
         const r = s.explosionResistance;
         if (typeof r !== 'number') return { canDig: true, byHand: true, needs: null, ticksByHand: null, uncertain: true, reason: 'explosion resistance unknown' };
         return r < mob.breaksResistanceBelow

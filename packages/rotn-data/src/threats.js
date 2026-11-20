@@ -24,6 +24,13 @@
 import { isOverworldBiome } from './biomes.js';
 import { mobMelee } from './melee.js';
 
+/** ESM Demolition (threat-reactions.json 'demolition'): { ...explosive, chance } for a listed mob, else null. */
+function explosiveOf(catalog, name) {
+    const d = catalog.threatReactions?.demolition;
+    const chance = d?.members?.[name];
+    return chance > 0 ? { ...structuredClone(d.explosive), chance } : null;
+}
+
 const DEFAULT_REACTION = { hostile: 'fight', none: 'ignore' };
 
 /** Spawn-time rules nightThreats does not reflect (#111 review); it reads only the static lists. */
@@ -56,7 +63,7 @@ function classRule(catalog, e) {
  * @returns {{name: string, displayName: string|null, level: 'dangerous'|'hostile'|'none',
  *   reaction: string, source: 'override'|'documented'|'vanilla'|'verified'|'inferred'|'default', rule?: string,
  *   variantNote?: string,
- *   group?: string, provoked: object|null, traits: object|null, melee: object|null,
+ *   group?: string, provoked: object|null, traits: object|null, melee: object|null, explosive: object|null,
  *   summary: string|null, explodes: boolean, ranged: boolean, lookAt: boolean, evidence: string[]}|null}
  *   null for an unknown entity. lookAt false: the mob is dangerous to look at (its targeting starts
  *   when a player looks at it, like the enderman's stare, or its gaze attack needs the player to look
@@ -69,7 +76,11 @@ function classRule(catalog, e) {
  *   traits: an entry's structured facts (threat-reactions.json description; the troll: size, speed,
  *   breaksBlocks 'blast', sunlight 'turns-to-stone', ...), null otherwise.
  *   melee: { damage, maxDamage, hitsToKill, ... } from mob-melee.json (src/melee.js mobMelee) without
- *   its evidence, or null when the mob has no entry there.
+ *   its evidence, or null when the mob has no entry there: null means unknown, never zero (assume
+ *   UNKNOWN_MELEE, src/melee.js).
+ *   explosive: for a mob that may carry ESM 'Demolition' TNT, { source: 'tnt', item, slot: 'offhand',
+ *   trigger (blocks), fuseTicks, power, repeatTicks, breaksResistanceBelow, chance (per spawn) }; check
+ *   its off-hand for TNT. null otherwise (the creepers' own explosion is 'explodes').
  */
 export function threatOf(catalog, input) {
     const e = catalog.entity(input);
@@ -85,7 +96,7 @@ export function threatOf(catalog, input) {
     })();
     // A dangerous mob is avoided whatever else applies (entity-overrides.json wins).
     if (level === 'dangerous') {
-        return { ...base, reaction: 'avoid', source: 'override', summary: e.threat?.note ?? null, explodes: false, ranged: false, lookAt: e.threat?.lookAt !== false, provoked: null, traits: null, melee, evidence: overrideEvidence };
+        return { ...base, reaction: 'avoid', source: 'override', summary: e.threat?.note ?? null, explodes: false, ranged: false, lookAt: e.threat?.lookAt !== false, provoked: null, traits: null, melee, explosive: explosiveOf(catalog, e.name), evidence: overrideEvidence };
     }
     const entry = catalog.threatReactions?.entities?.[e.name] ?? groupOf(catalog, e.name);
     const rule = !entry && level === 'hostile' ? classRule(catalog, e) : null;
@@ -101,6 +112,7 @@ export function threatOf(catalog, input) {
         provoked: r?.provoked ? structuredClone(r.provoked) : null,
         traits: r?.traits ? structuredClone(r.traits) : null,
         melee,
+        explosive: explosiveOf(catalog, e.name),
         evidence: [...(r?.evidence ?? []), ...overrideEvidence],
     };
     if (entry?.members) out.group = entry.id;

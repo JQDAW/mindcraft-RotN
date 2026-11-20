@@ -157,6 +157,138 @@ config/incontrol/spawn.json:739:     "mob": "iceandfire:if_troll",
 ## ice_and_fire.cfg (troll spawn weight)
 config/ice_and_fire.cfg:501:     I:"Troll Spawn Weight"=55
 
+## roughmobsrevamped.cfg (zombie list, weapons, enchants)
+config/roughmobsrevamped.cfg:2903:     S:zombieEntities <
+config/roughmobsrevamped.cfg:2904:         specialmobs:hungryzombie
+config/roughmobsrevamped.cfg:2905:         specialmobs:brutezombie
+config/roughmobsrevamped.cfg:2906:         specialmobs:plaguezombie
+config/roughmobsrevamped.cfg:2907:         specialmobs:fishingzombie
+config/roughmobsrevamped.cfg:2908:         specialmobs:firezombie
+config/roughmobsrevamped.cfg:2909:         specialmobs:giantzombie
+config/roughmobsrevamped.cfg:2910:         minecraft:zombie
+config/roughmobsrevamped.cfg:2911:         minecraft:zombie_villager
+config/roughmobsrevamped.cfg:2912:         minecraft:husk
+config/roughmobsrevamped.cfg:2913:         quark:dweller
+config/roughmobsrevamped.cfg:2914:         mod_lavacow:zombiemushroom
+config/roughmobsrevamped.cfg:2915:         mod_lavacow:zombiefrozen
+config/roughmobsrevamped.cfg:2916:         mod_lavacow:ithaqua
+config/roughmobsrevamped.cfg:2917:         toroquest:toroquest_mage
+config/roughmobsrevamped.cfg:2918:         betteranimalsplus:hirschgeist
+config/roughmobsrevamped.cfg:2919:         twilightforest:wraith
+config/roughmobsrevamped.cfg:2920:         twilightforest:lich_minion
+config/roughmobsrevamped.cfg:2921:      >
+config/roughmobsrevamped.cfg:3144:     I:_zombieEquipmentEnchantChance=20
+config/roughmobsrevamped.cfg:3148:     S:_zombieEquipmentEnchantMultiplier=0.3
+config/roughmobsrevamped.cfg:3153:     I:_zombieEquipmentWeaponChance=5
+config/roughmobsrevamped.cfg:3176:     S:zombieEquipmentMainhand <
+config/roughmobsrevamped.cfg:3177:         stone_pickaxe;3
+config/roughmobsrevamped.cfg:3178:         atop:mud_pickaxe;3
+config/roughmobsrevamped.cfg:3179:         iron_pickaxe;1
+config/roughmobsrevamped.cfg:3180:         wooden_axe;2
+config/roughmobsrevamped.cfg:3181:         stone_axe;2
+config/roughmobsrevamped.cfg:3182:         atop:mud_axe;2
+config/roughmobsrevamped.cfg:3183:         stone_sword;2
+config/roughmobsrevamped.cfg:3184:         iron_sword;2
+config/roughmobsrevamped.cfg:3185:         atop:mud_sword;2
+config/roughmobsrevamped.cfg:3186:         spartanweaponry:club_wood;2
+config/roughmobsrevamped.cfg:3187:         spartanweaponry:club_studded;2
+config/roughmobsrevamped.cfg:3188:         spartanweaponry:dagger_stone;2
+config/roughmobsrevamped.cfg:3189:         spartanweaponry:dagger_iron;2
+config/roughmobsrevamped.cfg:3190:         spartanweaponry:dagger_gold;2
+config/roughmobsrevamped.cfg:3191:      >
+config/roughmobsrevamped.cfg:3192: 
+config/roughmobsrevamped.cfg:3212:     S:zombieEquipmentWeaponEnchants <
+config/roughmobsrevamped.cfg:3213:         sharpness;4
+
+## spartanweaponry.cfg (club, dagger)
+config/spartanweaponry.cfg:126: club {
+config/spartanweaponry.cfg:176: dagger {
+config/spartanweaponry.cfg:128:     S:damageBase=4.0
+config/spartanweaponry.cfg:131:     S:damageMultiplier=1.0
+config/spartanweaponry.cfg:178:     S:damageBase=2.5
+config/spartanweaponry.cfg:181:     S:damageMultiplier=0.50
+
+## esm/entity_ai.json (Demolition, Damage)
+config/esm/entity_ai.json:68:     "Demolition": 0.0,
+config/esm/entity_ai.json:80:     "Damage": 1.0,
+config/esm/entity_ai.json:84:     "Boss Mod Damage": false,
+config/esm/entity_ai.json:145:       "Demolition": 0.01,
+config/esm/entity_ai.json:157:       "Demolition": 0.01,
+config/esm/entity_ai.json:184:       "Demolition": 0.01,
+config/esm/entity_ai.json:208:       "Demolition": 0.01,
+config/esm/entity_ai.json:272:       "Demolition": 0.01,
+config/esm/entity_ai.json:314:       "Demolition": 0.01,
+config/esm/entity_ai.json:334:       "Demolition": 0.01,
+config/esm/entity_ai.json:388:       "Demolition": 0.01,
+config/esm/entity_ai.json:396:       "Demolition": 0.01,
+config/esm/entity_ai.json:416:       "Demolition": 0.01,
+config/esm/entity_ai.json:436:       "Demolition": 0.01,
+config/esm/entity_ai.json:452:       "Demolition": 0.01,
+config/esm/entity_ai.json:90:     "specialmobs:sniperwitherskeleton": {
+config/esm/entity_ai.json:98:     "rats:illager_piper": {
+config/esm/entity_ai.json:103:     "minecraft:vindication_illager": {
+config/esm/entity_ai.json:110:     "specialmobs:brutewitherskeleton": {
+config/esm/entity_ai.json:116:     "twilightforest:giant_miner": {
+config/esm/entity_ai.json:123:     "minecraft:zombie_pigman": {
+config/esm/entity_ai.json:128:     "minecraft:wither_skeleton": {
+config/esm/entity_ai.json:133:     "specialmobs:toughsilverfish": {
+config/esm/entity_ai.json:137:     "betteranimalsplus:kermodebear": {
+config/esm/entity_ai.json:142:     "minecraft:zombie_villager": {
+config/esm/entity_ai.json:150:     "minecraft:silverfish": {
+config/esm/entity_ai.json:154:     "specialmobs:brutezombie": {
+config/esm/entity_ai.json:162:     "twilightforest:redcap_sapper": {
+config/esm/entity_ai.json:169:     "mod_lavacow:zombiefrozen": {
+config/esm/entity_ai.json:176:     "minecraft:husk": {
+config/esm/entity_ai.json:181:     "specialmobs:plaguezombie": {
+config/esm/entity_ai.json:189:     "specialmobs:ninjawitherskeleton": {
+config/esm/entity_ai.json:194:     "specialmobs:knightpigzombie": {
+config/esm/entity_ai.json:199:     "specialmobs:vampirepigzombie": {
+config/esm/entity_ai.json:204:     "specialmobs:bruteskeleton": {
+config/esm/entity_ai.json:213:     "specialmobs:brutepigzombie": {
+config/esm/entity_ai.json:218:     "minecraft:spider": {
+config/esm/entity_ai.json:222:     "specialmobs:poisonsilverfish": {
+config/esm/entity_ai.json:226:     "twilightforest:loyal_zombie": {
+config/esm/entity_ai.json:230:     "twilightforest:kobold": {
+config/esm/entity_ai.json:237:     "betteranimalsplus:blackbear": {
+config/esm/entity_ai.json:242:     "minecraft:polar_bear": {
+config/esm/entity_ai.json:247:     "twilightforest:yeti": {
+config/esm/entity_ai.json:251:     "specialmobs:spitfirewitherskeleton": {
+config/esm/entity_ai.json:257:     "mod_lavacow:zombiemushroom": {
+config/esm/entity_ai.json:264:     "specialmobs:giantpigzombie": {
+config/esm/entity_ai.json:269:     "specialmobs:hungryzombie": {
+config/esm/entity_ai.json:277:     "specialmobs:fishingpigzombie": {
+config/esm/entity_ai.json:282:     "specialmobs:knightwitherskeleton": {
+config/esm/entity_ai.json:287:     "minecraft:cave_spider": {
+config/esm/entity_ai.json:290:     "specialmobs:gatlingwitherskeleton": {
+config/esm/entity_ai.json:295:     "twilightforest:minotaur": {
+config/esm/entity_ai.json:299:     "twilightforest:lich_minion": {
+config/esm/entity_ai.json:306:     "betteranimalsplus:brownbear": {
+config/esm/entity_ai.json:311:     "twilightforest:redcap": {
+config/esm/entity_ai.json:319:     "specialmobs:giantwitherskeleton": {
+config/esm/entity_ai.json:324:     "twilightforest:skeleton_druid": {
+config/esm/entity_ai.json:331:     "minecraft:zombie": {
+config/esm/entity_ai.json:340:     "specialmobs:knightskeleton": {
+config/esm/entity_ai.json:346:     "twilightforest:minoshroom": {
+config/esm/entity_ai.json:350:     "quark:dweller": {
+config/esm/entity_ai.json:358:     "specialmobs:blindingsilverfish": {
+config/esm/entity_ai.json:362:     "specialmobs:firezombie": {
+config/esm/entity_ai.json:369:     "twilightforest:armored_giant": {
+config/esm/entity_ai.json:376:     "specialmobs:fishingsilverfish": {
+config/esm/entity_ai.json:380:     "primitivemobs:mimic": {
+config/esm/entity_ai.json:385:     "primitivemobs:goblin": {
+config/esm/entity_ai.json:393:     "specialmobs:specialzombie": {
+config/esm/entity_ai.json:401:     "specialmobs:plaguepigzombie": {
+config/esm/entity_ai.json:406:     "quark:pirate": {
+config/esm/entity_ai.json:412:     "primitivemobs:skeleton_warrior": {
+config/esm/entity_ai.json:421:     "twilightforest:snow_guardian": {
+config/esm/entity_ai.json:425:     "specialmobs:flyingsilverfish": {
+config/esm/entity_ai.json:429:     "twilightforest:troll": {
+config/esm/entity_ai.json:433:     "specialmobs:giantzombie": {
+config/esm/entity_ai.json:441:     "netherex:wight": {
+config/esm/entity_ai.json:445:     "minecraft:enderman": {
+config/esm/entity_ai.json:449:     "specialmobs:fishingzombie": {
+config/esm/entity_ai.json:457:     "specialmobs:hungrypigzombie": {
+
 ## server.properties (zip root)
 server.properties:12: difficulty=2
 server.properties:18: hardcore=false

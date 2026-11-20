@@ -536,7 +536,7 @@ export class RotnData {
         return canMobDig(this, entityName, blockName, opts);
     }
 
-    /** A mob's melee hit: damage, maxDamage, hitsToKill (src/melee.js), or null when not listed. */
+    /** A mob's melee hit: damage, maxDamage, hitsToKill (src/melee.js), or null when unknown (assume UNKNOWN_MELEE). */
     mobMelee(entityName) {
         return mobMelee(this, entityName);
     }

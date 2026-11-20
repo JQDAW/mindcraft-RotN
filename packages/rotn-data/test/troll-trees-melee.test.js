@@ -8,6 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRotnData } from '../src/catalog.js';
+import { UNKNOWN_MELEE as UNKNOWN_FROM_INDEX } from '../index.js';
+import { UNKNOWN_MELEE } from '../src/melee.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIX = path.join(HERE, 'fixtures/troll-trees-melee-3.3.4');
@@ -127,7 +129,8 @@ test('mobDigging/canMobDig: the troll is a blaster, answered by explosion resist
     assert.equal(pack.mobDigging('minecraft:zombie').mechanism, 'esm');
     assert.equal(pack.mobDigging('twilightforest:troll').mechanism, 'esm');
     assert.equal(pack.mobDigging('minecraft:skeleton'), null);
-    assert.equal(pack.canMobDig('iceandfire:if_troll', 'minecraft:torch')?.canDig, false, 'not solid: not a wall');
+    const torch = pack.canMobDig('iceandfire:if_troll', 'minecraft:torch');
+    assert.deepEqual([torch.canDig, torch.reason], [false, 'not a wall block']);
 });
 
 test('troll in daylight: stone only by day under open sky at brightness > 0.5; flees only from open sky; stone is for good', () => {
@@ -295,4 +298,107 @@ test('threatOf carries melee; nightThreats carries damage; the uncovered night t
     const NOT_READ = ['ancientbeasts:ghost', 'ancientbeasts:nekros', 'ancientbeasts:sandy', 'ancientbeasts:zealot', 'betteranimalsplus:tarantula', 'defiledlands:scuttler', 'mowziesmobs:barakoana', 'rats:illager_piper'];
     const gaps = night.filter((t) => ['fight', 'avoid'].includes(t.reaction) && t.damage == null).map((t) => t.name).sort();
     assert.deepEqual(gaps, NOT_READ);
+});
+
+// ---- #496 review (lead): weapons, ESM demolition and damage, the troll's through-wall hit and blast, UNKNOWN_MELEE ----
+
+test('zombie worst case: the stone axe (+8) and Sharpness II (+1.5) for every mob on Rough Mobs\' zombie list', () => {
+    const axe = section(melee, 'agy (ItemAxe)');
+    inOrder(axe, 'protected agy(ain$a)', 'Field f:[F', 'ain$a.ordinal', 'faload', 'putfield', 'Field b:F');
+    inOrder(axe, 'static {}', 'newarray       float', 'float 6.0f', 'float 8.0f', 'float 8.0f', 'float 8.0f', 'float 6.0f', 'putstatic', 'Field f:[F');
+    inOrder(section(melee, 'ahq (ItemTool)'), 'adh.f', 'String Tool modifier', 'Field b:F');
+    inOrder(section(melee, 'ain$a (ToolMaterial)'), 'String WOOD', 'iconst_0', 'String STONE', 'iconst_1');
+    inOrder(section(melee, 'ATOP ToolAxe'), 'float 6.0f', 'ItemAxe."<init>"');
+    inOrder(section(melee, 'ATOP ModItems'), 'String MUD', 'fconst_0', 'addToolMaterial');
+    for (const [line, v] of [[128, 'damageBase=4.0'], [131, 'damageMultiplier=1.0'], [178, 'damageBase=2.5'], [181, 'damageMultiplier=0.50']]) {
+        assert.ok(configs.includes(`config/spartanweaponry.cfg:${line}:     S:${v}`), `spartan ${line}`);
+    }
+    assert.match(cfg('config/roughmobsrevamped.cfg', /_zombieEquipmentWeaponChance/), /:3153:.*=5$/);
+    assert.match(cfg('config/roughmobsrevamped.cfg', /_zombieEquipmentEnchantChance/), /:3144:.*=20$/);
+    assert.match(cfg('config/roughmobsrevamped.cfg', /_zombieEquipmentEnchantMultiplier/), /:3148:.*=0\.3$/);
+    assert.match(cfg('config/roughmobsrevamped.cfg', /:3177:/), /stone_pickaxe;3/);
+    assert.ok(configs.includes('config/roughmobsrevamped.cfg:3213:         sharpness;4'));
+    // The zombie list, from the config lines 2904-2920.
+    const list = configs.split('\n').filter((l) => /^config\/roughmobsrevamped\.cfg:(29\d\d):/.test(l) && +l.split(':')[1] > 2903 && +l.split(':')[1] < 2921).map((l) => l.split(': ')[1].trim());
+    assert.ok(list.includes('minecraft:zombie') && list.includes('minecraft:husk') && list.includes('minecraft:zombie_villager'));
+    const sharpnessII = 1 + 0.5 * (Math.ceil(5 * 0.3) - 1);
+    for (const n of list.filter((x) => MM.mobs[x])) {
+        const m = pack.mobMelee(n);
+        assert.equal(m.maxDamage, m.damage + 8 + sharpnessII, n);
+        assert.match(m.weapon, /stone axe/, n);
+    }
+    assert.deepEqual([pack.mobMelee('minecraft:zombie').maxDamage, pack.mobMelee('minecraft:husk').maxDamage, pack.mobMelee('minecraft:zombie_villager').maxDamage], [12.5, 12.5, 12.5]);
+    // Not on the list: no weapon worst case.
+    for (const n of ['zombie_players:zombie_player', 'minecraft:zombie_pigman', 'specialmobs:specialzombie']) assert.equal(pack.mobMelee(n).maxDamage, pack.mobMelee(n).damage, n);
+});
+
+test('ESM Demolition: 1 in 100 listed mobs carry TNT and drop it lit within 4 blocks, every 10 s', () => {
+    inOrder(section(melee, 'ESM AdditionDemolition'), 'getTaskPriority', 'iconst_4', 'isValid', 'DEMOLITION', 'dconst_0', 'getAdditionalAI', 'nextDouble', 'DEMOLITION', 'OFFHAND', 'field_150335_W', 'func_184201_a', 'ESM_EntityAIDemolition');
+    const ai = section(melee, 'ESM ESM_EntityAIDemolition');
+    inOrder(ai, 'func_75250_a', 'delay', 'func_184614_ca', 'field_150335_W', 'func_184592_cb', 'field_150335_W', 'func_70638_az', 'func_70032_d', 'float 4.0f');
+    inOrder(ai, 'func_75249_e', 'sipush        200', 'delay', 'EntityTNTPrimed', 'func_72838_d');
+    assert.doesNotMatch(method(ai, 'func_75249_e'), /func_184201_a|func_190918_g/, 'the TNT stays in its hand');
+    inOrder(section(melee, 'acm (EntityTNTPrimed)'), 'bipush        80', 'bipush        80', 'float 4.0f');
+    inOrder(section(melee, 'vi (EntityList): tnt'), 'String tnt', 'class acm');
+    // The members are exactly the entity_ai.json entries with Demolition > 0 (config lines in order).
+    const lines = section(configs, 'esm/entity_ai.json').split('\n').filter((l) => l.startsWith('config/')).sort((a, b) => +a.split(':')[1] - +b.split(':')[1]);
+    const want = {};
+    let cur = null;
+    for (const l of lines) {
+        const ent = /"([a-z_]+:[a-z_]+)": \{$/.exec(l);
+        if (ent) cur = ent[1];
+        const d = /"Demolition": ([\d.]+)/.exec(l);
+        if (d && cur && +d[1] > 0) want[cur] = +d[1];
+    }
+    const demo = pack.threatReactions.demolition;
+    assert.deepEqual(demo.members, Object.fromEntries(Object.entries(want).sort()));
+    assert.equal(Object.keys(demo.members).length, 12);
+    assert.deepEqual(demo.explosive, { source: 'tnt', item: 'minecraft:tnt', slot: 'offhand', trigger: 4, fuseTicks: 80, power: 4, repeatTicks: 200, breaksResistanceBelow: 17 });
+    assert.ok(Math.abs(4 * 1.3 / 0.3 - 0.3 - demo.explosive.breaksResistanceBelow) < 0.05);
+    assert.deepEqual(pack.threatOf('minecraft:zombie').explosive, { ...demo.explosive, chance: 0.01 });
+    assert.equal(pack.threatOf('minecraft:husk').explosive, null);
+    assert.equal(pack.threatOf('minecraft:creeper').explosive, null);
+    assert.equal(pack.canMobDig('iceandfire:if_troll', 'minecraft:cobblestone').canDig, true);
+});
+
+test('ESM per-mob Damage changes nothing: default 1.0 (no modifier), a missing key reads 0 (x0)', () => {
+    const props = section(melee, 'ESM CfgProps');
+    inOrder(props, 'String Demolition', 'double 0.1d', 'String Damage', 'dconst_1');
+    inOrder(section(melee, 'ESM JsonHelper.getNumber'), 'iconst_0', 'getNumber', 'areturn');
+    inOrder(section(melee, 'ESM GeneralEntityHandler'), 'MOD_DAMAGE', 'BOSS_DAMAGE', 'curBossMod', 'dconst_0', 'dadd', 'dconst_1', 'dcmpl', 'ifeq', 'field_111264_e', 'ESM_TWEAK_3', 'iconst_1', 'func_111121_a');
+    const dmg = configs.split('\n').filter((l) => /^config\/esm\/entity_ai\.json:\d+:\s+"Damage"/.test(l));
+    assert.deepEqual(dmg.map((l) => l.split(':')[1]), ['80'], 'only the default block has Damage');
+    assert.match(dmg[0], /1\.0/);
+    assert.ok(MM.general.evidence.some((e) => /ESM_TWEAK_3/.test(e) && /entity_ai\.json:80/.test(e)));
+});
+
+test('troll: the hit goes through a 1-block wall (distance only), and its blast hurts for at most 4.8 within 4 blocks', () => {
+    const upd = section(troll, 'EntityTroll onLivingUpdate');
+    for (const [from, to] of [[654, 729], [730, 804]]) {
+        const hit = offsets(upd, from, to);
+        assert.match(hit, /func_70068_e/);
+        assert.doesNotMatch(hit, /func_70685_l|func_180495_p|func_72933_a|func_147447_a/, 'no canEntityBeSeen, block or ray trace');
+    }
+    const t = pack.threatOf('iceandfire:if_troll');
+    assert.deepEqual([t.traits.hitsThroughWalls, t.traits.reach, t.melee.hitsThroughWalls], [true, 2, true]);
+    assert.match(t.traits.reachMeaning, /no line-of-sight or block check/);
+    assert.match(t.melee.note, /1-block wall/);
+    // 0.6 (half its width) + 1 (wall) + 0.3 (half the player's) < 2 < 0.6 + 2 + 0.3.
+    assert.ok(t.traits.width / 2 + 1 + 0.3 < 2 && t.traits.width / 2 + 2 + 0.3 > 2);
+    const a = method(section(troll, 'BlockBreakExplosion <init>'), 'func_77278_a');
+    inOrder(a, 'explosionSize', 'fconst_2', 'fmul', 'func_76358_a', 'double 2.0d', 'ddiv', 'double 7.0d', 'dmul', 'float 6.0f', 'fdiv', 'func_70097_a');
+    const sizeMax = 2;
+    assert.equal(t.traits.blastRadius, 2 * sizeMax);
+    assert.equal(t.traits.blastDamageMax, Math.round(((1 + 1) / 2 * 7 * 2 * sizeMax + 1) / 6 * 10) / 10);
+});
+
+test('UNKNOWN_MELEE: the worst listed hit, exported; null melee means unknown', () => {
+    const worst = Math.max(...Object.values(MM.mobs).map((m) => Math.max(m.damage, m.maxDamage ?? 0)));
+    assert.equal(UNKNOWN_MELEE, worst);
+    assert.equal(UNKNOWN_FROM_INDEX, 18);
+    assert.equal(pack.mobMelee('rats:illager_piper'), null);
+    assert.equal(pack.fallingTreeDamage(), 0, 'default argument');
+    const readme = fs.readFileSync(path.join(HERE, '../README.md'), 'utf8');
+    assert.match(readme, /UNKNOWN_MELEE/);
+    assert.match(readme, /never zero/);
 });
