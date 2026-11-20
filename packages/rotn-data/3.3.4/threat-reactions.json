@@ -1,7 +1,7 @@
 {
   "format": "rotn-threat-reactions/1",
   "pack": "3.3.4",
-  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source: the rule's confidence, 'inferred' unless the rule says 'verified'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Optional fields on an entry or class rule: 'ranged', 'explodes', and 'lookAt': false for a mob that is dangerous to look at: its targeting starts when a player looks at it (the enderman's stare check), or its gaze attack needs the player to look back (the gorgon), so the bot must not look at its head; threatOf returns lookAt true otherwise. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'. Optional 'provoked' on an entry or group, for a mob that fights back once hurt (reaction 'ignore-unless-provoked'; a food animal the bot hunts, an Animania cow or hen, keeps 'ignore' so it may still be hunted, and 'provoked' says what happens once it is hit): damage (per hit, before armour), health, callsForHelp and helpers (who joins in), fightBack (false: do not fight it back early; get away), and for the Animania bulls reach, attackIntervalTicks, chaseSpeed, width, stepHeight and angerMetadata (the entity metadata index that is true while it charges). 'groups': like an entity entry, for the explicit 'members' list (any threat level), checked after 'entities' and before 'classRules'; threatOf returns the group's id as 'group'.",
+  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source: the rule's confidence, 'inferred' unless the rule says 'verified'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Optional fields on an entry or class rule: 'ranged', 'explodes', and 'lookAt': false for a mob that is dangerous to look at: its targeting starts when a player looks at it (the enderman's stare check), or its gaze attack needs the player to look back (the gorgon), so the bot must not look at its head; threatOf returns lookAt true otherwise. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'. Optional 'provoked' on an entry or group, for a mob that fights back once hurt (reaction 'ignore-unless-provoked'; a food animal the bot hunts, an Animania cow or hen, keeps 'ignore' so it may still be hunted, and 'provoked' says what happens once it is hit): damage (per hit, before armour), health, callsForHelp and helpers (who joins in), fightBack (false: do not fight it back early; get away), and for the Animania bulls reach, attackIntervalTicks, chaseSpeed, width, stepHeight and angerMetadata (the entity metadata index that is true while it charges). 'groups': like an entity entry, for the explicit 'members' list (any threat level), checked after 'entities' and before 'classRules'; threatOf returns the group's id as 'group'. Optional 'traits' on an entry (the troll): width, height, speed (the movement attribute), armor, knockbackResistance, immuneTo (damage types), targetsWithoutSight, breaksBlocks ('blast': see mob-digging.json 'blasters'), sunlight ('turns-to-stone'), spawnsUnderCover. 'demolition' (Epic Siege Mod): the mobs that may spawn holding TNT, with each one's chance in 'members' and the TNT's behaviour in 'explosive'; threatOf returns it as 'explosive' (with 'chance') for a listed mob.",
   "general": {
     "summary": "At night stay sealed in a cobblestone or stone shelter with light only inside; a dirt shack is not safe because mobs dig and pillar. Retreat if two or more hostiles come at once.",
     "confidence": "documented",
@@ -125,11 +125,49 @@
     },
     "iceandfire:if_troll": {
       "reaction": "avoid",
-      "summary": "A heavy melee hitter: 18 attack and 200 health on this pack (Ice and Fire's defaults are 10 and 50), armor 9. Do not fight it on the first night; stay sealed in. It flees the sun.",
+      "summary": "A heavy melee hitter: 18 damage a hit (9 hearts: two hits kill an unarmoured player from full health) and Broken Armor for 10 s, 200 health, armour 9, immune to arrows, knockback-proof, and it regenerates while hurt. It is 1.2 blocks wide and 3.5 tall, faster than a zombie (speed 0.35 against 0.23), and it targets a player without needing to see them. Daylight does not make it safe: it turns to stone only when, in the daytime, it stands where it can see the sky and its light level is 13 or more; in shade (under leaves, an overhang, a roof, in a cave), in rain (daylight 12), at dawn and dusk and in thunderstorms it stays fully active and attacks by day. By day in the open it first walks to a covered spot within 10 blocks if it finds one (TrollAIFleeSun); one that turns to stone stays a statue for good. It breaks into shelters on its own (Epic Siege Mod leaves it alone): when it cannot path to its target and is 1.7 to 5.5 blocks from it, it swings at the wall and a small blast about 1.9 blocks in front of it, at its mid-height, removes the blocks the blast reaches, about one strike every 1.75 s (each strike takes 1 s, and an idle troll starts one with chance 1/15 a tick). Stone, cobblestone, planks, dirt and glass all break; a block with explosion resistance 8.37 or more (obsidian, end stone, and stone bricks, 27.5 on this pack) does not (canMobDig answers per block). Special AI also lets it break doors and gates in its way and, while idle, light sources such as torches. It spawns in 71 overworld biomes (forests, taigas, hills, mountains, snowy and some jungle and mesa biomes: monster weight 55, alone), only where it cannot see the sky (caves, under trees or overhangs) and, as any monster, in the dark. Do not fight it on the first night and do not trust a cobblestone shelter when one is near: keep more than 5.5 blocks of solid ground between you and it, or a troll-proof wall, and do not count on daylight under trees.",
       "confidence": "verified",
+      "traits": {
+        "width": 1.2,
+        "height": 3.5,
+        "speed": 0.35,
+        "armor": 9,
+        "knockbackResistance": 1,
+        "immuneTo": [
+          "arrow"
+        ],
+        "targetsWithoutSight": true,
+        "breaksBlocks": "blast",
+        "breaksDoors": true,
+        "breaksLights": true,
+        "sunlight": "turns-to-stone",
+        "activeByDayInShade": true,
+        "petrifiesWhen": "daytime (skylightSubtracted below 4) and it sees the sky at its block and its brightness is above 0.5 (light 13 or more)",
+        "spawnsUnderCover": true,
+        "spawnBiomes": 71,
+        "spawnWeight": 55,
+        "trackingRange": 64,
+        "hitsThroughWalls": true,
+        "reach": 2,
+        "reachMeaning": "the 3D distance between the two positions (bottom centres of the hitboxes), getDistanceSq < 4.0, with no line-of-sight or block check: it hits through a 1-block wall when the bot stands against it, never through a 2-block one",
+        "blastDamageMax": 4.8,
+        "blastRadius": 4
+      },
       "evidence": [
-        "IceAndFireRotN-1.9.1-1.2.1.jar: EntityTroll extends EntityMob; initEntityAI adds EntityAIAttackMelee and TrollAIFleeSun; applyEntityAttributes sets attack damage from IceAndFireConfig.trollAttackStrength, max health from trollMaxHealth, armor 9",
-        "the pinned pack's config/ice_and_fire.cfg lines 491-495: S:\"Troll Attack Strength\"=18.0, S:\"Troll Max Health\"=200.0"
+        "IceAndFireRotN-1.9.1-1.2.1.jar (in the pack as mods/IceAndFireRotN-1.9.1-1.2.1.jar, SHA-256 6f8f6d7a12fbc207f2f0dc638d4b9901bab5b003e1793313be8c4aede00ca747): EntityTroll extends EntityMob (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/troll.javap.txt \"## EntityTroll header\")",
+        "Size and stats: <init> setSize(1.2, 3.5) (func_70105_a, offsets 10-15); applyEntityAttributes (func_110147_ax): MOVEMENT_SPEED 0.35, ATTACK_DAMAGE IceAndFireConfig.trollAttackStrength, MAX_HEALTH trollMaxHealth, KNOCKBACK_RESISTANCE 1.0, ARMOR 9.0; config/ice_and_fire.cfg:492 S:\"Troll Attack Strength\"=18.0, :495 S:\"Troll Max Health\"=200.0 (Ice and Fire's defaults 10 and 50)",
+        "Targeting: initEntityAI (func_184651_r) targetTasks EntityAIHurtByTarget (priority 1) and EntityAINearestAttackableTarget(EntityPlayer, checkSight false) (priority 2, offsets 145-161); tasks TrollAIFleeSun (2), EntityAIAttackMelee(1.0, true) (3)",
+        "Melee: attackEntityAsMob (func_70652_k) only starts ANIMATION_STRIKE_VERTICAL or _HORIZONTAL (20 ticks each, static init); onLivingUpdate (func_70636_d) offsets 654-729 and 730-804: at animation tick 10, if getDistanceSq(target) < 4.0 (2 blocks between the two feet positions; no canEntityBeSeen or block check, so it hits through a 1-block wall: hitsThroughWalls), target.attackEntityFrom(causeMobDamage(troll), ATTACK_DAMAGE); the horizontal strike also throws the target up (motionY 0.4, offsets 915-941)",
+        "Breaking in: onLivingUpdate offsets 945-1243: when the navigator has no path (func_75500_f) and a target exists with 3.0 < getDistanceSq < 30.0 (1.73 to 5.48 blocks) and the game rule mobGriefing is true, it faces the target, starts a vertical strike with chance 1/15 a tick when idle, and at its tick 10 runs new BlockBreakExplosion(world, troll, x, y + eyeHeight/2, z, 1 + nextFloat()) centred 1.9 blocks ahead (cos/sin of renderYawOffset + 90) unless a GenericGriefEvent is cancelled (no jar in the pack handles that event: only IceAndFireRotN's own classes name it), then doExplosionA and doExplosionB(true)",
+        "BlockBreakExplosion (vanilla Explosion's ray rule, troll.javap.txt '## BlockBreakExplosion'): each ray starts with power size x (0.7 + 0.6 x nextFloat), so below 2.6; a block is affected while power - (resistance + 0.3) x 0.3 stays above 0 (resistance from the exploder's getExplosionResistance, the block's), and power drops 0.225 per 0.3-block step: so a block with resistance 8.37 or more is never broken (2.6 / 0.3 - 0.3); doExplosionB drops the affected blocks (dropBlockAsItemWithChance) and removes them (onBlockExploded). Entities within 2 x size (so under 4 blocks: blastRadius) take causeMobDamage(troll) for ((v^2 + v) / 2 x 7 x 2size + 1) / 6, at most (7 x 4 + 1) / 6 = 4.8 (blastDamageMax), where v = (1 - distance/2size) x exposure",
+        "Epic Siege Mod leaves it alone: config/esm/epicsiegemod.cfg:579 lists iceandfire:if_troll in S:\"AI Blacklist\" (line 5, 'Mobs that are exempt from AI modifications'), and config/esm/entity_ai.json has no entry for it (EpicSiegeMod-13.169.jar (in the pack as mods/EpicSiegeMod-13.169.jar, SHA-256 398b7558dce5bf903df4afc6c143347d3245959f19c98d23f2f0312fb0a9c127))",
+        "Sunlight: onLivingUpdate offsets 202-383: setAvoidSun(world.isDaytime()); on the server, by day, when getBrightness() > 0.5 and world.canSeeSky(its block) it sets StoneEntityProperties.isStone and stops; ServerEvents.onEntityUpdate (offsets 1811-2076) then zeroes a stone mob's motion, sets NoAI and clears its target every tick, and onEntityDespawn denies its despawn; nothing in the jar sets isStone back to false (only ItemStoneStatue, ItemGorgonHead, EntityGorgon and EntityTroll set it, to true). config/ice_and_fire.cfg:222 'Entities immune to being turned to stone' does not list it",
+        "Also: attackEntityFrom (func_70097_a) ignores any damage type containing 'arrow'; below max health it gets Regeneration II for 30 ticks every 30 ticks (offsets 155-197); getCanSpawnHere (func_70601_bi): nextInt(trollSpawnCheckChance = 1) == 0 and not canSeeSky(the block above it), then EntityMob's (vanilla: a light-level check, not read)",
+        "Daylight in shade: TrollAIFleeSun.shouldExecute runs only while world.isDaytime() and canSeeSky(its feet) and findPossibleShelter() finds, in 10 random tries within 10 blocks across and 3 up or down, a block that cannot see the sky (and getBlockPathWeight < 0); it has mutex 1, so it takes over from EntityAIAttackMelee (priority 3) only while it runs. Under cover nothing in the troll stops it by day. Brightness above 0.5 means light 13 or more, and isDaytime means skylightSubtracted below 4 (vanilla WorldProvider brightness table and World.calculateSkylightSubtracted: rain takes 3 off the sky light, a thunderstorm 5; not read)",
+        "Spawns: the dump's spawn lists (spawns.json, 'monster') have iceandfire:if_troll in 71 overworld biomes with weight 55, groups of 1; config/ice_and_fire.cfg:459 B:\"Spawn Trolls\"=true, :501 I:\"Troll Spawn Weight\"=55; config/incontrol/spawn.json and potentialspawn.json name it only for dimension 10 (1% at light 7 or less, else deny): no In Control rule touches it in the overworld",
+        "config/Special_AI.cfg: iceandfire:if_troll 1.0 in door_breaking mob_list (:120; target_blocks doors and gates, requires_tools true), idle_fiddling (:461) and idle_griefing (:713; break_lights true: blocks with light above 1). Config only: Special AI's code was not read",
+        "config/rotm.cfg:511 Mob Offense iceandfire:if_troll;potioncore:broken_armor;100;0;10;100: Broken Armor I for 10 s on 100% of its hits (format at :433). Config only. config/thiccentities.cfg if_troll keeps every factor at 1; config/dmgcontrol.cfg:206 MaxHealth_iceandfire:if_troll=200.0 is inert (AllowHealthModification=false)",
+        "Tracking: the dump's entities.json tracking range 64 (frequency 1): the server sends it to a client within 64 blocks"
       ]
     },
     "minecraft:enderman": {
@@ -1050,5 +1088,39 @@
         "Vanilla 1.12 EntityAIHurtByTarget (not in the pack's jars; behaviour unverified on this pack): it targets the entity that last hurt the mob (its revenge target), so any hit the bot lands counts, including a sword sweep that clips it; it keeps that target while the target is within the mob's follow range (16 by default) and has not been out of sight for more than 60 ticks; with callsForHelp true it also gives that target to every mob of the same class nearby (within the follow range) that has none"
       ]
     }
-  ]
+  ],
+  "demolition": {
+    "summary": "Epic Siege Mod 'Demolition': a listed mob (the zombie, zombie villager and Special Mobs zombies among them) spawns 1 time in 100 with TNT in its off-hand (visible as its held item). Within 4 blocks of its target it drops lit TNT at its own feet, then again every 10 s, and keeps the TNT: the TNT explodes 4 s later with power 4, which breaks cobblestone and stone walls (explosion resistance below 17) and can kill a player next to it. A mob holding TNT is a creeper with legs: keep more than 4 blocks away, and move off the spot when it hisses.",
+    "confidence": "verified",
+    "explosive": {
+      "source": "tnt",
+      "item": "minecraft:tnt",
+      "slot": "offhand",
+      "trigger": 4,
+      "fuseTicks": 80,
+      "power": 4,
+      "repeatTicks": 200,
+      "breaksResistanceBelow": 17.0
+    },
+    "members": {
+      "minecraft:zombie": 0.01,
+      "minecraft:zombie_villager": 0.01,
+      "primitivemobs:goblin": 0.01,
+      "primitivemobs:skeleton_warrior": 0.01,
+      "specialmobs:bruteskeleton": 0.01,
+      "specialmobs:brutezombie": 0.01,
+      "specialmobs:fishingzombie": 0.01,
+      "specialmobs:giantzombie": 0.01,
+      "specialmobs:hungryzombie": 0.01,
+      "specialmobs:plaguezombie": 0.01,
+      "specialmobs:specialzombie": 0.01,
+      "twilightforest:redcap": 0.01
+    },
+    "evidence": [
+      "EpicSiegeMod-13.169.jar (in the pack as mods/EpicSiegeMod-13.169.jar, SHA-256 398b7558dce5bf903df4afc6c143347d3245959f19c98d23f2f0312fb0a9c127): CfgProps.DEMOLITION (\"Demolition\", default 0.1); AdditionDemolition.isValid: Demolition > 0; getAdditionalAI: on the server, if nextDouble() < Demolition, setItemStackToSlot(OFFHAND, new ItemStack(Blocks.TNT)), then adds ESM_EntityAIDemolition at task priority 4",
+      "ESM_EntityAIDemolition.shouldExecute: a delay counts down; then true when either hand holds TNT and the attack target is within getDistance < 4.0; startExecuting: delay = 200, spawns new EntityTNTPrimed(world, its x, y, z, itself) and plays the TNT fuse sound; the TNT stays in its hand",
+      "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): acm (EntityTNTPrimed, EntityList 'tnt') fuse 80 ticks (bipush 80 in both constructors), explode() at power 4.0f; the vanilla explosion ray rule (power up to 4 x 1.3 = 5.2, minus (resistance + 0.3) x 0.3) breaks blocks with explosion resistance below 5.2 / 0.3 - 0.3 = 17.03",
+      "config/esm/entity_ai.json: \"Demolition\": 0.01 for minecraft:zombie (:334), minecraft:zombie_villager (:145), primitivemobs:goblin (:388), primitivemobs:skeleton_warrior (:416), specialmobs:bruteskeleton (:208), specialmobs:brutezombie (:157), specialmobs:fishingzombie (:452), specialmobs:giantzombie (:436), specialmobs:hungryzombie (:272), specialmobs:plaguezombie (:184), specialmobs:specialzombie (:396), twilightforest:redcap (:314); the default block (:68) says 0.0 and applies only to mobs with no entry"
+    ]
+  }
 }

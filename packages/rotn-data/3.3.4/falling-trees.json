@@ -1,0 +1,28 @@
+{
+  "format": "rotn-falling-trees/1",
+  "pack": "3.3.4",
+  "description": "Whether and how a falling Dynamic Trees tree hurts entities on this pack, for fallingTree and fallingTreeDamage. Hand-written from the bytecode of DramaticTrees-1.12.2-0.13.4.jar (the pack's Dynamic Trees core: mcmod.info modid 'dynamictrees', 'Dynamic Trees with a little bit more edge'; the DynamicTrees* jars are add-ons for it) and config/dynamictrees.cfg, read with javap only; excerpts in packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/trees.javap.txt and configs.txt. confidence 'verified' = read from that bytecode and config; nothing here was watched in a run.",
+  "confidence": "verified",
+  "enabled": true,
+  "damageSource": "fallingtree",
+  "deathMessage": "%1$s was crushed by a falling tree",
+  "attacker": null,
+  "bypassesArmor": false,
+  "multiplier": 1.5,
+  "summary": "Chopping the base of a Dynamic Trees trunk makes the part above fall over as one entity. While it swings down (before its first bounce) every living entity its trunk line touches is hit once for woodVolume x fall speed x 3 x 1.5, if woodVolume x fall speed x 3 is above 2, and is knocked away from the chopper. woodVolume is the falling wood in full-log blocks (a branch of radius r counts r^2/64; a full log, radius 8, counts 1); the fall speed is in degrees a tick, from 0, growing by 0.1 / massCenterHeight a tick, so near the ground it is about sqrt(18 / massCenterHeight). A small oak (2 logs of volume, mass centre 3 blocks up) can hit for about 22, more than a full-health player has. The tree falls away from the face the axe struck, toward the chopper while sneaking: chop standing, from the side away from where it will fall, and keep other players and pets off that side. Armour reduces it (not bypassesArmor); it has no attacker.",
+  "formula": {
+    "damage": "woodVolume * fallSpeed * 3 * multiplier, only when woodVolume * fallSpeed * 3 > 2, once per entity per tree, before the first bounce",
+    "fallSpeedPerTick": "0.2 / (2 * massCenterY) added each tick while the falling tree is on the ground (degrees per tick)",
+    "woodVolume": "sum over the falling branch blocks of radius^2 * 64 / 4096"
+  },
+  "direction": "Falls away from the face the axe struck (BlockBranch.futureBreak: toolDir = the ray trace's sideHit, its opposite while sneaking; addRotation turns the tree so its top moves to toolDir's opposite side). A hit entity is pushed toward toolDir's opposite too.",
+  "evidence": [
+    "DramaticTrees-1.12.2-0.13.4.jar (in the pack as mods/DramaticTrees-1.12.2-0.13.4.jar, SHA-256 b86dae768ccc1182c52e5b9a8756a5906da53dc125d48bfe1c8dc69204a77ffe): TreeDamageSource extends DamageSource with the name \"fallingtree\" and nothing else (no setDamageBypassesArmor, no entity); AnimationConstants.TREE_DAMAGE is one instance",
+    "EntityFallingTree.defaultAnimationHandler: a trunk cut from below (cutDir DOWN) with its mass centre 1 or more above the cut uses AnimHandlerFall (AnimationHandlers.falloverAnimationHandler); Species/TreeFamily.selectAnimationHandler return it; selectAnimationHandler gives the void handler only when enableFallingTrees is false",
+    "AnimationHandlerFallover.handleMotion offsets 10-41: on the ground fallSpeed += 0.2 / (massCenter.y * 2); offsets 256-317: on hitting the ground fallSpeed *= -0.25 and bounces += 1; offsets 384-670: if ModConfigs.enableFallingTreeDamage and on the server, each living entity from testEntityCollision not yet hit is added to entitiesHit, damage = woodVolume * |fallSpeed| * 3, and only if bounces == 0 and damage > 2: knocked back along toolDir.getOpposite(), damage *= ModConfigs.fallingTreeDamageMultiplier, attackEntityFrom(TREE_DAMAGE, damage). This handler is the only attackEntityFrom call in the entities package",
+    "testEntityCollision: the living entities in the box around the trunk line from the base to trunkHeight - 1 along the current rotation, thickness the base branch radius / 16",
+    "NodeNetVolume.run adds radius * radius * 64 per branch block; getVolume divides by 4096. BlockBranch.destroyBranchFromNode fills BranchDestructionData.woodVolume from it",
+    "config/dynamictrees.cfg:48 B:enableFallingTreeDamage=true, :54 B:enableFallingTrees=true, :57 S:fallingTreeDamageMultiplier=1.5 (default 1.0)",
+    "assets/dynamictrees/lang/en_us.lang:111 death.attack.fallingtree=%1$s was crushed by a falling tree"
+  ]
+}

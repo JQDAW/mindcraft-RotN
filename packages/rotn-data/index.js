@@ -40,6 +40,12 @@ export const threatOf = (entityName) => pack().threatOf(entityName);
 export const nightThreats = (opts) => pack().nightThreats(opts);
 export const mobDigging = (entityName) => pack().mobDigging(entityName);
 export const canMobDig = (entityName, blockName, opts) => pack().canMobDig(entityName, blockName, opts);
+// Melee damage per mob and falling-tree damage (soak 5): 3.3.4/mob-melee.json, falling-trees.json.
+export const mobMelee = (entityName) => pack().mobMelee(entityName);
+export const fallingTree = () => pack().fallingTree();
+export const fallingTreeDamage = (tree) => pack().fallingTreeDamage(tree);
+// null melee means unknown, never zero: assume UNKNOWN_MELEE (the worst listed hit, the troll's 18).
+export { UNKNOWN_MELEE } from './src/melee.js';
 // Wild food (G4 #5): berry bushes, herbs, gardens, mushrooms and plant hazards (3.3.4/forage-food.json).
 export const forageFood = (block, meta) => pack().forageFood(block, meta);
 export const forageSources = (opts) => pack().forageSources(opts);

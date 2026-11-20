@@ -1,0 +1,679 @@
+{
+  "format": "rotn-mob-melee/1",
+  "pack": "3.3.4",
+  "description": "How hard a mob's melee hit is on this pack, for mobMelee and threatOf(...).melee: damage = its ATTACK_DAMAGE attribute with an empty hand after the pack's attribute changes, which is what a player takes per hit on this pack's difficulty (normal) before armour, enchantments and potions. Hand-written from javap -c -p -constants of the pinned pack zip's jars (vanilla classes from its obfuscated minecraft_server.1.12.2.jar, named through EntityList) and its configs; excerpts in packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/. confidence 'verified' = read from that bytecode and config; 'vanilla' = not read. Fields: damage; maxDamage (with the strongest item it is given that was read, when that is more); reach and intervalTicks where the mob's own code sets them; onHit (effects); weapon (how it gets one); note.",
+  "general": {
+    "summary": "Compare health with damage: a mob kills an unarmoured player at full health (20) in ceil(20 / damage) hits. Nothing on this pack scales mob damage: the difficulty is normal (vanilla scales mob damage to players only on easy and hard), Scaling Health adds no damage (Damage Modifier 0, Difficulty Weight 0, no mob potions, difficulty stays 0), Epic Siege Mod adds none (Boss Kill Modifier 0), Damage Control keeps the 'mob' source at 1.0 (but cuts what players deal, 'player' and 'arrow', to 0.8: the bot's own hits do 80%), Thicc Entities scales none of these mobs, and Rough Mobs changes ATTACK_DAMAGE only for the mobs it lists (blaze, dread lich, weta among these). A held weapon adds its attack damage (zombies get one 1 time in 5).",
+    "confidence": "verified",
+    "evidence": [
+      "server.properties:12 difficulty=2 (the pack zip's root; vanilla EntityPlayer.attackEntityFrom changes difficulty-scaled damage only on easy and hard: not read)",
+      "config/scalinghealth/main.cfg:278 S:\"Damage Modifier\"=0.0, :492 S:\"Difficulty Weight\"=0.00, :416-417 S:\"Mob Potions\" < > (empty), :84 S:\"Starting Value\"=0.0, :64 S:\"Increase Per Second\"=0.0",
+      "config/esm/epicsiegemod.cfg:903 S:\"Boss Kill Modifier\"=0.0 (the factor for mob health and damage multipliers)",
+      "config/dmgcontrol.cfg damage_source_modifiers: S:DamageModifier_mob=1.0, S:DamageModifier_player=0.8, S:DamageModifier_arrow=0.8, S:DamageModifier_fallingtree=1.0 (config only; Damage Control's code was not read)",
+      "config/thiccentities.cfg: every damage factor is 1.0 (only aerwhale, whale, quazar, harvester, sea serpent and ptera change anything, none of them damage)",
+      "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adh (SharedMonsterAttributes) static init: \"generic.attackDamage\" default 2.0 as field f; ade (EntityMob) bM registers it (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+      "EpicSiegeMod-13.169.jar (in the pack as mods/EpicSiegeMod-13.169.jar, SHA-256 398b7558dce5bf903df4afc6c143347d3245959f19c98d23f2f0312fb0a9c127): GeneralEntityHandler.onEntitySpawn adds an operation-1 ATTACK_DAMAGE modifier \"ESM_TWEAK_3\" of (Damage + the boss modifier when Boss Mod Damage is true) only when that sum is not 1.0. config/esm/entity_ai.json:80 \"Damage\": 1.0 is in the default block (mobs with no entry: no modifier); no entry has a \"Damage\" key, and an entry's missing number reads 0 (JsonHelper.getNumber(json, key) passes 0), a x0 modifier that changes nothing; :84 \"Boss Mod Damage\": false and Boss Kill Modifier 0"
+    ]
+  },
+  "mobs": {
+    "ancientbeasts:boulderer": {
+      "damage": 3,
+      "maxDamage": 6,
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar (in the pack as mods/ancientbeasts-1.9.99999.jar, SHA-256 26131c7a4f8faf89cd55d5758fc121a78e7f69afba15387ed15fc83617e4507c): EntityBoulderer extends EntityZombie (3.0); onInitialSpawn applies an AttributeModifier \"Damage bonus\" of GlobalDamageMultiplier (1.0) with operation 2 (x 2); the condition around it was not read"
+      ]
+    },
+    "ancientbeasts:frost_walker": {
+      "damage": 4,
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar (in the pack as mods/ancientbeasts-1.9.99999.jar, SHA-256 26131c7a4f8faf89cd55d5758fc121a78e7f69afba15387ed15fc83617e4507c): EntityFrostWalker applyEntityAttributes ATTACK_DAMAGE 4.0 x GlobalDamageMultiplier (1.0, config/ancientbeasts.cfg:50)"
+      ]
+    },
+    "ancientbeasts:giant_zombie": {
+      "damage": 15,
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar (in the pack as mods/ancientbeasts-1.9.99999.jar, SHA-256 26131c7a4f8faf89cd55d5758fc121a78e7f69afba15387ed15fc83617e4507c): EntityGiant applyEntityAttributes ATTACK_DAMAGE 15.0 x AncientBeastsConfig.GlobalDamageMultiplier; config/ancientbeasts.cfg:50 D:\"Global Damage Multiplier\"=1.0"
+      ]
+    },
+    "ancientbeasts:rifted_enderman": {
+      "damage": 6,
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar (in the pack as mods/ancientbeasts-1.9.99999.jar, SHA-256 26131c7a4f8faf89cd55d5758fc121a78e7f69afba15387ed15fc83617e4507c): EntityRiftedEnderman applyEntityAttributes ATTACK_DAMAGE 6.0 x GlobalDamageMultiplier (1.0, config/ancientbeasts.cfg:50)"
+      ]
+    },
+    "charm:spectre": {
+      "damage": 0.01,
+      "onHit": "curses a random item, then vanishes",
+      "confidence": "verified",
+      "evidence": [
+        "Charm-1.12.2-1.4.1.jar (in the pack as mods/Charm-1.12.2-1.4.1.jar, SHA-256 88817c93e103382d7377c78e29da7c48e74d5a397f62cb1631532c6d64195258): EntitySpectre applyEntityAttributes ATTACK_DAMAGE = Spectre.attackDamage, 0.01 (Spectre.configure sets the constant 0.01f; no config key); attackEntityAsMob then curses a random item of the player (config/charm.cfg:835 B:\"Apply curse\"=true) and despawns"
+      ]
+    },
+    "defiledlands:host": {
+      "damage": 5,
+      "confidence": "verified",
+      "evidence": [
+        "defiledlands-1.12.2-1.4.3.jar (in the pack as mods/defiledlands-1.12.2-1.4.3.jar, SHA-256 62e8d6b2ecfd97c87b6a7f481e6d3b2ee28494b28cb9745b9e7151f2f0ee3f36): EntityHost applyEntityAttributes ATTACK_DAMAGE 5.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)"
+      ]
+    },
+    "defiledlands:shambler": {
+      "damage": 14,
+      "confidence": "verified",
+      "evidence": [
+        "defiledlands-1.12.2-1.4.3.jar (in the pack as mods/defiledlands-1.12.2-1.4.3.jar, SHA-256 62e8d6b2ecfd97c87b6a7f481e6d3b2ee28494b28cb9745b9e7151f2f0ee3f36): EntityShambler applyEntityAttributes ATTACK_DAMAGE 14.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)"
+      ]
+    },
+    "defiledlands:shambler_twisted": {
+      "damage": 14,
+      "confidence": "verified",
+      "evidence": [
+        "defiledlands-1.12.2-1.4.3.jar (in the pack as mods/defiledlands-1.12.2-1.4.3.jar, SHA-256 62e8d6b2ecfd97c87b6a7f481e6d3b2ee28494b28cb9745b9e7151f2f0ee3f36): EntityShamblerTwisted extends EntityShambler (14.0) without its own applyEntityAttributes"
+      ]
+    },
+    "hordes:zombie_player": {
+      "damage": 3,
+      "note": "A held weapon adds its attack damage.",
+      "confidence": "verified",
+      "evidence": [
+        "The-Hordes-1.12.2-1.1.7.jar (in the pack as mods/The-Hordes-1.12.2-1.1.7.jar, SHA-256 882e8a4563cd69964a71b0e4c7584069bd77844110d8fb256d856464fe0c4ed3): net.smileycorp.hordes.common.entities.EntityZombiePlayer extends EntityZombie and sets no ATTACK_DAMAGE",
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adt (zombie) bM sets ATTACK_DAMAGE (adh.f) 3.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## adt\")"
+      ]
+    },
+    "iceandfire:dread_lich": {
+      "damage": 11,
+      "note": "Mostly a ranged caster.",
+      "onHit": "Frozen, Frostbitten (1 in 3) and Broken Magic Shield III for 15 s (rotm)",
+      "confidence": "verified",
+      "evidence": [
+        "IceAndFireRotN-1.9.1-1.2.1.jar (in the pack as mods/IceAndFireRotN-1.9.1-1.2.1.jar, SHA-256 6f8f6d7a12fbc207f2f0dc638d4b9901bab5b003e1793313be8c4aede00ca747): EntityDreadLich applyEntityAttributes ATTACK_DAMAGE 1.0",
+        "config/roughmobsrevamped.cfg:566 iceandfire:dread_lich;generic.attackDamage;0;10 (add 10)",
+        "config/rotm.cfg:581 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)"
+      ]
+    },
+    "iceandfire:gorgon": {
+      "damage": 3,
+      "note": "Its gaze, not its hit, is the danger (threat-reactions.json).",
+      "confidence": "verified",
+      "evidence": [
+        "IceAndFireRotN-1.9.1-1.2.1.jar (in the pack as mods/IceAndFireRotN-1.9.1-1.2.1.jar, SHA-256 6f8f6d7a12fbc207f2f0dc638d4b9901bab5b003e1793313be8c4aede00ca747): EntityGorgon applyEntityAttributes ATTACK_DAMAGE 3.0"
+      ]
+    },
+    "iceandfire:if_troll": {
+      "damage": 18,
+      "reach": 2,
+      "intervalTicks": 20,
+      "hitsThroughWalls": true,
+      "onHit": "Broken Armor I for 10 s (rotm, every hit)",
+      "note": "A hit lands 0.5 s after the swing starts. reach is the 3D distance between the two entities' positions (the centre of each hitbox's bottom), checked with nothing else: no line of sight, no block in between. So it hits through a 1-block wall when the bot stands against it (troll centre 0.6 from the wall, bot centre 0.3 behind it: 1.9 apart; 2.1 with the bot in the middle of its block), never through a 2-block wall (2.9), nor down through a 1-block roof onto a bot in a 2-high room (3 apart).",
+      "confidence": "verified",
+      "evidence": [
+        "IceAndFireRotN-1.9.1-1.2.1.jar (in the pack as mods/IceAndFireRotN-1.9.1-1.2.1.jar, SHA-256 6f8f6d7a12fbc207f2f0dc638d4b9901bab5b003e1793313be8c4aede00ca747): EntityTroll applyEntityAttributes ATTACK_DAMAGE = IceAndFireConfig.trollAttackStrength; config/ice_and_fire.cfg:492 S:\"Troll Attack Strength\"=18.0",
+        "onLivingUpdate: the hit lands 10 ticks into a 20-tick strike, only if the target is within 2 blocks (getDistanceSq < 4.0); see threat-reactions.json for the block breaking",
+        "config/rotm.cfg:511 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)"
+      ]
+    },
+    "minecraft:blaze": {
+      "damage": 9,
+      "note": "Its melee is a touch; it mostly shoots fireballs. Nether.",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): acq (blaze) bM sets ATTACK_DAMAGE 6.0",
+        "config/roughmobsrevamped.cfg:104 blaze;generic.attackDamage;0;3 (add 3)"
+      ]
+    },
+    "minecraft:cave_spider": {
+      "damage": 2,
+      "onHit": "poison 7 s and slowness 6 s",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): acr (cave_spider) sets no ATTACK_DAMAGE; attackEntityAsMob (B) poisons for 7 s on normal, 15 s on hard (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## acr\")",
+        "config/roughmobsrevamped.cfg:1626-1632: slowness 120 ticks on every hit"
+      ]
+    },
+    "minecraft:enderman": {
+      "damage": 7,
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): acu (enderman) bM sets ATTACK_DAMAGE 7.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## acu\")"
+      ]
+    },
+    "minecraft:endermite": {
+      "damage": 2,
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): acv (endermite) bM sets ATTACK_DAMAGE 2.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## acv\")"
+      ]
+    },
+    "minecraft:guardian": {
+      "damage": 6,
+      "note": "It hurts with its beam; ocean monuments only.",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): ada (guardian) bM sets ATTACK_DAMAGE 6.0"
+      ]
+    },
+    "minecraft:husk": {
+      "damage": 3,
+      "onHit": "hunger (140 x regional difficulty ticks)",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adb (husk) extends adt (zombie), no ATTACK_DAMAGE of its own; attackEntityAsMob (B) adds Hunger for 140 x regional difficulty ticks",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5"
+      ],
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)"
+    },
+    "minecraft:silverfish": {
+      "damage": 1,
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adj (silverfish) bM sets ATTACK_DAMAGE 1.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## adj\")"
+      ]
+    },
+    "minecraft:skeleton": {
+      "damage": 2,
+      "note": "Melee only when it holds no bow (vanilla: a skeleton with a bow shoots; it picks up a sword only from the ground). With an iron sword a hit is 7.",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adk (skeleton) extends the abstract skeleton and sets no ATTACK_DAMAGE; ade (EntityMob) bM registers it with the 2.0 default (adh static init)",
+        "config/roughmobsrevamped.cfg:1427 skeletonEquipmentMainhand: bow only; :1432-1433 iron_axe and iron_sword are off-hand items for dimension -1 (the Nether) only"
+      ]
+    },
+    "minecraft:slime": {
+      "damage": 4,
+      "note": "Damage equals its size: 4 for a big slime, 2 for a medium one, none for a small one.",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adl (slime) attack strength (di) is its size (dl); it can hurt a player only when not small (dh = !dm)"
+      ]
+    },
+    "minecraft:spider": {
+      "damage": 2,
+      "onHit": "slowness 6 s and a web (Rough Mobs, every hit)",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adn (spider) sets no ATTACK_DAMAGE: the 2.0 default (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## adn\")",
+        "config/roughmobsrevamped.cfg:1626-1632: slowness for 120 ticks on every hit (spiderSlownessChance=1), and a web where it lands (spiderSlownessCreateWeb)"
+      ]
+    },
+    "minecraft:stray": {
+      "damage": 2,
+      "note": "Melee only without a bow.",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): ado (stray) sets no ATTACK_DAMAGE (the 2.0 default)"
+      ]
+    },
+    "minecraft:vindication_illager": {
+      "damage": 5,
+      "note": "Vanilla gives it an iron axe, which adds its attack damage; the axe was not read.",
+      "onHit": "Broken Armor I for 7 s (rotm, 1 hit in 3)",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adq (vindication_illager) bM sets ATTACK_DAMAGE 5.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## adq\")",
+        "config/rotm.cfg:444 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)"
+      ]
+    },
+    "minecraft:wither_skeleton": {
+      "damage": 4,
+      "note": "Vanilla gives it a stone sword (+4) and its hit withers; Nether.",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): ads (wither_skeleton) onInitialSpawn (a) sets ATTACK_DAMAGE 4.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## ads\")"
+      ]
+    },
+    "minecraft:zombie": {
+      "damage": 3,
+      "onHit": "hunger (Rough Mobs, 1 hit in 4, 7.5 s)",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adt (zombie) bM sets ATTACK_DAMAGE (adh.f) 3.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## adt\")",
+        "config/roughmobsrevamped.cfg:2935-2938: hunger for 150 ticks on 1 hit in 4 (zombieHungerChance=4)",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5"
+      ],
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)"
+    },
+    "minecraft:zombie_pigman": {
+      "damage": 5,
+      "note": "Vanilla gives it a golden sword (+3: ItemSword 3.0 + GOLD 0.0), so a hit is 8; not checked in its spawn code. Nether.",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adf (zombie_pigman) bM sets ATTACK_DAMAGE 5.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## adf\")"
+      ]
+    },
+    "minecraft:zombie_villager": {
+      "damage": 3,
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adu (zombie_villager) extends adt (zombie), no ATTACK_DAMAGE of its own",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5"
+      ],
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)"
+    },
+    "mod_lavacow:mummy": {
+      "damage": 4,
+      "onHit": "corroded",
+      "confidence": "verified",
+      "evidence": [
+        "Fish's Undead Rising-1.3.2.jar (in the pack as mods/Fish's Undead Rising-1.3.2.jar, SHA-256 f45662c8b3ba6a46d251fbb56044bdc5290d1102d23500ad0dfd927aa9bf5c50): EntityMummy applyEntityAttributes ATTACK_DAMAGE = Modconfig.Mummy_Attack; config/Fishs_Undead_Rising.cfg:570 D:\"mummy attack\"=4.0; attackEntityAsMob adds Corroded"
+      ]
+    },
+    "mod_lavacow:parasite": {
+      "damage": 1,
+      "onHit": "nausea II for 7 s (rotm, 15%) and Soiled for 60 s (10%)",
+      "confidence": "verified",
+      "evidence": [
+        "Fish's Undead Rising-1.3.2.jar (in the pack as mods/Fish's Undead Rising-1.3.2.jar, SHA-256 f45662c8b3ba6a46d251fbb56044bdc5290d1102d23500ad0dfd927aa9bf5c50): EntityParasite applyEntityAttributes ATTACK_DAMAGE = Modconfig.Parasite_Attack; config/Fishs_Undead_Rising.cfg:613 D:\"parasite attack\"=1.0",
+        "config/rotm.cfg:519 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)"
+      ]
+    },
+    "mod_lavacow:sludgelord": {
+      "damage": 7,
+      "onHit": "Tarred II for 20 s and Corroded II for 10 s (rotm, every hit)",
+      "confidence": "verified",
+      "evidence": [
+        "Fish's Undead Rising-1.3.2.jar (in the pack as mods/Fish's Undead Rising-1.3.2.jar, SHA-256 f45662c8b3ba6a46d251fbb56044bdc5290d1102d23500ad0dfd927aa9bf5c50): EntitySludgeLord applyEntityAttributes ATTACK_DAMAGE = Modconfig.SludgeLord_Attack; config/Fishs_Undead_Rising.cfg:721 D:\"sludge lord attack\"=7.0",
+        "config/rotm.cfg:468 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)"
+      ]
+    },
+    "mod_lavacow:weta": {
+      "damage": 4,
+      "confidence": "verified",
+      "evidence": [
+        "Fish's Undead Rising-1.3.2.jar (in the pack as mods/Fish's Undead Rising-1.3.2.jar, SHA-256 f45662c8b3ba6a46d251fbb56044bdc5290d1102d23500ad0dfd927aa9bf5c50): EntityWeta applyEntityAttributes ATTACK_DAMAGE = Modconfig.Weta_Attack; config/Fishs_Undead_Rising.cfg:811 D:\"weta attack\"=3.0",
+        "config/roughmobsrevamped.cfg:583 mod_lavacow:weta;generic.attackDamage;0;1 (add 1)"
+      ]
+    },
+    "mod_lavacow:zombiefrozen": {
+      "damage": 3,
+      "onHit": "slowness V, Frosted II for 7 s (rotm, 1 hit in 2) and Frozen for 3 s (rotm, 1 in 5)",
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)",
+      "confidence": "verified",
+      "evidence": [
+        "Fish's Undead Rising-1.3.2.jar (in the pack as mods/Fish's Undead Rising-1.3.2.jar, SHA-256 f45662c8b3ba6a46d251fbb56044bdc5290d1102d23500ad0dfd927aa9bf5c50): EntityZombieFrozen applyEntityAttributes ATTACK_DAMAGE = Modconfig.ZombieFrozen_Attack (\"frigid attack\"); config/Fishs_Undead_Rising.cfg:68 D:\"frigid attack\"=3.0; attackEntityAsMob adds Slowness V for 40 x regional difficulty ticks",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5",
+        "config/rotm.cfg:573 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)"
+      ]
+    },
+    "mod_lavacow:zombiemushroom": {
+      "damage": 3,
+      "confidence": "verified",
+      "evidence": [
+        "Fish's Undead Rising-1.3.2.jar (in the pack as mods/Fish's Undead Rising-1.3.2.jar, SHA-256 f45662c8b3ba6a46d251fbb56044bdc5290d1102d23500ad0dfd927aa9bf5c50): EntityZombieMushroom applyEntityAttributes ATTACK_DAMAGE = Modconfig.ZombieMushroom_Attack, read from \"mycosis attack\"; config/Fishs_Undead_Rising.cfg:582 D:\"mycosis attack\"=3.0",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5"
+      ],
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)"
+    },
+    "quark:dweller": {
+      "damage": 3,
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)",
+      "onHit": "Vulnerable I for 3 s (rotm, 1 hit in 4)",
+      "confidence": "verified",
+      "evidence": [
+        "QuarkRotN-r1.6-190.jar (in the pack as mods/QuarkRotN-r1.6-190.jar, SHA-256 a79751417149459395984cc7ee83195ce8dcb4b2e6adbf7abb1ccc650f816dd4): EntityDweller extends EntityZombie and sets no ATTACK_DAMAGE; attackEntityAsMob removes its own invisibility, then EntityZombie's",
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adt (zombie) bM sets ATTACK_DAMAGE (adh.f) 3.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## adt\")",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5",
+        "config/rotm.cfg:454 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)"
+      ]
+    },
+    "specialmobs:babycavespider": {
+      "damage": 1,
+      "onHit": "poison (cave spider)",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityBabyCaveSpider extends the vanilla cave spider (2); adjustTypeAttributes adds -1 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:babyspider": {
+      "damage": 1,
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityBabySpider extends the vanilla spider (2); adjustTypeAttributes adds -1 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:bruteskeleton": {
+      "damage": 2,
+      "note": "Melee only when it holds no bow.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityBruteSkeleton extends the vanilla skeleton (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:brutezombie": {
+      "damage": 3,
+      "onHit": "also takes 2 more health, ignoring armour, but never below 1 (MobHelper.causeLifeLoss(target, 2))",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityBruteZombie extends the vanilla zombie (3); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5"
+      ],
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)"
+    },
+    "specialmobs:desertspider": {
+      "damage": 2,
+      "onHit": "nausea, blindness, slowness and resistance",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityDesertSpider extends the vanilla spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:fireskeleton": {
+      "damage": 2,
+      "onHit": "sets you on fire for 10 s",
+      "note": "Melee only when it holds no bow.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityFireSkeleton extends the vanilla skeleton (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:firezombie": {
+      "damage": 3,
+      "onHit": "sets you on fire for 10 s",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityFireZombie extends the vanilla zombie (3); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5"
+      ],
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)"
+    },
+    "specialmobs:fishingzombie": {
+      "damage": 3,
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityFishingZombie extends the vanilla zombie (3); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5"
+      ],
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)"
+    },
+    "specialmobs:flyingcavespider": {
+      "damage": 2,
+      "onHit": "poison (cave spider)",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityFlyingCaveSpider extends the vanilla cave spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:flyingspider": {
+      "damage": 2,
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityFlyingSpider extends the vanilla spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:gatlingskeleton": {
+      "damage": 4,
+      "note": "Melee only when it holds no bow.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityGatlingSkeleton extends the vanilla skeleton (2); adjustTypeAttributes adds 2 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:giantskeleton": {
+      "damage": 4,
+      "note": "Melee only when it holds no bow.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityGiantSkeleton extends the vanilla skeleton (2); adjustTypeAttributes adds 2 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:giantspider": {
+      "damage": 4,
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityGiantSpider extends the vanilla spider (2); adjustTypeAttributes adds 2 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:giantzombie": {
+      "damage": 5,
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityGiantZombie extends the vanilla zombie (3); adjustTypeAttributes adds 2 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5"
+      ],
+      "maxDamage": 14.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)"
+    },
+    "specialmobs:hungryspider": {
+      "damage": 1,
+      "onHit": "gains health and 1 attack damage as it feeds",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityHungrySpider extends the vanilla spider (2); adjustTypeAttributes adds -1 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:hungryzombie": {
+      "damage": 3,
+      "onHit": "heals itself",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityHungryZombie extends the vanilla zombie (3); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5"
+      ],
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)"
+    },
+    "specialmobs:huskzombie": {
+      "damage": 3,
+      "onHit": "hunger",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityHuskZombie extends the vanilla zombie (3); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:knightskeleton": {
+      "damage": 6,
+      "note": "Melee only when it holds no bow.",
+      "onHit": "slowness VI for 2 s (rotm, 1 hit in 5)",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityKnightSkeleton extends the vanilla skeleton (2); adjustTypeAttributes adds 4 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)",
+        "config/rotm.cfg:592 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)"
+      ]
+    },
+    "specialmobs:mothercavespider": {
+      "damage": 4,
+      "onHit": "poison (cave spider)",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityMotherCaveSpider extends the vanilla cave spider (2); adjustTypeAttributes adds 2 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:motherspider": {
+      "damage": 5,
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityMotherSpider extends the vanilla spider (2); adjustTypeAttributes adds 3 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:ninjaskeleton": {
+      "damage": 2,
+      "note": "Melee only when it holds no bow.",
+      "onHit": "poison III for 3 s (rotm, 1 hit in 2)",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityNinjaSkeleton extends the vanilla skeleton (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)",
+        "config/rotm.cfg:591 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)"
+      ]
+    },
+    "specialmobs:palespider": {
+      "damage": 2,
+      "onHit": "weakness and mining fatigue",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityPaleSpider extends the vanilla spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:plaguezombie": {
+      "damage": 3,
+      "onHit": "a random harmful effect",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityPlagueZombie extends the vanilla zombie (3); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)",
+        "Rough Mobs gives a mob on its zombieEntities list (config/roughmobsrevamped.cfg:2903-2921) a main-hand weapon 1 time in 5 at spawn (:3153 _zombieEquipmentWeaponChance=5), weighted from :3176-3191: stone_pickaxe, atop:mud_pickaxe, iron_pickaxe, wooden_axe, stone_axe, atop:mud_axe, stone_sword, iron_sword, atop:mud_sword, spartanweaponry clubs and daggers. A held weapon adds its attack damage; the strongest is the stone axe, +8 (ItemAxe, obf agy: its static array f = {6, 8, 8, 8, 6} by material, STONE is 1; ahq's Tool modifier is that field b). The others add less: iron sword +5 and stone sword +4 (ItemSword, obf ajy: 3.0 + the material's 2.0 or 1.0), wooden axe +6, pickaxes +2 to +3 (ItemPickaxe ajb: 1.0 + the material), ATOP's mud axe 6.0 and mud sword 3.0 (DelirusCrux ToolAxe passes 6.0 to Forge's ItemAxe(material, damage, speed); the MUD material's damage is 0), Spartan clubs 4.0 + 1.0 x material and daggers 2.5 + 0.5 x material (config/spartanweaponry.cfg:128-131, :178-181). 1 weapon in 20 is enchanted (:3144 _zombieEquipmentEnchantChance=20) at up to level ceil(5 x 0.3) = 2 (:3148 _zombieEquipmentEnchantMultiplier=0.3; :3212-3213 the list starts with sharpness), and Sharpness II adds 1.5 (vanilla 1 + 0.5 x (level - 1), not read): so a hit is at most base + 8 + 1.5"
+      ],
+      "maxDamage": 12.5,
+      "weapon": "Rough Mobs: a weapon 1 time in 5; the worst is a stone axe (+8), enchanted Sharpness II 1 time in 20 (+1.5)"
+    },
+    "specialmobs:poisonskeleton": {
+      "damage": 2,
+      "onHit": "poison",
+      "note": "Melee only when it holds no bow.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityPoisonSkeleton extends the vanilla skeleton (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:poisonspider": {
+      "damage": 2,
+      "onHit": "poison",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityPoisonSpider extends the vanilla spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:sniperskeleton": {
+      "damage": 4,
+      "note": "Melee only when it holds no bow.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntitySniperSkeleton extends the vanilla skeleton (2); adjustTypeAttributes adds 2 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:specialcavespider": {
+      "damage": 2,
+      "onHit": "poison (cave spider)",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): Entity_SpecialCaveSpider extends the vanilla cave spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:specialskeleton": {
+      "damage": 2,
+      "note": "Melee only when it holds no bow.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): Entity_SpecialSkeleton extends the vanilla skeleton (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:specialspider": {
+      "damage": 2,
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): Entity_SpecialSpider extends the vanilla spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:specialzombie": {
+      "damage": 3,
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): Entity_SpecialZombie extends the vanilla zombie (3); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:spitfireskeleton": {
+      "damage": 4,
+      "onHit": "sets you on fire for 10 s",
+      "note": "Melee only when it holds no bow.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntitySpitfireSkeleton extends the vanilla skeleton (2); adjustTypeAttributes adds 2 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:strayskeleton": {
+      "damage": 2,
+      "onHit": "slowness",
+      "note": "Melee only when it holds no bow.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityStraySkeleton extends the vanilla skeleton (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:webcavespider": {
+      "damage": 2,
+      "onHit": "poison (cave spider), places webs",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityWebCaveSpider extends the vanilla cave spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:webspider": {
+      "damage": 2,
+      "onHit": "places webs",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityWebSpider extends the vanilla spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:witchcavespider": {
+      "damage": 2,
+      "onHit": "poison (cave spider)",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityWitchCaveSpider extends the vanilla cave spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "specialmobs:witchspider": {
+      "damage": 2,
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityWitchSpider extends the vanilla spider (2); nothing changes ATTACK_DAMAGE (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "onTypeAttack runs after the vanilla attackEntityAsMob (Entity_Special*.attackEntityAsMob)"
+      ]
+    },
+    "zombie_players:zombie_player": {
+      "damage": 3,
+      "note": "A held weapon adds its attack damage.",
+      "confidence": "verified",
+      "evidence": [
+        "zombie_players-1.12.1-1.2.7.jar (in the pack as mods/zombie_players-1.12.1-1.2.7.jar, SHA-256 7969daf51537df644a26b95032c04f28d60b5be01a9beb4373999e33749eef24): EntityZombiePlayer extends EntityZombie and sets no ATTACK_DAMAGE; attackEntityAsMob calls EntityZombie's (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
+        "minecraft_server.1.12.2.jar (the pack zip's root, SHA-256 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e; obfuscated, classes named by EntityList (vi) registrations): adt (zombie) bM sets ATTACK_DAMAGE (adh.f) 3.0 (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt \"## adt\")"
+      ]
+    }
+  }
+}

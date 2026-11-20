@@ -22,6 +22,7 @@ import { createTranslator } from './translate.js';
 import { howToGet, rockRecipes } from './howto.js';
 import { threatOf, nightThreats } from './threats.js';
 import { mobDigging, canMobDig } from './digging.js';
+import { mobMelee, fallingTree, fallingTreeDamage } from './melee.js';
 import { forageFood, forageSources, forageHazard } from './forage.js';
 import { canFill } from './craft-fill.js';
 import { parseOld, registryName, WILDCARD_META } from './names.js';
@@ -99,6 +100,10 @@ export class RotnData {
         // Which mobs dig toward their target and which blocks they can dig, from Epic Siege Mod,
         // ESM-Tweaks and Tool Progression bytecode (mob-digging.json, hand-written with evidence).
         this.mobDiggingData = readJson(dir, 'mob-digging') ?? null;
+        // How hard each mob's melee hit is, and what a falling Dynamic Trees tree does, from the pack's
+        // bytecode and configs (mob-melee.json, falling-trees.json; hand-written with evidence).
+        this.mobMeleeData = readJson(dir, 'mob-melee') ?? null;
+        this.fallingTreesData = readJson(dir, 'falling-trees') ?? null;
         // Wild food blocks and plant hazards (forage-food.json, hand-written with citations).
         this.forageData = readJson(dir, 'forage-food') ?? null;
         // Which blocks fall (gravity), from the pack's bytecode and configs (falling-blocks.json,
@@ -529,6 +534,21 @@ export class RotnData {
     /** Whether a digging mob can dig a block state (src/digging.js). */
     canMobDig(entityName, blockName, opts) {
         return canMobDig(this, entityName, blockName, opts);
+    }
+
+    /** A mob's melee hit: damage, maxDamage, hitsToKill (src/melee.js), or null when unknown (assume UNKNOWN_MELEE). */
+    mobMelee(entityName) {
+        return mobMelee(this, entityName);
+    }
+
+    /** What a falling Dynamic Trees tree does to entities (src/melee.js), or null. */
+    fallingTree() {
+        return fallingTree(this);
+    }
+
+    /** About how much a falling tree hits for, before armour (src/melee.js). */
+    fallingTreeDamage(tree) {
+        return fallingTreeDamage(this, tree);
     }
 
     /** How to get food from a wild block state (src/forage.js), or null when it is not a forage source. */

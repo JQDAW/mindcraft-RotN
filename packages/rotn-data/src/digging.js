@@ -12,15 +12,42 @@
 //   else yes if HarvestUtil.canBreakBlockByHand (Tool Progression overwrite first, then the
 //   material, then a null harvest tool), else yes only with the block's harvest tool at its level
 //   in either hand. No digger has a Digging Blacklist (ESM reads a mob's own entry only).
+//
+// A 'blaster' (mob-digging.json 'blasters': the Ice and Fire troll, soak 5) is not an ESM digger: its
+// own AI blows a small explosion into the wall when it has no path to its target. canMobDig then
+// answers by the block's explosion resistance alone (the dump's explosionResistance, as the
+// explosion's rays read it): below breaksResistanceBelow it breaks, whatever the hardness or tool.
 
-/** The digging facts for a mob, or null when it does not dig (or the pack has no digging data). */
+/**
+ * The digging facts for a mob, or null when it does not dig (or the pack has no digging data).
+ * mechanism: 'esm' (an Epic Siege Mod digger: requiresTools, reach, keepWithin) or 'blast' (a mob
+ * whose own AI blows holes: breaksResistanceBelow, minDistance and maxDistance from its target,
+ * reach = how far ahead of it the blast is centred; keepWithin null).
+ */
 export function mobDigging(catalog, entityName) {
     const data = catalog.mobDiggingData;
     const d = data?.diggers?.[entityName];
+    const b = !d ? data?.blasters?.[entityName] : null;
+    if (b) {
+        return {
+            name: entityName,
+            digs: true,
+            mechanism: 'blast',
+            requiresTools: false,
+            reach: b.blastAhead,
+            keepWithin: null,
+            breaksResistanceBelow: b.breaksResistanceBelow,
+            minDistance: b.minDistance,
+            maxDistance: b.maxDistance,
+            when: b.when,
+            confidence: b.confidence,
+        };
+    }
     if (!d) return null;
     return {
         name: entityName,
         digs: true,
+        mechanism: 'esm',
         requiresTools: d.requiresTools,
         reach: data.settings.reach,
         keepWithin: data.settings.keepWithin,
@@ -32,7 +59,8 @@ export function mobDigging(catalog, entityName) {
 /**
  * Whether a digging mob can dig a block state.
  * @param {object} catalog RotnData
- * @param {string} entityName a registry name in mob-digging.json's diggers ("minecraft:zombie")
+ * @param {string} entityName a registry name in mob-digging.json's diggers ("minecraft:zombie") or
+ *   blasters ("iceandfire:if_troll": answered by explosion resistance, ticksByHand null, byHand true)
  * @param {string} blockName a 1.12 block registry name ("minecraft:cobblestone")
  * @param {{meta?: number, held?: Array<{type: string, level: number}>}} [opts] the block meta
  *   (default: the block's default meta) and the tool classes the mob holds in either hand
@@ -60,6 +88,14 @@ export function canMobDig(catalog, entityName, blockName, { meta, held = [] } = 
     const why = (reason) => (uncertain ? `${reason}; hardness unknown (the dump says 0)` : reason);
     const no = (reason, needs = null) => ({ canDig: false, byHand: false, needs, ticksByHand: null, uncertain, reason: why(reason) });
     const yes = (byHand, needs, ticksByHand, reason) => ({ canDig: true, byHand, needs, ticksByHand: uncertain ? null : ticksByHand, uncertain, reason: why(reason) });
+    if (mob.mechanism === 'blast') {
+        if (!solid) return no('not a wall block');
+        const r = s.explosionResistance;
+        if (typeof r !== 'number') return { canDig: true, byHand: true, needs: null, ticksByHand: null, uncertain: true, reason: 'explosion resistance unknown' };
+        return r < mob.breaksResistanceBelow
+            ? { canDig: true, byHand: true, needs: null, ticksByHand: null, uncertain: false, reason: `its blast breaks it (explosion resistance ${r}, below ${mob.breaksResistanceBelow})` }
+            : { canDig: false, byHand: false, needs: null, ticksByHand: null, uncertain: false, reason: `explosion resistance ${r}: its blast cannot break it` };
+    }
     if (typeof s.hardness !== 'number' || s.hardness < 0) return no('unbreakable');
     if (!solid) return no('not solid');
     if (s.hardness === 0 && !uncertain) return no('hardness 0: the dig never finishes');

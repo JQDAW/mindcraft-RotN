@@ -3,7 +3,7 @@
   "pack": "3.3.4",
   "description": "Which mobs dig through blocks toward their target, and which blocks they can dig, for mobDigging and canMobDig. Hand-written from the bytecode of Epic Siege Mod 13.169 (pinned pack zip), ESM-Tweaks 0.4.5 (downloaded at server start, see sources) and Tool Progression 1.6.12 (pinned pack zip), read with javap only, and from the pack's configs; excerpts and config copies in packages/rotn-data/test/fixtures/mob-digging-3.3.4/. confidence 'verified' = read from that bytecode and config; nothing here was watched in a run.",
   "confidence": "verified",
-  "summary": "Mobs listed in diggers dig toward their attack target when they have no path to it and stand still. Those with requiresTools true dig only blocks that need no tool (dirt, grass, sand, gravel, clay, wood, logs, planks, glass, leaves, wool: material that needs no tool, or no harvest tool) unless they hold the block's tool at its level (either hand); stone and cobblestone need a pickaxe. Those with requiresTools false (silverfish, bears, yeti, minotaur, minoshroom, snow guardian, troll, wight) dig any solid, breakable block, stone included, just slower. So a cobblestone shelter stops zombies without a pickaxe, not bears, silverfish or trolls; a dirt or wooden one stops neither.",
+  "summary": "Mobs listed in diggers dig toward their attack target when they have no path to it and stand still. Those with requiresTools true dig only blocks that need no tool (dirt, grass, sand, gravel, clay, wood, logs, planks, glass, leaves, wool: material that needs no tool, or no harvest tool) unless they hold the block's tool at its level (either hand); stone and cobblestone need a pickaxe. Those with requiresTools false (silverfish, bears, yeti, minotaur, minoshroom, snow guardian, Twilight Forest troll, wight) dig any solid, breakable block, stone included, just slower. So a cobblestone shelter stops zombies without a pickaxe, not bears, silverfish or Twilight Forest trolls; a dirt or wooden one stops neither. The Ice and Fire troll (iceandfire:if_troll) is not an ESM digger but a 'blaster' (see blasters): it blows a hole in any block with explosion resistance below 8.37, cobblestone and stone included, and needs no tool or dig time.",
   "sources": {
     "epicSiegeMod": {
       "file": "mods/EpicSiegeMod-13.169.jar",
@@ -333,5 +333,21 @@
     "Griefing (ESM's AdditionGrief: chests, furnaces, crafting tables, doors, glass and crops from its Grief Targets list) and pillaring are separate AIs, not covered here",
     "ESM-Tweaks comes from a moving remote list, not the pinned zip; a change there changes this behaviour",
     "The dump records hardness 0 for 564 solid states (for example minecraft:tnt, slime, sponge and stone_slab2, many slabs, walls and stairs from contentcreator, earthworks and aesthetics). Vanilla sponge (0.6) and red sandstone slabs (2.0) are not 0, so some of those values may be what the dumper read at its probe position rather than the in-game hardness, as with Dynamic Trees trunk shells; canMobDig marks those answers uncertain (all but hardnessZero.knownReal) and the real hardness of each was not checked"
-  ]
+  ],
+  "blasters": {
+    "iceandfire:if_troll": {
+      "breaksResistanceBelow": 8.3667,
+      "blastAhead": 1.9,
+      "minDistance": 1.73,
+      "maxDistance": 5.47,
+      "strikeTicks": 20,
+      "when": "Only while it has an attack target 1.73 to 5.47 blocks away (squared distance 3 to 30), its navigator has no path, and the game rule mobGriefing is true. Each idle tick it starts a strike with chance 1/15; 10 ticks in, a blast of size 1 to 2 centred 1.9 blocks ahead of it at its mid-height (about 1.5 blocks above its feet) removes and drops every block one of its rays breaks. Not Epic Siege Mod digging: no tool rule, no dig time, no 'reach' or 'keepWithin'.",
+      "confidence": "verified",
+      "evidence": [
+        "IceAndFireRotN-1.9.1-1.2.1.jar (in the pack as mods/IceAndFireRotN-1.9.1-1.2.1.jar, SHA-256 6f8f6d7a12fbc207f2f0dc638d4b9901bab5b003e1793313be8c4aede00ca747): EntityTroll.onLivingUpdate (func_70636_d) offsets 945-1243 and BlockBreakExplosion.doExplosionA/doExplosionB (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/troll.javap.txt)",
+        "A block breaks only when power - (resistance + 0.3) x 0.3 > 0 for a ray power below 2.6 (size < 2, x (0.7 + 0.6 x nextFloat)), so explosion resistance below 8.37; the dump records each block's getExplosionResistance(null) (blocks.json explosionResistance: stone and cobblestone 6, planks 3, obsidian 1200)",
+        "config/esm/epicsiegemod.cfg:579: iceandfire:if_troll is in the AI Blacklist, so ESM gives it no digging AI"
+      ]
+    }
+  }
 }
