@@ -1,6 +1,51 @@
 # Status: skills-rotn
 
-Updated: 2026-11-19T15:07Z (from `date -u`)
+Updated: 2026-11-20T06:42Z (from `date -u`)
+
+## 2026-11-20: soak 5 fixes (summary, 2026-11-20T06:42Z by `date -u`)
+
+Soak 5 (rotn-v0.1.11, #498) failed 7 of 9, with 6 deaths:
+- **Troll:** a troll broke into the side-pocket shelter, and the bot fought it from inside.
+- **Daylight deaths:** two in the open, one at health 1.5 and one bare-handed.
+- **Dirt shelter:** a zombie dug into it.
+- **Unstuck walk:** a 24-block drop, then drowning while chasing a rabbit.
+- **Spawn tree:** the bot was stuck up the spawn tree for minutes.
+
+The lead approved the plan (A + G, C + E, H, the logging PR, and B after rotn-data). PRs 1 to 4 and the Fix H follow-ups are merged and in rotn-v0.1.12 (`29b0ce72`, deployed on the CX23 by the lead through the gate at 06:36): #482 and #497 to #502. The #502 nits (#504) came after that tag. PR 5 (B) waits for rotn-data #496 (the troll).
+
+### Merged since the 2026-11-19 15:07 summary
+| PR | What |
+| --- | --- |
+| #482 | The #481 nit: the standing run is carried across a window boundary whenever it is charged to the window (a model `!goal` swapped in mid-run too) |
+| #497 | PR 1 (A + G). Only melee ("fight") mobs are hit from a shelter (`threats.shelterTarget`): never a troll, creeper, skeleton or enderman. In the open, a fight becomes a flee with no weapon or at health ≤ 8 (`fightRefusal`, `OPEN_FIGHT`). A cornered flee (the pathfinder stopped for 2 ticks) hits a melee mob only. In a breached shelter: back away first when unarmed or at health ≤ 8, or at once from a troll, creeper or skeleton; cornered, hit back a melee mob only (a troll: "waiting for the burrow plan"). The shelter fight stops at health 8. One low-health constant |
+| #499 | PR 2 (C + E + unstuck). Off the tree: the block in the feet cell first (a snow layer), no step off an edge into a fall over 3, a walk over the canopy to a leaf column, and the reason in the journal. The relocation and a new `treeTick` climb down before the walk and the agenda (retry 60 s after a climb ends). Failed walks are retried. `!digDown` never breaks a trunk or branch. The unstuck walk never steps on or lands on a tree part, with no parkour. Every fall-safe walk treats a water landing as a fall (at most 3; none at health ≤ 12). Under water with a walk going and air ≤ 15, the bot stops and swims up |
+| #500 | PR 3 (Fix H). With no weapon, the weapon reserve comes before food at any time of day unless food ≤ 6 ("no weapon, before food"). Unarmed, the food step says forage first and names no animal |
+| #501 | The Fix H follow-ups. No hunt by the reflex while unarmed. The model's `!attack` on a food animal is refused while unarmed (a giver may, warned; never ownership). A day-spent weapon gets a fresh dusk budget. The standing and open goals and the static food text say forage, do not hunt |
+| #502 | PR 4 (logging). A landing after a big drop is "by fall"; falling blocks or trees are named. A `[survival] hurt-detail` line follows each hurt line (each drop, position, vertical speed, cause, the 3 nearest entities within 16 with their last swing). The repair reasons say "opened during the repair (a wall when checked)" and what is in a cell that did not stay. "the repair closed the shelter". `closedOn` is refreshed after a back-away. `!attack` gives up after 10 s with no progress (that animal is left alone 5 min). The in-shelter eat checks the food again. Unarmed, a provoked food animal is not attacked by the model either |
+
+### After rotn-v0.1.12
+- **#504** (`a317ed3f`, approved): the #502 nits. The falling-block source only above the bot; `overlapping` counts bodies only; expired `rotnUnreachable` entries pruned; `weaponWindow` saved in `agenda.json` (a day-spent weapon still gets its dusk budget after a restart). Not in rotn-v0.1.12; in the soak only with a later tag.
+
+### Waiting
+- **PR 5 (Fix B), after rotn-data #496.** The burrow away from an avoid mob (a short 1x2 tunnel dug away from it, sealing behind; pickaxe allowed); the surface-shelter escape (dig down under the feet and seal above); keeping the bot centred in its cell against a troll's through-wall reach (distSq < 4, feet to feet); the overhang start-cell case.
+
+### To check in the next soak, on rotn-v0.1.12 (all tested offline only; #504's items only with a later tag)
+- **Fighting:**
+  - never `fight start iceandfire:if_troll (shelter)`, nor a creeper or skeleton;
+  - `flee zombie (melee, and no weapon)` or `(…, health N, 8 or less)` in the open;
+  - in a breach, `backing away` before `hitting back`; `waiting for the burrow plan` with a troll.
+- **The tree:** `[tree] up on a tree: climbing down before the agenda goes on`; `[respawn] up on a tree: climbing down before the walk away`; `still on the tree (<why>)`; no `got only 4 blocks` with no retry; `!digDown` refusing a trunk shell.
+- **Falls and water:** no unstuck drop of more than 3; `[reflex] under water with N of 20 air: stopping and swimming up`.
+- **Weapon and food:** `step weapon (no weapon, before food)` after a death; `hunting: no weapon, so no hunt (foraging only)`; `Not hunting X: you hold no weapon`.
+- **Logging:** `[survival] hurt-detail …` after every hurt line; `by fall` after a landing; `opened during the repair`; `the repair closed the shelter`; `Could not reach the X … leaving it alone for 5 min`.
+
+### Not done
+1. **`death_report.js` comment nits (#474):** for the next PR that touches the file.
+2. **Polar bears:** one near its cub attacks unprovoked (not built).
+3. **#431 review, the lookAt-window nit.**
+4. **Requests to rotn-data (through the lead):** the troll (#496: block breaking, size, reach, speed); DynamicTrees falling-tree damage; per-mob melee damage (`OPEN_FIGHT.maxLowHealth` 8 becomes "that mob's damage"); a size-aware slime entry; `WEAPON_ATTACK` as a cited table.
+5. **Without a pickaxe, cobblestone in the shelter except the hand-exit side:** proposed to the lead (death 4), no decision yet.
+6. **Cosmetic nits** from the 2026-11-08 summary.
 
 ## 2026-11-19 (later): soak 4 fixes for rotn-v0.1.8 (summary, 2026-11-19T15:07Z by `date -u`)
 
