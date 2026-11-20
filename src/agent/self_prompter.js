@@ -70,6 +70,7 @@ export class SelfPrompter {
         const MAX_NO_COMMAND = 3;
         let note = null;
         while (!this.interrupt) {
+            if (this.finishTurnStop()) break; // a stop after the turn: no waiting for a reflex first
             // Reflexes no longer stop this loop (skills-rotn A4): wait while one runs,
             // so the next command cannot cut a flee or a fight short.
             while (!this.interrupt && this.reflexActive()) {
@@ -197,7 +198,8 @@ export class SelfPrompter {
 
     shouldInterrupt(is_self_prompt) { // to be called from handleMessage
         // A self-prompt reply that arrives while a reflex runs is dropped, not acted on (A4).
-        if (is_self_prompt && this.state === ACTIVE && this.loop_active && this.reflexActive()) {
+        // #508 re-review: also while a stop after the turn is pending (the state is STOPPED already).
+        if (is_self_prompt && (this.state === ACTIVE || this.finish_turn) && this.loop_active && this.reflexActive()) {
             this.dropped_for_reflex = true;
             return true;
         }

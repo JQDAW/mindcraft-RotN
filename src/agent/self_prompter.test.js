@@ -103,6 +103,23 @@ test('#508 review 4: after a stop after the turn, the turn ends after its first 
     assert.equal(agent.sp.loop_active, false);
 });
 
+// #508 re-review: with the state STOPPED at once, the A4 drop of a reply that lands while a reflex
+// runs must still hold during a pending stop after the turn: the command would cut the flee or fight.
+test('#508 re-review: stopAfterTurn while the reply is in flight and a reflex runs: the command is dropped and the loop still ends', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const a = fakeAgent();
+    let reflex = false;
+    a.bot.modes.anyActive = () => reflex;
+    a.sp.start('a goal');
+    await tick();
+    assert.equal(a.sp.stopAfterTurn('budget'), true);
+    reflex = true; // a flee starts while the model's reply is in flight
+    a.reply('!craftRecipe("pyrotech:tinder", 3)');
+    await tick(20);
+    assert.deepEqual([a.ran, a.dropped], [[], 1], 'dropped, not run during the reflex');
+    assert.deepEqual([a.prompts, a.sp.loop_active, a.sp.isActive()], [1, false, false], 'no next prompt; the loop ended');
+});
+
 test('soak 6 (c): stopAfterTurn with no loop running stops at once', () => {
     const a = fakeAgent();
     a.sp.state = 1; // active, loop not started yet

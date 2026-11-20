@@ -314,6 +314,8 @@ export function submerged(bot, e) {
  * #508 review 1: a mob that is hurting the bot (a hit within PROVOKED_MS while it was within
  * PROVOKED_DIST, not the world's damage) is never left out: it is fought or fled from as before.
  */
+// Any recent damage that is not a fall or starving counts (drowning, fire, lava too, when the mob
+// is near): 1.12 does not say who hit. That leans to fighting the mob, the safe side here.
 function hurting(bot, e, now) {
     const me = bot?.entity?.position;
     return !!me && !!e?.position && now - (bot.lastDamageTime ?? -Infinity) <= PROVOKED_MS && !worldDamage(bot)
