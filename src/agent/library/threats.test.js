@@ -489,13 +489,16 @@ test('PR 5: in the open a melee mob is fled from with no weapon or at a health i
     assert.equal(maxHitOf(spider), 2);
     assert.equal(plan({ of: spider, health: 3 }).action, 'fight');
     assert.deepEqual([plan({ of: spider, health: 2 }).action, plan({ of: spider, health: 2 }).why], ['flee', 'melee, and health 2, a spider hits up to 2']);
-    // No melee entry (rats:illager_piper; an unknown hostile mob): UNKNOWN_MELEE, never zero.
-    for (const name of ['rats:illager_piper', 'somemod:unknown_beast']) {
+    // No melee entry (twilightforest:kobold, a hostile mob that is fought by default; an unknown
+    // hostile mob): UNKNOWN_MELEE, never zero. The example must stay without a melee entry in
+    // rotn-data (rats:illager_piper got one in #511).
+    for (const name of ['twilightforest:kobold', 'somemod:unknown_beast']) {
         const m = mob(name, 3);
         assert.equal(maxHitOf(m), 18, name);
         assert.equal(plan({ of: m, health: 18 }).action, 'flee', `${name} at 18`);
         assert.equal(plan({ of: m, health: 18.5 }).action, 'fight', `${name} at 18.5`);
     }
+    assert.equal(maxHitOf(mob('ancientbeasts:sandy', 3)), 18, 'an avoid mob with no melee entry');
     assert.equal(maxHitOf(null), 18, 'no mob: unknown');
     assert.equal(plan({ items: [{ name: 'pyrotech:crude_axe', count: 1 }] }).action, 'fight', 'a crude axe is a weapon');
     assert.equal(plan({ items: [{ name: 'stone_pickaxe', count: 1 }] }).action, 'flee', 'a pickaxe is not');
