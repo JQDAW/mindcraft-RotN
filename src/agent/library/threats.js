@@ -128,6 +128,19 @@ export function shelterEnemy(entity) {
 }
 
 /**
+ * Soak 5 (rotn-v0.1.11, 00:46): the bot swung six times from its pocket shelter at an Ice and Fire
+ * troll (avoid: 18 attack, 200 health, armor 9; "4 hits did not hurt"), took one hit of 18 and died.
+ * The lead's rule: the bot hits only a melee mob (reaction 'fight'), whatever the shelter state
+ * (closed, open, the hand fight, the morning fight) and in a cell it closes (shelter.hitOutOf);
+ * never one to avoid, keep away from or take cover from, and never one it must not look at.
+ * shelterEnemy stays the presence check (what is near the shelter); this is what may be hit.
+ */
+export function shelterTarget(entity) {
+    const t = threatFor(entity);
+    return !!t && !t.doNotLook && t.reaction === 'fight';
+}
+
+/**
  * Zombie Players' zombie (G3 round 2: "Zombie FRCFLD" killed the bot at its death spot). The mod
  * raises one where any player died; its name is not readable here (it is in the undecoded FML
  * spawn data), so it is matched by its entity type (rotn-data #226: a zombie that never despawns).
@@ -184,6 +197,31 @@ export function hasWeapon(bot) {
 export const canFightHard = (bot) => hasWeapon(bot) && bot?.health > 10;
 
 /**
+ * Soak 5 (rotn-v0.1.11), the lead's rule for a fight in the open: at health 1.5 the bot started a
+ * fight with a zombie and died within a second (01:00:11); respawned with no weapon, it fought a
+ * zombie by hand for 15 s and died (01:00:40). A melee mob is fled from, not fought, with no weapon
+ * or at health OPEN_FIGHT.maxLowHealth or less (later: that mob's damage, from rotn-data). Only a
+ * cornered bot hits back: skills.avoidEnemies hits a fight mob that keeps within 3 blocks while it
+ * tries to get away.
+ */
+export const OPEN_FIGHT = { maxLowHealth: 8 };
+
+/** Why the bot must not start or go on with a fight in the open now ('no weapon', 'health 6, 8 or less'), or null. */
+export function fightRefusal(bot) {
+    if (!hasWeapon(bot)) return 'no weapon';
+    const h = bot?.health;
+    if (Number.isFinite(h) && h <= OPEN_FIGHT.maxLowHealth) return `health ${Math.round(h * 10) / 10}, ${OPEN_FIGHT.maxLowHealth} or less`;
+    return null;
+}
+
+/** A 'fight' plan becomes a flee from the same mobs when fightRefusal says so. */
+function unlessRefused(bot, plan) {
+    const why = fightRefusal(bot);
+    if (!why) return plan;
+    return { action: 'flee', why: `${plan.why}, and ${why}`, from: plan.from, away: RANGES.fight.away, isEnemy: plan.isEnemy };
+}
+
+/**
  * Whether this mob hurt the bot: it is angry, or the bot was hit within PROVOKED_MS (3 s) while it
  * was within PROVOKED_DIST (4 blocks). An approximation (#227 nit): 1.12 sends the bot's health
  * and a hurt animation but not who dealt the damage, so another mob's hit, an arrow or fall damage
@@ -215,7 +253,8 @@ export function isAngry(entity) {
 /**
  * What to do about the mobs around the bot now. First match wins:
  * flee a dangerous mob, back off from one that explodes, retreat when outnumbered, get out of
- * a ranged mob's range, fight a melee mob, fight back a provoked one.
+ * a ranged mob's range, fight a melee mob, fight back a provoked one. A fight is a flee instead
+ * with no weapon or at low health (fightRefusal, soak 5).
  * @returns {{action: 'flee'|'fight', why: string, from: object, away?: number, isEnemy: (e) => boolean}|null}
  *   isEnemy: the mobs the action is about (for skills.avoidEnemies / defendSelf).
  */
@@ -265,13 +304,13 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
         return { action: 'flee', why: `a big slime of size ${size ?? 'unknown'}, and no weapon of attack ${SLIME.minAttack} or more, or health under ${SLIME.minHealth}`,
             from: slimes[0].e, away: RANGES.fight.away, isEnemy: isBigSlime };
     }
-    if (melee.length) return { action: 'fight', why: 'melee', from: melee[0].e, isEnemy: is('fight') };
+    if (melee.length) return unlessRefused(bot, { action: 'fight', why: 'melee', from: melee[0].e, isEnemy: is('fight') });
 
     const calmOnes = near.filter(x => x.t.reaction === 'ignore-unless-provoked' && x.d <= PROVOKED_DIST);
     const angry = calmOnes.find(x => isAngry(x.e) === true);
     if (angry) {
         const id = angry.e.id;
-        return { action: 'fight', why: 'provoked', from: angry.e, isEnemy: (e) => e.id === id };
+        return unlessRefused(bot, { action: 'fight', why: 'provoked', from: angry.e, isEnemy: (e) => e.id === id });
     }
     // Its anger cannot be read: never attack it unprovoked. After its hit (hitByIt), rotn-data's
     // fightBack decides (#448, the lead's decision): true (a rooster, a wolf, a llama): hit it back;
@@ -290,7 +329,7 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
             isEnemy: (e) => e.id === id || (!!p?.callsForHelp && e.name === name) };
         if (p?.fightBack !== true) return flee;
         if (ownedMaybe(bot, hitter.e)) return { ...flee, why: 'provoked, and it may be a player\'s' };
-        return { action: 'fight', why: 'provoked', from: hitter.e, isEnemy: (e) => e.id === id };
+        return unlessRefused(bot, { action: 'fight', why: 'provoked', from: hitter.e, isEnemy: (e) => e.id === id });
     }
     // #448: a food animal whose kind calls for help (Animania cows: the whole herd of the breed comes):
     // a hit with two of one kind within reach is the herd: back off from it. #453 review 1: never

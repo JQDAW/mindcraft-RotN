@@ -3176,6 +3176,9 @@ export function enemiesPoint(bot, isEnemy, distance) {
     return w > 0 ? Vec3(x / w, y / w, z / w) : null;
 }
 
+/** #497 review 3: the flee counts as blocked (the bot is cornered) after this many 500 ms ticks in a row not moving. */
+export const AVOID = { blockedTicks: 2 };
+
 export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHostile(entity), canHit=() => true) {
     /**
      * Move a given distance away from all nearby enemy mobs.
@@ -3183,6 +3186,8 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
      * @param {number} distance, the distance to move away.
      * @param {function} isEnemy, which mobs to move away from (skills-rotn D2c). Defaults to mc.isHostile.
      * @param {function} canHit, whether a cornered bot may hit that mob (never a creeper or a dragon).
+     *   Soak 5 (#497 review 3): cornered means the flee is blocked: the pathfinder has not moved for
+     *   AVOID.blockedTicks ticks in a row. A bot that is getting away never swings, however close the mob.
      * @returns {Promise<boolean>} true if the bot moved away, false otherwise.
      * @example
      * await skills.avoidEnemies(bot, 8);
@@ -3190,7 +3195,8 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
     bot.modes.pause('self_preservation'); // prevents damage-on-low-health from interrupting the bot
     let enemy = world.getNearestEntityWhere(bot, isEnemy, distance);
     let away = null; // the point the walk keeps away from
-    let still = 0; // ticks in a row the pathfinder was not moving
+    let still = 0; // ticks in a row the pathfinder was not moving (reset when the goal is set again)
+    let blocked = 0; // the same, never reset by a new goal: the flee is blocked (#497 review 3)
     while (enemy) {
         // #444 review 3: away from all the enemies at once, not the nearest one: with a slime close
         // and a skeleton farther the nearest one changed, and so did the way, every tick. Each
@@ -3200,7 +3206,9 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
         // which would restart a path still being computed): a failed flee path must not leave the
         // bot standing there.
         const point = enemiesPoint(bot, isEnemy, distance) ?? enemy.position;
-        still = away && bot.pathfinder.isMoving?.() === false ? still + 1 : 0;
+        const stopped = !!away && bot.pathfinder.isMoving?.() === false;
+        still = stopped ? still + 1 : 0;
+        blocked = stopped ? blocked + 1 : 0;
         if (!away || away.distanceTo(point) > 1 || still >= 2) {
             away = point;
             still = 0;
@@ -3212,7 +3220,7 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
         if (bot.interrupt_code) {
             break;
         }
-        if (enemy && bot.entity.position.distanceTo(enemy.position) < 3 && canHit(enemy)) {
+        if (enemy && blocked >= AVOID.blockedTicks && bot.entity.position.distanceTo(enemy.position) < 3 && canHit(enemy)) {
             await attackEntity(bot, enemy, false);
         }
     }

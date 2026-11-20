@@ -716,12 +716,13 @@ test('round 9 B (d): a mob standing in the opening is hit (in place) until it le
     assert.match(p.bot.output, /Cannot close 1, 64, 0: player stands in it\./);
 });
 
-test('#333 review: a mob rotn-data says to leave alone (a wolf, a polar bear, an enderman) is not hit out of the opening', async (t) => {
+test('#333 review, soak 5: a mob rotn-data says to leave alone (a wolf, a polar bear, an enderman) or not to fight (a troll, a creeper, a skeleton) is not hit out of the opening', async (t) => {
     t.mock.method(console, 'log', () => {});
     const saved = { ...SHELTER_GAP };
     Object.assign(SHELTER_GAP, { swingMs: 10 });
     t.after(() => Object.assign(SHELTER_GAP, saved));
-    for (const name of ['wolf', 'polar_bear', 'enderman']) {
+    // Soak 5 (00:46, the troll): nor a mob to avoid, keep away from or take cover from (threats.shelterTarget).
+    for (const name of ['wolf', 'polar_bear', 'enderman', 'iceandfire:if_troll', 'creeper', 'skeleton']) {
         const w = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
         w.bot.entities = { 1: w.bot.entity, 9: { name, type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.4 } };
         const struck = [];

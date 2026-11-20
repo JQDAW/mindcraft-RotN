@@ -21,7 +21,7 @@ import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe, equipHighestAttack } from './skills.js';
 import { eatToHeal } from './food.js';
-import { shelterEnemy } from './threats.js';
+import { shelterEnemy, shelterTarget, OPEN_FIGHT } from './threats.js';
 import { isTreePart } from './fall_safety.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -350,14 +350,15 @@ async function placeOnce(bot, target, interior, mode, why = () => {}) {
  * G3 round 9 B (fix d): a hostile mob standing in a cell to close is hit from where the bot stands,
  * at most SHELTER_GAP.hits times, until it is out of the cell. No walk. Never a player, and never a
  * mob rotn-data says to leave alone (#333 review: a wolf or a bear, a tool-free digger, would only
- * be angered; an enderman is never looked at): threats.shelterEnemy. Returns the number of hits.
+ * be angered; an enderman is never looked at), and (soak 5) only a melee mob, never a troll, a
+ * creeper or a skeleton: threats.shelterTarget. Returns the number of hits.
  */
 async function hitOutOf(bot, cell) {
     let hits = 0;
     const start = Date.now(), fight = {};
     const same = { id: null, health: null, hits: 0 };
     const healthOf = (e) => (Number.isFinite(e?.health) ? e.health : Number.isFinite(e?.metadata?.[7]) ? e.metadata[7] : null);
-    for (let mob = mobIn(bot, cell); mob && shelterEnemy(mob); mob = mobIn(bot, cell)) {
+    for (let mob = mobIn(bot, cell); mob && shelterTarget(mob); mob = mobIn(bot, cell)) {
         if (bot.interrupt_code || typeof bot.attack !== 'function') break;
         if (Date.now() - start >= SHELTER_GAP.maxMs) break;
         const health = healthOf(mob);
@@ -650,7 +651,7 @@ async function settleOn(bot, feet, { strict = true } = {}) {
  * the roof or the floor. lowHealth (#470 review 2): unarmed and held at this health or lower, back
  * away if possible, else hit back by hand.
  */
-export const BACK_AWAY = { margin: 0.15, lowHealth: 8, centerMs: 2000 };
+export const BACK_AWAY = { margin: 0.15, lowHealth: OPEN_FIGHT.maxLowHealth, centerMs: 2000 }; // #497 review 5: one low-health threshold
 
 /** The open cells a hostile mob (threats.shelterEnemy) holds: [{cell, mob}]. */
 export function heldCells(bot, site, open = []) {
