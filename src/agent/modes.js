@@ -74,6 +74,7 @@ export function shelterQuiet(name, bot) {
 export const SHELTER_SAY_MS = 30_000;
 let shelterSaidAt = -Infinity;
 let noWeaponSaidAt = -Infinity;
+let noWeaponSaid = null; // which refusal was said last (no weapon, or low health): a new one is said at once
 
 /**
  * The night routine's own work, which the in-shelter fight and eating never interrupt: the repair
@@ -113,25 +114,31 @@ function nightRoutineBusy(agent) {
 /**
  * The fight from inside the night shelter (G3 round 9 B; #331 review 1-4): never while the night's
  * repair runs, nor within SHELTER_FIGHT.restMs after the last such fight (the night routine checks
- * and repairs first); else the nearest hostile mob in reach (threats.shelterEnemy, whatever the
- * plan says) is hit in place for as long as one is in reach, capped. Returns whether it started.
+ * and repairs first); else the nearest melee mob in reach (threats.shelterTarget, whatever the
+ * plan says) is hit in place for as long as one is in reach, capped. Soak 5: never a mob to avoid,
+ * keep away from or take cover from (a troll took the bot from 19.8 to 1.8 in one hit while it
+ * swung at it). Returns whether it started.
  */
 function fightInShelter(mode, agent, { override = false } = {}) {
     const bot = agent.bot;
     if (nightRoutineBusy(agent)) return false;
     // Soak 3, the lead's (b): from the shelter only with a weapon. Bare hands did not hurt the zombies
     // ("4 hits did not hurt the zombie") while they hit for 6-8; the night routine backs away instead.
-    // #470 review 2: unarmed, held and at low health with no way to back away, the night routine
-    // lets it hit back by hand (agent._night.handFight): bare hands beat standing still.
-    if (!threats.hasWeapon(bot) && !agent._night?.handFight) {
-        if (Date.now() - noWeaponSaidAt >= SHELTER_SAY_MS) {
+    // Soak 5 (death 4), the lead's rule: nor at health 8 or less (threats.fightRefusal), armed or not.
+    // #470 review 2: cornered (no way to back away), the night routine lets it hit back
+    // (agent._night.handFight): hitting back beats standing still.
+    const refused = threats.fightRefusal(bot);
+    if (refused && !agent._night?.handFight) {
+        const kind = refused === 'no weapon' ? refused : 'health';
+        if (Date.now() - noWeaponSaidAt >= SHELTER_SAY_MS || noWeaponSaid !== kind) {
             noWeaponSaidAt = Date.now();
-            console.log('[shelter] no weapon: not fighting from the shelter');
+            noWeaponSaid = kind;
+            console.log(`[shelter] ${refused}: not fighting from the shelter unless cornered`);
         }
         return false;
     }
     if (Date.now() - (bot.rotnFightEndedAt ?? -Infinity) < skills.SHELTER_FIGHT.restMs) return false;
-    const target = world.getNearestEntityWhere(bot, (e) => threats.shelterEnemy(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
+    const target = world.getNearestEntityWhere(bot, (e) => threats.shelterTarget(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
     if (!target) return false;
     if (!claimThreat(mode.name, Date.now(), { override })) return false;
     if (Date.now() - shelterSaidAt >= SHELTER_SAY_MS) {
@@ -139,7 +146,7 @@ function fightInShelter(mode, agent, { override = false } = {}) {
         Promise.resolve(say(agent, `Fighting ${target.name} from the shelter!`)).catch(err => reportModeError(mode.name, err));
     }
     execute(mode, agent, async () => {
-        await skills.defendInPlace(bot, threats.shelterEnemy);
+        await skills.defendInPlace(bot, threats.shelterTarget);
         // CX23 soak: between fights, hurt and too hungry to heal (food below REGEN_FOOD): eat.
         if (!bot.interrupt_code) {
             const ate = await food.eatToHeal(bot);
@@ -476,7 +483,7 @@ const modes_list = [
     },
     {
         name: 'self_defense',
-        description: 'Fight nearby melee mobs (never creepers, endermen or dangerous mobs). Interrupts all actions.',
+        description: 'Fight nearby melee mobs (never creepers, endermen or dangerous mobs), only with a weapon and health above 8. Interrupts all actions.',
         interrupts: ['all'],
         on: true,
         active: false,
@@ -484,9 +491,9 @@ const modes_list = [
             // G3 round 9 B: in the shelter with a wall open, self_defense interrupted the repair and
             // defendSelf walked out after the zombie (pvp.attack follows its target); the bot died
             // outside. Now the repair runs on, and the fight is in place, at mobs within reach.
-            // #331 review 1 and 2: in the shelter any hostile mob in reach is hit, whatever the plan
-            // says (two zombies, a skeleton or a creeper near make it 'flee'), for as long as one is
-            // in reach (capped, review 3).
+            // #331 review 1 and 2: in the shelter a mob in reach is hit, whatever the plan says (two
+            // zombies near make it 'flee'), for as long as one is in reach (capped, review 3). Soak 5:
+            // only a melee mob (threats.shelterTarget), never a troll, a creeper or a skeleton.
             if (agent.bot.rotnSheltered) {
                 fightInShelter(this, agent);
                 return;

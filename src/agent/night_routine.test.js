@@ -1976,12 +1976,14 @@ async function breachAt(s, now = CHECK_MS + 1) {
 
 test('#470 review 2: no weapon, a zombie in one open cell: that cell is left out of the repair, the other is repaired; all held: no repair', async (t) => {
     quiet(t);
-    const one = heldSetup();
+    // Soak 5 (death 4), the lead's rule: unarmed at any health, cornered (no way to back away), it hits back.
+    const one = heldSetup({ plan: false });
     await breachAt(one);
     assert.deepEqual(one.o.repairs, [{ site: SITE, skip: ['1,64,0'] }]);
     assert.ok(one.agent.chat.includes('[night] no weapon and a zombie in the opening at 1, 64, 0: not repairing under it; repairing the other open cells'));
-    assert.equal(nightState(one.agent).handFight, false, 'health 20: no fight by hand');
-    const all = heldSetup({ held: 'both' });
+    assert.ok(one.agent.chat.includes('[night] no weapon, health 20, and no way to back away from a zombie in the opening at 1, 64, 0: hitting back by hand'));
+    assert.equal(nightState(one.agent).handFight, true, 'cornered: it hits back by hand');
+    const all = heldSetup({ held: 'both', plan: false });
     await breachAt(all);
     assert.deepEqual(all.o.repairs, [], 'every open cell held: nothing to repair');
     assert.equal(all.agent.bot.rotnSheltered, 'open');
@@ -2048,6 +2050,49 @@ test('#470 review 3: a back-away whose seal fails with the bot in plan.to keeps 
     const stay = heldSetup({ health: 5, backAway: () => Promise.resolve({ why: 'could not dig -1, 65, 0' }) });
     await breachAt(stay);
     assert.ok(nightState(stay.agent).site.equals(SITE));
+});
+
+// Soak 5 (death 4: a zombie dug into the dirt shelter and hit the bot from 20 to 0 while it fought
+// back from the opening), the lead's rule: unarmed at any health, or at health 8 or less armed or
+// not, with a melee mob in the opening or in reach through it, the bot backs away; only cornered
+// does it hit back. Armed above health 8 it fights from the shelter as before.
+test('soak 5 (death 4): unarmed at full health or armed at health 8 or less, a mob in the opening or in reach: back away; cornered: hit back; armed and healthy: the whole repair', async (t) => {
+    quiet(t);
+    const unarmed = heldSetup({ health: 20 });
+    await breachAt(unarmed);
+    assert.deepEqual(unarmed.labels, ['action:buildShelter', 'action:backAway'], 'unarmed at health 20: backed away');
+    assert.ok(unarmed.agent.chat.includes('[night] no weapon, health 20, and a zombie in the opening at 1, 64, 0: backing away into -1, 64, 0'));
+
+    const reach = (s) => { s.o.mobInReach = () => ({ id: 8, name: 'zombie', position: new Vec3(1.5, 64, 1.5) }); return s; };
+    const low = reach(heldSetup({ weapon: true, health: 6 }));
+    await breachAt(low);
+    assert.deepEqual(low.labels, ['action:buildShelter', 'action:backAway'], 'armed at health 6: backed away');
+    assert.ok(low.agent.chat.includes('[night] health 6, and a zombie in reach at 1, 64, 1: backing away into -1, 64, 0'));
+
+    const cornered = reach(heldSetup({ weapon: true, health: 6, plan: false }));
+    await breachAt(cornered);
+    // handFight is set for the fight while the repair runs; the fake repair closes the shelter, which clears it.
+    assert.ok(cornered.agent.chat.includes('[night] health 6, and no way to back away from a zombie in reach at 1, 64, 1: hitting back'), 'cornered: it hits back with its weapon');
+    assert.deepEqual(cornered.o.repairs, [{ site: SITE, skip: [] }], 'armed: no cell left out; the repair goes on');
+
+    const nobody = heldSetup({ weapon: true, health: 6 });
+    await breachAt(nobody);
+    assert.deepEqual(nobody.labels.filter(l => l === 'action:backAway'), [], 'nothing in reach: no back-away, the repair');
+    assert.deepEqual(nobody.o.repairs, [{ site: SITE, skip: [] }]);
+
+    // A troll (avoid) in the opening, cornered: it is never hit (threats.shelterTarget).
+    const troll = heldSetup({ plan: false });
+    const big = { id: 9, name: 'iceandfire:if_troll', position: new Vec3(1.5, 64, 0.5) };
+    troll.o.heldCells = (bot, site, open) => open.filter(c => c.equals(troll.opening[0])).map(cell => ({ cell, mob: big }));
+    await breachAt(troll);
+    assert.equal(nightState(troll.agent).handFight, false, 'a troll: no hand fight');
+    assert.ok(troll.agent.chat.includes('[night] no weapon, health 20, and no way to back away from a iceandfire:if_troll in the opening at 1, 64, 0: not hitting it (not a melee mob)'));
+
+    const healthy = reach(heldSetup({ weapon: true, health: 9 }));
+    await breachAt(healthy);
+    assert.deepEqual(healthy.labels.filter(l => l === 'action:backAway'), [], 'armed at health 9: no back-away');
+    assert.equal(nightState(healthy.agent).handFight, false);
+    assert.deepEqual(healthy.o.repairs, [{ site: SITE, skip: [] }]);
 });
 
 // Soak 3 (rotn-v0.1.5), the lead's C: a walk away a reflex cut short is tried again 5 s later, three

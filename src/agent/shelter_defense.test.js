@@ -124,16 +124,35 @@ async function selfPreservation(agent) {
 }
 const hurt = (bot) => Object.assign(bot, { health: 3, lastDamageTime: Date.now(), lastDamageTaken: 2, setControlState() {}, clearControlStates() {} });
 
-test('decision (1): hurt in the open shelter, the bot hits the mob in reach in place instead of fleeing out', async (t) => {
+test('decision (1): hurt in the open shelter and cornered, the bot hits the mob in reach in place instead of fleeing out', async (t) => {
     t.mock.method(console, 'log', () => {});
     const { agent, bot, calls, ran, self } = shelter();
     hurt(bot);
+    // Soak 5 (death 4): at health 8 or less only a cornered bot hits back (the night routine found
+    // no way to back away and set handFight).
+    agent._night = { handFight: true };
     const before = self.position.clone();
     await selfPreservation(agent);
     assert.deepEqual(ran, ['mode:self_preservation']);
     assert.deepEqual(calls.gotos, [], 'no walk (moveAway walked 20 blocks out)');
     assert.deepEqual(calls.attacks, [1, 1], 'hit in place');
     assert.ok(self.position.equals(before));
+});
+
+test('soak 5 (death 4): armed but at health 8 or less and not cornered, the bot does not fight from the shelter (the night routine backs away)', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    for (const health of [8, 3]) {
+        const { agent, bot, calls } = shelter();
+        bot.health = health;
+        await selfDefense(agent);
+        assert.deepEqual(calls.attacks, [], `health ${health}: no swing`);
+    }
+    assert.ok(logs.includes('[shelter] health 8, 8 or less: not fighting from the shelter unless cornered'));
+    const fit = shelter();
+    fit.bot.health = 9;
+    await selfDefense(fit.agent);
+    assert.deepEqual(fit.calls.attacks, [1, 1], 'health 9, armed: fought as before');
 });
 
 test('decision (1): hurt in the shelter with nothing in reach, the bot eats instead of fleeing; it never interrupts the repair', async (t) => {
@@ -476,6 +495,21 @@ test('CX23 soak: after a fight in place, hurt and too hungry to heal (food below
 });
 
 
+test('soak 5 (00:46, the troll): from the shelter a troll, a creeper or a skeleton in reach is never hit; a zombie still is', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    for (const name of ['iceandfire:if_troll', 'creeper', 'skeleton']) {
+        const s = shelter({ zombieAt: 6, others: [mob(2, name, 1)] });
+        await selfDefense(s.agent);
+        assert.deepEqual(s.calls.attacks, [], `${name}: no swing`);
+        s.agent._night = { handFight: true }; // nor when cornered
+        await selfDefense(s.agent);
+        assert.deepEqual(s.calls.attacks, [], `${name}: no swing when cornered`);
+    }
+    const both = shelter({ zombieAt: 2, others: [mob(3, 'iceandfire:if_troll', 1)] });
+    await selfDefense(both.agent);
+    assert.ok(both.calls.attacks.length > 0 && both.calls.attacks.every(id => id === 1), 'the zombie behind the troll is hit, the troll never');
+});
+
 test('soak 3 (b): with no weapon the bot does not fight from the shelter (bare hands did not hurt the zombies); it says so at most every SHELTER_SAY_MS', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
@@ -484,7 +518,7 @@ test('soak 3 (b): with no weapon the bot does not fight from the shelter (bare h
     await selfDefense(agent);
     await new Promise(r => setTimeout(r, 50));
     assert.deepEqual(calls.attacks, [], 'no swing');
-    assert.equal(logs.filter(l => l === '[shelter] no weapon: not fighting from the shelter').length, 1);
+    assert.equal(logs.filter(l => l === '[shelter] no weapon: not fighting from the shelter unless cornered').length, 1);
     assert.ok(bot.entities[1], 'the zombie is still there');
 });
 

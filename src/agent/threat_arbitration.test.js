@@ -46,7 +46,8 @@ function arena() {
         username: 'FRCFLD', entity: self, entities: { 0: self, [zombie.id]: zombie },
         registry: reg, version: '1.12.2', health: 20, isAlive: true, lastDamageTime: -1e9, lastDamageTaken: 0,
         blockAt: () => null, clearControlStates() {}, setControlState() {},
-        inventory: { items: () => [] },
+        // Soak 5: the open fight needs a weapon (threats.fightRefusal); the arena's bot holds one.
+        inventory: { items: () => [{ name: 'iron_sword', count: 1 }] },
         pathfinder: { goal: null, getPathFromTo: function* () { yield { result: { status: 'success', path: [] } }; } },
         modes: { behavior_log: '' },
         nearestEntity: () => null,

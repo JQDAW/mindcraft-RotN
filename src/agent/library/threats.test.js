@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
-import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES } from './threats.js';
+import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES, shelterTarget, shelterEnemy, fightRefusal, OPEN_FIGHT } from './threats.js';
 import { __modeForTest, __resetThreatLease } from '../modes.js';
 
 let nextId = 1;
@@ -14,7 +14,9 @@ function fakeBot(entities, extra = {}) {
     const self = { id: 0, name: 'player', type: 'player', position: new Vec3(0, 64, 0) };
     const all = { 0: self };
     for (const e of entities) all[e.id] = e;
-    return { entity: self, entities: all, lastDamageTime: 0, ...extra };
+    // Soak 5: a fight in the open needs a weapon and health above 8 (threats.fightRefusal); the fake
+    // bot holds an iron sword at full health unless a case says otherwise.
+    return { entity: self, entities: all, lastDamageTime: 0, health: 20, inventory: { items: () => [{ name: 'iron_sword', count: 1 }], slots: [] }, ...extra };
 }
 
 test('threatFor reads rotn-data: zombie fight, creeper keep-distance, skeleton take-cover, dragon avoid, enderman do-not-look', () => {
@@ -154,7 +156,7 @@ test('#186 review 2: an enderman is fought back only when it is angry (its screa
 function fightBot(entities) {
     const bot = fakeBot(entities, {
         registry: minecraftData('1.12.2'), version: '1.12.2', output: '',
-        inventory: { items: () => [] },
+        inventory: { items: () => [{ name: 'iron_sword', count: 1 }], slots: [] }, heldItem: { name: 'iron_sword' }, equip: async () => {},
         modes: { pause() {}, behavior_log: '' },
         pvp: { attacks: [], attack(e) { this.attacks.push(e.name); }, stop() {} },
     });
@@ -273,7 +275,8 @@ test('soak 2: a big slime is kept away from without a weapon or below health 14;
     assert.equal(bare.away, RANGES.fight.away);
     assert.equal(plan(slime(1, 4), { items: [sword], health: 10 }).action, 'flee', 'a weapon but health 10');
     assert.equal(plan(slime(1, 4), { items: [sword], health: 18 }).action, 'fight', 'a weapon and health 18: fought');
-    assert.equal(plan(slime(1, 1)).action, 'fight', 'a tiny one: fought bare-handed');
+    assert.equal(plan(slime(1, 1), { items: [sword] }).action, 'fight', 'a tiny one: fought with a weapon');
+    assert.equal(plan(slime(1, 1)).action, 'flee', 'soak 5: a tiny one is not fought bare-handed either');
 });
 
 test('#434 review: a crude axe or a stone sword is no real weapon for a big slime (attack 4 or more); a creeper or a crowd still decides first; magma cubes too', async () => {
@@ -440,4 +443,72 @@ test('#453 nit 1: an animal that did not react hides neither a second one that d
     // A rooster that did not react, and a Holstein herd in reach: the herd is fled.
     const herd = plan([rooster, at('animania:cow_holstein', 1.5), at('animania:cow_holstein', -2)], 1);
     assert.equal(herd?.why, 'a herd fights back');
+});
+
+// Soak 5 (rotn-v0.1.11): from its pocket shelter the bot swung six times at an Ice and Fire troll
+// (avoid: 18 attack, 200 health), took one hit of 18 and died (00:46). The lead's rule: only a melee
+// mob is hit from a shelter; the others are still seen (shelterEnemy) but never hit.
+test('soak 5: shelterTarget is a melee mob only (never a troll, a creeper, a skeleton, an enderman or an animal); shelterEnemy still sees them', () => {
+    const is = (name) => shelterTarget(mob(name, 1));
+    assert.equal(is('zombie'), true);
+    assert.equal(is('zombie_players:zombie_player'), true, 'the player zombie is a melee mob');
+    for (const name of ['iceandfire:if_troll', 'iceandfire:firedragon', 'creeper', 'skeleton', 'enderman', 'cow', 'iceandfire:if_cockatrice'])
+        assert.equal(is(name), false, name);
+    assert.equal(shelterTarget({ name: 'JQDAW', type: 'player', position: new Vec3(1, 64, 0) }), false, 'never a player');
+    for (const name of ['iceandfire:if_troll', 'creeper', 'skeleton']) assert.equal(shelterEnemy(mob(name, 1)), true, `${name}: still a threat near the shelter`);
+});
+
+// Soak 5 (rotn-v0.1.11), the lead's rule after deaths 2 and 3: at health 1.5 the bot fought a zombie
+// in the open and died within a second; respawned with no weapon, it fought one by hand for 15 s and
+// died. In the open a melee mob is fled from with no weapon or at health OPEN_FIGHT.maxLowHealth or less.
+test('soak 5: in the open a melee mob is fled from with no weapon or at health 8 or less; armed above 8 it is fought', () => {
+    assert.deepEqual(OPEN_FIGHT, { maxLowHealth: 8 });
+    const sword = { name: 'iron_sword', count: 1 };
+    const zombie = mob('zombie', 3);
+    const plan = ({ items = [sword], health = 20 } = {}) => threatPlan(fakeBot([zombie], { health, inventory: { items: () => items, slots: [] } }));
+    const bare = plan({ items: [] });
+    assert.deepEqual([bare.action, bare.why, bare.from, bare.away, bare.isEnemy(zombie)], ['flee', 'melee, and no weapon', zombie, RANGES.fight.away, true]);
+    const low = plan({ health: 8 });
+    assert.deepEqual([low.action, low.why], ['flee', 'melee, and health 8, 8 or less']);
+    assert.equal(plan({ health: 1.5 }).why, 'melee, and health 1.5, 8 or less', 'death 2');
+    assert.equal(plan({ health: 9 }).action, 'fight');
+    assert.equal(plan({ items: [{ name: 'pyrotech:crude_axe', count: 1 }] }).action, 'fight', 'a crude axe is a weapon');
+    assert.equal(plan({ items: [{ name: 'stone_pickaxe', count: 1 }] }).action, 'flee', 'a pickaxe is not');
+    assert.equal(fightRefusal({ health: 20, inventory: { items: () => [sword], slots: [] } }), null);
+    assert.equal(fightRefusal({ health: undefined, inventory: { items: () => [sword], slots: [] } }), null, 'health unknown: no refusal for it');
+    // A provoked animal that fights back (a rooster's own hit) is not fought bare-handed either.
+    const now = 100_000;
+    const rooster = { ...mob('animania:rooster_leghorn', 1.2), metadata: { 7: 8 } };
+    const peck = (items) => threatPlan(fakeBot([rooster], { lastDamageTime: now - 500, lastDamageTaken: 2, food: 12, inventory: { items: () => items, slots: [] } }), { now });
+    assert.equal(peck([sword]).action, 'fight');
+    assert.deepEqual([peck([]).action, peck([]).why], ['flee', 'provoked, and no weapon']);
+});
+
+test('soak 5: modes: unarmed, a lone zombie makes cowardice back off, not self_defense fight', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const a = modeAgent([mob('zombie', 4)]);
+    a.bot.inventory = { items: () => [], slots: [] };
+    await tick(a);
+    assert.deepEqual(a.ran, ['mode:cowardice']);
+    assert.match(a.bot.modes.behavior_log, /Backing off: zombie \(melee, and no weapon\)!/);
+    const low = modeAgent([mob('zombie', 4)]);
+    low.bot.health = 6;
+    await tick(low);
+    assert.deepEqual(low.ran, ['mode:cowardice'], 'armed at health 6: back off');
+});
+
+test('soak 5: a fight that drops to health 8 ends, and the bot backs off from the same zombie', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const zombie = mob('zombie', 3);
+    const bot = fightBot([zombie]);
+    bot.health = 20;
+    const attack = bot.pvp.attack.bind(bot.pvp);
+    bot.pvp.attack = (e) => { attack(e); bot.health = 8; }; // one exchange of hits
+    const agent = { bot, shut_up: true, openChat() {}, actions: { currentActionLabel: '', resume_func: null,
+        runAction: async (label, fn) => { await fn(); return { message: 'ok', interrupted: false }; } } };
+    await __modeForTest('self_defense').update(agent);
+    while (__modeForTest('self_defense').active) await new Promise(r => setTimeout(r, 10));
+    assert.deepEqual(bot.pvp.attacks, ['zombie'], 'one round, then it stopped');
+    assert.match(bot.modes.behavior_log, /Fighting zombie!\nBacking off: zombie \(melee, and health 8, 8 or less\)!/);
+    assert.equal(bot.pathfinder.goals.length, 1, 'it moved away');
 });
