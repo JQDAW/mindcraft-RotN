@@ -9,8 +9,8 @@
 - **The first soak with no death.** Each of the three nights passed in a closed shelter.
 - **Cost:**
   - **Daytime:** USD 0.057/h, above the 0.05 target; all 301 completions came by day.
-  - **While the self-prompter ran:** USD 0.080/h.
-  - **The 2-hour figure of 0.023 passes** only because the nights, and a 10-minute stretch of day 3 when the self-prompter was stopped, cost nothing (see *The LLM spend*).
+  - **While the self-prompter ran:** USD 0.080/h, which is what a whole day would cost if the standing goal's 5-minute daily budget were lifted.
+  - **The 2-hour figure of 0.023 passes** only because two things cost nothing: the nights, and 13.4 min of daytime after the standing goal had spent its 5-minute daily self-prompting budget (see *The LLM spend*).
 
 Every address is redacted (`<ip>`): the CX23's, the dev server's and the test server's.
 
@@ -43,7 +43,7 @@ All figures sum `cost_usd` over the bot's `[openrouter] usage …` lines in `dri
 | **Daytime**: from the join or each `[night] morning` line to the next `[night] sunset is near` line. Every completion falls in one of these windows | 47.8 | 301 | **0.0571** (above 0.05) |
 | – day 1: 17:12:41 (join) to 17:27:14 | 14.6 | 129 | 0.081 |
 | – day 2: 17:52:49 to 18:07:07 | 14.3 | 133 | 0.083 |
-| – day 3: 18:32:43 to 18:51:24 | 18.7 | 39 | 0.019 |
+| – day 3: 18:32:43 to 18:51:24 (the standing goal's budget ran out at 18:41:27) | 18.7 | 39 | 0.019 |
 | – day 4: the morning line at 19:12:38, 13 s before the stop | 0.2 | 0 | – |
 | **While self-prompting**: from each `Self-prompting started.` to the `self prompt loop stopped` after which it did not start again within 2 s | 34.1 | 301 | **0.0799** |
 | – 17:12:41 to 17:27:14 (sunset) | 14.6 | 129 | 0.081 |
@@ -51,10 +51,11 @@ All figures sum `cost_usd` over the bot's `[openrouter] usage …` lines in `dri
 | – 18:32:44 to 18:41:26 | 8.7 | 39 | 0.041 |
 
 - **Nights:** each measured from its `sunset is near` line to its `morning` line: 25.6 min (17:27:14–17:52:49), 25.6 min (18:07:07–18:32:43) and 21.2 min (18:51:24–19:12:38). That is 72.4 min with no LLM call.
-- **Daytime without the self-prompter:** 13.4 min, with no call either:
-  - 3.4 min on day 2: the loop stopped at 18:03:42, before the 18:07:07 sunset (see *What happened*);
-  - 10.0 min on day 3: it stopped at 18:41:26, before the 18:51:24 sunset.
-- So of the 120 min, the bot self-prompted for 34.1. At that rate (8.8 completions per minute) a bot that works all day would spend about USD 0.08/h. Soak 5's daytime rate was USD 0.064/h.
+- **Daytime without the self-prompter: 13.4 min, with no call either. Both stretches come from the standing goal's daily budget.** After `agenda done`, the standing goal gets 5 min of self-prompting per day. When they are spent, it stops the self-prompter until the next day. `server.log` shows this; `driver.log` has no line for it, because the stop writes none to the console (`src/agent/priority.js`, about lines 355–385):
+  - day 2 (the standing goal's day 1): started 17:58:38, `server.log` line 730 at 18:03:43: `agenda standing goal: its 5 min of self-prompting for day 1 are spent; none until the next day`. The self-prompter had stopped at 18:03:42, 3.4 min before the 18:07:07 sunset;
+  - day 3 (the standing goal's day 2): started 18:35:06, `server.log` line 893 at 18:41:27: the same line `for day 2`. The self-prompter had stopped at 18:41:26, 10.0 min before the 18:51:24 sunset.
+  - So the budget, not the bot's state, is why day 3 shows 0.019/h and why 13.4 min of daytime made no call.
+- Of the 120 min, the bot self-prompted for 34.1, at 8.8 completions per minute. **The 0.0799/h figure holds only if the budget were lifted:** a bot that self-prompts all day would spend about USD 0.08/h. With the budget, the daytime figure is 0.057/h. Soak 5's daytime rate was USD 0.064/h.
 
 ## The checks (`result.json`)
 | Check | Result |
@@ -85,15 +86,20 @@ Sources: the bot's `[survival]`, `[night]` and `[reflex]` lines in `driver.log`,
   - The standing goal re-ran the food step; it was `stuck` again at 17:58:17.
   - The bot ate at once after the `low` line at 18:02:08.
   - It stocked cobblestone and planned a stone sword (`!getCraftingPlan("stone_sword", 1)` at 18:03:38).
-  - At 18:03:40 the LLM answered `!craftRecipe("pyrotech:tinder", 3)`. **At 18:03:42 the journal shows `self prompt loop stopped`, with no `parsed command` line for that craft and no reason given.** It did not start again before the sunset at 18:07:07, so 3.4 min of day went unused.
+  - The standing goal had started at 17:58:38 (`agenda standing goal started (day 1)`, `server.log`).
+  - At 18:03:40 the LLM answered `!craftRecipe("pyrotech:tinder", 3)`. At 18:03:42 the journal shows `self prompt loop stopped`, with no `parsed command` line for that craft: the command the LLM had just returned was dropped.
+  - **The cause is the standing goal's daily budget:** at 18:03:43 `server.log` (line 730) has `agenda standing goal: its 5 min of self-prompting for day 1 are spent; none until the next day`. The journal has no line for this; the budget stop writes none to the console.
+  - No self-prompting followed before the sunset at 18:07:07: 3.4 min of day without work.
 - **Night 2 (18:07–18:32):**
   - 18:07:07: `food worth 11 hunger held, food 13; enough`; in the shelter at 18:07:12.
   - The eating reflex answered each of the four `low` lines that night within 2 s: persimmon, persimmon, scallion, spice leaf.
   - The morning line came at 18:32:43.
-- **Day 3 (18:32–18:51): an eel kept the bot busy in the water for 10 min, with the self-prompter stopped.**
-  - From 18:39:03 to 18:51:11 the bot fought a `betteranimalsplus:eel_freshwater` 26 times: every `fight start` of the soak. 25 fights ended `interrupted`, 1 `stopped`.
+- **Day 3 (18:32–18:51): an eel held the bot in a loop in the water for 12 min; meanwhile the standing goal's budget ran out.**
+  - The standing goal started again at 18:35:06 (`agenda standing goal started (day 2)`, `server.log`).
+  - **The eel loop began at 18:39:03**, the first `fight start`. From 18:39:03 to 18:51:11 the bot fought a `betteranimalsplus:eel_freshwater` 26 times: every `fight start` of the soak. 25 fights ended `interrupted`, 1 `stopped`.
   - At 18:40:53 the reflex reported `under water with 15 of 20 air: stopping and swimming up`.
-  - At 18:41:21 the unstuck reflex took over (`I'm stuck!`). **At 18:41:26 the self-prompter stopped and did not start again before the end of the soak.**
+  - At 18:41:21 the unstuck reflex took over (`I'm stuck!`).
+  - At 18:41:26 the self-prompter stopped. **The cause is the budget, not the eel loop:** at 18:41:27 `server.log` (line 893) has `agenda standing goal: its 5 min of self-prompting for day 2 are spent; none until the next day`. It ran out during the loop. There was no self-prompting again before the end of the soak.
   - From 18:41 to 18:51 there was a loop: self-defence against the eel, then an unstuck `Moved away from … to …`, 21 such moves between 18:41:27 and 18:51:00, about one every 30 s, all inside x 45–59, z -142 to -153, at y 61–65. From 18:44:42 to 18:49:29 the same move repeated 11 times: `Moved away from (49, 62, -147) to (45, 62, -151)`, and each time the bot was back at (49, 62, -147) for the next one.
   - At 18:47:07 came `[reflex] re-plan prompt held: it is not full day yet; it goes once at full day`.
   - It ended with `flee betteranimalsplus:eel_freshwater (outnumbered)` at 18:51:11 and `Moved 16 away from enemies`. Sunset came at 18:51:24.
@@ -123,11 +129,14 @@ Sources: the bot's `[survival]`, `[night]` and `[reflex]` lines in `driver.log`,
   - The whole log from the start line on was 21,230 lines, within the 200,000-line bound.
 
 ## For the owners (not judged here)
-- **lead (cost): the working rate is still above the ADR 0010 target.** While self-prompting, the bot spent USD 0.080/h (8.8 completions per minute); over all daytime it was USD 0.057/h. The 2-hour check passes (0.023) because 72 min were night and 13 min of day had no self-prompter. If the target is meant for working time, this run fails it, by more than soak 5 (0.064 by day).
-- **skills-rotn: the self-prompter stopped twice by day with no restart before the night.**
-  - At 18:03:42, right after the LLM answered `!craftRecipe("pyrotech:tinder", 3)`: no `parsed command` line followed, and no reason was logged.
-  - At 18:41:26, during the eel loop, and it never restarted: the re-plan prompt was `held: it is not full day yet` at 18:47:07.
-- **skills-rotn: an eel in the water holds the bot in a loop.** Self-defence and unstuck took turns for 10 min (26 fights, all interrupted or stopped; 21 unstuck moves, 11 of them the same move from (49, 62, -147)). The bot did not eat until food 10, and nothing broke the loop until the flee at 18:51:11. The eel never hurt it.
+- **lead (cost): the working rate is still above the ADR 0010 target.** While self-prompting, the bot spent USD 0.080/h (8.8 completions per minute); over all daytime it was USD 0.057/h. The 2-hour check passes (0.023) because 72 min were night and 13.4 min of day had no self-prompting after the standing goal's 5-minute daily budget was spent. The 0.080/h figure holds only if that budget were lifted. If the target is meant for working time, this run fails it, by more than soak 5 (0.064 by day).
+- **skills-rotn: the eel loop (self_defense against unstuck).** From 18:39:03 to the flee at 18:51:11 (12 min), self-defence against a `betteranimalsplus:eel_freshwater` in the water and the unstuck reflex took turns:
+  - 26 fights, all `interrupted` or `stopped`;
+  - 21 unstuck moves, 11 of them the same move from (49, 62, -147).
+  - Nothing broke the loop until the flee. The eel never hurt the bot.
+- **skills-rotn: eating lost to the eel loop for 8 min.** After the `low` line at 18:41:12, food fell to 11 and then 10 before the eating reflex ate at 18:49:30 (`ate rustic:ginseng:0 at food 10`). This is the `ate_when_low` failure.
+- **skills-rotn: a budget stop drops the command the LLM just returned.** At 18:03:40 the LLM answered `!craftRecipe("pyrotech:tinder", 3)`; the standing goal's budget stopped the self-prompter at 18:03:42, and the command was never parsed or run.
+- **skills-rotn: a budget stop writes no console line.** The two stops (18:03:43, 18:41:27) appear only in chat (`server.log`). `driver.log` shows a bare `self prompt loop stopped`, so the journal alone cannot tell a budget stop from any other.
 - **skills-rotn: the food step got `stuck` twice again** (17:21:16 and 17:58:17), as in soak 5.
 - **skills-rotn (logging, for #502's new line):** the one `hurt-detail` of the soak says `cause none near none` for 4 points over 1.6 s at full air. The source is still unknown.
 
