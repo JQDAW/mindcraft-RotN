@@ -1,0 +1,7 @@
+# test-server.sh starts, right after up (17:11):
+starts=1 files=1
+# test-server.sh log 200000 since-start, fetched at the end of the run (19:12), before the delete: the header, the start line, Done, the end line (line numbers of that answer; line 1 is the header)
+##rotn-test since-start files=latest.log found=1 lines=21230 over=0 nonempty=21222
+2:[17:08:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Starting minecraft server version 1.12.2
+20200:[17:10:27] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Done (19.094s)! For help, type "help" or "?"
+##rotn-test end
