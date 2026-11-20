@@ -1,0 +1,163 @@
+# Config lines from the pinned pack zip (default configs, ADR 0005), path:line: text.
+
+## ice_and_fire.cfg
+config/ice_and_fire.cfg:459:     B:"Spawn Trolls"=true
+config/ice_and_fire.cfg:492:     S:"Troll Attack Strength"=18.0
+config/ice_and_fire.cfg:495:     S:"Troll Max Health"=200.0
+config/ice_and_fire.cfg:498:     I:"Troll Spawn Check Chance"=1
+config/ice_and_fire.cfg:222:     S:"Entities immune to being turned to stone" <
+config/ice_and_fire.cfg:223:         minecraft:wither
+config/ice_and_fire.cfg:224:         minecraft:ender_dragon
+config/ice_and_fire.cfg:225:         harvestersnight:harvester
+config/ice_and_fire.cfg:226:         betterslimes:quazar
+config/ice_and_fire.cfg:227:         rats:black_death
+config/ice_and_fire.cfg:228:         mowziesmobs:frostmaw
+config/ice_and_fire.cfg:229:         mowziesmobs:ferrous_wroughtnaut
+config/ice_and_fire.cfg:230:         mowziesmobs:barako
+config/ice_and_fire.cfg:231:         aether_legacy:slider
+config/ice_and_fire.cfg:232:         aether_legacy:sun_spirit
+config/ice_and_fire.cfg:233:         aether_legacy:valkyrie_queen
+config/ice_and_fire.cfg:234:         aether_legacy:valkyrie
+config/ice_and_fire.cfg:235:         mod_lavacow:sludgelord
+config/ice_and_fire.cfg:236:      >
+
+## dynamictrees.cfg
+config/dynamictrees.cfg:47:     # If enabled then trees will harm living entities when falling [default: true]
+config/dynamictrees.cfg:48:     B:enableFallingTreeDamage=true
+config/dynamictrees.cfg:50:     # If enabled then trees will break other trees when falling [default: true]
+config/dynamictrees.cfg:51:     B:enableFallingTreeDomino=true
+config/dynamictrees.cfg:53:     # If enabled then trees will fall over when harvested [default: true]
+config/dynamictrees.cfg:54:     B:enableFallingTrees=true
+config/dynamictrees.cfg:56:     # Multiplier for damage incurred by a falling tree [range: 0.0 ~ 100.0, default: 1.0]
+config/dynamictrees.cfg:57:     S:fallingTreeDamageMultiplier=1.5
+
+## esm/epicsiegemod.cfg (AI Blacklist: "Mobs that are exempt from AI modifications")
+config/esm/epicsiegemod.cfg:5:     S:"AI Blacklist" <
+config/esm/epicsiegemod.cfg:47:         minecraft:creeper
+config/esm/epicsiegemod.cfg:48:         minecraft:skeleton
+config/esm/epicsiegemod.cfg:579:         iceandfire:if_troll
+config/esm/epicsiegemod.cfg:693:         zombie_players:zombie_player
+config/esm/epicsiegemod.cfg:903:     S:"Boss Kill Modifier"=0.0
+
+## Fishs_Undead_Rising.cfg
+config/Fishs_Undead_Rising.cfg:68:     D:"frigid attack"=3.0
+config/Fishs_Undead_Rising.cfg:570:     D:"mummy attack"=4.0
+config/Fishs_Undead_Rising.cfg:582:     D:"mycosis attack"=3.0
+config/Fishs_Undead_Rising.cfg:613:     D:"parasite attack"=1.0
+config/Fishs_Undead_Rising.cfg:721:     D:"sludge lord attack"=7.0
+config/Fishs_Undead_Rising.cfg:811:     D:"weta attack"=3.0
+
+## roughmobsrevamped.cfg
+config/roughmobsrevamped.cfg:104:         blaze;generic.attackDamage;0;3
+config/roughmobsrevamped.cfg:566:         iceandfire:dread_lich;generic.attackDamage;0;10
+config/roughmobsrevamped.cfg:583:         mod_lavacow:weta;generic.attackDamage;0;1
+config/roughmobsrevamped.cfg:1379:     I:_skeletonEquipmentWeaponChance=20
+config/roughmobsrevamped.cfg:1427:         bow;1
+config/roughmobsrevamped.cfg:1432:         iron_axe;3;-1
+config/roughmobsrevamped.cfg:1433:         iron_sword;3;-1
+config/roughmobsrevamped.cfg:1626:     I:spiderSlownessChance=1
+config/roughmobsrevamped.cfg:1632:     I:spiderSlownessDuration=120
+config/roughmobsrevamped.cfg:2935:     I:zombieHungerChance=4
+config/roughmobsrevamped.cfg:2938:     I:zombieHungerDuration=150
+config/roughmobsrevamped.cfg:3153:     I:_zombieEquipmentWeaponChance=5
+config/roughmobsrevamped.cfg:3180:         wooden_axe;2
+config/roughmobsrevamped.cfg:3181:         stone_axe;2
+config/roughmobsrevamped.cfg:3184:         iron_sword;2
+config/roughmobsrevamped.cfg:3198:         wooden_axe;1
+config/roughmobsrevamped.cfg:3199:         stone_axe;1
+config/roughmobsrevamped.cfg:3202:         iron_sword;1
+
+## scalinghealth/main.cfg
+config/scalinghealth/main.cfg:64:         S:"Increase Per Second"=0.0
+config/scalinghealth/main.cfg:84:         S:"Starting Value"=0.0
+config/scalinghealth/main.cfg:278:         S:"Damage Modifier"=0.0
+config/scalinghealth/main.cfg:492:             S:"Difficulty Weight"=0.00
+config/scalinghealth/main.cfg:416:             S:"Mob Potions" <
+config/scalinghealth/main.cfg:417:              >
+
+## ancientbeasts.cfg
+config/ancientbeasts.cfg:50:     D:"Global Damage Multiplier"=1.0
+
+## charm.cfg
+config/charm.cfg:835:         B:"Apply curse"=true
+
+## rotm.cfg (Mob Offense, lines 433-600 only)
+config/rotm.cfg:433:         # Format: <modid:entity>;<potionEffect>;<health>;<potionLevel>;<potionDuration>;<chance>;<?sound>;?<dimension>;?<damageType>
+config/rotm.cfg:443:         S:"Mob Offense" <
+config/rotm.cfg:444:             minecraft:vindication_illager;potioncore:broken_armor;100;0;7;33
+config/rotm.cfg:454:             quark:dweller;potioncore:vulnerable;100;0;3;25
+config/rotm.cfg:468:             mod_lavacow:sludgelord;betterwithaddons:tarred;100;1;20;100
+config/rotm.cfg:469:             mod_lavacow:sludgelord;mod_lavacow:corroded;100;1;10;100
+config/rotm.cfg:511:             iceandfire:if_troll;potioncore:broken_armor;100;0;10;100
+config/rotm.cfg:519:             mod_lavacow:parasite;minecraft:nausea;100;1;7;15;mob
+config/rotm.cfg:520:             mod_lavacow:parasite;mod_lavacow:soiled;100;0;60;10;mob
+config/rotm.cfg:573:             mod_lavacow:zombiefrozen;twilightforest:frosted;100;1;7;50
+config/rotm.cfg:574:             mod_lavacow:zombiefrozen;mowziesmobs:frozen;100;0;3;20
+config/rotm.cfg:581:             iceandfire:dread_lich;mowziesmobs:frozen;100;0;3;33
+config/rotm.cfg:582:             iceandfire:dread_lich;netherex:frostbitten;100;0;9;33
+config/rotm.cfg:583:             iceandfire:dread_lich;potioncore:broken_magic_shield;100;2;15;100
+config/rotm.cfg:591:             specialmobs:ninjaskeleton;minecraft:poison;100;2;3;50
+config/rotm.cfg:592:             specialmobs:knightskeleton;minecraft:slowness;100;5;2;20;bettercombatmod:player.swordslash
+
+## Special_AI.cfg
+config/Special_AI.cfg:51: door_breaking {
+config/Special_AI.cfg:120:         iceandfire:if_troll 1.0
+config/Special_AI.cfg:128:     B:requires_target=true
+config/Special_AI.cfg:133:     B:requires_tools=true
+config/Special_AI.cfg:413: idle_fiddling {
+config/Special_AI.cfg:461:         iceandfire:if_troll 1.0
+config/Special_AI.cfg:639: idle_griefing {
+config/Special_AI.cfg:646:     B:break_lights=true
+config/Special_AI.cfg:713:         iceandfire:if_troll 1.0
+config/Special_AI.cfg:726:     B:requires_tools=true
+
+## dmgcontrol.cfg
+config/dmgcontrol.cfg:10:     S:DamageModifier_arrow=0.8
+config/dmgcontrol.cfg:32:     S:DamageModifier_fallingtree=1.0
+config/dmgcontrol.cfg:63:     S:DamageModifier_mob=1.0
+config/dmgcontrol.cfg:70:     S:DamageModifier_player=0.8
+config/dmgcontrol.cfg:86:     B:AllowHealthModification=false
+config/dmgcontrol.cfg:206:     S:"MaxHealth_iceandfire:if_troll"=200.0
+
+## thiccentities.cfg (if_troll)
+    if_troll {
+        # The amount of extra armor to give the entity. Default: 0
+        D:armor=0.0
+
+        # The factor to scale the entity's damage by. Default: 1
+        D:damage=1.0
+
+        # The factor to scale the entity's follow range by. Default: 1
+        D:followRange=1.0
+
+        # The factor to scale the entity's max health by. Default: 1
+        D:health=1.0
+
+        # The factor to scale the player's jump strength by. Default: 1
+        D:jump=1.0
+
+        # The factor to scale the entity by. Default: 1
+        D:scale=1.0
+
+        # The factor to scale the entity's speed by. Default: 1
+        D:speed=1.0
+
+        # The amount of extra armor toughness to give the entity. Default: 0
+        D:toughness=0.0
+    }
+
+    myrmex_worker {
+
+## incontrol/spawn.json (the only troll rules)
+config/incontrol/spawn.json:729:     "dimension": 10,
+config/incontrol/spawn.json:730:     "mob": "iceandfire:if_troll",
+config/incontrol/spawn.json:738:     "dimension": 10,
+config/incontrol/spawn.json:739:     "mob": "iceandfire:if_troll",
+
+## ice_and_fire.cfg (troll spawn weight)
+config/ice_and_fire.cfg:501:     I:"Troll Spawn Weight"=55
+
+## server.properties (zip root)
+server.properties:12: difficulty=2
+server.properties:18: hardcore=false
+

@@ -22,6 +22,7 @@
 // common-mobs.json. What it does not reflect is listed in NIGHT_THREATS_NOT_REFLECTED.
 
 import { isOverworldBiome } from './biomes.js';
+import { mobMelee } from './melee.js';
 
 const DEFAULT_REACTION = { hostile: 'fight', none: 'ignore' };
 
@@ -55,7 +56,7 @@ function classRule(catalog, e) {
  * @returns {{name: string, displayName: string|null, level: 'dangerous'|'hostile'|'none',
  *   reaction: string, source: 'override'|'documented'|'vanilla'|'verified'|'inferred'|'default', rule?: string,
  *   variantNote?: string,
- *   group?: string, provoked: object|null,
+ *   group?: string, provoked: object|null, traits: object|null, melee: object|null,
  *   summary: string|null, explodes: boolean, ranged: boolean, lookAt: boolean, evidence: string[]}|null}
  *   null for an unknown entity. lookAt false: the mob is dangerous to look at (its targeting starts
  *   when a player looks at it, like the enderman's stare, or its gaze attack needs the player to look
@@ -65,6 +66,10 @@ function classRule(catalog, e) {
  *   attackIntervalTicks, chaseSpeed, width, stepHeight and angerMetadata ({ index, type, field, note }:
  *   the metadata entry that is true while the bull charges). null otherwise. group: the group's id
  *   when the entry came from 'groups'.
+ *   traits: an entry's structured facts (threat-reactions.json description; the troll: size, speed,
+ *   breaksBlocks 'blast', sunlight 'turns-to-stone', ...), null otherwise.
+ *   melee: { damage, maxDamage, hitsToKill, ... } from mob-melee.json (src/melee.js mobMelee) without
+ *   its evidence, or null when the mob has no entry there.
  */
 export function threatOf(catalog, input) {
     const e = catalog.entity(input);
@@ -72,9 +77,15 @@ export function threatOf(catalog, input) {
     const level = e.dangerous ? 'dangerous' : e.hostile ? 'hostile' : 'none';
     const overrideEvidence = e.threat?.evidence ? [e.threat.evidence] : [];
     const base = { name: e.name, displayName: e.displayName ?? null, level };
+    const melee = (() => {
+        const m = mobMelee(catalog, e.name);
+        if (!m) return null;
+        const { evidence, ...rest } = m;
+        return rest;
+    })();
     // A dangerous mob is avoided whatever else applies (entity-overrides.json wins).
     if (level === 'dangerous') {
-        return { ...base, reaction: 'avoid', source: 'override', summary: e.threat?.note ?? null, explodes: false, ranged: false, lookAt: e.threat?.lookAt !== false, provoked: null, evidence: overrideEvidence };
+        return { ...base, reaction: 'avoid', source: 'override', summary: e.threat?.note ?? null, explodes: false, ranged: false, lookAt: e.threat?.lookAt !== false, provoked: null, traits: null, melee, evidence: overrideEvidence };
     }
     const entry = catalog.threatReactions?.entities?.[e.name] ?? groupOf(catalog, e.name);
     const rule = !entry && level === 'hostile' ? classRule(catalog, e) : null;
@@ -88,6 +99,8 @@ export function threatOf(catalog, input) {
         ranged: !!r?.ranged,
         lookAt: r?.lookAt !== false,
         provoked: r?.provoked ? structuredClone(r.provoked) : null,
+        traits: r?.traits ? structuredClone(r.traits) : null,
+        melee,
         evidence: [...(r?.evidence ?? []), ...overrideEvidence],
     };
     if (entry?.members) out.group = entry.id;
@@ -104,8 +117,9 @@ export function threatOf(catalog, input) {
  * @param {import('./catalog.js').RotnData} catalog
  * @param {{biome?: string|string[], limit?: number}} [opts] a biome registry name ("minecraft:plains")
  *        or several; default: every overworld biome (src/biomes.js, as common-mobs.json)
- * @returns {Array<{name, displayName, level, reaction, explodes, ranged, lookAt, share: number, biomes: number}>}
- *        share = the mob's spawn weight / all listed monsters' weight over the biomes (0-1)
+ * @returns {Array<{name, displayName, level, reaction, explodes, ranged, lookAt, damage: number|null, share: number, biomes: number}>}
+ *        share = the mob's spawn weight / all listed monsters' weight over the biomes (0-1);
+ *        damage = its melee hit (mob-melee.json), null when not listed
  */
 export function nightThreats(catalog, { biome, limit = 20 } = {}) {
     const spawns = catalog.dump.spawns?.biomes ?? {};
@@ -123,7 +137,7 @@ export function nightThreats(catalog, { biome, limit = 20 } = {}) {
     for (const [name, w] of weight) {
         const t = threatOf(catalog, name);
         if (!t || t.level === 'none') continue;
-        rows.push({ name, displayName: t.displayName, level: t.level, reaction: t.reaction, explodes: t.explodes, ranged: t.ranged, lookAt: t.lookAt, weight: w, biomes: where.get(name) });
+        rows.push({ name, displayName: t.displayName, level: t.level, reaction: t.reaction, explodes: t.explodes, ranged: t.ranged, lookAt: t.lookAt, damage: t.melee?.damage ?? null, weight: w, biomes: where.get(name) });
     }
     const total = rows.reduce((a, r) => a + r.weight, 0);
     return rows
