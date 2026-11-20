@@ -315,7 +315,8 @@ const BODY_TYPES = ['player', 'mob', 'hostile', 'animal', 'passive', 'ambient', 
 /** Soak 5: entities (not the bot) whose box overlaps the cell (width from entity.width, else 0.6). */
 export function overlapping(bot, cell) {
     return Object.values(bot.entities ?? {}).filter(e => {
-        if (!e || e === bot.entity || !e.position || e.name === 'item') return false;
+        // #502 nit 2: bodies only (as mobIn's BODY_TYPES): never an item, an XP orb or an arrow.
+        if (!e || e === bot.entity || !e.position || !BODY_TYPES.includes(e.type)) return false;
         const w = (e.width ?? 0.6) / 2, h = e.height ?? 1.8;
         return e.position.x + w > cell.x && e.position.x - w < cell.x + 1 && e.position.z + w > cell.z && e.position.z - w < cell.z + 1
             && e.position.y + h > cell.y && e.position.y < cell.y + 1;

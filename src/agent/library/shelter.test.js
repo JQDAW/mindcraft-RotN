@@ -1113,3 +1113,17 @@ test('soak 5: "did not stay" names what is in the cell now and the entities over
     assert.equal(r.closed, false);
     assert.match(r.line, /1, 64, 0: the block did not stay \(placed twice; now air; iceandfire:if_troll over the cell\)/);
 });
+
+// #502 nit 2: "over the cell" names bodies only, never an XP orb, an arrow or an item.
+test('#502 nit 2: overlapping skips XP orbs, arrows and items', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { overlapping } = await import('./shelter.js');
+    const { bot } = fakeBot({ cobble: 2, set: shellAt({ '1,64,0': 'air' }) });
+    const over = (type, name) => ({ id: name, name, type, position: new Vec3(1.5, 64, 0.5), width: 0.5, height: 0.5 });
+    bot.entities = { 1: bot.entity, a: over('orb', 'experience_orb'), b: over('object', 'arrow'), c: over('object', 'item'), d: over('mob', 'zombie') };
+    assert.deepEqual(overlapping(bot, new Vec3(1, 64, 0)).map(e => e.name), ['zombie']);
+    bot.entities = { 1: bot.entity, a: over('orb', 'experience_orb'), b: over('object', 'arrow') };
+    bot.placeBlock = () => Promise.resolve(); // never kept
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.match(r.line, /1, 64, 0: the block did not stay \(placed twice; now air\)/);
+});
