@@ -1507,3 +1507,32 @@ test('soak 5: up on a tree by day, the bot climbs down before the agenda (not wh
     up = false;
     assert.equal(treeTick(agent, opts(10 * TREE_TICK.retryMs)), null, 'on the ground: nothing');
 });
+
+// Soak 6 (c, d): the standing goal's budget stop wrote no console line (only the chat line), and its
+// plain stop dropped the command the model had just returned (18:03:40 !craftRecipe tinder). Now it
+// logs "[agenda] standing goal budget spent ..." and stops the self-prompter after the turn in flight.
+test('soak 6 (c, d): the standing goal\'s budget stop is logged and lets the turn in flight finish (stopAfterTurn, not stop)', (t) => {
+    noNight(t);
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const clock = { now: 1_000_000 };
+    const agent = doneAgent(t, clock);
+    const sp = agent.self_prompter;
+    const after = [];
+    // A loop is running: the stop waits for its turn, then the state is stopped.
+    sp.stopAfterTurn = (why) => { after.push(why); sp.loop_active = true; setImmediate(() => { sp.state = 'stopped'; sp.loop_active = false; }); return true; };
+    let now = 0;
+    const tick = () => { clock.now = 1_000_000 + now; return autonomyTick(agent, { now }); };
+    assert.equal(tick(), 'goal:open');
+    for (now = TICK_MS; now <= STEP_LLM_MS + TICK_MS && !after.length; now += TICK_MS) tick();
+    assert.deepEqual(after, ['standing goal budget spent: 5 min of self-prompting for day 3']);
+    assert.equal(sp.stops, 0, 'no plain stop (it dropped the reply in flight)');
+    assert.ok(logs.includes('[agenda] standing goal budget spent: 5 min of self-prompting for day 3; the self-prompter stops after the turn in flight (its command still runs)'), logs.join('\n'));
+    // While the turn finishes nothing else starts it; then the chat line, once.
+    assert.notEqual(tick(), 'goal:open');
+    return new Promise(resolve => setImmediate(resolve)).then(() => {
+        now += TICK_MS;
+        assert.equal(tick(), 'goal:open:spent');
+        assert.equal(agent.said.filter(l => l === 'agenda standing goal: its 5 min of self-prompting for day 3 are spent; none until the next day').length, 1);
+    });
+});

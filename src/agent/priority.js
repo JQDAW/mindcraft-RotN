@@ -365,7 +365,12 @@ function openGoalTick(agent, now, open) {
                 agent._open_goal_prompt = open;
             }
             if (w.llmMs < budget) { saveWindow(agent, now, { force: false }); return 'goal:open:running'; }
-            sp.stop(false);
+            // Soak 6 (c, d): the stop wrote no console line, and it dropped the command the model had
+            // just returned. Now it is logged, and the turn in flight runs its command first.
+            const label = standingLabel(w.key);
+            const why = label ? `standing goal budget spent: ${minutes(budget)} of self-prompting for ${label}` : `open goal budget spent: ${minutes(budget)} of self-prompting for this wait`;
+            const later = sp.stopAfterTurn ? sp.stopAfterTurn(why) : (sp.stop(false), false);
+            console.log(`[agenda] ${why}; the self-prompter stops${later ? ' after the turn in flight (its command still runs)' : ''}`);
             run.running = false;
             saveWindow(agent, now);
         } else {
