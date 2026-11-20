@@ -70,6 +70,12 @@ export function shelterQuiet(name, bot) {
     return false;
 }
 
+/**
+ * Soak 5 (death 5): under water with this much air left (of 20) or less, a walk stops and the bot
+ * swims up, for at most swimMs. #499 nit: 15 of 20 (about 11 s of air left), not 10.
+ */
+export const DROWNING = { surfaceAt: 15, swimMs: 6000 };
+
 /** A mob in reach is named in chat at most this often from the shelter (T1: up to 24 lines a minute). */
 export const SHELTER_SAY_MS = 30_000;
 let shelterSaidAt = -Infinity;
@@ -231,8 +237,15 @@ const modes_list = [
             if (!block) block = {name: 'air'}; // hacky fix when blocks are not loaded
             if (!blockAbove) blockAbove = {name: 'air'};
             if (names112.isWater(blockAbove.name)) {
+                // Soak 5 (death 5): the bot drowned chasing a rabbit; with a walk going (a goal set) it
+                // never swam up. Out of air (DROWNING.surfaceAt), the walk stops and it swims up.
+                const air = bot.oxygenLevel;
+                if (bot.pathfinder.goal && Number.isFinite(air) && air <= DROWNING.surfaceAt) {
+                    console.log(`[reflex] under water with ${air} of 20 air: stopping and swimming up`);
+                    execute(this, agent, async () => { await skills.swimUp(bot, DROWNING.swimMs); }).catch(err => reportModeError(this.name, err));
+                }
                 // does not call execute so does not interrupt other actions
-                if (!bot.pathfinder.goal) {
+                else if (!bot.pathfinder.goal) {
                     bot.setControlState('jump', true);
                 }
             }
@@ -751,7 +764,7 @@ export async function moveAwayWithin(bot, distance, timeoutMs) {
     // Every walk away is fall-safe too (skills.goToGoal).
     const free = standsOnTree(bot)
         ? skills.descendFromTree(bot, run).then((down) => { if (!down) throw new Error('no safe way down from the tree'); })
-        : skills.moveAway(bot, distance);
+        : skills.moveAway(bot, distance, { offTrees: true }); // soak 5: never onto leaves that may not hold
     const moved = free.then(() => ({ outcome: 'freed' }), (error) => ({ outcome: 'failed', error }));
     try {
         return await Promise.race([moved, timedOut]);

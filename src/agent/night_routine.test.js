@@ -1776,12 +1776,15 @@ test('CX23 soak: up on a tree at night (a respawn in the canopy), the routine cl
     const o2 = ops({ closed: false });
     const calls2 = [];
     o2.onTree = () => true;
-    o2.descend = () => { calls2.push('descend'); return Promise.resolve(false); };
+    o2.descend = (bot) => { calls2.push('descend'); bot.rotnTreeWhy = 'Not digging down: dynamictrees:trunkshell is under you'; return Promise.resolve(false); };
     const build2 = o2.buildShelter;
     o2.buildShelter = (bot, opts) => { calls2.push('build'); return build2(bot, opts); };
-    t.mock.method(console, 'warn', () => {});
+    const warns = [];
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
     for (let i = 0; i < 4; i++) { nightTick(stuck, { now: i * RETRY_MS * 2, ops: o2 }); await settle(stuck); }
     assert.equal(calls2.filter(c => c === 'descend').length, 1, 'once per build phase');
+    // Soak 5 (00:47): the journal says why it is still up there.
+    assert.ok(warns.includes('[night] still on the tree (Not digging down: dynamictrees:trunkshell is under you); sheltering from here'), warns.join('\n'));
     assert.ok(calls2.includes('build'));
 
     // On the ground: no climb at all.

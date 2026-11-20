@@ -9,7 +9,8 @@
 
 import pf from 'mineflayer-pathfinder';
 import { Vec3 } from 'vec3';
-import { goToGoal } from './library/skills.js';
+import { goToGoal, descendFromTree } from './library/skills.js';
+import { standsOnTree } from './library/fall_safety.js';
 import { isPlayerZombie, shelterEnemy } from './library/threats.js';
 import { safeError } from './safe_error.js';
 import { isGiverGoal } from './agenda_driver.js';
@@ -99,19 +100,25 @@ export function dryAt(bot) {
     };
 }
 
-/** The walk (fall-safe goToGoal) to within 4 blocks of the target, at most RELOCATE.walkMs. */
+/**
+ * The walk (fall-safe goToGoal) to within 4 blocks of the target, at most RELOCATE.walkMs. Soak 5
+ * (00:56): a walk that failed (no path from the spawn tree) was taken for one that ended short:
+ * it now returns {failed: true, why}.
+ */
 async function walkTo(bot, target) {
     let timer;
     const limit = new Promise(resolve => { timer = setTimeout(() => { try { bot.pathfinder?.stop?.(); } catch { /* best effort */ } resolve(); }, RELOCATE.walkMs); });
-    try { await Promise.race([goToGoal(bot, new pf.goals.GoalNearXZ(target.x, target.z, 4)).catch(() => {}), limit]); }
-    finally { clearTimeout(timer); }
+    try {
+        return await Promise.race([goToGoal(bot, new pf.goals.GoalNearXZ(target.x, target.z, 4)).then(() => null, (err) => ({ failed: true, why: safeError(err) })), limit]);
+    } finally { clearTimeout(timer); }
 }
 
 /**
  * One check, from the priority stack before the agenda: 'relocating' while the walk away runs (the
  * agenda and the model's goal wait), else null. Never throws.
  */
-export function relocateTick(agent, { now = Date.now(), clock = Date.now, walk = walkTo, log = (l) => console.log(l) } = {}) {
+export function relocateTick(agent, { now = Date.now(), clock = Date.now, walk = walkTo, log = (l) => console.log(l),
+    onTree = standsOnTree, descend = (bot) => descendFromTree(bot) } = {}) {
     const r = agent._relocate ??= { forDeath: null, triedAt: -Infinity, job: null };
     if (r.job) return 'relocating';
     // #416 review 1: a goal a task giver typed, or self-prompting a bot-to-bot conversation paused,
@@ -136,21 +143,34 @@ export function relocateTick(agent, { now = Date.now(), clock = Date.now, walk =
     // The agenda's self-prompting waits (as at night): its commands would stop the walk.
     if (agent.self_prompter?.isActive?.()) agent.self_prompter.stop(false);
     agent._agenda_paused = true;
+    // Soak 5 (00:56:18): respawned up the spawn tree, the walk found no path and the agenda resumed
+    // up there ("got only 4 blocks"). Down from the tree first; a walk that failed (no path, still
+    // on the tree) is tried again like one a reflex cut short.
+    let walked = null;
     r.job = Promise.resolve()
-        .then(() => agent.actions.runAction('action:leaveDeathArea', () => walk(bot, target), { keepReplan: true })) // #463 review 1: the death's re-plan survives the walk
+        .then(() => agent.actions.runAction('action:leaveDeathArea', async () => {
+            if (onTree(bot)) {
+                log('[respawn] up on a tree: climbing down before the walk away');
+                if (!await descend(bot)) { walked = { failed: true, why: `still up on the tree${bot.rotnTreeWhy ? `: ${bot.rotnTreeWhy}` : ''}` }; return; }
+            }
+            walked = await walk(bot, target);
+        }, { keepReplan: true })) // #463 review 1: the death's re-plan survives the walk
         .catch(err => { log(`[respawn] the walk away failed: ${safeError(err)}`); return null; })
         .then((ret) => {
             r.job = null;
             const here = bot.entity?.position;
             const nearest = here ? Math.min(...why.places.map(p => hdist(p.pos, here))) : 0;
             if (nearest >= RELOCATE.away) { log(`[respawn] now ${Math.round(nearest)} blocks from ${what} at ${at(here)}; the agenda resumes`); return; }
-            // #416 review 3: cut short by a reflex or a command: tried again after RELOCATE.waitMs, at most RELOCATE.tries walks.
-            if (ret?.interrupted && r.tries < RELOCATE.tries) {
+            // #416 review 3: cut short by a reflex or a command (soak 5: or failed): tried again after
+            // RELOCATE.waitMs, at most RELOCATE.tries walks.
+            if ((ret?.interrupted || walked?.failed) && r.tries < RELOCATE.tries) {
                 if (why.kind === 'death') r.forDeath = null; else r.triedAt = -Infinity;
                 r.notBefore = clock() + RELOCATE.waitMs;
-                log(`[respawn] the walk away was interrupted at ${Math.round(nearest)} blocks (try ${r.tries} of ${RELOCATE.tries}); trying again in ${RELOCATE.waitMs / 1000} s`);
+                const how = ret?.interrupted ? 'was interrupted' : `failed (${walked.why})`;
+                log(`[respawn] the walk away ${how} at ${Math.round(nearest)} blocks (try ${r.tries} of ${RELOCATE.tries}); trying again in ${RELOCATE.waitMs / 1000} s`);
                 return;
             }
+            if (walked?.failed) { log(`[respawn] the walk away failed at ${Math.round(nearest)} blocks from ${what} (${walked.why}) after ${r.tries} tries; the agenda resumes`); return; }
             log(`[respawn] got only ${Math.round(nearest)} blocks from ${what}${here ? ` (at ${at(here)})` : ''}; the agenda resumes`);
         });
     return 'relocating';

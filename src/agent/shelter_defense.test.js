@@ -574,3 +574,34 @@ test('#477 review 1: resetNight (a death, a new night) during a morning leave cl
     for (let i = 0; i < 40 && calls.attacks.length === 0; i++) await new Promise(r => setTimeout(r, 25));
     assert.ok(calls.attacks.length > 0, 'the shelter fight is back');
 });
+
+// Soak 5 (death 5): the bot chased a rabbit into water and drowned; with a walk going (a goal set)
+// self_preservation never let it swim up. Out of air it now stops the walk and swims up.
+test('soak 5 (death 5): under water with a walk going and 15 of 20 air or less, the walk stops and the bot swims up; with air left, nothing', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { DROWNING } = await import('./modes.js');
+    assert.deepEqual(DROWNING, { surfaceAt: 15, swimMs: 6000 });
+    const under = (air) => {
+        const s = shelter({ zombieAt: 30 });
+        Object.assign(s.bot, { rotnSheltered: false, oxygenLevel: air });
+        s.self.position = new Vec3(0.5, 64, 0.5);
+        s.bot.blockAt = (p) => ({ name: Math.floor(p.y) >= 64 && Math.floor(p.y) <= 65 ? 'water' : 'air', position: p });
+        s.bot.pathfinder.goal = { chase: 'rabbit' };
+        const controls = [];
+        let stops = 0;
+        s.bot.pathfinder.stop = () => { stops++; };
+        s.bot.setControlState = (c, on) => { controls.push(`${c}:${on}`); if (c === 'jump' && on) s.self.position = new Vec3(0.5, 65, 0.5); };
+        return { ...s, controls, stops: () => stops };
+    };
+    const low = under(8);
+    await selfPreservation(low.agent);
+    assert.deepEqual(low.ran, ['mode:self_preservation']);
+    assert.ok(low.stops() >= 1, 'the walk stops');
+    assert.deepEqual(low.controls, ['jump:true', 'jump:false']);
+    assert.ok(logs.includes('[reflex] under water with 8 of 20 air: stopping and swimming up'));
+    assert.match(low.bot.output, /Swam up: head out of the water\./);
+    const fine = under(16);
+    await selfPreservation(fine.agent);
+    assert.deepEqual(fine.ran, [], 'air left: the walk goes on');
+});

@@ -108,7 +108,60 @@ export function standsOnTree(bot) {
     const feet = bot?.entity?.position;
     if (!feet) return false;
     const below = blockAt(bot, offset(feet.floored ? feet.floored() : feet, -1));
-    return isTreePart(below);
+    if (isTreePart(below)) return true;
+    // Soak 5 (01:42:51): off the middle of its cell the bot rests on the next block too. With
+    // nothing firm under its centre, a tree part under any corner of its footprint is the tree it
+    // stands on (the unstuck walk from there dropped 24 blocks).
+    if (below && !isEmpty(bot, below)) return false;
+    return footprintBelow(bot, feet).some(isTreePart);
+}
+
+/** Half the width of the player's footprint (0.6 wide). */
+const HALF_WIDTH = 0.3;
+
+/** The blocks under the four corners of the bot's footprint (each once). */
+function footprintBelow(bot, feet) {
+    const seen = new Map();
+    for (const dx of [-HALF_WIDTH, HALF_WIDTH]) for (const dz of [-HALF_WIDTH, HALF_WIDTH]) {
+        const p = new Vec3(Math.floor(feet.x + dx), Math.floor(feet.y) - 1, Math.floor(feet.z + dz));
+        const k = `${p.x},${p.y},${p.z}`;
+        if (!seen.has(k)) seen.set(k, blockAt(bot, p));
+    }
+    return [...seen.values()];
+}
+
+/**
+ * Soak 5 (00:16, the spawn tree): the bot stood at y 83.50, on a block lower than a full cube in
+ * its own feet cell (a snow layer on the leaves), so digging the leaf under that cell did not drop
+ * it. The block it rests on: the one in its feet cell when it stands above the cell's floor, else
+ * the one below; null when the position is unknown.
+ */
+export function supportBlock(bot) {
+    const feet = bot?.entity?.position;
+    if (!feet) return null;
+    const cell = feet.floored ? feet.floored() : new Vec3(Math.floor(feet.x), Math.floor(feet.y), Math.floor(feet.z));
+    if (feet.y - cell.y > 0.01) {
+        const inCell = blockAt(bot, cell);
+        if (inCell && !isEmpty(bot, inCell)) return inCell;
+    }
+    return blockAt(bot, offset(cell, -1));
+}
+
+/**
+ * Soak 5 (01:43, death 5): at health 3 the bot chased a rabbit into water and drowned. A walk at
+ * health WATER_AVOID.maxHealth or less never enters water, unless the bot is in water already
+ * (#264 review 1: a bot in a lake must still find its way out).
+ */
+export const WATER_AVOID = { maxHealth: 12 };
+const isWater = (b) => !!b && VANILLA_WATER.test(b.name ?? '');
+/** Whether a walk must keep out of water now (low health, and not in water already). */
+export function avoidsWater(bot) {
+    const h = bot?.health;
+    if (!Number.isFinite(h) || h > WATER_AVOID.maxHealth) return false;
+    const feet = bot?.entity?.position;
+    if (!feet) return false;
+    const cell = feet.floored ? feet.floored() : new Vec3(Math.floor(feet.x), Math.floor(feet.y), Math.floor(feet.z));
+    return !isWater(blockAt(bot, cell)) && !isWater(blockAt(bot, offset(cell, 1)));
 }
 
 /**
@@ -148,6 +201,21 @@ export function fallSafe(movements) {
     const bot = movements.bot;
     if (bot) movements.exclusionAreasStep.push((b) => (b?.position && isTrunkShell(blockAt(bot, offset(b.position, -1))) ? NEVER : 0));
     liquidAndHazardSafe(movements);
+    // Soak 5 (death 5): at low health no step into water (avoidsWater, read at each step).
+    if (bot) movements.exclusionAreasStep.push((b) => (isWater(b) && avoidsWater(bot) ? NEVER : 0));
+    // #499 review 1 (01:42:51): the pathfinder takes a drop into water of any height
+    // (getLandingBlock returns the first liquid; infiniteLiquidDropdownDistance; getMoveDown never
+    // checks), and no step exclusion sees the landing cell. A water landing is a fall like any other:
+    // at most MAX_SAFE_DROP; and none at all while avoidsWater.
+    movements.infiniteLiquidDropdownDistance = false;
+    const landing = movements.getLandingBlock.bind(movements);
+    movements.getLandingBlock = (node, dir) => {
+        const land = landing(node, dir);
+        if (!land?.liquid) return land;
+        if (node.y - land.position.y > MAX_SAFE_DROP) return null;
+        if (bot && avoidsWater(bot)) return null;
+        return land;
+    };
     movements.rotnFallSafe = true;
     return movements;
 }
