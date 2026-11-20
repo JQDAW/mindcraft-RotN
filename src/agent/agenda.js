@@ -344,6 +344,9 @@ export class Agenda {
         this.reserveOff = false; // its budget ran out: not again until the night is past
         this.weapon = weapon; // the before-night weapon (WEAPON_RESERVE_STEP; null for none)
         this.weaponOff = false; // its budget ran out: not again until the night is past
+        // #500 follow-up 3: the window (whenNow) it was last judged in. In memory like weaponOff
+        // (neither is in agenda.json; a restart rebuilds both from the saved spent budget).
+        this.weaponWindow = null;
         this.finished = false; // "agenda done": only the reserve runs
         this.active = false;
         this.done_at = {}; // step id -> when it was first seen done

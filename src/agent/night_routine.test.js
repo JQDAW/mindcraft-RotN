@@ -2143,6 +2143,22 @@ test('#497 review 6: mobInReach finds the nearest melee mob within the shelter f
     assert.deepEqual(['creeper', 'skeleton', 'iceandfire:if_troll', 'zombie', 'cow'].map(n => notMelee(m(9, n, 1))), [true, true, true, false, false]);
 });
 
+// Soak 5: a repair that closed the shelter is said in the journal (00:31:47 said nothing); after a
+// back-away or the pocket move the "out of the shelter" line names the new cell (00:46:55 named the
+// hole's closing spot).
+test('soak 5: the repair that closed the shelter is logged; a back-away refreshes where the shelter closed', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const armed = heldSetup({ weapon: true, held: 'none' });
+    await breachAt(armed);
+    assert.ok(logs.includes('[night] the repair closed the shelter at 0, 64, 0'), logs.join('\n'));
+    const back = heldSetup({ health: 8 });
+    await breachAt(back);
+    assert.ok(nightState(back.agent).site.equals(SITE.offset(-1, 0, 0)));
+    assert.match(nightState(back.agent).closedOn.at, /^-0\.50, 64\.00, 0\.50 /, 'where the bot stands in the new cell');
+});
+
 // Soak 3 (rotn-v0.1.5), the lead's C: a walk away a reflex cut short is tried again 5 s later, three
 // walks in all; one that ran out of time is not; the plan is told whether it is night and armed.
 test('soak 3 C: an interrupted walk away is tried again NIGHT_RELOCATE.waitMs later, 3 walks in all, then the shelter; a timed-out walk is not tried again', async (t) => {

@@ -605,3 +605,23 @@ test('soak 5 (death 5): under water with a walk going and 15 of 20 air or less, 
     await selfPreservation(fine.agent);
     assert.deepEqual(fine.ran, [], 'air left: the walk goes on');
 });
+
+// Soak 5 (00:46:52): the fight's eat-between-fights ate the bread first; then "could not eat bread
+// (food 20)". The hold checks again when its action runs.
+test('soak 5: the hold in the shelter checks the food again when it runs: fed or the food gone meanwhile, it does not try', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { agent, bot } = shelter({ zombieAt: 6 });
+    hurt(bot);
+    bot.food = 10;
+    const bread = { name: 'bread', metadata: 0, count: 1, type: 297 };
+    bot.inventory = { items: () => [AXE, ...(bread.count > 0 ? [bread] : [])], slots: [] };
+    let tried = 0;
+    bot.consume = () => { tried++; return Promise.resolve(); };
+    bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+    const run = agent.actions.runAction.bind(agent.actions);
+    agent.actions.runAction = (label, fn, o) => { bread.count = 0; bot.food = 20; return run(label, fn, o); }; // eaten elsewhere first
+    await selfPreservation(agent);
+    assert.equal(tried, 0, 'no second try');
+    assert.ok(logs.includes('[reflex] hurt in the shelter: no need to eat minecraft:bread:0 now (food 20)'), logs.join('\n'));
+});

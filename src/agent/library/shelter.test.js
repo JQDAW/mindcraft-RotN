@@ -1087,3 +1087,29 @@ test('#474 review 2: the seal\'s dirt is crafted from piles before any dig; a cr
     assert.deepEqual(r2, { site: new Vec3(-1, 61, 0) }, ok.bot.output);
     assert.deepEqual(order, ['craft', 'dig', 'dig']);
 });
+
+// Soak 5 (01:27, death 4): "the repair placed nothing (2 open: not tried; nothing to place a block
+// against)": the lower wall was a wall when the repair came to it, and the zombie dug it during the
+// repair. The reason now says so.
+test('soak 5: a cell that was a wall when the repair came to it and is open at the end: "opened during the repair"', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, world } = fakeBot({ cobble: 2, set: shellAt({ '1,65,0': 'air' }) });
+    const place = bot.placeBlock;
+    bot.placeBlock = (ref, face) => { world.set('1,64,0', 'air'); return place(ref, face); }; // dug meanwhile
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.equal(r.closed, false);
+    assert.match(r.line, /1, 64, 0: opened during the repair \(a wall when checked\)/);
+    assert.doesNotMatch(r.line, /not tried/);
+});
+
+// Soak 5 (00:46): "the block did not stay (placed twice)" with a troll at the roof. The reason now
+// names what is in the cell and any body over it (a wide one need not stand in the cell).
+test('soak 5: "did not stay" names what is in the cell now and the entities over it', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot } = fakeBot({ cobble: 2, set: shellAt({ '1,64,0': 'air' }) });
+    bot.placeBlock = () => Promise.resolve(); // the server never keeps it
+    bot.entities = { 1: bot.entity, 9: { id: 9, name: 'iceandfire:if_troll', type: 'mob', position: new Vec3(2.6, 64, 0.5), width: 1.5, height: 3.6 } };
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.equal(r.closed, false);
+    assert.match(r.line, /1, 64, 0: the block did not stay \(placed twice; now air; iceandfire:if_troll over the cell\)/);
+});
