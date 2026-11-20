@@ -10,6 +10,8 @@ export class SelfPrompter {
         this.loop_active = false;
         this.interrupt = false;
         this.dropped_for_reflex = false;
+        this.finish_turn = null; // stopAfterTurn's reason, until the loop stops
+        this.finish_turn_ran = false; // a command ran since (#508 review 4)
         this.prompt = '';
         this.idle_time = 0;
         this.cooldown = 2000;
@@ -23,6 +25,7 @@ export class SelfPrompter {
             prompt = this.prompt;
         }
         this.state = ACTIVE;
+        this.finish_turn = null;
         this.prompt = prompt;
         this.startLoop();
     }
@@ -67,6 +70,7 @@ export class SelfPrompter {
         const MAX_NO_COMMAND = 3;
         let note = null;
         while (!this.interrupt) {
+            if (this.finishTurnStop()) break; // a stop after the turn: no waiting for a reflex first
             // Reflexes no longer stop this loop (skills-rotn A4): wait while one runs,
             // so the next command cannot cut a flee or a fight short.
             while (!this.interrupt && this.reflexActive()) {
@@ -77,6 +81,7 @@ export class SelfPrompter {
             let msg = `You are self-prompting with the goal: '${this.prompt}'. Your next response MUST contain a command with this syntax: !commandName. Respond:`;
             if (note) msg = `${note} ${msg}`;
 
+            if (this.finishTurnStop()) break;
             this.dropped_for_reflex = false;
             let used_command = await this.agent.handleMessage('system', msg, -1);
             if (!used_command && this.dropped_for_reflex) {
@@ -95,8 +100,10 @@ export class SelfPrompter {
             }
             else {
                 no_command_count = 0;
+                if (this.finishTurnStop()) break;
                 await new Promise(r => setTimeout(r, this.cooldown));
             }
+            if (this.finishTurnStop()) break;
         }
         console.log('self prompt loop stopped')
         this.loop_active = false;
@@ -135,6 +142,7 @@ export class SelfPrompter {
     }
 
     async stop(stop_action=true) {
+        this.finish_turn = null;
         // Only a running loop needs the interrupt; set with no loop, it stayed on and
         // made the next start a no-op (skills-rotn E3).
         if (this.loop_active) this.interrupt = true;
@@ -142,6 +150,38 @@ export class SelfPrompter {
             await this.agent.actions.stop();
         this.stopLoop();
         this.state = STOPPED;
+    }
+
+    /**
+     * Soak 6 (c): a budget stop (priority.js, the standing goal's daily budget) dropped the command
+     * the model had just returned (18:03:40 !craftRecipe tinder; the loop stopped 2 s later). Stop
+     * after the turn in flight instead: a reply already asked for still runs its command, then the
+     * loop ends and the state is STOPPED. With no loop running, it stops now. `why` is logged.
+     */
+    stopAfterTurn(why = 'a stop after the turn') {
+        // #508 review 6: STOPPED at once and saved, so a restart meanwhile does not resume the loop;
+        // the loop itself ends at its next check (finishTurnStop) or after the turn's first command.
+        this.state = STOPPED;
+        try { this.agent.history?.save?.(); } catch (err) { console.warn(`[self-prompt] could not save the stop: ${err?.message ?? err}`); }
+        if (!this.loop_active) return false;
+        this.finish_turn = why;
+        this.finish_turn_ran = false;
+        return true;
+    }
+
+    /** handleMessage ran a command (#508 review 4): with a stop after the turn due, the turn ends here. */
+    noteCommandRan(is_self_prompt) {
+        if (is_self_prompt && this.finish_turn) this.finish_turn_ran = true;
+    }
+
+    /** The loop's check for stopAfterTurn: true (and STOPPED) when a stop after the turn is due. */
+    finishTurnStop() {
+        if (!this.finish_turn) return false;
+        console.log(`[self-prompt] stopping after the turn (${this.finish_turn})`);
+        this.finish_turn = null;
+        this.finish_turn_ran = false;
+        this.state = STOPPED;
+        return true;
     }
 
     async pause() {
@@ -158,13 +198,16 @@ export class SelfPrompter {
 
     shouldInterrupt(is_self_prompt) { // to be called from handleMessage
         // A self-prompt reply that arrives while a reflex runs is dropped, not acted on (A4).
-        if (is_self_prompt && this.state === ACTIVE && this.loop_active && this.reflexActive()) {
+        // #508 re-review: also while a stop after the turn is pending (the state is STOPPED already).
+        if (is_self_prompt && (this.state === ACTIVE || this.finish_turn) && this.loop_active && this.reflexActive()) {
             this.dropped_for_reflex = true;
             return true;
         }
         // A stop sets the state to STOPPED at once, so the interrupt alone decides: the reply
         // loop ends at its next checkpoint instead of running more commands (E3: !stop, a hold
         // or a task taking over must win before the next command).
+        // #508 review 4: a stop after the turn lets one command run, not a chain of them.
+        if (is_self_prompt && this.finish_turn && this.finish_turn_ran) return true;
         return is_self_prompt && this.interrupt;
     }
 

@@ -13,6 +13,7 @@ import {
     isLiquid, hazardOf, isLethal, isFirmGround, installWalkSafety,
     MAX_SAFE_DROP, PATHFINDER_MAX_DROP_DOWN, fallSafe, treeSafe, standsOnTree, leafFromGround, itemOnGround, isTreePart,
     supportBlock, avoidsWater, WATER_AVOID,
+    walkStart,
 } from './fall_safety.js';
 import { ROTN_EARLY_GAME } from '../agenda.js';
 import { moveAwayWithin } from '../modes.js';
@@ -831,4 +832,52 @@ test('#499 review 1 and 2: the unstuck walk\'s neighbours from a canopy edge 22 
     assert.ok(ys.every(y => y >= 82), `no neighbour more than 3 below: ${ys}`);
     const rawYs = new pf.Movements(bot).getNeighbors({ x: 0, y: 85, z: 0, remainingBlocks: 0 }).map(mv => mv.y);
     assert.ok(rawYs.includes(63), 'the raw pathfinder would drop into the water');
+});
+
+// #499 review 4 (the overhang start cell, PR 5): overhanging an edge that is not a tree, with nothing
+// under its centre, the unstuck walk planned from the floored start cell, whose first move could be
+// a drop. Now it steps onto the nearest cell with a floor first; with none, it does not walk.
+test('PR 5: overhanging an edge, the unstuck walk first steps onto the cell with a floor; with none under the footprint it refuses', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const pit = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`0,${63 - i},0`, 'air'])); // a 20-deep drop under cell 0
+    const ledge = fakeBot({ blocks: pit, arrive: () => at(6, 64) });
+    ledge.entity.position = new Vec3(0.75, 64, 0.5); // footprint 0.45-1.05: resting on the dirt at 1, 63, 0
+    assert.equal(standsOnTree(ledge), false);
+    assert.deepEqual(walkStart(ledge), { cell: at(1, 64), shift: true });
+    const steps = [];
+    let atGoto = null;
+    ledge.setControlState = (k, v) => { steps.push([k, v]); if (k === 'forward' && v) ledge.entity.position = new Vec3(1.5, 64, 0.5); };
+    const goto = ledge.pathfinder.goto;
+    ledge.pathfinder.goto = (goal) => { atGoto ??= ledge.entity.position.floored(); return goto(goal); };
+    const r = await moveAwayWithin(ledge, 5, 3000);
+    assert.equal(r.outcome, 'freed');
+    assert.deepEqual(atGoto, at(1, 64), 'the walk starts from the cell with a floor, not over the drop');
+    assert.ok(steps.some(([k, v]) => k === 'forward' && v));
+    assert.ok(logs.includes('[reflex] unstuck: overhanging an edge at 0, 64, 0 (nothing under the centre); stepping onto 1, 64, 0 first'), logs.join('\n'));
+
+    // On its own floor: no step, the walk as before.
+    const flat = fakeBot({ arrive: () => at(6, 64) });
+    assert.deepEqual(walkStart(flat), { cell: at(0, 64), shift: false });
+
+    // Nothing under any corner (a bot falling, or on a pillar edge over air): no walk.
+    const air = Object.fromEntries([0, 1].flatMap(x => Array.from({ length: 20 }, (_, i) => [`${x},${63 - i},0`, 'air'])));
+    const none = fakeBot({ blocks: air });
+    none.entity.position = new Vec3(0.75, 64, 0.5);
+    assert.equal(walkStart(none), null);
+    const refused = await moveAwayWithin(none, 5, 2000);
+    assert.equal(refused.outcome, 'failed');
+    assert.match(refused.error.message, /no floor under the start cell 0, 64, 0 or next to it/);
+    assert.deepEqual(none.calls.gotos, [], 'no walk');
+
+    // A neighbour cell with a floor but no room for the body (a wall at head height) is no start.
+    const wall = fakeBot({ blocks: { ...pit, '1,65,0': 'stone' } });
+    wall.entity.position = new Vec3(0.75, 64, 0.5);
+    assert.equal(walkStart(wall), null);
+});
+
+test('PR 5: walkStart: a block under the bot that is not loaded is no reason to refuse the walk', () => {
+    const bot = fakeBot();
+    bot.blockAt = () => null;
+    assert.deepEqual(walkStart(bot), { cell: at(0, 64), shift: false });
 });

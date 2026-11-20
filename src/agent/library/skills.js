@@ -12,7 +12,7 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
-import { shelterEnemy, threatPlan } from "./threats.js";
+import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable } from "./threats.js";
 import { logAte, fightJournal } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -672,20 +672,9 @@ export async function attackNearest(bot, mobType, kill=true) {
  * Soak 5: an attack chase that gets no closer (by a block) and lands no hit for stallMs gives up;
  * that entity is left alone for skipMs (isUnreachable). tickMs: how often the chase is checked.
  */
-export const ATTACK_PROGRESS = { stallMs: 10_000, skipMs: 5 * 60_000, tickMs: 1000 };
-function markUnreachable(bot, entity, now = Date.now()) {
-    const m = (bot.rotnUnreachable ??= new Map());
-    // #502 nit 3: expired entries go (an entity id is not reused soon, but the map would only grow).
-    for (const [id, until] of m) if (until <= now) m.delete(id);
-    m.set(entity.id, now + ATTACK_PROGRESS.skipMs);
-}
-/** Whether an attack on this entity gave up within ATTACK_PROGRESS.skipMs (soak 5). */
-export { markUnreachable };
-export function isUnreachable(bot, entity, now = Date.now()) {
-    const until = bot?.rotnUnreachable?.get(entity?.id);
-    if (Number.isFinite(until) && now >= until) bot.rotnUnreachable.delete(entity.id); // #502 nit 3
-    return Number.isFinite(until) && now < until;
-}
+export const ATTACK_PROGRESS = { stallMs: 10_000, skipMs: UNREACHABLE.skipMs, tickMs: 1000 };
+// markUnreachable and isUnreachable live in threats.js since soak 6 (threatPlan uses them).
+export { markUnreachable, isUnreachable };
 
 export async function attackEntity(bot, entity, kill=true) {
     /**
@@ -756,12 +745,17 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
      * **/
     bot.modes.pause('self_defense');
     bot.modes.pause('cowardice');
+    // #508 review 5: the same mobs threatPlan fights: never a given-up or submerged one (an eel picked
+    // over the zombie), unless it is hurting the bot.
+    const chosen = isEnemy;
+    isEnemy = (e) => chosen(e) && fightable(bot, e);
     let attacked = false;
     const fight = {}; // one line when the weapon cannot be taken in hand (G3 round 7 B)
     const journal = fightJournal(bot, 'open'); // G4 #5: "[survival] fight start/end"
     // #384 nit 2: every start gets its end (a throw ends it as 'interrupted').
     let outcome = 'interrupted';
     let enemy = world.getNearestEntityWhere(bot, isEnemy, range);
+    let fought = null; // the mob last attacked (soak 6: fights interrupted again and again on it)
     try {
         while (enemy) {
             await equipHighestAttack(bot, fight);
@@ -779,6 +773,7 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
                 } catch (err) {/* might error if entity dies, ignore */}
             }
             journal.start(enemy); // #384 nit 1: at the first attack, not before the equip and the walk
+            fought = enemy;
             bot.pvp.attack(enemy);
             attacked = true;
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -797,6 +792,9 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
         if (!enemy) outcome = 'gone'; // no enemy left in range (killed when the first one is dead or gone from the world)
     } finally {
         journal.end(outcome);
+        // Soak 6 (the eel loop): the third fight in a row on one mob that ends interrupted gives it up.
+        const n = noteFightEnd(bot, fought, outcome);
+        if (n) console.log(`[survival] giving up on ${fought.name}: ${n} fights in a row on it were interrupted; leaving it alone for ${UNREACHABLE.skipMs / 60_000} min`);
     }
     bot.pvp.stop();
     if (attacked)
@@ -825,7 +823,8 @@ const healthOf = (e) => (Number.isFinite(e?.health) ? e.health : Number.isFinite
 
 /**
  * Fight from where the bot stands (G3 round 9 B, its night shelter with a wall open): hit the
- * nearest enemy within SHELTER_FIGHT.reach while one is in reach and keepFighting() holds, at
+ * nearest enemy within SHELTER_FIGHT.reach while one is in reach and keepFighting(enemy) holds (PR 5:
+ * the mob in reach, for its maxDamage), at
  * most SHELTER_FIGHT.maxMs and maxSwings, and at most sameTargetSwings hits on one mob whose
  * health does not go down (when it is known). No walk and no mineflayer-pvp (pvp.attack follows
  * its target, which took the bot out of the shelter). While it runs, bot.rotnFightingInPlace is
@@ -858,7 +857,7 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
             same.hits++;
             await new Promise(resolve => setTimeout(resolve, SHELTER_FIGHT.swingMs));
             if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
-            if (!keepFighting()) { why = 'the situation changed'; outcome = 'stopped'; break; }
+            if (!keepFighting(nearest() ?? enemy)) { why = 'the situation changed'; outcome = 'stopped'; break; }
         }
     } finally {
         bot.rotnFightingInPlace = false;
