@@ -102,6 +102,10 @@ test('G4 #3: followPlayer walks with the fall-safe movements (no drop over 3, no
     assert.equal(bot.calls.goals[0].entity, bot.players.JQDAW.entity);
 });
 
+// Timer jitter: a timer may fire a little before the clock reads its delay, and a limit's timer
+// can start a few ms before the fake records the start (CI: "the walk ran 298 ms; the limit is 300").
+const TIMER_SLACK_MS = 20;
+
 /** FOLLOW_LIMITS.lostMs for one test. */
 function lostMs(t, ms) {
     const saved = skills.FOLLOW_LIMITS.lostMs;
@@ -119,7 +123,7 @@ test('G4 #3, #323 review 2: followPlayer ends only after the player has been gon
     setTimeout(() => { bot.interrupt_code = true; }, 6000); // a safety net: the test must not hang
     assert.equal(await skills.followPlayer(bot, 'JQDAW', 3), false);
     assert.equal(bot.interrupt_code, false, 'it ended by itself, before the safety net');
-    assert.ok(Date.now() - goneAt >= 1500, 'not before the grace period');
+    assert.ok(Date.now() - goneAt >= 1500 - TIMER_SLACK_MS, 'not before the grace period');
     assert.match(bot.output, /Lost sight of JQDAW; waiting up to 1\.5 s for them\./);
     assert.match(bot.output, /Stopped following JQDAW: not seen for 1\.5 s \(they left, or are too far away to see\)\./);
     assert.ok(bot.calls.stops >= 1, 'the follow goal is cleared');

@@ -186,6 +186,10 @@ test('useOn: a missing tool is refused at once (the upstream check was always fa
     assert.equal(await skills.useToolOn(b2, 'hand', 'cow', LIMITS), true);
 });
 
+// Timer jitter: a timer may fire a little before the clock reads its delay, and a limit's timer
+// can start a few ms before the fake records the start (CI: "the walk ran 298 ms; the limit is 300").
+const TIMER_SLACK_MS = 20;
+
 // G3 smoke C+D: !searchForBlock("log", 64) never returned (goToNearestBlock -> goToPosition ->
 // goToGoal, whose pathfinder.goto has no time limit). Every goToGoal walk is bounded now.
 // The walk itself is timed (goto until the stop), not the whole call: the first wood search in a
@@ -204,9 +208,9 @@ test('goToGoal: a walk that never arrives ends at GO_TO_LIMITS; the search repor
     assert.equal(bot.calls.walks.length, 1, 'one walk');
     const { ms } = bot.calls.walks[0];
     assert.notEqual(ms, null, 'the walk was stopped, not left running');
-    // Not before the limit (a timer may fire 1 ms early by the clock), and nowhere near the next
-    // bound a walk has (GO_TO_LIMITS.stepMs, 15 s): 2 s leaves a loaded machine room for a late timer.
-    assert.ok(ms >= 299 && ms < 2000, `the walk ran ${ms} ms; the limit is 300 ms`);
+    // Not before the limit (less TIMER_SLACK_MS of jitter), and nowhere near the next bound a walk
+    // has (GO_TO_LIMITS.stepMs, 15 s): 2 s leaves a loaded machine room for a late timer.
+    assert.ok(ms >= 300 - TIMER_SLACK_MS && ms < 2000, `the walk ran ${ms} ms; the limit is 300 ms`);
     assert.match(bot.output, /Found log at .*Navigating\.\.\./s);
     // This line pins the exact limit: the message names the limit that ended the walk (0.3 s, the
     // value set above). The 2000 ms above is only a ceiling on how late the timer may fire.

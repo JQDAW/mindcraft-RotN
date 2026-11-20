@@ -14,6 +14,10 @@ import { FALLING_TREE, FELL_HOLD_MS, FALLING_SEEN_MAX_MS, fallingTreeNear } from
 
 const quiet = { log: () => {} };
 
+// Timer jitter: a timer may fire a little before the clock reads its delay, and a limit's timer
+// can start a few ms before the fake records the start (CI: "the walk ran 298 ms; the limit is 300").
+const TIMER_SLACK_MS = 20;
+
 test('requestReplan records and coalesces; takeReplanNote returns one note and clears it', () => {
     const agent = {};
     requestReplan(agent, 'self_defense', 'action:collectBlocks', { now: 1000, ...quiet });
@@ -146,7 +150,7 @@ test('unstuck: still stuck after the bounded attempt -> stop, log and re-plan; n
     await mode.update(agent);
     while (mode.active || Date.now() - started < 20) await new Promise(r => setTimeout(r, 10));
 
-    assert.ok(Date.now() - started >= 60, 'the bounded attempt ran to its timeout');
+    assert.ok(Date.now() - started >= 60 - TIMER_SLACK_MS, 'the bounded attempt ran to its timeout');
     assert.deepEqual(agent.calls.cleanKill, []);
     assert.equal(stopped, 1);
     assert.ok(warnings.includes('[reflex] unstuck: still stuck after 0.06 s; re-planning instead of a restart.'));
