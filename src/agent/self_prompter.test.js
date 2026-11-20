@@ -11,7 +11,8 @@ const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
 
 function fakeAgent() {
     const agent = {
-        prompts: 0, ran: [], dropped: 0, pending: null,
+        prompts: 0, ran: [], dropped: 0, pending: null, saves: 0,
+        history: { save() { agent.saves++; } },
         bot: { modes: { anyActive: () => false } },
         isIdle: () => true,
         openChat() {},
@@ -54,7 +55,8 @@ test('soak 6 (c): stopAfterTurn lets the reply in flight run its command, then t
     a.sp.start('a goal');
     await tick();
     assert.equal(a.sp.stopAfterTurn('standing goal budget spent'), true, 'a turn is in flight');
-    assert.equal(a.sp.isActive(), true, 'still active until the turn ends');
+    // #508 review 6: STOPPED at once, and saved, so a restart now does not resume it.
+    assert.deepEqual([a.sp.isActive(), a.sp.loop_active, a.saves], [false, true, 1]);
     a.reply('!craftRecipe("pyrotech:tinder", 3)');
     await tick(20);
     assert.deepEqual(a.ran, ['!craftRecipe("pyrotech:tinder", 3)'], 'the command ran');
@@ -70,6 +72,35 @@ test('soak 6 (c): stopAfterTurn lets the reply in flight run its command, then t
     a.sp.stop(false);
     a.reply('!stop');
     await tick(600);
+});
+
+// #508 review 4: the turn in flight runs its first command only; a chained second one is not run.
+test('#508 review 4: after a stop after the turn, the turn ends after its first command (a chained second command is not run)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const agent = { ran: [], bot: { modes: { anyActive: () => false } }, isIdle: () => true, openChat() {}, actions: { stop: () => Promise.resolve() } };
+    let release;
+    const gate = new Promise(r => { release = r; });
+    // As agent.js: a reply's command runs, then the model is asked again in the same turn while
+    // checkInterrupt allows it (two commands chained here).
+    agent.handleMessage = async () => {
+        let used = false;
+        for (const command of ['!craftRecipe("pyrotech:tinder", 3)', '!collectBlocks("dirt", 8)']) {
+            if (agent.sp.shouldInterrupt(true)) break;
+            if (!used) await gate; // the first reply is in flight when the stop comes
+            agent.ran.push(command);
+            used = true;
+            agent.sp.noteCommandRan(true);
+        }
+        return used;
+    };
+    agent.sp = new SelfPrompter(agent);
+    agent.sp.start('a goal');
+    await tick();
+    agent.sp.stopAfterTurn('budget');
+    release();
+    await tick(20);
+    assert.deepEqual(agent.ran, ['!craftRecipe("pyrotech:tinder", 3)']);
+    assert.equal(agent.sp.loop_active, false);
 });
 
 test('soak 6 (c): stopAfterTurn with no loop running stops at once', () => {

@@ -456,6 +456,7 @@ export class Agent {
 
                 console.log('Agent executed:', command_name, 'and got:', execute_res);
                 used_command = true;
+                this.self_prompter.noteCommandRan?.(self_prompt); // #508 review 4: a stop after the turn ends it here
 
                 if (execute_res)
                     this.history.add('system', execute_res, untrusted);

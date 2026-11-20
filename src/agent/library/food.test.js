@@ -315,8 +315,12 @@ test('soak 6 (b): between fights (a reflex\'s action) at food 12 or lower it eat
         await settled();
         return b.eaten;
     };
-    assert.deepEqual(await run(), ['rustic:wildberries'], 'unarmed (a refused fight), the zombie 6 away, between reflexes: eats');
-    assert.deepEqual(await run({ sword: true }), ['rustic:wildberries'], 'armed (a fight plan): eats');
+    assert.deepEqual(await run({ sword: true }), ['rustic:wildberries'], 'armed (a fight plan), the zombie 6 away, an unstuck walk: eats');
+    // #508 review 3: a refused fight (unarmed, or low health) is a flee: it still blocks; and a flee
+    // (cowardice) is never cut.
+    assert.deepEqual(await run(), [], 'unarmed: a flee, not now');
+    assert.deepEqual(await run({ sword: true, label: 'mode:cowardice' }), [], 'never during cowardice');
+    assert.deepEqual(await run({ sword: true, label: 'mode:self_preservation' }), [], 'nor during the low-health flee');
     assert.deepEqual(await run({ label: 'mode:self_defense', sword: true }), ['rustic:wildberries'], 'a fight action: its turn too');
     assert.deepEqual(await run({ x: 3, sword: true }), [], 'the zombie within 4: not now');
     assert.deepEqual(await run({ hurtAgo: 5_000, sword: true }), [], 'hurt 5 s ago: not now');

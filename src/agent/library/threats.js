@@ -242,7 +242,7 @@ export function fightRefusal(bot, mob = null) {
 function unlessRefused(bot, plan) {
     const why = fightRefusal(bot, plan.from);
     if (!why) return plan;
-    return { action: 'flee', why: `${plan.why}, and ${why}`, from: plan.from, away: RANGES.fight.away, isEnemy: plan.isEnemy, refused: why };
+    return { action: 'flee', why: `${plan.why}, and ${why}`, from: plan.from, away: RANGES.fight.away, isEnemy: plan.isEnemy };
 }
 
 /**
@@ -305,7 +305,33 @@ const WATER = /(^|:)(flowing_)?water$/;
 export function submerged(bot, e) {
     if (typeof bot?.blockAt !== 'function' || !e?.position?.offset) return false;
     const waterAt = (dy) => { try { return WATER.test(bot.blockAt(e.position.offset(0, dy, 0))?.name ?? ''); } catch { return false; } };
-    return waterAt(0) && waterAt(Math.max(e.height ?? 0.5, 0.1));
+    // #508 review 2: water in its feet block and the block above it (a small mob in a 1-deep puddle,
+    // a spider or a baby zombie, is within reach and is not submerged).
+    return waterAt(0) && waterAt(1);
+}
+
+/**
+ * #508 review 1: a mob that is hurting the bot (a hit within PROVOKED_MS while it was within
+ * PROVOKED_DIST, not the world's damage) is never left out: it is fought or fled from as before.
+ */
+function hurting(bot, e, now) {
+    const me = bot?.entity?.position;
+    return !!me && !!e?.position && now - (bot.lastDamageTime ?? -Infinity) <= PROVOKED_MS && !worldDamage(bot)
+        && e.position.distanceTo(me) <= PROVOKED_DIST;
+}
+
+/**
+ * Soak 6: whether the bot fights this melee mob at all: not one under water or given up on, unless
+ * it is hurting the bot (#508 review 1: then its unreachable mark and its count of interrupted
+ * fights are cleared). threatPlan and defendSelf both use it.
+ */
+export function fightable(bot, e, now = Date.now()) {
+    if (hurting(bot, e, now)) {
+        bot.rotnUnreachable?.delete(e.id);
+        bot.rotnFightStops?.delete(e.id);
+        return true;
+    }
+    return !submerged(bot, e) && !isUnreachable(bot, e, now);
 }
 
 /**
@@ -322,6 +348,8 @@ export const FIGHT_GIVE_UP = { maxInterrupted: 3 };
 export function noteFightEnd(bot, mob, outcome, now = Date.now()) {
     if (!bot || mob?.id == null) return null;
     const m = (bot.rotnFightStops ??= new Map());
+    // #508 review 7: mobs no longer loaded (dead, despawned) leave the count.
+    for (const id of m.keys()) if (id !== mob.id && !bot.entities?.[id]) m.delete(id);
     if (outcome !== 'interrupted') { m.delete(mob.id); return null; }
     const n = (m.get(mob.id) ?? 0) + 1;
     if (n < FIGHT_GIVE_UP.maxInterrupted) { m.set(mob.id, n); return null; }
@@ -365,7 +393,7 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
     const boom = within('keep-distance');
     if (boom.length) return { action: 'flee', why: 'explodes', from: boom[0].e, away: RANGES['keep-distance'].away, isEnemy: is('keep-distance') };
     // Soak 6: a melee mob under water, or one the bot gave up on, is neither fought nor counted.
-    const melee = within('fight').filter(x => !submerged(bot, x.e) && !isUnreachable(bot, x.e, now));
+    const melee = within('fight').filter(x => fightable(bot, x.e, now));
     if (melee.length >= OUTNUMBERED) {
         return { action: 'flee', why: 'outnumbered', from: melee[0].e, away: RANGES.fight.away, isEnemy: (e) => ['fight', 'take-cover'].includes(threatFor(e)?.reaction) };
     }
@@ -441,14 +469,14 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
 export const EAT_SAFE = { distance: 4, hurtMs: 10_000 };
 
 /**
- * Whether the mobs around keep the bot from eating at food EAT_AT now: any flee, except one from a
- * fight refused for no weapon or low health (refused); a melee mob within EAT_SAFE.distance; a hurt
- * within EAT_SAFE.hurtMs.
+ * Whether the mobs around keep the bot from eating at food EAT_AT now: any flee (#508 review 3: also
+ * one from a fight refused for no weapon or low health); a melee mob within EAT_SAFE.distance; a
+ * hurt within EAT_SAFE.hurtMs.
  */
 export function blocksEating(bot, { now = Date.now() } = {}) {
     const plan = threatPlan(bot, { now });
     if (!plan) return false;
-    if (plan.action !== 'fight' && !plan.refused) return true;
+    if (plan.action !== 'fight') return true;
     const here = bot.entity?.position;
     const close = !here || !plan.from?.position || plan.from.position.distanceTo(here) <= EAT_SAFE.distance;
     return close || now - (bot.lastDamageTime ?? -Infinity) <= EAT_SAFE.hurtMs;

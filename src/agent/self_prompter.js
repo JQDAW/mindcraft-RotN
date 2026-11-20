@@ -11,6 +11,7 @@ export class SelfPrompter {
         this.interrupt = false;
         this.dropped_for_reflex = false;
         this.finish_turn = null; // stopAfterTurn's reason, until the loop stops
+        this.finish_turn_ran = false; // a command ran since (#508 review 4)
         this.prompt = '';
         this.idle_time = 0;
         this.cooldown = 2000;
@@ -157,9 +158,19 @@ export class SelfPrompter {
      * loop ends and the state is STOPPED. With no loop running, it stops now. `why` is logged.
      */
     stopAfterTurn(why = 'a stop after the turn') {
-        if (!this.loop_active) { this.state = STOPPED; return false; }
+        // #508 review 6: STOPPED at once and saved, so a restart meanwhile does not resume the loop;
+        // the loop itself ends at its next check (finishTurnStop) or after the turn's first command.
+        this.state = STOPPED;
+        try { this.agent.history?.save?.(); } catch (err) { console.warn(`[self-prompt] could not save the stop: ${err?.message ?? err}`); }
+        if (!this.loop_active) return false;
         this.finish_turn = why;
+        this.finish_turn_ran = false;
         return true;
+    }
+
+    /** handleMessage ran a command (#508 review 4): with a stop after the turn due, the turn ends here. */
+    noteCommandRan(is_self_prompt) {
+        if (is_self_prompt && this.finish_turn) this.finish_turn_ran = true;
     }
 
     /** The loop's check for stopAfterTurn: true (and STOPPED) when a stop after the turn is due. */
@@ -167,6 +178,7 @@ export class SelfPrompter {
         if (!this.finish_turn) return false;
         console.log(`[self-prompt] stopping after the turn (${this.finish_turn})`);
         this.finish_turn = null;
+        this.finish_turn_ran = false;
         this.state = STOPPED;
         return true;
     }
@@ -192,6 +204,8 @@ export class SelfPrompter {
         // A stop sets the state to STOPPED at once, so the interrupt alone decides: the reply
         // loop ends at its next checkpoint instead of running more commands (E3: !stop, a hold
         // or a task taking over must win before the next command).
+        // #508 review 4: a stop after the turn lets one command run, not a chain of them.
+        if (is_self_prompt && this.finish_turn && this.finish_turn_ran) return true;
         return is_self_prompt && this.interrupt;
     }
 

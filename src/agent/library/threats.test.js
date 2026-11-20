@@ -621,6 +621,19 @@ test('soak 6 (a): a melee mob under water is neither fought nor counted; at the 
     assert.equal(submerged(bot(top), top), false);
     assert.equal(threatPlan(bot(top)).action, 'fight');
     assert.equal(submerged(fakeBot([deep]), deep), false, 'no world to read: as before');
+    // #508 review 2: a small mob in a 1-deep puddle (water in its feet block only) is in reach.
+    const puddle = (p) => ({ name: p.y === 63 && p.x >= 1 && p.x <= 5 ? 'water' : p.y < 63 ? 'dirt' : 'air' });
+    for (const [name, h] of [['spider', 0.9], ['cave_spider', 0.5], ['silverfish', 0.3], ['zombie', 0.98], ['slime', 0.51]]) {
+        const m = { id: 70, name, type: 'mob', position: new Vec3(3.5, 63, 0.5), height: h };
+        assert.equal(submerged(fakeBot([m], { blockAt: (p) => puddle(p.floored()) }), m), false, `${name} in a puddle`);
+    }
+    // #508 review 1: one that is hurting the bot is fought as before, under water or not.
+    const now = 2_000_000;
+    const biting = eel(5, 1.5, 61.2); // 1 block away
+    const hurt = fakeBot([biting], { blockAt: (p) => water(p.floored()), lastDamageTime: now - 500, lastDamageTaken: 2 });
+    assert.equal(threatPlan(hurt, { now }).action, 'fight', 'a submerged eel that just bit: fight');
+    const fell = fakeBot([biting], { blockAt: (p) => water(p.floored()), lastDamageTime: now - 500, lastDamageTaken: 2, lastDamageCause: 'fall' });
+    assert.equal(threatPlan(fell, { now }), null, 'a fall is not its hit');
 });
 
 test('soak 6 (a): three fights in a row on one mob that end interrupted give it up for 5 min; any other end starts the count again', async () => {
@@ -640,6 +653,29 @@ test('soak 6 (a): three fights in a row on one mob that end interrupted give it 
     assert.equal(isUnreachable(bot, zombie, now), true);
     assert.equal(threatPlan(bot, { now }), null, 'given up: no fight');
     assert.equal(threatPlan(bot, { now: now + UNREACHABLE.skipMs }).action, 'fight', '5 min later: fought again');
+    // #508 review 1: given up, but hitting the bot now: fought, and its mark is cleared.
+    markUnreachable(bot, zombie, now);
+    Object.assign(bot, { lastDamageTime: now - 1000, lastDamageTaken: 3 });
+    assert.equal(threatPlan(bot, { now }).action, 'fight', 'it hurts the bot: fight');
+    assert.equal(isUnreachable(bot, zombie, now), false, 'the hit cleared its mark');
+    // #508 review 7: a mob no longer loaded leaves the count.
+    const gone = mob('zombie', 5);
+    noteFightEnd(bot, gone, 'interrupted', now);
+    assert.equal(bot.rotnFightStops.has(gone.id), true);
+    noteFightEnd(bot, zombie, 'interrupted', now);
+    assert.deepEqual([...bot.rotnFightStops.keys()], [zombie.id], 'the unloaded one is pruned');
+});
+
+test('#508 review 5: defendSelf fights the zombie, not a given-up eel nearer to it', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { defendSelf, markUnreachable } = await import('./skills.js');
+    const eel = { id: 80, name: 'betteranimalsplus:eel_freshwater', type: 'mob', position: new Vec3(1.5, 64, 0), height: 0.5 };
+    const zombie = mob('zombie', 3);
+    const bot = fightBot([eel, zombie]);
+    markUnreachable(bot, eel);
+    bot.pvp.attack = (e) => { bot.pvp.attacks.push(e.name); bot.interrupt_code = true; };
+    await defendSelf(bot, 8, (e) => threatFor(e)?.reaction === 'fight');
+    assert.deepEqual(bot.pvp.attacks, ['zombie']);
 });
 
 test('soak 6 (a): defendSelf counts its interrupted ends: the third gives the mob up, with a line', async (t) => {

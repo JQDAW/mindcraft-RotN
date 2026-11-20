@@ -12,7 +12,7 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
-import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd } from "./threats.js";
+import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable } from "./threats.js";
 import { logAte, fightJournal } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -745,6 +745,10 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
      * **/
     bot.modes.pause('self_defense');
     bot.modes.pause('cowardice');
+    // #508 review 5: the same mobs threatPlan fights: never a given-up or submerged one (an eel picked
+    // over the zombie), unless it is hurting the bot.
+    const chosen = isEnemy;
+    isEnemy = (e) => chosen(e) && fightable(bot, e);
     let attacked = false;
     const fight = {}; // one line when the weapon cannot be taken in hand (G3 round 7 B)
     const journal = fightJournal(bot, 'open'); // G4 #5: "[survival] fight start/end"

@@ -76,6 +76,9 @@ export function shelterQuiet(name, bot) {
  */
 export const DROWNING = { surfaceAt: 15, swimMs: 6000 };
 
+/** Soak 6 (b), #508 review 3: the reflex actions an eat at food EAT_AT may cut (never a flee). */
+export const EAT_BETWEEN = ['mode:unstuck', 'mode:self_defense'];
+
 /** A mob in reach is named in chat at most this often from the shelter (T1: up to 24 lines a minute). */
 export const SHELTER_SAY_MS = 30_000;
 let shelterSaidAt = -Infinity;
@@ -410,10 +413,11 @@ const modes_list = [
             // Soak 4 (rotn-v0.1.7): in a closed night shelter a mob outside is no threat to eating; a
             // zombie at the corner kept the bot from eating at food 12 all morning (it waited for 6).
             // Soak 6 (b): a melee mob that is not close and has not hurt the bot lately does not put
-            // off an eat (threats.blocksEating), and a reflex's own action (an unstuck walk, a fight)
-            // is no work to wait for: eating gets its turn between fights.
+            // off an eat (threats.blocksEating), and an unstuck walk or a fight (EAT_BETWEEN) is no
+            // work to wait for: eating gets its turn between fights.
             try { threatened = bot.rotnSheltered === true ? false : threats.blocksEating(bot); } catch { threatened = false; }
-            const between = agent.isIdle() || /^mode:(?!eating$)/.test(agent.actions?.currentActionLabel ?? '');
+            // #508 review 3: never a flee (cowardice); only an unstuck walk or a fight is cut for it.
+            const between = agent.isIdle() || EAT_BETWEEN.includes(agent.actions?.currentActionLabel ?? '');
             if (!food.wantsToEat(bot.food, { idle: between, threatened })) return;
             // Soak 2: food 0 kills at once on this pack; at EMERGENCY_FOOD or lower, avoided food too.
             const emergency = Number.isFinite(bot.food) && bot.food <= food.EMERGENCY_FOOD;
