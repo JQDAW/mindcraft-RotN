@@ -11,7 +11,7 @@ Soak 5 (rotn-v0.1.11, #498) failed 7 of 9, with 6 deaths:
 - **Unstuck walk:** a 24-block drop, then drowning while chasing a rabbit.
 - **Spawn tree:** the bot was stuck up the spawn tree for minutes.
 
-The lead approved the plan (A + G, C + E, H, the logging PR, and B after rotn-data). PRs 1 to 4 and the Fix H follow-ups are merged; the #502 nits PR #504 is open. PR 5 (B) waits for rotn-data #496 (the troll). None of this is in a release tag yet.
+The lead approved the plan (A + G, C + E, H, the logging PR, and B after rotn-data). PRs 1 to 4 and the Fix H follow-ups are merged and in rotn-v0.1.12 (`29b0ce72`, deployed on the CX23 by the lead through the gate at 06:36): #482 and #497 to #502. The #502 nits (#504) came after that tag. PR 5 (B) waits for rotn-data #496 (the troll).
 
 ### Merged since the 2026-11-19 15:07 summary
 | PR | What |
@@ -23,13 +23,13 @@ The lead approved the plan (A + G, C + E, H, the logging PR, and B after rotn-da
 | #501 | The Fix H follow-ups. No hunt by the reflex while unarmed. The model's `!attack` on a food animal is refused while unarmed (a giver may, warned; never ownership). A day-spent weapon gets a fresh dusk budget. The standing and open goals and the static food text say forage, do not hunt |
 | #502 | PR 4 (logging). A landing after a big drop is "by fall"; falling blocks or trees are named. A `[survival] hurt-detail` line follows each hurt line (each drop, position, vertical speed, cause, the 3 nearest entities within 16 with their last swing). The repair reasons say "opened during the repair (a wall when checked)" and what is in a cell that did not stay. "the repair closed the shelter". `closedOn` is refreshed after a back-away. `!attack` gives up after 10 s with no progress (that animal is left alone 5 min). The in-shelter eat checks the food again. Unarmed, a provoked food animal is not attacked by the model either |
 
-### Open
-- **#504** (`a317ed3f`): the #502 nits. The falling-block source only above the bot; `overlapping` counts bodies only; expired `rotnUnreachable` entries pruned; `weaponWindow` saved in `agenda.json` (a day-spent weapon still gets its dusk budget after a restart).
+### After rotn-v0.1.12
+- **#504** (`a317ed3f`, approved): the #502 nits. The falling-block source only above the bot; `overlapping` counts bodies only; expired `rotnUnreachable` entries pruned; `weaponWindow` saved in `agenda.json` (a day-spent weapon still gets its dusk budget after a restart). Not in rotn-v0.1.12; in the soak only with a later tag.
 
 ### Waiting
 - **PR 5 (Fix B), after rotn-data #496.** The burrow away from an avoid mob (a short 1x2 tunnel dug away from it, sealing behind; pickaxe allowed); the surface-shelter escape (dig down under the feet and seal above); keeping the bot centred in its cell against a troll's through-wall reach (distSq < 4, feet to feet); the overhang start-cell case.
 
-### To check in the next soak (all tested offline only)
+### To check in the next soak, on rotn-v0.1.12 (all tested offline only; #504's items only with a later tag)
 - **Fighting:**
   - never `fight start iceandfire:if_troll (shelter)`, nor a creeper or skeleton;
   - `flee zombie (melee, and no weapon)` or `(…, health N, 8 or less)` in the open;
