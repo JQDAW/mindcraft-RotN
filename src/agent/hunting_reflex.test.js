@@ -18,7 +18,10 @@ __setRegistryForTest(reg);
 const flush = () => new Promise(r => setImmediate(r));
 const cow = (id, x, extra = {}) => ({ id, name: 'animania:cow_holstein', type: 'mob', position: new Vec3(x + 0.5, 64, 0.5), height: 1.4, ...extra, metadata: { 7: 10, ...(extra.metadata ?? {}) } });
 
-function huntAgent({ food = 12, items = [], timeOfDay = 1000, animals = [], idle = true, blocks = {} } = {}) {
+// Soak 5 (#500 follow-up 1 and 2): no hunt with no weapon; these bots hold a sword unless a case says unarmed.
+const SWORD = { name: 'iron_sword', count: 1, metadata: 0, type: reg.itemsByName.iron_sword.id };
+function huntAgent({ food = 12, items = [], timeOfDay = 1000, animals = [], idle = true, blocks = {}, armed = true } = {}) {
+    if (armed && !items.includes(SWORD)) items.push(SWORD); // the caller's own list (some tests add to it)
     __resetThreatLease();
     const self = { id: 0, name: 'player', type: 'player', position: new Vec3(0.5, 64, 0.5), height: 1.8 };
     const runs = [];
@@ -424,4 +427,42 @@ test('#432 review 4: a hunt under way stops once food falls to 4 (too weak to hu
     await new Promise(r => setTimeout(r, 200));
     assert.deepEqual(calls, ['attack', 'stop']);
     assert.ok(lines.includes('[reflex] hunting animania:cow_holstein: stopped'), lines.join('\n'));
+});
+
+// Soak 5 (#500 follow-ups 1 and 2, Fix H): after a death the bot hunted a sow bare-handed with
+// zombies near. With no weapon the hunting reflex forages only, and the model's !attack on a food
+// animal is refused; a task giver who types it may, warned; never an animal that may be a player's.
+test('#500 follow-up 1: with no weapon the hunting reflex never hunts (said once); foraging still runs; armed it hunts', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    assert.deepEqual(await hunt(huntAgent({ armed: false, animals: [cow(1, 3)] })), [], 'unarmed: no hunt');
+    assert.deepEqual(await hunt(huntAgent({ armed: false, animals: [cow(1, 3)] })), []);
+    assert.equal(logs.filter(l => l === '[reflex] hunting: no weapon, so no hunt (foraging only)').length, 1, 'said once');
+    const crop = withCrops(huntAgent({ armed: false, animals: [cow(1, 3)] }), { '6,64,0': ['rustic:wildberry_bush', 1] });
+    assert.deepEqual(await hunt(crop), ['mode:hunting'], 'unarmed: it still forages');
+    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 3)] })), ['mode:hunting'], 'armed: it hunts');
+});
+
+test('#500 follow-up 2: the model\'s !attack on a food animal with no weapon is refused; a task giver may, warned; ownership still refuses the giver', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const run = async (animals, context, { armed = false } = {}) => {
+        const agent = huntAgent({ animals, armed });
+        const hit = [];
+        agent.bot.pvp = { attack: (e) => { hit.push(e.id); delete agent.bot.entities[e.id]; }, stop() {} };
+        agent.bot.equip = () => Promise.resolve();
+        agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }));
+        await executeCommand(agent, '!attack("animania:cow_holstein")', context);
+        return { out: agent.bot.output, hit };
+    };
+    let r = await run([cow(1, 3)]);
+    assert.deepEqual(r.hit, [], 'the model, unarmed: refused');
+    assert.match(r.out, /Not hunting animania:cow_holstein: you hold no weapon\. Forage for food first \(!forage\); make a weapon \(a crude axe from 1 rock and 2 sticks, or a stone axe\) before you hunt\./);
+    r = await run([cow(1, 3)], { sender: 'JQDAW' });
+    assert.deepEqual(r.hit, [1], 'a giver typed it: hunted');
+    assert.match(r.out, /Warning: JQDAW asked for it, so hunting animania:cow_holstein with no weapon\./);
+    r = await run([cow(1, 3, { metadata: { 2: 'Bessie' } })], { sender: 'JQDAW' });
+    assert.deepEqual(r.hit, [], 'never a named one, giver or not');
+    assert.match(r.out, /it may belong to a player/);
+    r = await run([cow(1, 3)], undefined, { armed: true });
+    assert.deepEqual(r.hit, [1], 'armed: hunted as before');
 });

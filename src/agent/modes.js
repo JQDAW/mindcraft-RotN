@@ -532,12 +532,13 @@ const modes_list = [
     },
     {
         name: 'hunting',
-        description: 'When food is short, by day, with no threat near, when idle: gather ripe wild food (berry bushes, herbs, gardens), else hunt a wild animal. Never what may belong to a player.',
+        description: 'When food is short, by day, with no threat near, when idle: gather ripe wild food (berry bushes, herbs, gardens), else, holding a weapon, hunt a wild animal. Never what may belong to a player.',
         // #422 review 6: it never interrupts anything (a giver's follow included): only when idle.
         interrupts: [],
         on: true,
         active: false,
         skipped_said: '',
+        unarmed_said: false,
         forage_every_ms: 5_000, // no ripe wild food found: the next search after this
         forage_none_at: -Infinity,
         update: async function (agent) {
@@ -581,6 +582,12 @@ const modes_list = [
             }
             // Soak 2: at food 4 or lower weakness leaves a bare hand doing nothing: no hunt.
             if (tooWeakToHunt(bot)) return;
+            // Soak 5 (#500 follow-up 1, Fix H): no hunt with no weapon; foraging (above) goes on.
+            if (!threats.hasWeapon(bot)) {
+                if (!this.unarmed_said) { this.unarmed_said = true; console.log('[reflex] hunting: no weapon, so no hunt (foraging only)'); }
+                return;
+            }
+            this.unarmed_said = false;
             const skipped = [];
             const target = huntTarget(bot, { bases, skipped });
             const said = skipped.join('; ');

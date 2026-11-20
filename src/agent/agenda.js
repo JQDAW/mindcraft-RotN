@@ -242,6 +242,8 @@ export const OPEN_GOAL_PREFIX = 'Open goal while the agenda waits: ';
  * day, unless food is WEAPON_FIRST.foodAtMost or lower (then food first).
  */
 export const WEAPON_FIRST = { foodAtMost: 6 };
+/** #500 follow-up 4: what the standing and open goals say about food while the bot holds no weapon. */
+export const NO_WEAPON_FOOD = 'with no weapon: forage for food (!forage), do not hunt; make a weapon first';
 const beforeNight = (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN; };
 const foodFirst = (s) => { const f = s.food?.(); return Number.isFinite(f) && f <= WEAPON_FIRST.foodAtMost; };
 
@@ -292,7 +294,7 @@ export const FOOD_RESERVE_STEP = {
     id: 'food', short: 'keep food for the day and the night', reserve: true, when: 'food',
     due: (s, ctx) => foodShort(s, ctx) !== null,
     done: () => false, // done when no longer due (enough held)
-    goal: `Food: on this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: food 0 kills you at once, at any health. Long walks cost hunger. Keep food worth at least ${FOOD_TARGET.night} hunger before night. Gather ripe wild food first with !forage (wildberry bushes, wild herbs, HarvestCraft gardens), else kill a wild cow, pig, sheep or rabbit near you with !attack("<its name>") and pick up the meat (raw meat gives 1 hunger; eat it raw if needed). Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh unless your food is ${EMERGENCY_FOOD} or lower, and then only these, in this order: ${emergencyFoodText()}; never ${NEVER_EAT_TEXT}. Keep the bread for last.`,
+    goal: `Food: on this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: food 0 kills you at once, at any health. Long walks cost hunger. Keep food worth at least ${FOOD_TARGET.night} hunger before night. Gather ripe wild food first with !forage (wildberry bushes, wild herbs, HarvestCraft gardens); only while you hold a weapon, else hunt a wild cow, pig, sheep or rabbit near you and pick up the meat (raw meat gives 1 hunger; eat it raw if needed); with no weapon, do not hunt: make a weapon first. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh unless your food is ${EMERGENCY_FOOD} or lower, and then only these, in this order: ${emergencyFoodText()}; never ${NEVER_EAT_TEXT}. Keep the bread for last.`,
     goalNow: (s, ctx) => {
         const target = foodShort(s, ctx) ?? FOOD_TARGET.day;
         const held = s.foodHeld?.() ?? 0;
@@ -436,8 +438,16 @@ export class Agenda {
         let due = false;
         try { due = !!r.due(state, { foodDue }); } catch { due = false; }
         if (!due) {
-            if (!readOnly) { this.weaponOff = false; delete this.spent[r.id]; } // #468 review 5: a query changes no budget
+            if (!readOnly) { this.weaponOff = false; delete this.spent[r.id]; this.weaponWindow = null; } // #468 review 5: a query changes no budget
             return null;
+        }
+        // #500 follow-up 3: asked by day (before food) and spent, it gets a fresh budget once its
+        // window turns to before night (the soak 3 dusk weapon, #470).
+        let window = null;
+        try { window = r.whenNow?.(state) ?? null; } catch { window = null; }
+        if (!readOnly && window) {
+            if (this.weaponWindow && this.weaponWindow !== window && window === 'before night') { this.weaponOff = false; delete this.spent[r.id]; }
+            this.weaponWindow = window;
         }
         if (this.weaponOff) return null;
         let done = false;
@@ -642,7 +652,10 @@ export class Agenda {
         try { held = state?.foodHeld?.() ?? 0; blocks = reserveHave(state); } catch { /* the plain text */ }
         const where = shelter ? `your last shelter at ${shelter.x}, ${shelter.y}, ${shelter.z}` : 'where you are';
         const kind = state && noPickaxe(state) ? 'dirt (no pickaxe yet)' : 'cobblestone first';
+        let armed = true;
+        try { armed = state?.hasWeapon?.() !== false; } catch { armed = true; }
         return `${STANDING_GOAL_PREFIX}keep food worth at least ${FOOD_TARGET.day} hunger (you hold ${held}) and ${SHELTER_RESERVE} blocks for the night's shelter (you have ${blocks}; ${kind}); `
+            + (armed ? '' : `${NO_WEAPON_FOOD}; `)
             + 'keep a weapon and a pickaxe, and make better ones when you can (a stone sword or axe, a spare pickaxe); '
             + `explore by day within ${STANDING.exploreRadius} blocks of ${where}, away from where you died (a zombie rises there and stays); `
             + 'be back near it before dusk: the night routine builds the shelter then.';
@@ -667,9 +680,11 @@ export class Agenda {
         const when = e.capped ? `its ${STUCK_RETRY.max} retries are spent, so it is retried once at each new full day`
             : `it is retried with a fresh budget in about ${left} min or at the next full day`;
         const blocks = state && noPickaxe(state) ? 'dirt (no pickaxe yet)' : 'cobblestone or stone';
+        let unarmed = false;
+        try { unarmed = state?.hasWeapon?.() === false; } catch { unarmed = false; }
         return `${OPEN_GOAL_PREFIX}step ${stuck.id} (${stuck.short}) is stuck: ${e.why}; ${when}. Its goal was: ${stuck.goal} `
             + 'Until then: gather the materials it needs, and explore nearby for them (rock piles, dead bushes, trees, a crafting table you placed), '
-            + `away from where you died. Keep food worth at least ${FOOD_TARGET.day} hunger, and keep ${SHELTER_RESERVE} blocks of ${blocks} for the night's shelter: do not place them.`;
+            + `away from where you died. Keep food worth at least ${FOOD_TARGET.day} hunger${unarmed ? ` (${NO_WEAPON_FOOD})` : ''}, and keep ${SHELTER_RESERVE} blocks of ${blocks} for the night's shelter: do not place them.`;
     }
 }
 

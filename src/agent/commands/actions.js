@@ -10,7 +10,7 @@ import { hasAutonomyPrefix } from '../agenda_driver.js';
 import { nightPhase, nightRoutineActive } from '../library/night.js';
 import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
-import { threatFor, hurtBy } from '../library/threats.js';
+import { threatFor, hurtBy, hasWeapon } from '../library/threats.js';
 import { mayBelongToPlayer, retaliationRisk, knownBases, isHuntableAnimal, tooWeakToHunt, HUNT_MIN_FOOD } from '../library/hunting.js';
 import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
@@ -583,6 +583,16 @@ export const actionsList = [
             if (mob && isHuntableAnimal(mob) && tooWeakToHunt(agent.bot) && !hurtBy(agent.bot, mob)) {
                 skills.log(agent.bot, `Not hunting ${type}: your food is ${agent.bot.food}, and at ${HUNT_MIN_FOOD} or lower you are too weak to hurt it (weakness). Eat anything you hold, or !forage nearby; food 0 kills you at once on this pack.`);
                 return;
+            }
+            // Soak 5 (#500 follow-up 2): no hunt with no weapon (the model chased a sow bare-handed
+            // after a death, with zombies near). A task giver who types it may, with a warning; the
+            // ownership refusal below still holds.
+            if (mob && isHuntableAnimal(mob) && !hasWeapon(agent.bot) && !hurtBy(agent.bot, mob)) {
+                if (!giver) {
+                    skills.log(agent.bot, `Not hunting ${type}: you hold no weapon. Forage for food first (!forage); make a weapon (a crude axe from 1 rock and 2 sticks, or a stone axe) before you hunt.`);
+                    return;
+                }
+                skills.log(agent.bot, `Warning: ${giver} asked for it, so hunting ${type} with no weapon.`);
             }
             if (mob && threatFor(mob)?.reaction === 'ignore-unless-provoked' && !hurtBy(agent.bot, mob) && !(giver && never?.fightBack === false)) {
                 skills.log(agent.bot, `Not attacking ${type}: it attacks only when hurt, and it has not hurt you. Leave it alone; if it attacks you, the bot defends itself.`);

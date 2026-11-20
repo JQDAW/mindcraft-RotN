@@ -10,7 +10,7 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD } from './agenda.js';
 import { Vec3 } from 'vec3';
 import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
@@ -790,7 +790,7 @@ test('#468 review 1: every step left waits on the stuck one: food first (a stand
     assert.equal(tick(), 'stuck');
     assert.equal(tick(), 'food', 'food 14, none held: the day\'s target as a standing duty');
     assert.equal(agent._agenda_open_goal, null);
-    agent.bot.inventory = { items: () => [stack('bread', 0, 4)], slots: [] };
+    agent.bot.inventory = { items: () => [stack('bread', 0, 4), stack('iron_sword', 0, 1)], slots: [] };
     assert.equal(tick(), null, 'nothing runnable');
     assert.match(agent._agenda_open_goal, /^Open goal while the agenda waits: step rocks \(collect 6 rocks\) is stuck: 5 min of self-prompting; it is retried with a fresh budget in about 20 min or at the next full day\. Its goal was: Collect at least 6 rocks/);
     assert.match(agent._agenda_open_goal, /Until then: gather the materials it needs, and explore nearby for them .*Keep food worth at least \d+ hunger, and keep 10 blocks of dirt \(no pickaxe yet\) for the night's shelter: do not place them\.$/);
@@ -959,4 +959,46 @@ test('soak 5 (Fix H): the weapon\'s budget spent by day: food then, not the weap
     // !agenda (readOnly) agrees and changes nothing.
     const fresh = hFixAgent(t, []);
     assert.equal(fresh.agenda.judge(agendaState(fresh.bot), { readOnly: true }).step.id, 'weapon');
+});
+
+// #500 follow-up 3: the weapon asked by day (before food) and spent gets a fresh budget once its
+// window turns to before night (#470's dusk weapon).
+test('#500 follow-up 3: a weapon spent by day (before food) is asked again with a fresh budget once it is before night', (t) => {
+    const agent = hFixAgent(t, [stack('dirt', 0, SHELTER_RESERVE)]);
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    agent.agenda.spent.weapon = { attempts: 1, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'food', 'off by day while food is short');
+    agent.bot.time = { timeOfDay: dayAt(7) }; // dusk: the before-night window; food still short
+    assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), 'weapon', 'a fresh dusk budget');
+    assert.equal(agent.agenda.spentOn('weapon').llm_ms, 0);
+    assert.match(agent.self_prompter.prompt, /step weapon \(before night\): Night is near and you hold no weapon\./);
+    // Spent at dusk: not again until the night is past (as in soak 3).
+    agent.agenda.spent.weapon = { attempts: 1, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: 4 * TICK_MS }), 'stuck');
+    assert.notEqual(agendaTick(agent, { now: 5 * TICK_MS }), 'weapon');
+    // A query (readOnly) never resets it.
+    const q = hFixAgent(t, []);
+    q.agenda.weaponOff = true;
+    q.agenda.weaponWindow = 'no weapon, before food';
+    q.bot.time = { timeOfDay: dayAt(7) };
+    q.agenda.judge(agendaState(q.bot), { readOnly: true });
+    assert.equal(q.agenda.weaponOff, true);
+});
+
+// #500 follow-ups 4 and 5: the standing goal, the open goal and the static food text never send an
+// unarmed bot hunting.
+test('#500 follow-ups 4 and 5: unarmed, the standing and open goals say forage, do not hunt; the static food goal names no !attack', (t) => {
+    assert.equal(NO_WEAPON_FOOD, 'with no weapon: forage for food (!forage), do not hunt; make a weapon first');
+    const a = new Agenda('FRCFLD', { dir: tempDir(t) });
+    const unarmed = agendaState(fakeBot([]));
+    const armed = agendaState(fakeBot([stack('stone_axe', 0, 1)]));
+    assert.match(a.standingGoal(unarmed), /for the night's shelter \(you have 0; dirt \(no pickaxe yet\)\); with no weapon: forage for food \(!forage\), do not hunt; make a weapon first; keep a weapon/);
+    assert.doesNotMatch(a.standingGoal(armed), /with no weapon/);
+    a.start();
+    a.markStuck('rocks', '5 min of self-prompting');
+    assert.match(a.openGoal(unarmed), /Keep food worth at least \d+ hunger \(with no weapon: forage for food \(!forage\), do not hunt; make a weapon first\), and keep/);
+    assert.doesNotMatch(a.openGoal(armed), /with no weapon/);
+    assert.doesNotMatch(FOOD_RESERVE_STEP.goal, /!attack/);
+    assert.match(FOOD_RESERVE_STEP.goal, /with no weapon, do not hunt: make a weapon first/);
 });
