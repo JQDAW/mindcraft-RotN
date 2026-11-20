@@ -21,9 +21,18 @@ export const UNKNOWN_MELEE = 18;
  * @param {import('./catalog.js').RotnData} catalog
  * @param {string} entityName a registry name ("minecraft:zombie")
  * @returns {{name: string, damage: number, maxDamage: number, hitsToKill: number|null,
- *   reach?: number, intervalTicks?: number, onHit?: string, weapon?: string, note?: string,
- *   confidence: string, evidence: string[]}|null}
+ *   reach?: number, intervalTicks?: number, width?: number, height?: number, hitsThroughWalls?: boolean,
+ *   wallBlocks?: number, hitsThroughFloor?: true, hitsThroughRoof?: true, attack?: 'spell'|'none',
+ *   onHit?: string, weapon?: string, note?: string, confidence: string, evidence: string[]}|null}
  *   maxDamage: with the strongest item it is given that was read (= damage when none);
+ *   reach: blocks from its position to a player's feet (for a player target), checked with nothing
+ *   else (no line of sight, no block in between); width, height: its hitbox;
+ *   hitsThroughWalls: reach > width / 2 + 1 + 0.3 (a 1-block wall, the bot against its far side; with
+ *   the bot in the middle of its block use + 0.5); wallBlocks: the thickest such wall;
+ *   hitsThroughFloor: it hits a bot on a 1-block floor from directly below (reach > 1 + ceil(height));
+ *   hitsThroughRoof: from on top of a 1-block roof over a 2-high room (reach > 3);
+ *   attack: absent for melee; 'spell' when the damage is a spell's, at reach; 'none' when it does no
+ *   damage itself (damage 0, read: not unknown);
  *   hitsToKill: hits that kill an unarmoured player at 20 health (null for a mob that does no damage).
  */
 export function mobMelee(catalog, entityName) {

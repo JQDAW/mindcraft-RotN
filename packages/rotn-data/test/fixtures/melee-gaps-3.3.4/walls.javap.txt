@@ -1,0 +1,1847 @@
+# javap -c -p -constants excerpts (reads class files; runs no mod code) from the pinned RotN 3.3.4
+# server pack zip, for test/melee-gaps.test.js (through-wall reach). Jars as in gaps.javap.txt, plus (mods/):
+# specialmobs-1.0.4_for_mc1.12.2.jar 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125
+# IceAndFireRotN-1.9.1-1.2.1.jar 6f8f6d7a12fbc207f2f0dc638d4b9901bab5b003e1793313be8c4aede00ca747
+# and the SHA-256 lines below
+
+# Fish's Undead Rising-1.3.2.jar f45662c8b3ba6a46d251fbb56044bdc5290d1102d23500ad0dfd927aa9bf5c50
+# zombie_players-1.12.1-1.2.7.jar 7969daf51537df644a26b95032c04f28d60b5be01a9beb4373999e33749eef24
+# specialmobs-1.0.4_for_mc1.12.2.jar 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125
+# IceAndFireRotN-1.9.1-1.2.1.jar 6f8f6d7a12fbc207f2f0dc638d4b9901bab5b003e1793313be8c4aede00ca747
+# ancientbeasts-1.9.99999.jar 26131c7a4f8faf89cd55d5758fc121a78e7f69afba15387ed15fc83617e4507c
+
+## SRG names (notch -> SRG)
+CL: acp net/minecraft/entity/monster/AbstractSkeleton
+MD: acp/dm ()V net/minecraft/entity/monster/AbstractSkeleton/func_85036_m ()V
+CL: acq net/minecraft/entity/monster/EntityBlaze
+CL: acq$a net/minecraft/entity/monster/EntityBlaze$AIFireballAttack
+MD: acq$a/e ()V net/minecraft/entity/monster/EntityBlaze$AIFireballAttack/func_75246_d ()V
+CL: acr net/minecraft/entity/monster/EntityCaveSpider
+CL: adn net/minecraft/entity/monster/EntitySpider
+MD: adn/r ()V net/minecraft/entity/monster/EntitySpider/func_184651_r ()V
+CL: adn$a net/minecraft/entity/monster/EntitySpider$AISpiderAttack
+CL: adt net/minecraft/entity/monster/EntityZombie
+MD: adt/r ()V net/minecraft/entity/monster/EntityZombie/func_184651_r ()V
+MD: vg/h (Lvg;)D net/minecraft/entity/Entity/func_70068_e (Lnet/minecraft/entity/Entity;)D
+CL: yq net/minecraft/entity/ai/EntityAIZombieAttack
+
+## adn (EntitySpider) <init>: size 1.4 x 0.9
+  public adn(amu);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #20                 // Method ade."<init>":(Lamu;)V
+       5: aload_0
+       6: ldc           #21                 // float 1.4f
+       8: ldc           #22                 // float 0.9f
+      10: invokevirtual #25                 // Method a:(FF)V
+      13: return
+
+## adn (EntitySpider) initEntityAI (r): adds adn$a
+  protected void r();
+    Code:
+       0: aload_0
+       1: getfield      #42                 // Field br:Lxf;
+       4: iconst_1
+       5: new           #44                 // class wz
+       8: dup
+       9: aload_0
+      10: invokespecial #47                 // Method wz."<init>":(Lvq;)V
+      13: invokevirtual #52                 // Method xf.a:(ILxe;)V
+      16: aload_0
+      17: getfield      #42                 // Field br:Lxf;
+      20: iconst_3
+      21: new           #54                 // class xj
+      24: dup
+      25: aload_0
+      26: ldc           #55                 // float 0.4f
+      28: invokespecial #58                 // Method xj."<init>":(Lvq;F)V
+      31: invokevirtual #52                 // Method xf.a:(ILxe;)V
+      34: aload_0
+      35: getfield      #42                 // Field br:Lxf;
+      38: iconst_4
+      39: new           #10                 // class adn$a
+      42: dup
+      43: aload_0
+      44: invokespecial #61                 // Method adn$a."<init>":(Ladn;)V
+      47: invokevirtual #52                 // Method xf.a:(ILxe;)V
+      50: aload_0
+      51: getfield      #42                 // Field br:Lxf;
+      54: iconst_5
+      55: new           #63                 // class yp
+      58: dup
+      59: aload_0
+      60: ldc2_w        #64                 // double 0.8d
+      63: invokespecial #68                 // Method yp."<init>":(Lvx;D)V
+      66: invokevirtual #52                 // Method xf.a:(ILxe;)V
+      69: aload_0
+      70: getfield      #42                 // Field br:Lxf;
+      73: bipush        6
+      75: new           #70                 // class xl
+      78: dup
+      79: aload_0
+      80: ldc           #72                 // class aed
+      82: ldc           #73                 // float 8.0f
+      84: invokespecial #76                 // Method xl."<init>":(Lvq;Ljava/lang/Class;F)V
+      87: invokevirtual #52                 // Method xf.a:(ILxe;)V
+      90: aload_0
+      91: getfield      #42                 // Field br:Lxf;
+      94: bipush        6
+      96: new           #78                 // class yb
+      99: dup
+     100: aload_0
+     101: invokespecial #79                 // Method yb."<init>":(Lvq;)V
+     104: invokevirtual #52                 // Method xf.a:(ILxe;)V
+     107: aload_0
+     108: getfield      #82                 // Field bs:Lxf;
+     111: iconst_1
+     112: new           #84                 // class yt
+     115: dup
+     116: aload_0
+     117: iconst_0
+     118: iconst_0
+     119: anewarray     #86                 // class java/lang/Class
+     122: invokespecial #89                 // Method yt."<init>":(Lvx;Z[Ljava/lang/Class;)V
+     125: invokevirtual #52                 // Method xf.a:(ILxe;)V
+     128: aload_0
+     129: getfield      #82                 // Field bs:Lxf;
+     132: iconst_2
+     133: new           #7                  // class adn$c
+     136: dup
+     137: aload_0
+     138: ldc           #72                 // class aed
+     140: invokespecial #92                 // Method adn$c."<init>":(Ladn;Ljava/lang/Class;)V
+     143: invokevirtual #52                 // Method xf.a:(ILxe;)V
+     146: aload_0
+     147: getfield      #82                 // Field bs:Lxf;
+     150: iconst_3
+     151: new           #7                  // class adn$c
+     154: dup
+     155: aload_0
+     156: ldc           #94                 // class aak
+     158: invokespecial #92                 // Method adn$c."<init>":(Ladn;Ljava/lang/Class;)V
+     161: invokevirtual #52                 // Method xf.a:(ILxe;)V
+     164: return
+
+## adn$a (EntitySpider$AISpiderAttack) header and signatures
+class adn$a extends xo {
+  public adn$a(adn);
+  public boolean b();
+  protected double a(vp);
+
+## acr (EntityCaveSpider) header, signatures and <init>: size 0.7 x 0.5, no initEntityAI
+public class acr extends adn {
+  public acr(amu);
+  public static void a(ry);
+  protected void bM();
+  public boolean B(vg);
+  public vs a(ua, vs);
+  public float by();
+  protected nf J();
+  public acr(amu);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #9                  // Method adn."<init>":(Lamu;)V
+       5: aload_0
+       6: ldc           #10                 // float 0.7f
+       8: ldc           #11                 // float 0.5f
+      10: invokevirtual #15                 // Method a:(FF)V
+      13: return
+
+## adt (EntityZombie) <init>: size 0.6 x 1.95
+  public adt(amu);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #32                 // Method ade."<init>":(Lamu;)V
+       5: aload_0
+       6: new           #34                 // class wu
+       9: dup
+      10: aload_0
+      11: invokespecial #37                 // Method wu."<init>":(Lvq;)V
+      14: putfield      #39                 // Field bA:Lwu;
+      17: aload_0
+      18: ldc           #40                 // float -1.0f
+      20: putfield      #42                 // Field bC:F
+      23: aload_0
+      24: ldc           #43                 // float 0.6f
+      26: ldc           #44                 // float 1.95f
+      28: invokevirtual #47                 // Method a:(FF)V
+      31: return
+
+## adt (EntityZombie) initEntityAI (r): adds yq
+  protected void r();
+    Code:
+       0: aload_0
+       1: getfield      #57                 // Field br:Lxf;
+       4: iconst_0
+       5: new           #59                 // class wz
+       8: dup
+       9: aload_0
+      10: invokespecial #60                 // Method wz."<init>":(Lvq;)V
+      13: invokevirtual #65                 // Method xf.a:(ILxe;)V
+      16: aload_0
+      17: getfield      #57                 // Field br:Lxf;
+      20: iconst_2
+      21: new           #67                 // class yq
+      24: dup
+      25: aload_0
+      26: dconst_1
+      27: iconst_0
+      28: invokespecial #70                 // Method yq."<init>":(Ladt;DZ)V
+      31: invokevirtual #65                 // Method xf.a:(ILxe;)V
+      34: aload_0
+      35: getfield      #57                 // Field br:Lxf;
+      38: iconst_5
+      39: new           #72                 // class xs
+      42: dup
+      43: aload_0
+      44: dconst_1
+      45: invokespecial #75                 // Method xs."<init>":(Lvx;D)V
+      48: invokevirtual #65                 // Method xf.a:(ILxe;)V
+      51: aload_0
+      52: getfield      #57                 // Field br:Lxf;
+      55: bipush        7
+      57: new           #77                 // class yp
+      60: dup
+      61: aload_0
+      62: dconst_1
+      63: invokespecial #78                 // Method yp."<init>":(Lvx;D)V
+      66: invokevirtual #65                 // Method xf.a:(ILxe;)V
+      69: aload_0
+      70: getfield      #57                 // Field br:Lxf;
+      73: bipush        8
+      75: new           #80                 // class xl
+      78: dup
+      79: aload_0
+      80: ldc           #82                 // class aed
+      82: ldc           #83                 // float 8.0f
+      84: invokespecial #86                 // Method xl."<init>":(Lvq;Ljava/lang/Class;F)V
+      87: invokevirtual #65                 // Method xf.a:(ILxe;)V
+      90: aload_0
+      91: getfield      #57                 // Field br:Lxf;
+      94: bipush        8
+      96: new           #88                 // class yb
+      99: dup
+     100: aload_0
+     101: invokespecial #89                 // Method yb."<init>":(Lvq;)V
+     104: invokevirtual #65                 // Method xf.a:(ILxe;)V
+     107: aload_0
+     108: invokevirtual #92                 // Method do:()V
+     111: return
+
+## yq (EntityAIZombieAttack) header and signatures: no getAttackReachSqr
+public class yq extends xo {
+  public yq(adt, double, boolean);
+  public void c();
+  public void d();
+  public void e();
+
+## acq$a (EntityBlaze$AIFireballAttack) updateTask (e): melee when getDistanceSqToEntity < 4
+  public void e();
+    Code:
+       0: aload_0
+       1: dup
+       2: getfield      #45                 // Field c:I
+       5: iconst_1
+       6: isub
+       7: putfield      #45                 // Field c:I
+      10: aload_0
+      11: getfield      #19                 // Field a:Lacq;
+      14: invokevirtual #30                 // Method acq.z:()Lvp;
+      17: astore_1
+      18: aload_0
+      19: getfield      #19                 // Field a:Lacq;
+      22: aload_1
+      23: invokevirtual #49                 // Method acq.h:(Lvg;)D
+      26: dstore_2
+      27: dload_2
+      28: ldc2_w        #50                 // double 4.0d
+      31: dcmpg
+      32: ifge          83
+      35: aload_0
+      36: getfield      #45                 // Field c:I
+      39: ifgt          57
+      42: aload_0
+      43: bipush        20
+      45: putfield      #45                 // Field c:I
+      48: aload_0
+      49: getfield      #19                 // Field a:Lacq;
+      52: aload_1
+      53: invokevirtual #55                 // Method acq.B:(Lvg;)Z
+      56: pop
+      57: aload_0
+      58: getfield      #19                 // Field a:Lacq;
+      61: invokevirtual #59                 // Method acq.u:()Lwq;
+      64: aload_1
+      65: getfield      #63                 // Field vp.p:D
+      68: aload_1
+      69: getfield      #66                 // Field vp.q:D
+      72: aload_1
+      73: getfield      #69                 // Field vp.r:D
+      76: dconst_1
+      77: invokevirtual #74                 // Method wq.a:(DDDD)V
+      80: goto          467
+      83: dload_2
+      84: aload_0
+      85: invokespecial #78                 // Method f:()D
+      88: aload_0
+      89: invokespecial #78                 // Method f:()D
+      92: dmul
+      93: dcmpg
+      94: ifge          434
+      97: aload_1
+      98: getfield      #63                 // Field vp.p:D
+     101: aload_0
+     102: getfield      #19                 // Field a:Lacq;
+     105: getfield      #79                 // Field acq.p:D
+     108: dsub
+     109: dstore        4
+     111: aload_1
+     112: invokevirtual #83                 // Method vp.bw:()Lbhb;
+     115: getfield      #87                 // Field bhb.b:D
+     118: aload_1
+     119: getfield      #91                 // Field vp.H:F
+     122: fconst_2
+     123: fdiv
+     124: f2d
+     125: dadd
+     126: aload_0
+     127: getfield      #19                 // Field a:Lacq;
+     130: getfield      #92                 // Field acq.q:D
+     133: aload_0
+     134: getfield      #19                 // Field a:Lacq;
+     137: getfield      #93                 // Field acq.H:F
+     140: fconst_2
+     141: fdiv
+     142: f2d
+     143: dadd
+     144: dsub
+     145: dstore        6
+     147: aload_1
+     148: getfield      #69                 // Field vp.r:D
+     151: aload_0
+     152: getfield      #19                 // Field a:Lacq;
+     155: getfield      #94                 // Field acq.r:D
+     158: dsub
+     159: dstore        8
+     161: aload_0
+     162: getfield      #45                 // Field c:I
+     165: ifgt          416
+     168: aload_0
+     169: dup
+     170: getfield      #38                 // Field b:I
+     173: iconst_1
+     174: iadd
+     175: putfield      #38                 // Field b:I
+     178: aload_0
+     179: getfield      #38                 // Field b:I
+     182: iconst_1
+     183: if_icmpne     203
+     186: aload_0
+     187: bipush        60
+     189: putfield      #45                 // Field c:I
+     192: aload_0
+     193: getfield      #19                 // Field a:Lacq;
+     196: iconst_1
+     197: invokevirtual #42                 // Method acq.a:(Z)V
+     200: goto          239
+     203: aload_0
+     204: getfield      #38                 // Field b:I
+     207: iconst_4
+     208: if_icmpgt     220
+     211: aload_0
+     212: bipush        6
+     214: putfield      #45                 // Field c:I
+     217: goto          239
+     220: aload_0
+     221: bipush        100
+     223: putfield      #45                 // Field c:I
+     226: aload_0
+     227: iconst_0
+     228: putfield      #38                 // Field b:I
+     231: aload_0
+     232: getfield      #19                 // Field a:Lacq;
+     235: iconst_0
+     236: invokevirtual #42                 // Method acq.a:(Z)V
+     239: aload_0
+     240: getfield      #38                 // Field b:I
+     243: iconst_1
+     244: if_icmple     416
+     247: dload_2
+     248: invokestatic  #99                 // Method rk.a:(D)F
+     251: invokestatic  #102                // Method rk.c:(F)F
+     254: ldc           #103                // float 0.5f
+     256: fmul
+     257: fstore        10
+     259: aload_0
+     260: getfield      #19                 // Field a:Lacq;
+     263: getfield      #107                // Field acq.l:Lamu;
+     266: aconst_null
+     267: sipush        1018
+     270: new           #109                // class et
+     273: dup
+     274: aload_0
+     275: getfield      #19                 // Field a:Lacq;
+     278: getfield      #79                 // Field acq.p:D
+     281: d2i
+     282: aload_0
+     283: getfield      #19                 // Field a:Lacq;
+     286: getfield      #92                 // Field acq.q:D
+     289: d2i
+     290: aload_0
+     291: getfield      #19                 // Field a:Lacq;
+     294: getfield      #94                 // Field acq.r:D
+     297: d2i
+     298: invokespecial #112                // Method et."<init>":(III)V
+     301: iconst_0
+     302: invokevirtual #117                // Method amu.a:(Laed;ILet;I)V
+     305: iconst_0
+     306: istore        11
+     308: iload         11
+     310: iconst_1
+     311: if_icmpge     416
+     314: new           #119                // class aes
+     317: dup
+     318: aload_0
+     319: getfield      #19                 // Field a:Lacq;
+     322: getfield      #107                // Field acq.l:Lamu;
+     325: aload_0
+     326: getfield      #19                 // Field a:Lacq;
+     329: dload         4
+     331: aload_0
+     332: getfield      #19                 // Field a:Lacq;
+     335: invokevirtual #123                // Method acq.bR:()Ljava/util/Random;
+     338: invokevirtual #128                // Method java/util/Random.nextGaussian:()D
+     341: fload         10
+     343: f2d
+     344: dmul
+     345: dadd
+     346: dload         6
+     348: dload         8
+     350: aload_0
+     351: getfield      #19                 // Field a:Lacq;
+     354: invokevirtual #123                // Method acq.bR:()Ljava/util/Random;
+     357: invokevirtual #128                // Method java/util/Random.nextGaussian:()D
+     360: fload         10
+     362: f2d
+     363: dmul
+     364: dadd
+     365: invokespecial #131                // Method aes."<init>":(Lamu;Lvp;DDD)V
+     368: astore        12
+     370: aload         12
+     372: aload_0
+     373: getfield      #19                 // Field a:Lacq;
+     376: getfield      #92                 // Field acq.q:D
+     379: aload_0
+     380: getfield      #19                 // Field a:Lacq;
+     383: getfield      #93                 // Field acq.H:F
+     386: fconst_2
+     387: fdiv
+     388: f2d
+     389: dadd
+     390: ldc2_w        #132                // double 0.5d
+     393: dadd
+     394: putfield      #134                // Field aes.q:D
+     397: aload_0
+     398: getfield      #19                 // Field a:Lacq;
+     401: getfield      #107                // Field acq.l:Lamu;
+     404: aload         12
+     406: invokevirtual #136                // Method amu.a:(Lvg;)Z
+     409: pop
+     410: iinc          11, 1
+     413: goto          308
+     416: aload_0
+     417: getfield      #19                 // Field a:Lacq;
+     420: invokevirtual #140                // Method acq.t:()Lwp;
+     423: aload_1
+     424: ldc           #141                // float 10.0f
+     426: ldc           #141                // float 10.0f
+     428: invokevirtual #146                // Method wp.a:(Lvg;FF)V
+     431: goto          467
+     434: aload_0
+     435: getfield      #19                 // Field a:Lacq;
+     438: invokevirtual #150                // Method acq.x:()Lze;
+     441: invokevirtual #154                // Method ze.p:()V
+     444: aload_0
+     445: getfield      #19                 // Field a:Lacq;
+     448: invokevirtual #59                 // Method acq.u:()Lwq;
+     451: aload_1
+     452: getfield      #63                 // Field vp.p:D
+     455: aload_1
+     456: getfield      #66                 // Field vp.q:D
+     459: aload_1
+     460: getfield      #69                 // Field vp.r:D
+     463: dconst_1
+     464: invokevirtual #74                 // Method wq.a:(DDDD)V
+     467: aload_0
+     468: invokespecial #156                // Method xe.e:()V
+     471: return
+
+## acq (EntityBlaze) <init>: no setSize (the Entity default 0.6 x 1.8)
+  public acq(amu);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #18                 // Method ade."<init>":(Lamu;)V
+       5: aload_0
+       6: ldc           #19                 // float 0.5f
+       8: putfield      #21                 // Field a:F
+      11: aload_0
+      12: getstatic     #27                 // Field beh.g:Lbeh;
+      15: ldc           #28                 // float -1.0f
+      17: invokevirtual #31                 // Method a:(Lbeh;F)V
+      20: aload_0
+      21: getstatic     #34                 // Field beh.f:Lbeh;
+      24: ldc           #35                 // float 8.0f
+      26: invokevirtual #31                 // Method a:(Lbeh;F)V
+      29: aload_0
+      30: getstatic     #38                 // Field beh.i:Lbeh;
+      33: fconst_0
+      34: invokevirtual #31                 // Method a:(Lbeh;F)V
+      37: aload_0
+      38: getstatic     #41                 // Field beh.j:Lbeh;
+      41: fconst_0
+      42: invokevirtual #31                 // Method a:(Lbeh;F)V
+      45: aload_0
+      46: iconst_1
+      47: putfield      #45                 // Field X:Z
+      50: aload_0
+      51: bipush        10
+      53: putfield      #48                 // Field b_:I
+      56: return
+
+## Special Mobs Entity_SpecialSpider <init>, initEntityAI, initTypeAI
+public class fathertoast.specialmobs.entity.spider.Entity_SpecialSpider extends net.minecraft.entity.monster.EntitySpider implements fathertoast.specialmobs.entity.ISpecialMob {
+  public fathertoast.specialmobs.entity.spider.Entity_SpecialSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #69                 // Method net/minecraft/entity/monster/EntitySpider."<init>":(Lnet/minecraft/world/World;)V
+       5: return
+  protected void func_184651_r();
+    Code:
+       0: aload_0
+       1: invokespecial #76                 // Method net/minecraft/entity/monster/EntitySpider.func_184651_r:()V
+       4: aload_0
+       5: invokevirtual #79                 // Method initTypeAI:()V
+       8: return
+  protected void initTypeAI();
+    Code:
+       0: return
+
+## Special Mobs EntityBabySpider <init>
+public class fathertoast.specialmobs.entity.spider.EntityBabySpider extends fathertoast.specialmobs.entity.spider.Entity_SpecialSpider {
+  public fathertoast.specialmobs.entity.spider.EntityBabySpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #45                 // Method fathertoast/specialmobs/entity/spider/Entity_SpecialSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: ldc           #46                 // float 0.6f
+       8: ldc           #47                 // float 0.4f
+      10: invokevirtual #51                 // Method func_70105_a:(FF)V
+      13: aload_0
+      14: invokevirtual #55                 // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      17: ldc           #47                 // float 0.4f
+      19: invokevirtual #61                 // Method fathertoast/specialmobs/entity/SpecialMobData.setBaseScale:(F)V
+      22: return
+
+## Special Mobs EntityDesertSpider <init>
+public class fathertoast.specialmobs.entity.spider.EntityDesertSpider extends fathertoast.specialmobs.entity.spider.Entity_SpecialSpider {
+  public fathertoast.specialmobs.entity.spider.EntityDesertSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #75                 // Method fathertoast/specialmobs/entity/spider/Entity_SpecialSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: fconst_1
+       7: ldc           #76                 // float 0.8f
+       9: invokevirtual #80                 // Method func_70105_a:(FF)V
+      12: aload_0
+      13: invokevirtual #84                 // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      16: ldc           #76                 // float 0.8f
+      18: invokevirtual #90                 // Method fathertoast/specialmobs/entity/SpecialMobData.setBaseScale:(F)V
+      21: return
+
+## Special Mobs EntityGiantSpider <init>
+public class fathertoast.specialmobs.entity.spider.EntityGiantSpider extends fathertoast.specialmobs.entity.spider.Entity_SpecialSpider {
+  public fathertoast.specialmobs.entity.spider.EntityGiantSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #44                 // Method fathertoast/specialmobs/entity/spider/Entity_SpecialSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: ldc           #45                 // float 1.9f
+       8: ldc           #46                 // float 1.3f
+      10: invokevirtual #50                 // Method func_70105_a:(FF)V
+      13: aload_0
+      14: invokevirtual #54                 // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      17: ldc           #55                 // float 1.5f
+      19: invokevirtual #61                 // Method fathertoast/specialmobs/entity/SpecialMobData.setBaseScale:(F)V
+      22: return
+
+## Special Mobs EntityHungrySpider <init>
+public class fathertoast.specialmobs.entity.spider.EntityHungrySpider extends fathertoast.specialmobs.entity.spider.Entity_SpecialSpider {
+  public fathertoast.specialmobs.entity.spider.EntityHungrySpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #84                 // Method fathertoast/specialmobs/entity/spider/Entity_SpecialSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: ldc           #85                 // float 1.9f
+       8: ldc           #86                 // float 1.3f
+      10: invokevirtual #90                 // Method func_70105_a:(FF)V
+      13: aload_0
+      14: invokevirtual #94                 // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      17: ldc           #95                 // float 1.5f
+      19: invokevirtual #101                // Method fathertoast/specialmobs/entity/SpecialMobData.setBaseScale:(F)V
+      22: aload_0
+      23: invokevirtual #94                 // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      26: bipush        40
+      28: invokevirtual #104                // Method fathertoast/specialmobs/entity/SpecialMobData.setRegenerationTime:(I)V
+      31: return
+
+## Special Mobs EntityMotherSpider <init>
+public class fathertoast.specialmobs.entity.spider.EntityMotherSpider extends fathertoast.specialmobs.entity.spider.Entity_SpecialSpider {
+  public fathertoast.specialmobs.entity.spider.EntityMotherSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #74                 // Method fathertoast/specialmobs/entity/spider/Entity_SpecialSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: ldc           #75                 // float 1.8f
+       8: ldc           #76                 // float 1.2f
+      10: invokevirtual #80                 // Method func_70105_a:(FF)V
+      13: aload_0
+      14: invokevirtual #84                 // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      17: ldc           #85                 // float 1.4f
+      19: invokevirtual #91                 // Method fathertoast/specialmobs/entity/SpecialMobData.setBaseScale:(F)V
+      22: aload_0
+      23: invokevirtual #84                 // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      26: bipush        30
+      28: invokevirtual #94                 // Method fathertoast/specialmobs/entity/SpecialMobData.setRegenerationTime:(I)V
+      31: return
+
+## Special Mobs spiders without a size of their own (signatures and <init>)
+public class fathertoast.specialmobs.entity.spider.EntityFlyingSpider extends fathertoast.specialmobs.entity.spider.Entity_SpecialSpider {
+  public static fathertoast.specialmobs.bestiary.BestiaryInfo GET_BESTIARY_INFO();
+  public static void BUILD_LOOT_TABLE(fathertoast.specialmobs.loot.LootTableBuilder);
+  public fathertoast.specialmobs.entity.spider.EntityFlyingSpider(net.minecraft.world.World);
+  public net.minecraft.util.ResourceLocation[] getDefaultTextures();
+  protected net.minecraft.util.ResourceLocation func_184647_J();
+  protected void adjustTypeAttributes();
+  public void func_70636_d();
+  public fathertoast.specialmobs.entity.spider.EntityFlyingSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #53                 // Method fathertoast/specialmobs/entity/spider/Entity_SpecialSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: invokevirtual #57                 // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+       9: fconst_0
+      10: invokevirtual #63                 // Method fathertoast/specialmobs/entity/SpecialMobData.setFallDamageMultiplier:(F)V
+      13: return
+public class fathertoast.specialmobs.entity.spider.EntityPaleSpider extends fathertoast.specialmobs.entity.spider.Entity_SpecialSpider {
+  public static fathertoast.specialmobs.bestiary.BestiaryInfo GET_BESTIARY_INFO();
+  public static void BUILD_LOOT_TABLE(fathertoast.specialmobs.loot.LootTableBuilder);
+  public fathertoast.specialmobs.entity.spider.EntityPaleSpider(net.minecraft.world.World);
+  public net.minecraft.util.ResourceLocation[] getDefaultTextures();
+  protected net.minecraft.util.ResourceLocation func_184647_J();
+  protected void adjustTypeAttributes();
+  public void onTypeAttack(net.minecraft.entity.Entity);
+  public fathertoast.specialmobs.entity.spider.EntityPaleSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #53                 // Method fathertoast/specialmobs/entity/spider/Entity_SpecialSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: return
+public class fathertoast.specialmobs.entity.spider.EntityPoisonSpider extends fathertoast.specialmobs.entity.spider.Entity_SpecialSpider {
+  public static fathertoast.specialmobs.bestiary.BestiaryInfo GET_BESTIARY_INFO();
+  public static void BUILD_LOOT_TABLE(fathertoast.specialmobs.loot.LootTableBuilder);
+  public fathertoast.specialmobs.entity.spider.EntityPoisonSpider(net.minecraft.world.World);
+  public net.minecraft.util.ResourceLocation[] getDefaultTextures();
+  protected net.minecraft.util.ResourceLocation func_184647_J();
+  protected void adjustTypeAttributes();
+  public void onTypeAttack(net.minecraft.entity.Entity);
+  public fathertoast.specialmobs.entity.spider.EntityPoisonSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #55                 // Method fathertoast/specialmobs/entity/spider/Entity_SpecialSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: return
+public class fathertoast.specialmobs.entity.spider.EntityWebSpider extends fathertoast.specialmobs.entity.spider.Entity_SpecialSpider {
+  public static fathertoast.specialmobs.bestiary.BestiaryInfo GET_BESTIARY_INFO();
+  public static void BUILD_LOOT_TABLE(fathertoast.specialmobs.loot.LootTableBuilder);
+  public fathertoast.specialmobs.entity.spider.EntityWebSpider(net.minecraft.world.World);
+  public net.minecraft.util.ResourceLocation[] getDefaultTextures();
+  protected net.minecraft.util.ResourceLocation func_184647_J();
+  protected void adjustTypeAttributes();
+  public void onTypeAttack(net.minecraft.entity.Entity);
+  private boolean tryPlaceWeb(net.minecraft.util.math.BlockPos);
+  public void func_70014_b(net.minecraft.nbt.NBTTagCompound);
+  public void func_70037_a(net.minecraft.nbt.NBTTagCompound);
+  public fathertoast.specialmobs.entity.spider.EntityWebSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #64                 // Method fathertoast/specialmobs/entity/spider/Entity_SpecialSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: return
+public class fathertoast.specialmobs.entity.spider.EntityWitchSpider extends fathertoast.specialmobs.entity.spider.Entity_SpecialSpider {
+  public static fathertoast.specialmobs.bestiary.BestiaryInfo GET_BESTIARY_INFO();
+  public static void BUILD_LOOT_TABLE(fathertoast.specialmobs.loot.LootTableBuilder);
+  public fathertoast.specialmobs.entity.spider.EntityWitchSpider(net.minecraft.world.World);
+  public net.minecraft.util.ResourceLocation[] getDefaultTextures();
+  protected net.minecraft.util.ResourceLocation func_184647_J();
+  protected void adjustTypeAttributes();
+  public boolean func_70687_e(net.minecraft.potion.PotionEffect);
+  public void onTypeAttack(net.minecraft.entity.Entity);
+  public fathertoast.specialmobs.entity.spider.EntityWitchSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #49                 // Method fathertoast/specialmobs/entity/spider/Entity_SpecialSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: return
+
+## Special Mobs Entity_SpecialCaveSpider <init>, initEntityAI, initTypeAI
+public class fathertoast.specialmobs.entity.cavespider.Entity_SpecialCaveSpider extends net.minecraft.entity.monster.EntityCaveSpider implements fathertoast.specialmobs.entity.ISpecialMob {
+  public fathertoast.specialmobs.entity.cavespider.Entity_SpecialCaveSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #69                 // Method net/minecraft/entity/monster/EntityCaveSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: ldc           #70                 // float 0.7f
+       8: ldc           #71                 // float 0.5f
+      10: invokevirtual #75                 // Method func_70105_a:(FF)V
+      13: return
+  protected void func_184651_r();
+    Code:
+       0: aload_0
+       1: invokespecial #82                 // Method net/minecraft/entity/monster/EntityCaveSpider.func_184651_r:()V
+       4: aload_0
+       5: invokevirtual #85                 // Method initTypeAI:()V
+       8: return
+  protected void initTypeAI();
+    Code:
+       0: return
+
+## Special Mobs EntityBabyCaveSpider <init>
+public class fathertoast.specialmobs.entity.cavespider.EntityBabyCaveSpider extends fathertoast.specialmobs.entity.cavespider.Entity_SpecialCaveSpider {
+  public fathertoast.specialmobs.entity.cavespider.EntityBabyCaveSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #45                 // Method fathertoast/specialmobs/entity/cavespider/Entity_SpecialCaveSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: ldc           #46                 // float 0.6f
+       8: ldc           #47                 // float 0.4f
+      10: invokevirtual #51                 // Method func_70105_a:(FF)V
+      13: aload_0
+      14: invokevirtual #55                 // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      17: ldc           #47                 // float 0.4f
+      19: invokevirtual #61                 // Method fathertoast/specialmobs/entity/SpecialMobData.setBaseScale:(F)V
+      22: return
+
+## Special Mobs cave spiders without a size of their own (signatures and <init>)
+public class fathertoast.specialmobs.entity.cavespider.EntityFlyingCaveSpider extends fathertoast.specialmobs.entity.cavespider.Entity_SpecialCaveSpider {
+  public static fathertoast.specialmobs.bestiary.BestiaryInfo GET_BESTIARY_INFO();
+  public static void BUILD_LOOT_TABLE(fathertoast.specialmobs.loot.LootTableBuilder);
+  public fathertoast.specialmobs.entity.cavespider.EntityFlyingCaveSpider(net.minecraft.world.World);
+  public net.minecraft.util.ResourceLocation[] getDefaultTextures();
+  protected net.minecraft.util.ResourceLocation func_184647_J();
+  protected void adjustTypeAttributes();
+  public void func_70636_d();
+  public fathertoast.specialmobs.entity.cavespider.EntityFlyingCaveSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #53                 // Method fathertoast/specialmobs/entity/cavespider/Entity_SpecialCaveSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: return
+public class fathertoast.specialmobs.entity.cavespider.EntityMotherCaveSpider extends fathertoast.specialmobs.entity.cavespider.Entity_SpecialCaveSpider {
+  public static fathertoast.specialmobs.bestiary.BestiaryInfo GET_BESTIARY_INFO();
+  public static void BUILD_LOOT_TABLE(fathertoast.specialmobs.loot.LootTableBuilder);
+  public fathertoast.specialmobs.entity.cavespider.EntityMotherCaveSpider(net.minecraft.world.World);
+  public net.minecraft.util.ResourceLocation[] getDefaultTextures();
+  protected net.minecraft.util.ResourceLocation func_184647_J();
+  protected void adjustTypeAttributes();
+  public void func_70645_a(net.minecraft.util.DamageSource);
+  public void func_70014_b(net.minecraft.nbt.NBTTagCompound);
+  public void func_70037_a(net.minecraft.nbt.NBTTagCompound);
+  public fathertoast.specialmobs.entity.cavespider.EntityMotherCaveSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #74                 // Method fathertoast/specialmobs/entity/cavespider/Entity_SpecialCaveSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: return
+public class fathertoast.specialmobs.entity.cavespider.EntityWebCaveSpider extends fathertoast.specialmobs.entity.cavespider.Entity_SpecialCaveSpider {
+  public static fathertoast.specialmobs.bestiary.BestiaryInfo GET_BESTIARY_INFO();
+  public static void BUILD_LOOT_TABLE(fathertoast.specialmobs.loot.LootTableBuilder);
+  public fathertoast.specialmobs.entity.cavespider.EntityWebCaveSpider(net.minecraft.world.World);
+  public net.minecraft.util.ResourceLocation[] getDefaultTextures();
+  protected net.minecraft.util.ResourceLocation func_184647_J();
+  protected void adjustTypeAttributes();
+  public void onTypeAttack(net.minecraft.entity.Entity);
+  private boolean tryPlaceWeb(net.minecraft.util.math.BlockPos);
+  public void func_70014_b(net.minecraft.nbt.NBTTagCompound);
+  public void func_70037_a(net.minecraft.nbt.NBTTagCompound);
+  public fathertoast.specialmobs.entity.cavespider.EntityWebCaveSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #64                 // Method fathertoast/specialmobs/entity/cavespider/Entity_SpecialCaveSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: return
+public class fathertoast.specialmobs.entity.cavespider.EntityWitchCaveSpider extends fathertoast.specialmobs.entity.cavespider.Entity_SpecialCaveSpider {
+  public static fathertoast.specialmobs.bestiary.BestiaryInfo GET_BESTIARY_INFO();
+  public static void BUILD_LOOT_TABLE(fathertoast.specialmobs.loot.LootTableBuilder);
+  public fathertoast.specialmobs.entity.cavespider.EntityWitchCaveSpider(net.minecraft.world.World);
+  public net.minecraft.util.ResourceLocation[] getDefaultTextures();
+  protected net.minecraft.util.ResourceLocation func_184647_J();
+  protected void adjustTypeAttributes();
+  public boolean func_70687_e(net.minecraft.potion.PotionEffect);
+  public void onTypeAttack(net.minecraft.entity.Entity);
+  public fathertoast.specialmobs.entity.cavespider.EntityWitchCaveSpider(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #49                 // Method fathertoast/specialmobs/entity/cavespider/Entity_SpecialCaveSpider."<init>":(Lnet/minecraft/world/World;)V
+       5: return
+
+## Special Mobs Entity_SpecialZombie setCombatTask
+public class fathertoast.specialmobs.entity.zombie.Entity_SpecialZombie extends net.minecraft.entity.monster.EntityZombie implements fathertoast.specialmobs.entity.ISpecialMob,net.minecraft.entity.IRangedAttackMob {
+  public void setCombatTask();
+    Code:
+       0: aload_0
+       1: getfield      #193                // Field field_70170_p:Lnet/minecraft/world/World;
+       4: ifnull        118
+       7: aload_0
+       8: getfield      #193                // Field field_70170_p:Lnet/minecraft/world/World;
+      11: getfield      #199                // Field net/minecraft/world/World.field_72995_K:Z
+      14: ifne          118
+      17: aload_0
+      18: getfield      #95                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      21: aload_0
+      22: getfield      #201                // Field currentAttackAI:Lnet/minecraft/entity/ai/EntityAIBase;
+      25: invokevirtual #205                // Method net/minecraft/entity/ai/EntityAITasks.func_85156_a:(Lnet/minecraft/entity/ai/EntityAIBase;)V
+      28: aload_0
+      29: invokevirtual #132                // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      32: astore_1
+      33: aload_0
+      34: invokevirtual #209                // Method func_184614_ca:()Lnet/minecraft/item/ItemStack;
+      37: astore_2
+      38: aload_1
+      39: getfield      #156                // Field fathertoast/specialmobs/entity/SpecialMobData.rangedAttackMaxRange:F
+      42: fconst_0
+      43: fcmpl
+      44: ifle          92
+      47: aload_2
+      48: invokevirtual #215                // Method net/minecraft/item/ItemStack.func_190926_b:()Z
+      51: ifne          92
+      54: aload_2
+      55: invokevirtual #219                // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+      58: instanceof    #221                // class net/minecraft/item/ItemBow
+      61: ifeq          92
+      64: aload_0
+      65: new           #223                // class net/minecraft/entity/ai/EntityAIAttackRangedBow
+      68: dup
+      69: aload_0
+      70: aload_1
+      71: getfield      #146                // Field fathertoast/specialmobs/entity/SpecialMobData.rangedWalkSpeed:F
+      74: f2d
+      75: aload_1
+      76: getfield      #149                // Field fathertoast/specialmobs/entity/SpecialMobData.rangedAttackCooldown:I
+      79: aload_1
+      80: getfield      #156                // Field fathertoast/specialmobs/entity/SpecialMobData.rangedAttackMaxRange:F
+      83: invokespecial #226                // Method net/minecraft/entity/ai/EntityAIAttackRangedBow."<init>":(Lnet/minecraft/entity/monster/EntityMob;DIF)V
+      86: putfield      #201                // Field currentAttackAI:Lnet/minecraft/entity/ai/EntityAIBase;
+      89: goto          106
+      92: aload_0
+      93: new           #228                // class net/minecraft/entity/ai/EntityAIZombieAttack
+      96: dup
+      97: aload_0
+      98: dconst_1
+      99: iconst_0
+     100: invokespecial #231                // Method net/minecraft/entity/ai/EntityAIZombieAttack."<init>":(Lnet/minecraft/entity/monster/EntityZombie;DZ)V
+     103: putfield      #201                // Field currentAttackAI:Lnet/minecraft/entity/ai/EntityAIBase;
+     106: aload_0
+     107: getfield      #95                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     110: iconst_2
+     111: aload_0
+     112: getfield      #201                // Field currentAttackAI:Lnet/minecraft/entity/ai/EntityAIBase;
+     115: invokevirtual #106                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     118: return
+
+## Special Mobs EntityGiantZombie <init>
+public class fathertoast.specialmobs.entity.zombie.EntityGiantZombie extends fathertoast.specialmobs.entity.zombie.Entity_SpecialZombie {
+  public fathertoast.specialmobs.entity.zombie.EntityGiantZombie(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #44                 // Method fathertoast/specialmobs/entity/zombie/Entity_SpecialZombie."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: fconst_1
+       7: putfield      #48                 // Field field_70138_W:F
+      10: aload_0
+      11: ldc           #49                 // float 0.9f
+      13: ldc           #50                 // float 2.7f
+      15: invokevirtual #54                 // Method func_70105_a:(FF)V
+      18: aload_0
+      19: fconst_1
+      20: invokevirtual #58                 // Method func_146069_a:(F)V
+      23: aload_0
+      24: invokevirtual #62                 // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      27: ldc           #63                 // float 1.5f
+      29: invokevirtual #68                 // Method fathertoast/specialmobs/entity/SpecialMobData.setBaseScale:(F)V
+      32: return
+
+## Special Mobs Entity_SpecialSkeleton <init>, setCollisionSize, setCombatTask (func_85036_m)
+public class fathertoast.specialmobs.entity.skeleton.Entity_SpecialSkeleton extends net.minecraft.entity.monster.EntitySkeleton implements fathertoast.specialmobs.entity.ISpecialMob {
+  public fathertoast.specialmobs.entity.skeleton.Entity_SpecialSkeleton(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #90                 // Method net/minecraft/entity/monster/EntitySkeleton."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: fconst_1
+       7: invokevirtual #94                 // Method setCollisionSize:(F)V
+      10: return
+  protected void setCollisionSize(float);
+    Code:
+       0: aload_0
+       1: ldc           #99                 // float 0.6f
+       3: fload_1
+       4: fmul
+       5: ldc           #100                // float 1.99f
+       7: fload_1
+       8: fmul
+       9: invokevirtual #104                // Method func_70105_a:(FF)V
+      12: return
+  public void func_85036_m();
+    Code:
+       0: aload_0
+       1: getfield      #190                // Field field_70170_p:Lnet/minecraft/world/World;
+       4: ifnull        120
+       7: aload_0
+       8: getfield      #190                // Field field_70170_p:Lnet/minecraft/world/World;
+      11: getfield      #196                // Field net/minecraft/world/World.field_72995_K:Z
+      14: ifne          120
+      17: aload_0
+      18: getfield      #200                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      21: aload_0
+      22: getfield      #202                // Field currentAttackAI:Lnet/minecraft/entity/ai/EntityAIBase;
+      25: invokevirtual #208                // Method net/minecraft/entity/ai/EntityAITasks.func_85156_a:(Lnet/minecraft/entity/ai/EntityAIBase;)V
+      28: aload_0
+      29: invokevirtual #113                // Method getSpecialData:()Lfathertoast/specialmobs/entity/SpecialMobData;
+      32: astore_1
+      33: aload_0
+      34: invokevirtual #212                // Method func_184614_ca:()Lnet/minecraft/item/ItemStack;
+      37: astore_2
+      38: aload_1
+      39: getfield      #135                // Field fathertoast/specialmobs/entity/SpecialMobData.rangedAttackMaxRange:F
+      42: fconst_0
+      43: fcmpl
+      44: ifle          92
+      47: aload_2
+      48: invokevirtual #218                // Method net/minecraft/item/ItemStack.func_190926_b:()Z
+      51: ifne          92
+      54: aload_2
+      55: invokevirtual #222                // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+      58: instanceof    #224                // class net/minecraft/item/ItemBow
+      61: ifeq          92
+      64: aload_0
+      65: new           #226                // class net/minecraft/entity/ai/EntityAIAttackRangedBow
+      68: dup
+      69: aload_0
+      70: aload_1
+      71: getfield      #125                // Field fathertoast/specialmobs/entity/SpecialMobData.rangedWalkSpeed:F
+      74: f2d
+      75: aload_1
+      76: getfield      #128                // Field fathertoast/specialmobs/entity/SpecialMobData.rangedAttackCooldown:I
+      79: aload_1
+      80: getfield      #135                // Field fathertoast/specialmobs/entity/SpecialMobData.rangedAttackMaxRange:F
+      83: invokespecial #229                // Method net/minecraft/entity/ai/EntityAIAttackRangedBow."<init>":(Lnet/minecraft/entity/monster/EntityMob;DIF)V
+      86: putfield      #202                // Field currentAttackAI:Lnet/minecraft/entity/ai/EntityAIBase;
+      89: goto          108
+      92: aload_0
+      93: new           #231                // class fathertoast/specialmobs/ai/EntityAISpecialAttackMelee
+      96: dup
+      97: aload_0
+      98: ldc2_w        #232                // double 1.2d
+     101: iconst_0
+     102: invokespecial #236                // Method fathertoast/specialmobs/ai/EntityAISpecialAttackMelee."<init>":(Lnet/minecraft/entity/EntityCreature;DZ)V
+     105: putfield      #202                // Field currentAttackAI:Lnet/minecraft/entity/ai/EntityAIBase;
+     108: aload_0
+     109: getfield      #200                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     112: iconst_4
+     113: aload_0
+     114: getfield      #202                // Field currentAttackAI:Lnet/minecraft/entity/ai/EntityAIBase;
+     117: invokevirtual #240                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     120: return
+
+## Special Mobs EntityGiantSkeleton setCollisionSize
+public class fathertoast.specialmobs.entity.skeleton.EntityGiantSkeleton extends fathertoast.specialmobs.entity.skeleton.Entity_SpecialSkeleton {
+  protected void setCollisionSize(float);
+    Code:
+       0: aload_0
+       1: ldc           #65                 // float 0.9f
+       3: fload_1
+       4: fmul
+       5: ldc           #66                 // float 2.7f
+       7: fload_1
+       8: fmul
+       9: invokevirtual #70                 // Method func_70105_a:(FF)V
+      12: return
+
+## Special Mobs EntitySpitfireSkeleton setCollisionSize
+public class fathertoast.specialmobs.entity.skeleton.EntitySpitfireSkeleton extends fathertoast.specialmobs.entity.skeleton.Entity_SpecialSkeleton {
+  protected void setCollisionSize(float);
+    Code:
+       0: aload_0
+       1: ldc           #85                 // float 0.9f
+       3: fload_1
+       4: fmul
+       5: ldc           #86                 // float 2.7f
+       7: fload_1
+       8: fmul
+       9: invokevirtual #90                 // Method func_70105_a:(FF)V
+      12: return
+
+## Special Mobs EntityAISpecialAttackMelee header and signatures: no getAttackReachSqr
+public class fathertoast.specialmobs.ai.EntityAISpecialAttackMelee<T extends net.minecraft.entity.EntityCreature & net.minecraft.entity.IRangedAttackMob> extends net.minecraft.entity.ai.EntityAIAttackMelee {
+  public fathertoast.specialmobs.ai.EntityAISpecialAttackMelee(T, double, boolean);
+  public void func_75251_c();
+  public void func_75249_e();
+
+## Special Mobs SpecialMobData setBaseScale, nextScale (render scale only)
+  public void setBaseScale(float);
+    Code:
+       0: aload_0
+       1: fload_1
+       2: putfield      #174                // Field baseScale:F
+       5: aload_0
+       6: aload_0
+       7: invokespecial #196                // Method nextScale:()F
+      10: invokevirtual #432                // Method setRenderScale:(F)V
+      13: return
+  private float nextScale();
+    Code:
+       0: invokestatic  #437                // Method fathertoast/specialmobs/config/Config.get:()Lfathertoast/specialmobs/config/Config;
+       3: getfield      #440                // Field fathertoast/specialmobs/config/Config.GENERAL:Lfathertoast/specialmobs/config/Config$GENERAL;
+       6: getfield      #443                // Field fathertoast/specialmobs/config/Config$GENERAL.RANDOM_SCALING:F
+       9: fconst_0
+      10: fcmpl
+      11: ifle          46
+      14: aload_0
+      15: getfield      #174                // Field baseScale:F
+      18: fconst_1
+      19: aload_0
+      20: getfield      #170                // Field theEntity:Lnet/minecraft/entity/EntityLiving;
+      23: invokevirtual #447                // Method net/minecraft/entity/EntityLiving.func_70681_au:()Ljava/util/Random;
+      26: invokevirtual #452                // Method java/util/Random.nextFloat:()F
+      29: ldc_w         #453                // float 0.5f
+      32: fsub
+      33: invokestatic  #437                // Method fathertoast/specialmobs/config/Config.get:()Lfathertoast/specialmobs/config/Config;
+      36: getfield      #440                // Field fathertoast/specialmobs/config/Config.GENERAL:Lfathertoast/specialmobs/config/Config$GENERAL;
+      39: getfield      #443                // Field fathertoast/specialmobs/config/Config$GENERAL.RANDOM_SCALING:F
+      42: fmul
+      43: fadd
+      44: fmul
+      45: freturn
+      46: aload_0
+      47: getfield      #174                // Field baseScale:F
+      50: freturn
+
+## Ancient Beasts EntityBoulderer <init> (no initEntityAI: the zombie's)
+public class com.unoriginal.ancientbeasts.entity.Entities.EntityBoulderer extends net.minecraft.entity.monster.EntityZombie {
+  public com.unoriginal.ancientbeasts.entity.Entities.EntityBoulderer(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #23                 // Method net/minecraft/entity/monster/EntityZombie."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: ldc           #24                 // float 0.8f
+       8: ldc           #25                 // float 1.95f
+      10: invokevirtual #29                 // Method func_70105_a:(FF)V
+      13: return
+
+## Ancient Beasts EntityFrostWalker <init>, initEntityAI
+public class com.unoriginal.ancientbeasts.entity.Entities.EntityFrostWalker extends net.minecraft.entity.monster.EntityMob implements com.unoriginal.ancientbeasts.util.IMagicUser {
+  public com.unoriginal.ancientbeasts.entity.Entities.EntityFrostWalker(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #33                 // Method net/minecraft/entity/monster/EntityMob."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: ldc           #34                 // float 0.8f
+       8: fconst_2
+       9: invokevirtual #38                 // Method func_70105_a:(FF)V
+      12: return
+  protected void func_184651_r();
+    Code:
+       0: aload_0
+       1: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+       4: iconst_0
+       5: new           #50                 // class net/minecraft/entity/ai/EntityAISwimming
+       8: dup
+       9: aload_0
+      10: invokespecial #53                 // Method net/minecraft/entity/ai/EntityAISwimming."<init>":(Lnet/minecraft/entity/EntityLiving;)V
+      13: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      16: aload_0
+      17: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      20: iconst_2
+      21: new           #12                 // class com/unoriginal/ancientbeasts/entity/Entities/EntityFrostWalker$AIFrostWalkerFastMelee
+      24: dup
+      25: aload_0
+      26: ldc2_w        #60                 // double 2.0d
+      29: iconst_0
+      30: invokespecial #64                 // Method com/unoriginal/ancientbeasts/entity/Entities/EntityFrostWalker$AIFrostWalkerFastMelee."<init>":(Lcom/unoriginal/ancientbeasts/entity/Entities/EntityFrostWalker;DZ)V
+      33: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      36: aload_0
+      37: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      40: iconst_3
+      41: new           #9                  // class com/unoriginal/ancientbeasts/entity/Entities/EntityFrostWalker$AIFrostWalkerSlowMelee
+      44: dup
+      45: aload_0
+      46: dconst_1
+      47: iconst_0
+      48: invokespecial #65                 // Method com/unoriginal/ancientbeasts/entity/Entities/EntityFrostWalker$AIFrostWalkerSlowMelee."<init>":(Lcom/unoriginal/ancientbeasts/entity/Entities/EntityFrostWalker;DZ)V
+      51: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      54: aload_0
+      55: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      58: iconst_3
+      59: new           #15                 // class com/unoriginal/ancientbeasts/entity/Entities/EntityFrostWalker$EntityAICastIceMagic
+      62: dup
+      63: aload_0
+      64: aload_0
+      65: invokespecial #68                 // Method com/unoriginal/ancientbeasts/entity/Entities/EntityFrostWalker$EntityAICastIceMagic."<init>":(Lcom/unoriginal/ancientbeasts/entity/Entities/EntityFrostWalker;Lcom/unoriginal/ancientbeasts/entity/Entities/EntityFrostWalker;)V
+      68: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      71: aload_0
+      72: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      75: iconst_3
+      76: new           #70                 // class com/unoriginal/ancientbeasts/entity/Entities/magic/CastingMagic
+      79: dup
+      80: aload_0
+      81: invokespecial #71                 // Method com/unoriginal/ancientbeasts/entity/Entities/magic/CastingMagic."<init>":(Lnet/minecraft/entity/EntityLiving;)V
+      84: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      87: aload_0
+      88: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      91: iconst_4
+      92: new           #73                 // class net/minecraft/entity/ai/EntityAIAvoidEntity
+      95: dup
+      96: aload_0
+      97: ldc           #75                 // class net/minecraft/entity/player/EntityPlayer
+      99: ldc           #76                 // float 8.0f
+     101: dconst_1
+     102: ldc2_w        #77                 // double 1.25d
+     105: invokespecial #81                 // Method net/minecraft/entity/ai/EntityAIAvoidEntity."<init>":(Lnet/minecraft/entity/EntityCreature;Ljava/lang/Class;FDD)V
+     108: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     111: aload_0
+     112: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     115: iconst_4
+     116: new           #73                 // class net/minecraft/entity/ai/EntityAIAvoidEntity
+     119: dup
+     120: aload_0
+     121: ldc           #83                 // class net/minecraft/entity/monster/EntityIronGolem
+     123: ldc           #76                 // float 8.0f
+     125: dconst_1
+     126: ldc2_w        #77                 // double 1.25d
+     129: invokespecial #81                 // Method net/minecraft/entity/ai/EntityAIAvoidEntity."<init>":(Lnet/minecraft/entity/EntityCreature;Ljava/lang/Class;FDD)V
+     132: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     135: aload_0
+     136: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     139: iconst_5
+     140: new           #73                 // class net/minecraft/entity/ai/EntityAIAvoidEntity
+     143: dup
+     144: aload_0
+     145: ldc           #85                 // class com/unoriginal/ancientbeasts/entity/Entities/EntityNetherhound
+     147: ldc           #86                 // float 10.0f
+     149: ldc2_w        #87                 // double 0.8d
+     152: dconst_1
+     153: invokespecial #81                 // Method net/minecraft/entity/ai/EntityAIAvoidEntity."<init>":(Lnet/minecraft/entity/EntityCreature;Ljava/lang/Class;FDD)V
+     156: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     159: aload_0
+     160: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     163: iconst_5
+     164: new           #90                 // class net/minecraft/entity/ai/EntityAIMoveTowardsRestriction
+     167: dup
+     168: aload_0
+     169: dconst_1
+     170: invokespecial #93                 // Method net/minecraft/entity/ai/EntityAIMoveTowardsRestriction."<init>":(Lnet/minecraft/entity/EntityCreature;D)V
+     173: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     176: aload_0
+     177: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     180: bipush        7
+     182: new           #95                 // class net/minecraft/entity/ai/EntityAIWanderAvoidWater
+     185: dup
+     186: aload_0
+     187: dconst_1
+     188: invokespecial #96                 // Method net/minecraft/entity/ai/EntityAIWanderAvoidWater."<init>":(Lnet/minecraft/entity/EntityCreature;D)V
+     191: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     194: aload_0
+     195: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     198: bipush        8
+     200: new           #98                 // class net/minecraft/entity/ai/EntityAIWatchClosest
+     203: dup
+     204: aload_0
+     205: ldc           #75                 // class net/minecraft/entity/player/EntityPlayer
+     207: ldc           #76                 // float 8.0f
+     209: invokespecial #101                // Method net/minecraft/entity/ai/EntityAIWatchClosest."<init>":(Lnet/minecraft/entity/EntityLiving;Ljava/lang/Class;F)V
+     212: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     215: aload_0
+     216: getfield      #48                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     219: bipush        8
+     221: new           #103                // class net/minecraft/entity/ai/EntityAILookIdle
+     224: dup
+     225: aload_0
+     226: invokespecial #104                // Method net/minecraft/entity/ai/EntityAILookIdle."<init>":(Lnet/minecraft/entity/EntityLiving;)V
+     229: invokevirtual #59                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     232: aload_0
+     233: invokevirtual #107                // Method func_175456_n:()V
+     236: return
+
+## Ancient Beasts EntityFrostWalker$AIFrostWalkerSlowMelee header and signatures
+class com.unoriginal.ancientbeasts.entity.Entities.EntityFrostWalker$AIFrostWalkerSlowMelee extends net.minecraft.entity.ai.EntityAIAttackMelee {
+  public com.unoriginal.ancientbeasts.entity.Entities.EntityFrostWalker$AIFrostWalkerSlowMelee(com.unoriginal.ancientbeasts.entity.Entities.EntityFrostWalker, double, boolean);
+  public void func_75249_e();
+  public void func_75251_c();
+  public void func_75246_d();
+
+## Ancient Beasts EntityFrostWalker$AIFrostWalkerFastMelee header and signatures
+class com.unoriginal.ancientbeasts.entity.Entities.EntityFrostWalker$AIFrostWalkerFastMelee extends com.unoriginal.ancientbeasts.entity.Entities.EntityFrostWalker$AIFrostWalkerSlowMelee {
+  public com.unoriginal.ancientbeasts.entity.Entities.EntityFrostWalker$AIFrostWalkerFastMelee(com.unoriginal.ancientbeasts.entity.Entities.EntityFrostWalker, double, boolean);
+  public boolean func_75250_a();
+
+## Ancient Beasts EntityGiant <init>, initEntityAI
+public class com.unoriginal.ancientbeasts.entity.Entities.EntityGiant extends net.minecraft.entity.monster.EntityMob {
+  public com.unoriginal.ancientbeasts.entity.Entities.EntityGiant(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #23                 // Method net/minecraft/entity/monster/EntityMob."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: ldc           #24                 // float 2.8f
+       8: ldc           #25                 // float 7.2f
+      10: invokevirtual #29                 // Method func_70105_a:(FF)V
+      13: aload_0
+      14: fconst_2
+      15: putfield      #33                 // Field field_70138_W:F
+      18: aload_0
+      19: bipush        50
+      21: putfield      #36                 // Field field_70728_aV:I
+      24: return
+  protected void func_184651_r();
+    Code:
+       0: aload_0
+       1: getfield      #46                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+       4: iconst_0
+       5: new           #48                 // class net/minecraft/entity/ai/EntityAISwimming
+       8: dup
+       9: aload_0
+      10: invokespecial #51                 // Method net/minecraft/entity/ai/EntityAISwimming."<init>":(Lnet/minecraft/entity/EntityLiving;)V
+      13: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      16: aload_0
+      17: getfield      #46                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      20: iconst_4
+      21: new           #7                  // class com/unoriginal/ancientbeasts/entity/Entities/EntityGiant$EntityAIGiantMelee
+      24: dup
+      25: aload_0
+      26: dconst_1
+      27: iconst_0
+      28: invokespecial #60                 // Method com/unoriginal/ancientbeasts/entity/Entities/EntityGiant$EntityAIGiantMelee."<init>":(Lnet/minecraft/entity/EntityCreature;DZ)V
+      31: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      34: aload_0
+      35: getfield      #46                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      38: iconst_5
+      39: new           #62                 // class net/minecraft/entity/ai/EntityAIMoveTowardsRestriction
+      42: dup
+      43: aload_0
+      44: dconst_1
+      45: invokespecial #65                 // Method net/minecraft/entity/ai/EntityAIMoveTowardsRestriction."<init>":(Lnet/minecraft/entity/EntityCreature;D)V
+      48: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      51: aload_0
+      52: getfield      #46                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      55: bipush        7
+      57: new           #67                 // class net/minecraft/entity/ai/EntityAIWanderAvoidWater
+      60: dup
+      61: aload_0
+      62: dconst_1
+      63: invokespecial #68                 // Method net/minecraft/entity/ai/EntityAIWanderAvoidWater."<init>":(Lnet/minecraft/entity/EntityCreature;D)V
+      66: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      69: aload_0
+      70: getfield      #46                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      73: bipush        8
+      75: new           #70                 // class net/minecraft/entity/ai/EntityAIWatchClosest
+      78: dup
+      79: aload_0
+      80: ldc           #72                 // class net/minecraft/entity/player/EntityPlayer
+      82: ldc           #73                 // float 8.0f
+      84: invokespecial #76                 // Method net/minecraft/entity/ai/EntityAIWatchClosest."<init>":(Lnet/minecraft/entity/EntityLiving;Ljava/lang/Class;F)V
+      87: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      90: aload_0
+      91: getfield      #46                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      94: bipush        8
+      96: new           #78                 // class net/minecraft/entity/ai/EntityAILookIdle
+      99: dup
+     100: aload_0
+     101: invokespecial #79                 // Method net/minecraft/entity/ai/EntityAILookIdle."<init>":(Lnet/minecraft/entity/EntityLiving;)V
+     104: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     107: aload_0
+     108: getfield      #46                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     111: bipush        6
+     113: new           #81                 // class net/minecraft/entity/ai/EntityAIMoveThroughVillage
+     116: dup
+     117: aload_0
+     118: dconst_1
+     119: iconst_0
+     120: invokespecial #82                 // Method net/minecraft/entity/ai/EntityAIMoveThroughVillage."<init>":(Lnet/minecraft/entity/EntityCreature;DZ)V
+     123: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     126: aload_0
+     127: getfield      #85                 // Field field_70715_bh:Lnet/minecraft/entity/ai/EntityAITasks;
+     130: iconst_1
+     131: new           #87                 // class net/minecraft/entity/ai/EntityAIHurtByTarget
+     134: dup
+     135: aload_0
+     136: iconst_1
+     137: iconst_1
+     138: anewarray     #89                 // class java/lang/Class
+     141: dup
+     142: iconst_0
+     143: ldc           #91                 // class net/minecraft/entity/monster/EntityZombie
+     145: aastore
+     146: invokespecial #94                 // Method net/minecraft/entity/ai/EntityAIHurtByTarget."<init>":(Lnet/minecraft/entity/EntityCreature;Z[Ljava/lang/Class;)V
+     149: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     152: aload_0
+     153: getfield      #85                 // Field field_70715_bh:Lnet/minecraft/entity/ai/EntityAITasks;
+     156: iconst_2
+     157: new           #96                 // class net/minecraft/entity/ai/EntityAINearestAttackableTarget
+     160: dup
+     161: aload_0
+     162: ldc           #72                 // class net/minecraft/entity/player/EntityPlayer
+     164: iconst_1
+     165: invokespecial #99                 // Method net/minecraft/entity/ai/EntityAINearestAttackableTarget."<init>":(Lnet/minecraft/entity/EntityCreature;Ljava/lang/Class;Z)V
+     168: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     171: aload_0
+     172: getfield      #85                 // Field field_70715_bh:Lnet/minecraft/entity/ai/EntityAITasks;
+     175: iconst_3
+     176: new           #96                 // class net/minecraft/entity/ai/EntityAINearestAttackableTarget
+     179: dup
+     180: aload_0
+     181: ldc           #101                // class net/minecraft/entity/passive/EntityVillager
+     183: iconst_0
+     184: invokespecial #99                 // Method net/minecraft/entity/ai/EntityAINearestAttackableTarget."<init>":(Lnet/minecraft/entity/EntityCreature;Ljava/lang/Class;Z)V
+     187: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     190: aload_0
+     191: getfield      #85                 // Field field_70715_bh:Lnet/minecraft/entity/ai/EntityAITasks;
+     194: iconst_3
+     195: new           #96                 // class net/minecraft/entity/ai/EntityAINearestAttackableTarget
+     198: dup
+     199: aload_0
+     200: ldc           #103                // class net/minecraft/entity/monster/EntityIronGolem
+     202: iconst_1
+     203: invokespecial #99                 // Method net/minecraft/entity/ai/EntityAINearestAttackableTarget."<init>":(Lnet/minecraft/entity/EntityCreature;Ljava/lang/Class;Z)V
+     206: invokevirtual #57                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     209: return
+
+## Ancient Beasts EntityGiant$EntityAIGiantMelee getAttackReachSqr
+class com.unoriginal.ancientbeasts.entity.Entities.EntityGiant$EntityAIGiantMelee extends net.minecraft.entity.ai.EntityAIAttackMelee {
+  protected double func_179512_a(net.minecraft.entity.EntityLivingBase);
+    Code:
+       0: aload_0
+       1: getfield      #33                 // Field field_75441_b:Lnet/minecraft/entity/EntityCreature;
+       4: getfield      #53                 // Field net/minecraft/entity/EntityCreature.field_70130_N:F
+       7: ldc           #54                 // float 1.9f
+       9: fmul
+      10: aload_0
+      11: getfield      #33                 // Field field_75441_b:Lnet/minecraft/entity/EntityCreature;
+      14: getfield      #53                 // Field net/minecraft/entity/EntityCreature.field_70130_N:F
+      17: fmul
+      18: ldc           #54                 // float 1.9f
+      20: fmul
+      21: aload_1
+      22: getfield      #57                 // Field net/minecraft/entity/EntityLivingBase.field_70130_N:F
+      25: fadd
+      26: f2d
+      27: dreturn
+}
+
+## Ice and Fire EntityGorgon <init>, initEntityAI
+public class com.github.alexthe666.iceandfire.entity.EntityGorgon extends net.minecraft.entity.monster.EntityMob implements net.ilexiconn.llibrary.server.animation.IAnimatedEntity,com.github.alexthe666.iceandfire.entity.IVillagerFear,com.github.alexthe666.iceandfire.entity.IAnimalFear,com.github.alexthe666.iceandfire.entity.IHumanoid {
+  public com.github.alexthe666.iceandfire.entity.EntityGorgon(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #38                 // Method net/minecraft/entity/monster/EntityMob."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: ldc           #39                 // float 0.8f
+       8: ldc           #40                 // float 1.99f
+      10: invokevirtual #44                 // Method func_70105_a:(FF)V
+      13: bipush        30
+      15: invokestatic  #50                 // Method net/ilexiconn/llibrary/server/animation/Animation.create:(I)Lnet/ilexiconn/llibrary/server/animation/Animation;
+      18: putstatic     #52                 // Field ANIMATION_SCARE:Lnet/ilexiconn/llibrary/server/animation/Animation;
+      21: bipush        10
+      23: invokestatic  #50                 // Method net/ilexiconn/llibrary/server/animation/Animation.create:(I)Lnet/ilexiconn/llibrary/server/animation/Animation;
+      26: putstatic     #54                 // Field ANIMATION_HIT:Lnet/ilexiconn/llibrary/server/animation/Animation;
+      29: return
+  protected void func_184651_r();
+    Code:
+       0: aload_0
+       1: getfield      #228                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+       4: iconst_1
+       5: new           #230                // class net/minecraft/entity/ai/EntityAISwimming
+       8: dup
+       9: aload_0
+      10: invokespecial #233                // Method net/minecraft/entity/ai/EntityAISwimming."<init>":(Lnet/minecraft/entity/EntityLiving;)V
+      13: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      16: aload_0
+      17: getfield      #228                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      20: iconst_2
+      21: new           #241                // class net/minecraft/entity/ai/EntityAIRestrictSun
+      24: dup
+      25: aload_0
+      26: invokespecial #244                // Method net/minecraft/entity/ai/EntityAIRestrictSun."<init>":(Lnet/minecraft/entity/EntityCreature;)V
+      29: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      32: aload_0
+      33: getfield      #228                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      36: iconst_3
+      37: new           #246                // class net/minecraft/entity/ai/EntityAIFleeSun
+      40: dup
+      41: aload_0
+      42: dconst_1
+      43: invokespecial #249                // Method net/minecraft/entity/ai/EntityAIFleeSun."<init>":(Lnet/minecraft/entity/EntityCreature;D)V
+      46: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      49: aload_0
+      50: getfield      #228                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      53: iconst_3
+      54: aload_0
+      55: new           #251                // class com/github/alexthe666/iceandfire/entity/ai/GorgonAIStare
+      58: dup
+      59: aload_0
+      60: dconst_1
+      61: ldc           #252                // float 15.0f
+      63: invokespecial #255                // Method com/github/alexthe666/iceandfire/entity/ai/GorgonAIStare."<init>":(Lcom/github/alexthe666/iceandfire/entity/EntityGorgon;DF)V
+      66: dup_x1
+      67: putfield      #257                // Field aiStare:Lcom/github/alexthe666/iceandfire/entity/ai/GorgonAIStare;
+      70: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      73: aload_0
+      74: getfield      #228                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      77: iconst_3
+      78: aload_0
+      79: new           #259                // class net/minecraft/entity/ai/EntityAIAttackMelee
+      82: dup
+      83: aload_0
+      84: dconst_1
+      85: iconst_0
+      86: invokespecial #262                // Method net/minecraft/entity/ai/EntityAIAttackMelee."<init>":(Lnet/minecraft/entity/EntityCreature;DZ)V
+      89: dup_x1
+      90: putfield      #264                // Field aiMelee:Lnet/minecraft/entity/ai/EntityAIAttackMelee;
+      93: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      96: aload_0
+      97: getfield      #228                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     100: iconst_4
+     101: new           #251                // class com/github/alexthe666/iceandfire/entity/ai/GorgonAIStare
+     104: dup
+     105: aload_0
+     106: dconst_1
+     107: ldc           #252                // float 15.0f
+     109: invokespecial #255                // Method com/github/alexthe666/iceandfire/entity/ai/GorgonAIStare."<init>":(Lcom/github/alexthe666/iceandfire/entity/EntityGorgon;DF)V
+     112: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     115: aload_0
+     116: getfield      #228                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     119: iconst_5
+     120: new           #21                 // class com/github/alexthe666/iceandfire/entity/EntityGorgon$1
+     123: dup
+     124: aload_0
+     125: aload_0
+     126: dconst_1
+     127: invokespecial #267                // Method com/github/alexthe666/iceandfire/entity/EntityGorgon$1."<init>":(Lcom/github/alexthe666/iceandfire/entity/EntityGorgon;Lnet/minecraft/entity/EntityCreature;D)V
+     130: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     133: aload_0
+     134: getfield      #228                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     137: bipush        6
+     139: new           #19                 // class com/github/alexthe666/iceandfire/entity/EntityGorgon$2
+     142: dup
+     143: aload_0
+     144: aload_0
+     145: ldc_w         #269                // class net/minecraft/entity/player/EntityPlayer
+     148: ldc_w         #270                // float 8.0f
+     151: fconst_1
+     152: invokespecial #273                // Method com/github/alexthe666/iceandfire/entity/EntityGorgon$2."<init>":(Lcom/github/alexthe666/iceandfire/entity/EntityGorgon;Lnet/minecraft/entity/EntityLiving;Ljava/lang/Class;FF)V
+     155: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     158: aload_0
+     159: getfield      #228                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     162: bipush        6
+     164: new           #275                // class net/minecraft/entity/ai/EntityAILookIdle
+     167: dup
+     168: aload_0
+     169: invokespecial #276                // Method net/minecraft/entity/ai/EntityAILookIdle."<init>":(Lnet/minecraft/entity/EntityLiving;)V
+     172: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     175: aload_0
+     176: getfield      #279                // Field field_70715_bh:Lnet/minecraft/entity/ai/EntityAITasks;
+     179: iconst_1
+     180: new           #281                // class net/minecraft/entity/ai/EntityAIHurtByTarget
+     183: dup
+     184: aload_0
+     185: iconst_0
+     186: iconst_0
+     187: anewarray     #283                // class java/lang/Class
+     190: invokespecial #286                // Method net/minecraft/entity/ai/EntityAIHurtByTarget."<init>":(Lnet/minecraft/entity/EntityCreature;Z[Ljava/lang/Class;)V
+     193: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     196: aload_0
+     197: getfield      #279                // Field field_70715_bh:Lnet/minecraft/entity/ai/EntityAITasks;
+     200: iconst_2
+     201: new           #288                // class net/minecraft/entity/ai/EntityAINearestAttackableTarget
+     204: dup
+     205: aload_0
+     206: ldc_w         #269                // class net/minecraft/entity/player/EntityPlayer
+     209: iconst_0
+     210: iconst_1
+     211: iconst_0
+     212: new           #17                 // class com/github/alexthe666/iceandfire/entity/EntityGorgon$3
+     215: dup
+     216: aload_0
+     217: invokespecial #291                // Method com/github/alexthe666/iceandfire/entity/EntityGorgon$3."<init>":(Lcom/github/alexthe666/iceandfire/entity/EntityGorgon;)V
+     220: invokespecial #294                // Method net/minecraft/entity/ai/EntityAINearestAttackableTarget."<init>":(Lnet/minecraft/entity/EntityCreature;Ljava/lang/Class;IZZLcom/google/common/base/Predicate;)V
+     223: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     226: aload_0
+     227: getfield      #279                // Field field_70715_bh:Lnet/minecraft/entity/ai/EntityAITasks;
+     230: iconst_3
+     231: new           #288                // class net/minecraft/entity/ai/EntityAINearestAttackableTarget
+     234: dup
+     235: aload_0
+     236: ldc           #133                // class net/minecraft/entity/EntityLiving
+     238: iconst_0
+     239: iconst_1
+     240: iconst_0
+     241: new           #15                 // class com/github/alexthe666/iceandfire/entity/EntityGorgon$4
+     244: dup
+     245: aload_0
+     246: invokespecial #295                // Method com/github/alexthe666/iceandfire/entity/EntityGorgon$4."<init>":(Lcom/github/alexthe666/iceandfire/entity/EntityGorgon;)V
+     249: invokespecial #294                // Method net/minecraft/entity/ai/EntityAINearestAttackableTarget."<init>":(Lnet/minecraft/entity/EntityCreature;Ljava/lang/Class;IZZLcom/google/common/base/Predicate;)V
+     252: invokevirtual #239                // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     255: aload_0
+     256: getfield      #228                // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     259: aload_0
+     260: getfield      #264                // Field aiMelee:Lnet/minecraft/entity/ai/EntityAIAttackMelee;
+     263: invokevirtual #299                // Method net/minecraft/entity/ai/EntityAITasks.func_85156_a:(Lnet/minecraft/entity/ai/EntityAIBase;)V
+     266: return
+
+## Fish's Undead Rising EntityWeta <init>, initEntityAI
+public class com.Fishmod.mod_LavaCow.entities.tameable.EntityWeta extends com.Fishmod.mod_LavaCow.entities.tameable.EntityFishTameable implements com.Fishmod.mod_LavaCow.entities.IAggressive {
+  public com.Fishmod.mod_LavaCow.entities.tameable.EntityWeta(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #17                 // Method com/Fishmod/mod_LavaCow/entities/tameable/EntityFishTameable."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: iconst_0
+       7: putfield      #19                 // Field isAggressive:Z
+      10: aload_0
+      11: iconst_0
+      12: putfield      #21                 // Field attackTimer:I
+      15: aload_0
+      16: ldc           #22                 // float 0.8f
+      18: ldc           #23                 // float 0.5f
+      20: invokevirtual #27                 // Method func_70105_a:(FF)V
+      23: aload_0
+      24: iconst_1
+      25: putfield      #30                 // Field field_70728_aV:I
+      28: return
+  protected void func_184651_r();
+    Code:
+       0: aload_0
+       1: new           #38                 // class com/Fishmod/mod_LavaCow/entities/ai/EntityAIDestroyCrops
+       4: dup
+       5: aload_0
+       6: ldc2_w        #39                 // double 1.1d
+       9: iconst_0
+      10: invokespecial #43                 // Method com/Fishmod/mod_LavaCow/entities/ai/EntityAIDestroyCrops."<init>":(Lnet/minecraft/entity/EntityCreature;DZ)V
+      13: putfield      #45                 // Field DestroyCrops:Lcom/Fishmod/mod_LavaCow/entities/ai/EntityAIDestroyCrops;
+      16: aload_0
+      17: invokespecial #47                 // Method com/Fishmod/mod_LavaCow/entities/tameable/EntityFishTameable.func_184651_r:()V
+      20: aload_0
+      21: getfield      #51                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      24: iconst_1
+      25: new           #53                 // class net/minecraft/entity/ai/EntityAISwimming
+      28: dup
+      29: aload_0
+      30: invokespecial #56                 // Method net/minecraft/entity/ai/EntityAISwimming."<init>":(Lnet/minecraft/entity/EntityLiving;)V
+      33: invokevirtual #62                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      36: aload_0
+      37: getfield      #51                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      40: iconst_2
+      41: new           #64                 // class net/minecraft/entity/ai/EntityAIMate
+      44: dup
+      45: aload_0
+      46: dconst_1
+      47: invokespecial #67                 // Method net/minecraft/entity/ai/EntityAIMate."<init>":(Lnet/minecraft/entity/passive/EntityAnimal;D)V
+      50: invokevirtual #62                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      53: aload_0
+      54: getfield      #51                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      57: iconst_3
+      58: new           #69                 // class net/minecraft/entity/ai/EntityAILeapAtTarget
+      61: dup
+      62: aload_0
+      63: ldc           #70                 // float 0.4f
+      65: invokespecial #73                 // Method net/minecraft/entity/ai/EntityAILeapAtTarget."<init>":(Lnet/minecraft/entity/EntityLiving;F)V
+      68: invokevirtual #62                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      71: aload_0
+      72: getfield      #51                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      75: iconst_3
+      76: new           #75                 // class net/minecraft/entity/ai/EntityAITempt
+      79: dup
+      80: aload_0
+      81: dconst_1
+      82: getstatic     #81                 // Field com/Fishmod/mod_LavaCow/init/FishItems.CANEPORK:Lnet/minecraft/item/Item;
+      85: iconst_0
+      86: invokespecial #84                 // Method net/minecraft/entity/ai/EntityAITempt."<init>":(Lnet/minecraft/entity/EntityCreature;DLnet/minecraft/item/Item;Z)V
+      89: invokevirtual #62                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      92: aload_0
+      93: getfield      #51                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      96: iconst_4
+      97: new           #86                 // class net/minecraft/entity/ai/EntityAIAttackMelee
+     100: dup
+     101: aload_0
+     102: dconst_1
+     103: iconst_0
+     104: invokespecial #87                 // Method net/minecraft/entity/ai/EntityAIAttackMelee."<init>":(Lnet/minecraft/entity/EntityCreature;DZ)V
+     107: invokevirtual #62                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     110: aload_0
+     111: getfield      #51                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     114: iconst_5
+     115: aload_0
+     116: getfield      #45                 // Field DestroyCrops:Lcom/Fishmod/mod_LavaCow/entities/ai/EntityAIDestroyCrops;
+     119: invokevirtual #62                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     122: aload_0
+     123: getfield      #51                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     126: bipush        6
+     128: new           #89                 // class net/minecraft/entity/ai/EntityAIWatchClosest
+     131: dup
+     132: aload_0
+     133: ldc           #91                 // class net/minecraft/entity/player/EntityPlayer
+     135: ldc           #92                 // float 8.0f
+     137: invokespecial #95                 // Method net/minecraft/entity/ai/EntityAIWatchClosest."<init>":(Lnet/minecraft/entity/EntityLiving;Ljava/lang/Class;F)V
+     140: invokevirtual #62                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     143: aload_0
+     144: getfield      #51                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     147: bipush        6
+     149: new           #97                 // class net/minecraft/entity/ai/EntityAILookIdle
+     152: dup
+     153: aload_0
+     154: invokespecial #98                 // Method net/minecraft/entity/ai/EntityAILookIdle."<init>":(Lnet/minecraft/entity/EntityLiving;)V
+     157: invokevirtual #62                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     160: aload_0
+     161: getfield      #101                // Field field_70715_bh:Lnet/minecraft/entity/ai/EntityAITasks;
+     164: iconst_1
+     165: new           #103                // class net/minecraft/entity/ai/EntityAIHurtByTarget
+     168: dup
+     169: aload_0
+     170: iconst_0
+     171: iconst_0
+     172: anewarray     #105                // class java/lang/Class
+     175: invokespecial #108                // Method net/minecraft/entity/ai/EntityAIHurtByTarget."<init>":(Lnet/minecraft/entity/EntityCreature;Z[Ljava/lang/Class;)V
+     178: invokevirtual #62                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     181: aload_0
+     182: invokevirtual #111                // Method func_175456_n:()V
+     185: return
+
+## Fish's Undead Rising EntitySludgeLord <init>, initEntityAI
+public class com.Fishmod.mod_LavaCow.entities.EntitySludgeLord extends net.minecraft.entity.monster.EntityMob {
+  public com.Fishmod.mod_LavaCow.entities.EntitySludgeLord(net.minecraft.world.World);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #19                 // Method net/minecraft/entity/monster/EntityMob."<init>":(Lnet/minecraft/world/World;)V
+       5: aload_0
+       6: iconst_0
+       7: putfield      #21                 // Field isAggressive:Z
+      10: aload_0
+      11: ldc           #22                 // float 2.5f
+      13: ldc           #23                 // float 3.0f
+      15: invokevirtual #27                 // Method func_70105_a:(FF)V
+      18: aload_0
+      19: bipush        20
+      21: putfield      #30                 // Field field_70728_aV:I
+      24: return
+  protected void func_184651_r();
+    Code:
+       0: aload_0
+       1: getfield      #40                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+       4: iconst_1
+       5: new           #10                 // class com/Fishmod/mod_LavaCow/entities/EntitySludgeLord$AICastingApell
+       8: dup
+       9: aload_0
+      10: invokespecial #43                 // Method com/Fishmod/mod_LavaCow/entities/EntitySludgeLord$AICastingApell."<init>":(Lcom/Fishmod/mod_LavaCow/entities/EntitySludgeLord;)V
+      13: invokevirtual #49                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      16: aload_0
+      17: getfield      #40                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      20: iconst_2
+      21: new           #51                 // class com/Fishmod/mod_LavaCow/entities/ai/EntityFishAIAttackRange
+      24: dup
+      25: aload_0
+      26: ldc           #53                 // class com/Fishmod/mod_LavaCow/entities/projectiles/EntitySludgeJet
+      28: getstatic     #59                 // Field com/Fishmod/mod_LavaCow/init/FishItems.ENTITY_SLUDGELORD_ATTACK:Lnet/minecraft/util/SoundEvent;
+      31: iconst_1
+      32: iconst_2
+      33: ldc2_w        #60                 // double 5.0d
+      36: ldc2_w        #62                 // double 8.0d
+      39: ldc2_w        #64                 // double 1.2d
+      42: ldc2_w        #66                 // double 0.6d
+      45: ldc2_w        #64                 // double 1.2d
+      48: invokespecial #70                 // Method com/Fishmod/mod_LavaCow/entities/ai/EntityFishAIAttackRange."<init>":(Lnet/minecraft/entity/EntityCreature;Ljava/lang/Class;Lnet/minecraft/util/SoundEvent;IIDDDDD)V
+      51: invokevirtual #49                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      54: aload_0
+      55: getfield      #40                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      58: iconst_3
+      59: new           #72                 // class net/minecraft/entity/ai/EntityAIAttackMelee
+      62: dup
+      63: aload_0
+      64: dconst_1
+      65: iconst_0
+      66: invokespecial #75                 // Method net/minecraft/entity/ai/EntityAIAttackMelee."<init>":(Lnet/minecraft/entity/EntityCreature;DZ)V
+      69: invokevirtual #49                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      72: aload_0
+      73: getfield      #40                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      76: iconst_4
+      77: new           #7                  // class com/Fishmod/mod_LavaCow/entities/EntitySludgeLord$AIUseSpell
+      80: dup
+      81: aload_0
+      82: invokespecial #76                 // Method com/Fishmod/mod_LavaCow/entities/EntitySludgeLord$AIUseSpell."<init>":(Lcom/Fishmod/mod_LavaCow/entities/EntitySludgeLord;)V
+      85: invokevirtual #49                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+      88: getstatic     #81                 // Field com/Fishmod/mod_LavaCow/client/Modconfig.SunScreen_Mode:Z
+      91: ifne          111
+      94: aload_0
+      95: getfield      #40                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+      98: iconst_4
+      99: new           #83                 // class net/minecraft/entity/ai/EntityAIFleeSun
+     102: dup
+     103: aload_0
+     104: dconst_1
+     105: invokespecial #86                 // Method net/minecraft/entity/ai/EntityAIFleeSun."<init>":(Lnet/minecraft/entity/EntityCreature;D)V
+     108: invokevirtual #49                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     111: aload_0
+     112: getfield      #40                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     115: iconst_5
+     116: new           #88                 // class net/minecraft/entity/ai/EntityAIMoveTowardsRestriction
+     119: dup
+     120: aload_0
+     121: dconst_1
+     122: invokespecial #89                 // Method net/minecraft/entity/ai/EntityAIMoveTowardsRestriction."<init>":(Lnet/minecraft/entity/EntityCreature;D)V
+     125: invokevirtual #49                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     128: aload_0
+     129: getfield      #40                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     132: bipush        7
+     134: new           #91                 // class net/minecraft/entity/ai/EntityAIWanderAvoidWater
+     137: dup
+     138: aload_0
+     139: dconst_1
+     140: invokespecial #92                 // Method net/minecraft/entity/ai/EntityAIWanderAvoidWater."<init>":(Lnet/minecraft/entity/EntityCreature;D)V
+     143: invokevirtual #49                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     146: aload_0
+     147: getfield      #40                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     150: bipush        8
+     152: new           #94                 // class net/minecraft/entity/ai/EntityAIWatchClosest
+     155: dup
+     156: aload_0
+     157: ldc           #96                 // class net/minecraft/entity/player/EntityPlayer
+     159: ldc           #97                 // float 8.0f
+     161: invokespecial #100                // Method net/minecraft/entity/ai/EntityAIWatchClosest."<init>":(Lnet/minecraft/entity/EntityLiving;Ljava/lang/Class;F)V
+     164: invokevirtual #49                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     167: aload_0
+     168: getfield      #40                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+     171: bipush        8
+     173: new           #102                // class net/minecraft/entity/ai/EntityAILookIdle
+     176: dup
+     177: aload_0
+     178: invokespecial #105                // Method net/minecraft/entity/ai/EntityAILookIdle."<init>":(Lnet/minecraft/entity/EntityLiving;)V
+     181: invokevirtual #49                 // Method net/minecraft/entity/ai/EntityAITasks.func_75776_a:(ILnet/minecraft/entity/ai/EntityAIBase;)V
+     184: aload_0
+     185: invokevirtual #108                // Method func_175456_n:()V
+     188: return
+
+## Fish's Undead Rising EntityMummy <init> (size), initEntityAI (super first)
+public class com.Fishmod.mod_LavaCow.entities.EntityMummy extends net.minecraft.entity.monster.EntityZombie implements com.Fishmod.mod_LavaCow.entities.IAggressive {
+  public com.Fishmod.mod_LavaCow.entities.EntityMummy(net.minecraft.world.World);
+       2: invokespecial #18                 // Method net/minecraft/entity/monster/EntityZombie."<init>":(Lnet/minecraft/world/World;)V
+      11: fconst_1
+      12: ldc           #21                 // float 1.95f
+      14: invokevirtual #25                 // Method func_70105_a:(FF)V
+  protected void func_184651_r();
+    Code:
+       0: aload_0
+       1: invokespecial #58                 // Method net/minecraft/entity/monster/EntityZombie.func_184651_r:()V
+       4: aload_0
+       5: getfield      #62                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+
+## Fish's Undead Rising EntityZombieFrozen <init> (size), initEntityAI (super first)
+public class com.Fishmod.mod_LavaCow.entities.EntityZombieFrozen extends net.minecraft.entity.monster.EntityZombie implements com.Fishmod.mod_LavaCow.entities.IAggressive {
+  public com.Fishmod.mod_LavaCow.entities.EntityZombieFrozen(net.minecraft.world.World);
+       2: invokespecial #15                 // Method net/minecraft/entity/monster/EntityZombie."<init>":(Lnet/minecraft/world/World;)V
+      11: fconst_1
+      12: ldc           #18                 // float 1.95f
+      14: invokevirtual #22                 // Method func_70105_a:(FF)V
+  protected void func_184651_r();
+    Code:
+       0: aload_0
+       1: invokespecial #34                 // Method net/minecraft/entity/monster/EntityZombie.func_184651_r:()V
+       4: aload_0
+       5: getfield      #38                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+
+## Fish's Undead Rising EntityZombieMushroom <init> (size), initEntityAI (super first)
+public class com.Fishmod.mod_LavaCow.entities.EntityZombieMushroom extends net.minecraft.entity.monster.EntityZombie implements com.Fishmod.mod_LavaCow.entities.IAggressive {
+  public com.Fishmod.mod_LavaCow.entities.EntityZombieMushroom(net.minecraft.world.World);
+       2: invokespecial #20                 // Method net/minecraft/entity/monster/EntityZombie."<init>":(Lnet/minecraft/world/World;)V
+      55: fconst_1
+      56: ldc           #40                 // float 1.95f
+      58: invokevirtual #44                 // Method func_70105_a:(FF)V
+  protected void func_184651_r();
+    Code:
+       0: aload_0
+       1: invokespecial #77                 // Method net/minecraft/entity/monster/EntityZombie.func_184651_r:()V
+       4: aload_0
+       5: getfield      #81                 // Field field_70714_bg:Lnet/minecraft/entity/ai/EntityAITasks;
+
+## zombie_players EntityZombiePlayer initEntityAI (the attack task)
+  protected void func_184651_r();
+      82: new           #235                // class com/corosus/zombie_players/entity/ai/EntityAIZombieAttackWeaponReach
+      89: invokespecial #238                // Method com/corosus/zombie_players/entity/ai/EntityAIZombieAttackWeaponReach."<init>":(Lnet/minecraft/entity/monster/EntityZombie;DZ)V
+
+## zombie_players EntityAIZombieAttackWeaponReach getAttackReachSqr
+public class com.corosus.zombie_players.entity.ai.EntityAIZombieAttackWeaponReach extends net.minecraft.entity.ai.EntityAIZombieAttack {
+  protected double func_179512_a(net.minecraft.entity.EntityLivingBase);
+    Code:
+       0: aload_0
+       1: getfield      #13                 // Field zombie:Lnet/minecraft/entity/monster/EntityZombie;
+       4: instanceof    #24                 // class com/corosus/zombie_players/entity/EntityZombiePlayer
+       7: ifeq          54
+      10: aload_0
+      11: getfield      #13                 // Field zombie:Lnet/minecraft/entity/monster/EntityZombie;
+      14: invokevirtual #30                 // Method net/minecraft/entity/monster/EntityZombie.func_184614_ca:()Lnet/minecraft/item/ItemStack;
+      17: invokevirtual #36                 // Method net/minecraft/item/ItemStack.func_190926_b:()Z
+      20: ifne          54
+      23: ldc           #37                 // float 3.0f
+      25: fstore_2
+      26: aload_0
+      27: getfield      #41                 // Field field_75441_b:Lnet/minecraft/entity/EntityCreature;
+      30: getfield      #47                 // Field net/minecraft/entity/EntityCreature.field_70130_N:F
+      33: fconst_2
+      34: fmul
+      35: aload_0
+      36: getfield      #41                 // Field field_75441_b:Lnet/minecraft/entity/EntityCreature;
+      39: getfield      #47                 // Field net/minecraft/entity/EntityCreature.field_70130_N:F
+      42: fmul
+      43: fconst_2
+      44: fmul
+      45: aload_1
+      46: getfield      #50                 // Field net/minecraft/entity/EntityLivingBase.field_70130_N:F
+      49: fadd
+      50: fload_2
+      51: fadd
+      52: f2d
+      53: dreturn
+      54: aload_0
+      55: aload_1
+      56: invokespecial #52                 // Method net/minecraft/entity/ai/EntityAIZombieAttack.func_179512_a:(Lnet/minecraft/entity/EntityLivingBase;)D
+      59: dreturn
+}
+
