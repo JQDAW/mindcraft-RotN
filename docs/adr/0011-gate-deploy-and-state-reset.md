@@ -59,7 +59,7 @@ harness-ops writes the steps into `deploy/cx23/README.md` with a check command f
 - `passwd -S rotn-build` showing a locked password;
 - `stat` of `/opt/mindcraft-rotn` showing `rotn-build rotn-release 2750`;
 - `getent group rotn-release` listing exactly `rotn-build,mindcraft-rotn`, and `id -gn rotn-build` showing `rotn-build` (its primary group stays its own);
-- `sudo -u mindcraft-rotn test -r /opt/mindcraft-rotn/current/main.js` succeeding.
+- `sudo -u mindcraft-rotn head -c1 /opt/mindcraft-rotn/current/main.js >/dev/null` succeeding (a real read: on the CX23 `/usr/bin/test` is uutils, whose `test -r` ignored supplementary groups and gave a false 1 during the install; #493).
 
 **Migration of an existing tree** (the first install already ran): `build-user` runs `chown -R -P rotn-build:rotn-release /opt/mindcraft-rotn` (releases and `repo.git` from earlier deploys are owned by `deploy` or part by `rotn-build`), so `prune`, `state`, `deploys.log` and `repo.git` stay writable for `rotn-build`. `deploy` itself is in neither group and loses read access to `/opt`; that is intended (`release` runs as `rotn-build`), so do not add `deploy` to `rotn-release`.
 
