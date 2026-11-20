@@ -235,9 +235,21 @@ export const OPEN_GOAL_PREFIX = 'Open goal while the agenda waits: ';
  * is past). Done when the bot holds any weapon threats.hasWeapon counts (a sword or an axe; the
  * crude axe too: attack 3 on this pack, as the stone axe).
  */
+/**
+ * Soak 5 (the lead's Fix H, which updates the soak 3 decision): after a death the bot went hunting
+ * with no weapon and no food (~30 commands in 3 min, !attack on a sow bare-handed), and died to
+ * zombies by day. With no weapon, the weapon reserve comes before the food reserve at any time of
+ * day, unless food is WEAPON_FIRST.foodAtMost or lower (then food first).
+ */
+export const WEAPON_FIRST = { foodAtMost: 6 };
+const beforeNight = (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN; };
+const foodFirst = (s) => { const f = s.food?.(); return Number.isFinite(f) && f <= WEAPON_FIRST.foodAtMost; };
+
 export const WEAPON_RESERVE_STEP = {
     id: 'weapon', short: 'hold a weapon for the night', reserve: true, when: 'before night',
-    due: (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN; },
+    // ctx.foodDue (Fix H): the food reserve is due now; the weapon then comes first by day too.
+    due: (s, ctx = {}) => beforeNight(s) || (!!ctx.foodDue && !foodFirst(s)),
+    whenNow: (s) => (beforeNight(s) ? 'before night' : 'no weapon, before food'),
     done: (s) => s.hasWeapon?.() !== false,
     goal: 'Night is near and you hold no weapon. Zombies here hit for 6 to 8 and dig into shelters, and bare hands do not hurt them. '
         + 'Craft a stone axe at a crafting table with !craftRecipe("stone_axe", 1): 3 rocks and 2 sticks. Rock piles break by hand: !collectBlocks("pyrotech:rock", 3); sticks: !collectBlocks("stick", 2). '
@@ -247,7 +259,9 @@ export const WEAPON_RESERVE_STEP = {
         const sticks = s.countOre?.('stickWood') ?? 0;
         const table = !!(s.near?.('crafting_table') || (s.count?.('crafting_table') ?? 0) > 0);
         const have = `You hold ${rocks} rock${rocks === 1 ? '' : 's'} and ${sticks} stick${sticks === 1 ? '' : 's'}${table ? ', and a crafting table is at hand' : ', and no crafting table is near'}. `;
-        return WEAPON_RESERVE_STEP.goal.replace('Craft a stone axe', `${have}Craft a stone axe`);
+        const goal = beforeNight(s) ? WEAPON_RESERVE_STEP.goal
+            : WEAPON_RESERVE_STEP.goal.replace('Night is near and you hold no weapon.', 'You hold no weapon and you are short of food: the weapon comes first (hunting needs one, and zombies attack by day too); the agenda goes on to food once you hold one.');
+        return goal.replace('Craft a stone axe', `${have}Craft a stone axe`);
     },
 };
 
@@ -294,8 +308,13 @@ export const FOOD_RESERVE_STEP = {
         // the two differ by one on purpose: the eating starts a step before the hunting stops).
         const weak = Number.isFinite(food) && food <= HUNT_MIN_FOOD;
         const emergency = Number.isFinite(food) && food <= EMERGENCY_FOOD;
+        // Soak 5 (Fix H): with no weapon, forage first; hunting waits for a weapon (the weapon reserve
+        // comes first unless food is WEAPON_FIRST.foodAtMost or lower); no animals are named then.
+        const armed = s.hasWeapon?.() !== false;
         const near = weak
             ? `At food ${food} you are too weak to hunt (weakness): eat the food you hold, and !forage nearby; do not walk far. `
+            : !armed
+            ? `You hold no weapon: gather ripe wild food with !forage${crops.length ? '' : ' (berry bushes, wild herbs, HarvestCraft gardens; look around nearby, do not walk far)'}; hunting waits until you hold a weapon. `
             : animals.length
             ? `Near you: ${animals.slice(0, 3).join(', ')}: kill one with !attack("${animals[0]}") and pick up what it drops. `
             : crops.length ? 'No wild animal is near. ' : 'No ripe wild food and no wild animal is near: try !forage once you see berry bushes, herbs or HarvestCraft gardens; or look for an animal (cows, pigs, sheep, rabbits; on this pack mostly Animania ones such as animania:cow_holstein or animania:sow_old_spot) with !searchForEntity, away from fences and houses, then !attack it. ';
@@ -399,7 +418,7 @@ export class Agenda {
     /** Whether a step id is one of the reserves (the shelter blocks, the weapon, the food). */
     isReserveId(id) { return id != null && (id === this.reserve?.id || id === this.weapon?.id || id === this.food?.id); }
     /** A reserve, if one is wanted now: the shelter reserve first, then the weapon, then food (G4 #5). */
-    anyReserveWanted(state) { return this.reserveWanted(state) ?? this.weaponWanted(state) ?? this.foodWanted(state); }
+    anyReserveWanted(state) { return this.reserveWanted(state) ?? this.weaponWanted(state, { foodDue: this.foodDue(state) }) ?? this.foodWanted(state); }
     /** A reserve's budget is spent: the shelter reserve and the weapon until the night is past; food for FOOD_RETRY_MS. */
     reserveStuck(id) {
         if (id === this.food?.id) this.foodOffUntil = this.now() + FOOD_RETRY_MS;
@@ -411,11 +430,11 @@ export class Agenda {
      * The before-night weapon (WEAPON_RESERVE_STEP) when it is wanted now: due, none held, budget
      * not spent. Once the night is no longer near, its budget is fresh again for the next dusk.
      */
-    weaponWanted(state, { readOnly = false } = {}) {
+    weaponWanted(state, { readOnly = false, foodDue = false } = {}) {
         const r = this.weapon;
         if (!r) return null;
         let due = false;
-        try { due = !!r.due(state); } catch { due = false; }
+        try { due = !!r.due(state, { foodDue }); } catch { due = false; }
         if (!due) {
             if (!readOnly) { this.weaponOff = false; delete this.spent[r.id]; } // #468 review 5: a query changes no budget
             return null;
@@ -424,6 +443,13 @@ export class Agenda {
         let done = false;
         try { done = !!r.done(state); } catch { done = false; }
         return done ? null : r;
+    }
+
+    /** Whether the food reserve is due now (its rule only: no budget, no day cap; Fix H's weapon-first check). */
+    foodDue(state, { standing = false } = {}) {
+        const r = this.food;
+        if (!r) return false;
+        try { return !!r.due(state, { finished: this.finished || standing }); } catch { return false; }
     }
 
     /**
@@ -595,7 +621,10 @@ export class Agenda {
         // readOnly (#468 review 5, !agenda): the reserves are judged without touching their budgets.
         const blocked = waiting && !step;
         // Then a weapon before night (soak 3, lead decision), then food (G4 #5).
-        const pick = this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly })
+        // Soak 5 (Fix H): with no weapon, the weapon before food at any time of day (unless food is
+        // WEAPON_FIRST.foodAtMost or lower).
+        const foodDue = this.foodDue(state, { standing: blocked });
+        const pick = this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly, foodDue })
             ?? this.foodWanted(state, { standing: blocked, readOnly }) ?? step;
         return { step: pick, newlyDone, waiting: blocked };
     }
