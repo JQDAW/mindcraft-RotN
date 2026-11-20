@@ -218,7 +218,7 @@ export function fightRefusal(bot) {
 function unlessRefused(bot, plan) {
     const why = fightRefusal(bot);
     if (!why) return plan;
-    return { action: 'flee', why: `${plan.why}, and ${why}`, from: plan.from, away: RANGES.fight.away, isEnemy: plan.isEnemy };
+    return { action: 'flee', why: `${plan.why}, and ${why}`, from: plan.from, away: RANGES.fight.away, isEnemy: plan.isEnemy, refused: why };
 }
 
 /**
@@ -251,9 +251,66 @@ export function isAngry(entity) {
 }
 
 /**
+ * Soak 5: an entity the bot gave up on (an attack chase with no progress, a fight interrupted again
+ * and again) is left alone for skipMs. Moved here from skills.js (soak 6) so threatPlan can use it;
+ * skills.js re-exports both.
+ */
+export const UNREACHABLE = { skipMs: 5 * 60_000 };
+export function markUnreachable(bot, entity, now = Date.now()) {
+    const m = (bot.rotnUnreachable ??= new Map());
+    // #502 nit 3: expired entries go (an entity id is not reused soon, but the map would only grow).
+    for (const [id, until] of m) if (until <= now) m.delete(id);
+    m.set(entity.id, now + UNREACHABLE.skipMs);
+}
+
+/** Whether the bot gave up on this entity within UNREACHABLE.skipMs (soak 5, soak 6). */
+export function isUnreachable(bot, entity, now = Date.now()) {
+    const until = bot?.rotnUnreachable?.get(entity?.id);
+    if (Number.isFinite(until) && now >= until) bot.rotnUnreachable.delete(entity.id); // #502 nit 3
+    return Number.isFinite(until) && now < until;
+}
+
+const WATER = /(^|:)(flowing_)?water$/;
+
+/**
+ * Soak 6 (18:39-18:51): self_defense fought a betteranimalsplus:eel_freshwater in the water 26
+ * times; each fight ran about 30 s until the unstuck reflex ended it, then the next began. The eel
+ * never hurt the bot. A mob whose body is under water (water at its feet and at its top) cannot be
+ * reached by melee from the bank: not a fight, nor a reason to flee as outnumbered.
+ */
+export function submerged(bot, e) {
+    if (typeof bot?.blockAt !== 'function' || !e?.position?.offset) return false;
+    const waterAt = (dy) => { try { return WATER.test(bot.blockAt(e.position.offset(0, dy, 0))?.name ?? ''); } catch { return false; } };
+    return waterAt(0) && waterAt(Math.max(e.height ?? 0.5, 0.1));
+}
+
+/**
+ * Soak 6: fights in a row on one mob that ended interrupted (the unstuck reflex, each time) before
+ * the bot gives up on it for UNREACHABLE.skipMs (markUnreachable).
+ */
+export const FIGHT_GIVE_UP = { maxInterrupted: 3 };
+
+/**
+ * After a fight with mob ended with outcome ('gone', 'stopped', 'interrupted', ...): count an
+ * interrupted one; the third in a row marks the mob unreachable and returns how many there were,
+ * else null. Any other outcome starts the count again.
+ */
+export function noteFightEnd(bot, mob, outcome, now = Date.now()) {
+    if (!bot || mob?.id == null) return null;
+    const m = (bot.rotnFightStops ??= new Map());
+    if (outcome !== 'interrupted') { m.delete(mob.id); return null; }
+    const n = (m.get(mob.id) ?? 0) + 1;
+    if (n < FIGHT_GIVE_UP.maxInterrupted) { m.set(mob.id, n); return null; }
+    m.delete(mob.id);
+    markUnreachable(bot, mob, now);
+    return n;
+}
+
+/**
  * What to do about the mobs around the bot now. First match wins:
  * flee a dangerous mob, back off from one that explodes, retreat when outnumbered, get out of
- * a ranged mob's range, fight a melee mob, fight back a provoked one. A fight is a flee instead
+ * a ranged mob's range, fight a melee mob (not one under water or given up on, soak 6), fight back
+ * a provoked one. A fight is a flee instead
  * with no weapon or at low health (fightRefusal, soak 5).
  * @returns {{action: 'flee'|'fight', why: string, from: object, away?: number, isEnemy: (e) => boolean}|null}
  *   isEnemy: the mobs the action is about (for skills.avoidEnemies / defendSelf).
@@ -283,7 +340,8 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
     if (avoid.length) return { action: 'flee', why: 'dangerous', from: avoid[0].e, away: RANGES.avoid.away, isEnemy: is('avoid') };
     const boom = within('keep-distance');
     if (boom.length) return { action: 'flee', why: 'explodes', from: boom[0].e, away: RANGES['keep-distance'].away, isEnemy: is('keep-distance') };
-    const melee = within('fight');
+    // Soak 6: a melee mob under water, or one the bot gave up on, is neither fought nor counted.
+    const melee = within('fight').filter(x => !submerged(bot, x.e) && !isUnreachable(bot, x.e, now));
     if (melee.length >= OUTNUMBERED) {
         return { action: 'flee', why: 'outnumbered', from: melee[0].e, away: RANGES.fight.away, isEnemy: (e) => ['fight', 'take-cover'].includes(threatFor(e)?.reaction) };
     }
@@ -349,6 +407,27 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
         }
     }
     return null;
+}
+
+/**
+ * Soak 6 (b): food fell from 12 to 10 over 8 min while self_defense and unstuck took turns; the
+ * eating reflex at food 12 waited for a calm that never came. A melee fight plan whose mob is
+ * farther than `distance` and with no hurt within hurtMs is no reason to put off an eat (1.6 s).
+ */
+export const EAT_SAFE = { distance: 4, hurtMs: 10_000 };
+
+/**
+ * Whether the mobs around keep the bot from eating at food EAT_AT now: any flee, except one from a
+ * fight refused for no weapon or low health (refused); a melee mob within EAT_SAFE.distance; a hurt
+ * within EAT_SAFE.hurtMs.
+ */
+export function blocksEating(bot, { now = Date.now() } = {}) {
+    const plan = threatPlan(bot, { now });
+    if (!plan) return false;
+    if (plan.action !== 'fight' && !plan.refused) return true;
+    const here = bot.entity?.position;
+    const close = !here || !plan.from?.position || plan.from.position.distanceTo(here) <= EAT_SAFE.distance;
+    return close || now - (bot.lastDamageTime ?? -Infinity) <= EAT_SAFE.hurtMs;
 }
 
 /**

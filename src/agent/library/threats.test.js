@@ -579,3 +579,64 @@ test('#497 review 5: BACK_AWAY.lowHealth is OPEN_FIGHT.maxLowHealth', async () =
     const { BACK_AWAY } = await import('./shelter.js');
     assert.equal(BACK_AWAY.lowHealth, OPEN_FIGHT.maxLowHealth);
 });
+
+// Soak 6 (18:39-18:51): self_defense fought a betteranimalsplus:eel_freshwater in the water 26 times;
+// each fight ran about 30 s until the unstuck reflex ended it, and the next began. The eel never hurt
+// the bot. A melee mob under water is not fought (nor counted as a second one); a mob whose fights
+// end interrupted three times in a row is given up on for 5 min.
+test('soak 6 (a): a melee mob under water is neither fought nor counted; at the surface it is', async () => {
+    const { submerged } = await import('./threats.js');
+    const eel = (id, x, y) => ({ id, name: 'betteranimalsplus:eel_freshwater', type: 'mob', position: new Vec3(x, y, 0.5), height: 0.5 });
+    assert.equal(threatFor(eel(1, 2, 62)).reaction, 'fight', 'rotn-data: a default fight mob (asked: ignore?)');
+    // Water from y 60 to 62 at x 1-5; air above.
+    const water = (p) => ({ name: p.x >= 1 && p.x <= 5 && p.y >= 60 && p.y <= 62 ? 'water' : p.y < 64 ? 'dirt' : 'air' });
+    const bot = (...es) => fakeBot(es, { blockAt: (p) => water(p.floored()) });
+    const deep = eel(2, 3.5, 61.2);
+    assert.equal(submerged(bot(deep), deep), true);
+    assert.equal(threatPlan(bot(deep)), null, 'under water: no fight');
+    assert.equal(threatPlan(bot(deep, eel(3, 4.5, 60.5))), null, 'two under water: not outnumbered either');
+    const top = eel(4, 3.5, 62.6); // its top (63.1) out of the water
+    assert.equal(submerged(bot(top), top), false);
+    assert.equal(threatPlan(bot(top)).action, 'fight');
+    assert.equal(submerged(fakeBot([deep]), deep), false, 'no world to read: as before');
+});
+
+test('soak 6 (a): three fights in a row on one mob that end interrupted give it up for 5 min; any other end starts the count again', async () => {
+    const { noteFightEnd, FIGHT_GIVE_UP, UNREACHABLE, isUnreachable } = await import('./threats.js');
+    const { ATTACK_PROGRESS, markUnreachable } = await import('./skills.js');
+    assert.deepEqual([FIGHT_GIVE_UP.maxInterrupted, UNREACHABLE.skipMs, ATTACK_PROGRESS.skipMs], [3, 300_000, 300_000]);
+    assert.equal(typeof markUnreachable, 'function', 'still exported from skills.js');
+    const zombie = mob('zombie', 3);
+    const bot = fakeBot([zombie]);
+    const now = 1_000_000;
+    assert.equal(noteFightEnd(bot, zombie, 'interrupted', now), null);
+    assert.equal(noteFightEnd(bot, zombie, 'gone', now), null, 'reset');
+    assert.equal(noteFightEnd(bot, zombie, 'interrupted', now), null);
+    assert.equal(noteFightEnd(bot, zombie, 'interrupted', now), null);
+    assert.equal(threatPlan(bot, { now }).action, 'fight');
+    assert.equal(noteFightEnd(bot, zombie, 'interrupted', now), 3);
+    assert.equal(isUnreachable(bot, zombie, now), true);
+    assert.equal(threatPlan(bot, { now }), null, 'given up: no fight');
+    assert.equal(threatPlan(bot, { now: now + UNREACHABLE.skipMs }).action, 'fight', '5 min later: fought again');
+});
+
+test('soak 6 (a): defendSelf counts its interrupted ends: the third gives the mob up, with a line', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { defendSelf } = await import('./skills.js');
+    const zombie = mob('zombie', 3);
+    const bot = fightBot([zombie]);
+    bot.pvp.attack = (e) => { bot.pvp.attacks.push(e.name); bot.interrupt_code = true; }; // unstuck takes over
+    for (let i = 0; i < 3; i++) { bot.interrupt_code = false; await defendSelf(bot, 8, (e) => e.name === 'zombie'); }
+    assert.deepEqual(bot.pvp.attacks, ['zombie', 'zombie', 'zombie']);
+    assert.ok(logs.includes('[survival] giving up on zombie: 3 fights in a row on it were interrupted; leaving it alone for 5 min'), logs.join('\n'));
+    assert.equal(threatPlan(bot), null);
+});
+
+test('soak 6 (a): self_defense starts no fight with an eel under water', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const a = modeAgent([{ id: 50, name: 'betteranimalsplus:eel_freshwater', type: 'mob', position: new Vec3(3.5, 61.2, 0.5), height: 0.5 }]);
+    a.bot.blockAt = (p) => ({ name: p.floored().y <= 62 && p.floored().y >= 60 && p.x >= 1 ? 'water' : 'air' });
+    await tick(a);
+    assert.deepEqual(a.ran, []);
+});

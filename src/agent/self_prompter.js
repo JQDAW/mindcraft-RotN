@@ -10,6 +10,7 @@ export class SelfPrompter {
         this.loop_active = false;
         this.interrupt = false;
         this.dropped_for_reflex = false;
+        this.finish_turn = null; // stopAfterTurn's reason, until the loop stops
         this.prompt = '';
         this.idle_time = 0;
         this.cooldown = 2000;
@@ -23,6 +24,7 @@ export class SelfPrompter {
             prompt = this.prompt;
         }
         this.state = ACTIVE;
+        this.finish_turn = null;
         this.prompt = prompt;
         this.startLoop();
     }
@@ -77,6 +79,7 @@ export class SelfPrompter {
             let msg = `You are self-prompting with the goal: '${this.prompt}'. Your next response MUST contain a command with this syntax: !commandName. Respond:`;
             if (note) msg = `${note} ${msg}`;
 
+            if (this.finishTurnStop()) break;
             this.dropped_for_reflex = false;
             let used_command = await this.agent.handleMessage('system', msg, -1);
             if (!used_command && this.dropped_for_reflex) {
@@ -95,8 +98,10 @@ export class SelfPrompter {
             }
             else {
                 no_command_count = 0;
+                if (this.finishTurnStop()) break;
                 await new Promise(r => setTimeout(r, this.cooldown));
             }
+            if (this.finishTurnStop()) break;
         }
         console.log('self prompt loop stopped')
         this.loop_active = false;
@@ -135,6 +140,7 @@ export class SelfPrompter {
     }
 
     async stop(stop_action=true) {
+        this.finish_turn = null;
         // Only a running loop needs the interrupt; set with no loop, it stayed on and
         // made the next start a no-op (skills-rotn E3).
         if (this.loop_active) this.interrupt = true;
@@ -142,6 +148,27 @@ export class SelfPrompter {
             await this.agent.actions.stop();
         this.stopLoop();
         this.state = STOPPED;
+    }
+
+    /**
+     * Soak 6 (c): a budget stop (priority.js, the standing goal's daily budget) dropped the command
+     * the model had just returned (18:03:40 !craftRecipe tinder; the loop stopped 2 s later). Stop
+     * after the turn in flight instead: a reply already asked for still runs its command, then the
+     * loop ends and the state is STOPPED. With no loop running, it stops now. `why` is logged.
+     */
+    stopAfterTurn(why = 'a stop after the turn') {
+        if (!this.loop_active) { this.state = STOPPED; return false; }
+        this.finish_turn = why;
+        return true;
+    }
+
+    /** The loop's check for stopAfterTurn: true (and STOPPED) when a stop after the turn is due. */
+    finishTurnStop() {
+        if (!this.finish_turn) return false;
+        console.log(`[self-prompt] stopping after the turn (${this.finish_turn})`);
+        this.finish_turn = null;
+        this.state = STOPPED;
+        return true;
     }
 
     async pause() {

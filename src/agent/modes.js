@@ -349,7 +349,7 @@ const modes_list = [
         // can eat at food 6 or lower in a fight: the loop stops at the first active mode (#206 review 4).
         name: 'eating',
         // #432 nit: the emergency foods are named from food.EMERGENCY_FOODS; cloudsbluff is never eaten.
-        description: `Eat at food 12 or lower when idle and no threat is near, and at 6 or lower always, in a fight too. At food ${food.EMERGENCY_FOOD} or lower with nothing else (food 0 kills on this pack): ${food.emergencyFoodText()}, in that order; never ${food.NEVER_EAT_TEXT.replace(' or any other food', '')}. Bread only when nothing else is left.`,
+        description: `Eat at food 12 or lower when idle or between fights and no threat is close, and at 6 or lower always, in a fight too. At food ${food.EMERGENCY_FOOD} or lower with nothing else (food 0 kills on this pack): ${food.emergencyFoodText()}, in that order; never ${food.NEVER_EAT_TEXT.replace(' or any other food', '')}. Bread only when nothing else is left.`,
         interrupts: ['all'],
         on: true,
         active: false,
@@ -366,8 +366,12 @@ const modes_list = [
             let threatened = false;
             // Soak 4 (rotn-v0.1.7): in a closed night shelter a mob outside is no threat to eating; a
             // zombie at the corner kept the bot from eating at food 12 all morning (it waited for 6).
-            try { threatened = bot.rotnSheltered === true ? false : !!threats.threatPlan(bot); } catch { threatened = false; }
-            if (!food.wantsToEat(bot.food, { idle: agent.isIdle(), threatened })) return;
+            // Soak 6 (b): a melee mob that is not close and has not hurt the bot lately does not put
+            // off an eat (threats.blocksEating), and a reflex's own action (an unstuck walk, a fight)
+            // is no work to wait for: eating gets its turn between fights.
+            try { threatened = bot.rotnSheltered === true ? false : threats.blocksEating(bot); } catch { threatened = false; }
+            const between = agent.isIdle() || /^mode:(?!eating$)/.test(agent.actions?.currentActionLabel ?? '');
+            if (!food.wantsToEat(bot.food, { idle: between, threatened })) return;
             // Soak 2: food 0 kills at once on this pack; at EMERGENCY_FOOD or lower, avoided food too.
             const emergency = Number.isFinite(bot.food) && bot.food <= food.EMERGENCY_FOOD;
             const item = food.chooseFood(bot, { skip: this.given_up, emergency });

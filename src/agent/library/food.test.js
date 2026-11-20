@@ -297,3 +297,29 @@ test('#478 ate_when_low: held in the closed shelter with a zombie at the corner,
     assert.notEqual(held.eaten[0], 'bread', 'bread last');
     assert.ok(logs.some(l => /^\[reflex\] ate \S+ at food 12$/.test(l)), logs.join('\n'));
 });
+
+// Soak 6 (b): during the eel loop food fell from 12 to 10 over 8 min (18:41:12 to 18:49:30): the
+// eating reflex at food 12 waited for an idle bot with no threat, and self_defense and unstuck took
+// turns all along. Now a reflex's own action is no work to wait for, and a melee mob that is not
+// within 4 blocks and has not hurt the bot in 10 s does not put off the eat.
+test('soak 6 (b): between fights (a reflex\'s action) at food 12 or lower it eats unless the melee mob is close or hurt it lately; never cuts the model\'s action at 11', async (t) => {
+    quiet(t);
+    const zombieAt = (x) => ({ 1: null, 2: { id: 2, name: 'zombie', type: 'mob', position: new Vec3(x, 64, 0), metadata: [] } });
+    const run = async ({ x = 6, label = 'mode:unstuck', hurtAgo = Infinity, sword = false, food = 11 } = {}) => {
+        const mode = freshMode();
+        const items = [stack('rustic:wildberries', 0, 3), ...(sword ? [stack('iron_sword', 0, 1)] : [])];
+        const b = eatBot(items, food);
+        b.bot.entities = { ...zombieAt(x), 1: b.bot.entity };
+        b.bot.lastDamageTime = Date.now() - hurtAgo;
+        await mode.update(modeAgent(b.bot, { idle: false, label }));
+        await settled();
+        return b.eaten;
+    };
+    assert.deepEqual(await run(), ['rustic:wildberries'], 'unarmed (a refused fight), the zombie 6 away, between reflexes: eats');
+    assert.deepEqual(await run({ sword: true }), ['rustic:wildberries'], 'armed (a fight plan): eats');
+    assert.deepEqual(await run({ label: 'mode:self_defense', sword: true }), ['rustic:wildberries'], 'a fight action: its turn too');
+    assert.deepEqual(await run({ x: 3, sword: true }), [], 'the zombie within 4: not now');
+    assert.deepEqual(await run({ hurtAgo: 5_000, sword: true }), [], 'hurt 5 s ago: not now');
+    assert.deepEqual(await run({ label: 'action:collectBlocks' }), [], 'the model\'s action is not cut at 11');
+    assert.deepEqual(await run({ food: 13 }), [], 'not hungry');
+});
