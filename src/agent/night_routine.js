@@ -638,20 +638,27 @@ export function hostileNear(bot, range = LEAVE_MOB_RANGE) {
 const key3 = (p) => `${p.x},${p.y},${p.z}`;
 
 /**
- * Soak 5 (death 4): a melee mob (threats.shelterTarget) within the in-shelter fight's reach of the
- * bot, the nearest, or null: one that hits the bot through an opening without standing in it.
+ * Soak 5 (death 4): the nearest mob within the in-shelter fight's reach of the bot (inShelterReach)
+ * that `which` accepts (default: a melee mob, threats.shelterTarget), or null: one that hits the bot
+ * through an opening without standing in it.
  */
-export function mobInReach(bot) {
+export function mobInReach(bot, which = shelterTarget) {
     const here = bot?.entity?.position;
     if (!here) return null;
     let best = null, bestD = Infinity;
     for (const e of Object.values(bot.entities ?? {})) {
-        if (!e || e === bot.entity || !e.position || !shelterTarget(e) || !inShelterReach(bot, e)) continue;
+        if (!e || e === bot.entity || !e.position || !which(e) || !inShelterReach(bot, e)) continue;
         const d = e.position.distanceTo(here);
         if (d < bestD) { best = e; bestD = d; }
     }
     return best;
 }
+
+/** #497 review 1: a threat the shelter never hits (avoid, keep-distance, take-cover: a troll, a creeper, a skeleton). */
+export const notMelee = (e) => shelterEnemy(e) && !shelterTarget(e);
+
+/** "a zombie", "an iceandfire:if_troll" (#497 review 6). */
+const aMob = (name) => `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}`;
 
 /** "a zombie at x, y, z" for hostileNear's mob (tests' ops may return just true). */
 const mobText = (e) => e?.position ? `a ${e.name ?? e.displayName ?? 'hostile mob'} at ${at(e.position.floored())}` : 'a hostile mob';
@@ -659,8 +666,9 @@ const mobText = (e) => e?.position ? `a ${e.name ?? e.displayName ?? 'hostile mo
 /** What the routine does in the world (tests pass their own). */
 export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, onTree: standsOnTree, descend: (bot) => descendFromTree(bot),
     nightRelocation: nightRelocationPlan, walkAwayAtNight, morningChoice, openToward,
-    awayFromMobs: (bot) => avoidEnemies(bot, MORNING.awayDist, shelterEnemy),
-    heldCells, retreatPlan, backAway, hasWeapon, mobInReach };
+    // #497 review 2: away from every threat; cornered, it may hit a melee mob only, never a troll or a creeper.
+    awayFromMobs: (bot) => avoidEnemies(bot, MORNING.awayDist, shelterEnemy, shelterTarget),
+    heldCells, retreatPlan, backAway, hasWeapon, mobInReach, dangerInReach: (bot) => mobInReach(bot, notMelee) };
 
 /**
  * Exposed with no weapon (round 9 B, fix h): keep away from mobs rather than fight bare-handed.
@@ -1164,40 +1172,53 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // through it, the bot backs away into an enclosed column on the far side (once per shelter);
         // only cornered (no way to back away) does it hit back (n.handFight lets
         // modes.fightInShelter swing, by hand or with its weapon).
+        // #497 review 1: a threat the shelter never hits (notMelee: a troll, a creeper, a skeleton)
+        // in the opening or in reach starts the back-away too, armed or not, at any health; cornered,
+        // the bot never hits it and waits for the burrow plan (Fix B).
         let skip = [];
         n.handFight = false;
         // #477 review 3: the wall opened for the morning fight is not rebuilt (also in the 30 s the
         // mob is out of range): the fight's opening stays until it ends.
         if (need.todo.length > 0 && n.morningAct === 'fight') { bot.rotnSheltered = 'open'; return 'night:inside'; }
-        const armed = (ops.hasWeapon ?? hasWeapon)(bot);
-        const refused = !armed || (Number.isFinite(bot.health) && bot.health <= BACK_AWAY.lowHealth);
-        if (need.todo.length > 0 && refused) {
-            const held = armed ? [] : (ops.heldCells?.(bot, n.site, need.todo) ?? []);
-            const reaching = held.length ? held[0].mob : ops.mobInReach?.(bot) ?? null;
+        if (need.todo.length > 0) {
+            const armed = (ops.hasWeapon ?? hasWeapon)(bot);
+            const refused = !armed || (Number.isFinite(bot.health) && bot.health <= BACK_AWAY.lowHealth);
+            const held = ops.heldCells?.(bot, n.site, need.todo) ?? [];
+            const heldOther = held.find(h => !shelterTarget(h.mob));
+            const other = heldOther ? { mob: heldOther.mob, cell: heldOther.cell } : (() => { const m = ops.dangerInReach?.(bot) ?? null; return m ? { mob: m } : null; })();
+            const heldMelee = held.find(h => shelterTarget(h.mob));
+            const melee = !refused ? null : heldMelee && !armed ? { mob: heldMelee.mob, cell: heldMelee.cell }
+                : (() => { const m = ops.mobInReach?.(bot) ?? null; return m ? { mob: m } : null; })();
+            const reaching = other ?? melee;
             if (reaching) {
                 bot.rotnSheltered = 'open';
-                const mob = `a ${reaching.name ?? 'hostile mob'}`;
-                const where = held.length ? `in the opening at ${at(held[0].cell)}` : `in reach${reaching.position ? ` at ${at(reaching.position.floored())}` : ''}`;
-                const why = `${armed ? '' : 'no weapon, '}health ${Math.round(bot.health)}`;
+                const name = reaching.mob.name ?? 'hostile mob';
+                const where = reaching.cell ? `in the opening at ${at(reaching.cell)}` : `in reach${reaching.mob.position ? ` at ${at(reaching.mob.position.floored())}` : ''}`;
+                const why = other ? `${aMob(name)} (${threatFor(reaching.mob)?.reaction ?? 'not a melee mob'}) ${where}`
+                    : `${armed ? '' : 'no weapon, '}health ${Math.round(bot.health)}, and ${aMob(name)} ${where}`;
                 const plan = n.backedAway ? null : ops.retreatPlan?.(bot, n.site, need.todo);
                 if (plan) {
                     n.backedAway = true;
-                    line(agent, `[night] ${why}, and ${mob} ${where}: backing away into ${at(plan.to)}`);
+                    line(agent, `[night] ${why}: backing away into ${at(plan.to)}`);
                     startBackAway(agent, n, ops, plan, tolerateBody, BACK_AWAY_LABEL, 'backed away');
                     return 'night:inside';
                 }
-                // Only a melee mob is hit back (threats.shelterTarget): a troll in the opening is not.
-                const hit = shelterTarget(reaching);
-                n.handFight = hit;
-                const text = `[night] ${why}, and no way to back away from ${mob} ${where}: ${!hit ? 'not hitting it (not a melee mob)' : armed ? 'hitting back' : 'hitting back by hand'}`;
-                const said = held.length ? key3(held[0].cell) : `reach:${reaching.id ?? ''}`;
+                // Cornered: a melee mob is hit back; any other threat never is.
+                n.handFight = !other;
+                const text = other
+                    ? `[night] ${why}, and no way to back away: not hitting it; waiting for the burrow plan`
+                    : `[night] ${armed ? '' : 'no weapon, '}health ${Math.round(bot.health)}, and no way to back away from ${aMob(name)} ${where}: ${armed ? 'hitting back' : 'hitting back by hand'}`;
+                const said = reaching.cell ? key3(reaching.cell) : `reach:${reaching.mob.id ?? ''}`;
                 if (n.handSaid === said) console.log(text); else { n.handSaid = said; line(agent, text); }
             }
-            if (held.length) {
-                skip = held.map(h => h.cell);
-                const mob = `a ${held[0].mob.name ?? 'hostile mob'}`;
-                const text = `[night] no weapon and ${mob} in the opening at ${held.map(h => at(h.cell)).join('; ')}: not repairing under it; repairing the other open cells`;
-                if (n.holdSaid === held.map(h => key3(h.cell)).join(';')) console.log(text); else { n.holdSaid = held.map(h => key3(h.cell)).join(';'); line(agent, text); }
+            // A cell the bot will not clear by hitting (no weapon, or a mob it never hits) is left
+            // out of the repair; the other open cells are repaired.
+            const leave = held.filter(h => !armed || !shelterTarget(h.mob));
+            if (leave.length) {
+                skip = leave.map(h => h.cell);
+                const text = `[night] ${armed ? '' : 'no weapon and '}${aMob(leave[0].mob.name ?? 'hostile mob')} in the opening at ${leave.map(h => at(h.cell)).join('; ')}: not repairing under it; repairing the other open cells`;
+                const said = leave.map(h => key3(h.cell)).join(';');
+                if (n.holdSaid === said) console.log(text); else { n.holdSaid = said; line(agent, text); }
                 if (skip.length >= need.todo.length) return 'night:inside';
             }
         }

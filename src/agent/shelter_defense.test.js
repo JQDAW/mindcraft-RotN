@@ -510,6 +510,28 @@ test('soak 5 (00:46, the troll): from the shelter a troll, a creeper or a skelet
     assert.ok(both.calls.attacks.length > 0 && both.calls.attacks.every(id => id === 1), 'the zombie behind the troll is hit, the troll never');
 });
 
+test('#497 review 4: a fight from the shelter stops once health falls to 8; cornered (handFight) it goes on', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // The mode is shared by the tests in this file: wait (bounded) for an earlier fight to end, and
+    // for this fight's own end line, so a fight still running elsewhere cannot cut the wait short.
+    const until = async (ok, ms = 8000) => { const end = Date.now() + ms; while (!ok()) { if (Date.now() > end) throw new Error('timed out'); await new Promise(r => setTimeout(r, 20)); } };
+    const run = async (cornered) => {
+        await until(() => !__modeForTest('self_defense').active);
+        const s = shelter({ killAfter: 3 }); // the zombie dies at the third hit
+        if (cornered) s.agent._night = { handFight: true };
+        const attack = s.bot.attack;
+        s.bot.attack = (e) => { attack(e); s.bot.health = 8; }; // the zombie hits back
+        await selfDefense(s.agent);
+        await until(() => /Fought from inside the shelter/.test(s.bot.output));
+        return { hits: s.calls.attacks.length, output: s.bot.output };
+    };
+    const free = await run(false);
+    assert.equal(free.hits, 1, 'one swing, then health 8: it stops');
+    assert.match(free.output, /stopped: the situation changed/);
+    const cornered = await run(true);
+    assert.equal(cornered.hits, 3, `cornered: it fights on until the zombie dies (hits ${cornered.hits}: ${cornered.output})`);
+});
+
 test('soak 3 (b): with no weapon the bot does not fight from the shelter (bare hands did not hurt the zombies); it says so at most every SHELTER_SAY_MS', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));

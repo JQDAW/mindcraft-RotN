@@ -21,7 +21,7 @@ import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe, equipHighestAttack } from './skills.js';
 import { eatToHeal } from './food.js';
-import { shelterEnemy, shelterTarget } from './threats.js';
+import { shelterEnemy, shelterTarget, OPEN_FIGHT } from './threats.js';
 import { isTreePart } from './fall_safety.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -651,7 +651,7 @@ async function settleOn(bot, feet, { strict = true } = {}) {
  * the roof or the floor. lowHealth (#470 review 2): unarmed and held at this health or lower, back
  * away if possible, else hit back by hand.
  */
-export const BACK_AWAY = { margin: 0.15, lowHealth: 8, centerMs: 2000 };
+export const BACK_AWAY = { margin: 0.15, lowHealth: OPEN_FIGHT.maxLowHealth, centerMs: 2000 }; // #497 review 5: one low-health threshold
 
 /** The open cells a hostile mob (threats.shelterEnemy) holds: [{cell, mob}]. */
 export function heldCells(bot, site, open = []) {

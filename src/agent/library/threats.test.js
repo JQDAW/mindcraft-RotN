@@ -152,6 +152,15 @@ test('#186 review 2: an enderman is fought back only when it is angry (its screa
     assert.deepEqual([back.action, back.why, back.isEnemy(rifted)], ['flee', 'provoked', true]);
 });
 
+/** #497 review 6: wait for a mode's action to end, at most 5 s (a hang fails the test, not the run). */
+async function untilIdle(name, ms = 5000) {
+    const deadline = Date.now() + ms;
+    while (__modeForTest(name).active) {
+        if (Date.now() > deadline) throw new Error(`${name} still active after ${ms} ms`);
+        await new Promise(r => setTimeout(r, 10));
+    }
+}
+
 // A bot whose pathfinder and pvp are fakes, so defendSelf and avoidEnemies really run.
 function fightBot(entities) {
     const bot = fakeBot(entities, {
@@ -181,7 +190,7 @@ test('#186 review 1: a creeper arriving mid-fight ends the fight, and the bot ba
     const agent = { bot, shut_up: true, openChat() {}, actions: { currentActionLabel: '', resume_func: null,
         runAction: async (label, fn) => { await fn(); return { message: 'ok', interrupted: false }; } } };
     await __modeForTest('self_defense').update(agent);
-    while (__modeForTest('self_defense').active) await new Promise(r => setTimeout(r, 10));
+    await untilIdle('self_defense');
     assert.deepEqual(bot.pvp.attacks, ['zombie'], 'one round, then it stopped');
     assert.match(bot.output, /Stopped fighting: the situation changed\./);
     assert.match(bot.modes.behavior_log, /Fighting zombie!\nBacking off: creeper \(explodes\)!/);
@@ -507,8 +516,66 @@ test('soak 5: a fight that drops to health 8 ends, and the bot backs off from th
     const agent = { bot, shut_up: true, openChat() {}, actions: { currentActionLabel: '', resume_func: null,
         runAction: async (label, fn) => { await fn(); return { message: 'ok', interrupted: false }; } } };
     await __modeForTest('self_defense').update(agent);
-    while (__modeForTest('self_defense').active) await new Promise(r => setTimeout(r, 10));
+    await untilIdle('self_defense');
     assert.deepEqual(bot.pvp.attacks, ['zombie'], 'one round, then it stopped');
     assert.match(bot.modes.behavior_log, /Fighting zombie!\nBacking off: zombie \(melee, and health 8, 8 or less\)!/);
     assert.equal(bot.pathfinder.goals.length, 1, 'it moved away');
+});
+
+// #497 review 3 (the lead's decision): in the open, cornered means the flee is blocked (the pathfinder
+// has not moved for AVOID.blockedTicks ticks in a row), not "within 3 blocks". A bot getting away
+// never swings, however close the mob; a blocked one hits a fight mob, never a troll or a creeper.
+test('#497 review 3: avoidEnemies hits a close fight mob only when the flee is blocked; never one canHit refuses', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { avoidEnemies, AVOID } = await import('./skills.js');
+    assert.deepEqual(AVOID, { blockedTicks: 2 });
+    const run = async (name, moving, canHit = (e) => shelterTarget(e)) => {
+        const e = { id: 931, name, type: 'mob', position: new Vec3(2, 64, 0), height: 1.8 };
+        const bot = fightBot([e]);
+        bot.inventory = { items: () => [], slots: [] }; // unarmed
+        bot.lookAt = () => Promise.resolve();
+        const hits = [];
+        bot.attack = (x) => { hits.push(x.name); return Promise.resolve(); };
+        bot.pathfinder.isMoving = () => moving;
+        bot.pathfinder.setGoal = function (goal) { this.goals.push(goal); }; // the mob stays 2 blocks away
+        setTimeout(() => { bot.interrupt_code = true; }, 2300); // about five ticks of 500 ms
+        await avoidEnemies(bot, 16, (x) => x.id === e.id, canHit);
+        return hits;
+    };
+    assert.deepEqual(await run('zombie', true), [], 'getting away: no swing, however close');
+    const blocked = await run('zombie', false);
+    assert.ok(blocked.length >= 1 && blocked.every(n => n === 'zombie'), `blocked: it hits back (${blocked})`);
+    assert.deepEqual(await run('iceandfire:if_troll', false), [], 'blocked by a troll: never a swing');
+    assert.deepEqual(await run('creeper', false), [], 'nor at a creeper');
+});
+
+// #497 review 2: the morning leave (NIGHT_OPS.awayFromMobs) keeps away from every threat, and when
+// blocked it may hit a melee mob only (threats.shelterTarget), never a troll or a creeper.
+test('#497 review 2: the morning leave never swings at a troll or a creeper, even blocked; a blocked zombie is hit', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { NIGHT_OPS } = await import('../night_routine.js');
+    const run = async (name) => {
+        const e = { id: 941, name, type: 'mob', position: new Vec3(2, 64, 0), height: 1.8 };
+        const bot = fightBot([e]);
+        bot.lookAt = () => Promise.resolve();
+        const hits = [];
+        bot.attack = (x) => { hits.push(x.name); return Promise.resolve(); };
+        bot.pathfinder.isMoving = () => false; // blocked
+        bot.pathfinder.setGoal = function (goal) { this.goals.push(goal); };
+        setTimeout(() => { bot.interrupt_code = true; }, 2300);
+        await NIGHT_OPS.awayFromMobs(bot);
+        return { hits, goals: bot.pathfinder.goals.length };
+    };
+    for (const name of ['iceandfire:if_troll', 'creeper']) {
+        const r = await run(name);
+        assert.deepEqual(r.hits, [], `${name}: no swing`);
+        assert.ok(r.goals >= 1, `${name}: it still tries to get away`);
+    }
+    assert.ok((await run('zombie')).hits.length >= 1, 'a blocked zombie is hit');
+});
+
+// #497 review 5: one low-health threshold for the open fight and the shelter's back-away.
+test('#497 review 5: BACK_AWAY.lowHealth is OPEN_FIGHT.maxLowHealth', async () => {
+    const { BACK_AWAY } = await import('./shelter.js');
+    assert.equal(BACK_AWAY.lowHealth, OPEN_FIGHT.maxLowHealth);
 });

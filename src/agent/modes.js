@@ -146,7 +146,8 @@ function fightInShelter(mode, agent, { override = false } = {}) {
         Promise.resolve(say(agent, `Fighting ${target.name} from the shelter!`)).catch(err => reportModeError(mode.name, err));
     }
     execute(mode, agent, async () => {
-        await skills.defendInPlace(bot, threats.shelterTarget);
+        // #497 review 4: the fight stops once health falls to 8 (fightRefusal), unless cornered.
+        await skills.defendInPlace(bot, threats.shelterTarget, () => !threats.fightRefusal(bot) || !!agent._night?.handFight);
         // CX23 soak: between fights, hurt and too hungry to heal (food below REGEN_FOOD): eat.
         if (!bot.interrupt_code) {
             const ate = await food.eatToHeal(bot);
