@@ -717,6 +717,39 @@ test('round 9 B (d): a mob standing in the opening is hit (in place) until it le
     assert.match(p.bot.output, /Cannot close 1, 64, 0: player stands in it\./);
 });
 
+// Better Combat plan step 2 (#521, /home/rv/net-forge-bc-plan.md): bot.attack resolves
+// { sent, path, waitedMs, reason }; sent false when a newer call replaced it. hitOutOf did not await
+// it and counted every call in noHurtHits, and slept a fixed 600 ms.
+test('#521: hitOutOf awaits bot.attack, counts only the swings that went out (noHurtHits), stops after SHELTER_GAP.unsentMax unsent in a row, and paces by bot.forge.attackCooldownTicks()', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SHELTER_GAP };
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    assert.equal(SHELTER_GAP.unsentMax, 3);
+    const run = async (results, gap = { swingMs: 5 }) => {
+        Object.assign(SHELTER_GAP, saved, { noHurtHits: 2, maxMs: 3000 }, gap);
+        const { bot } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+        const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95, health: 20 }; // not hurt
+        bot.entities = { 1: bot.entity, 7: zombie };
+        const tries = [];
+        bot.forge = { attackCooldownTicks: () => 2 }; // 100 ms
+        bot.attack = () => { tries.push(Date.now()); const r = results[tries.length - 1] ?? { sent: true, path: 'bettercombat' }; return Promise.resolve(r); };
+        await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+        return tries;
+    };
+    const replaced = { sent: false, path: null, waitedMs: 0, reason: 'replaced' };
+    // Two replaced, then two that went out: noHurtHits (2) counts only those two.
+    assert.equal((await run([replaced, replaced])).length, 4, 'two unsent, then two sent hits that did not hurt it');
+    // Never sent: unsentMax tries, not noHurtHits.
+    assert.equal((await run([replaced, replaced, replaced, replaced, replaced])).length, 3);
+    // Mineflayer's own bot.attack returns nothing: every call counts, as before.
+    assert.equal((await run([undefined, undefined, undefined])).length, 2);
+    // swingMs null: the gap is Better Combat's cooldown for the held item (2 ticks here), not 600 ms.
+    const paced = await run([], { swingMs: null });
+    assert.equal(paced.length, 2);
+    const gap = paced[1] - paced[0];
+    assert.ok(gap >= 90 && gap < 450, `paced by attackCooldownTicks: ${gap} ms`);
+});
+
 test('#333 review, soak 5: a mob rotn-data says to leave alone (a wolf, a polar bear, an enderman) or not to fight (a troll, a creeper, a skeleton) is not hit out of the opening', async (t) => {
     t.mock.method(console, 'log', () => {});
     const saved = { ...SHELTER_GAP };

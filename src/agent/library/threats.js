@@ -291,6 +291,25 @@ export function weaponCooldownMs(item) {
     return WEAPON_COOLDOWN_MS.other;
 }
 
+/**
+ * Better Combat plan step 2 (#521): the ms to wait between two swings: Better Combat's cooldown for the
+ * held item (bot.forge.attackCooldownTicks(), from its attack speed attribute) when forge-bridge has
+ * it, else weaponCooldownMs (the vanilla class's). bot.attack's Better Combat path waits for the same
+ * cooldown itself, so a swing paced by it is not held back or replaced.
+ */
+export function attackCooldownMs(bot, item = bot?.heldItem) {
+    let ticks = null;
+    try { ticks = bot?.forge?.attackCooldownTicks?.(); } catch { ticks = null; }
+    return Number.isFinite(ticks) && ticks > 0 ? ticks * 50 : weaponCooldownMs(item);
+}
+
+/**
+ * Better Combat plan step 2 (#521): whether a bot.attack result was a swing that went out. #521's
+ * bot.attack resolves { sent, path, waitedMs, reason }: sent false when a newer call replaced it or
+ * the connection ended. Mineflayer's own returns nothing, which counts as sent.
+ */
+export const attackSent = (r) => r?.sent !== false;
+
 /** The bot's best weapon by WEAPON_ATTACK (any sword or axe when none is listed), or null. */
 function bestWeapon(bot) {
     const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]].filter(i => typeof i?.name === 'string' && /sword|(^|[:_])axe$/.test(i.name));
