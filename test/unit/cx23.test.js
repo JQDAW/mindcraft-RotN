@@ -343,6 +343,7 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
     const SRC = fs.readFileSync(path.join(CX, 'mindcraft-rotn-ctl.sh'), 'utf8').replace(/\r/g, '');
     // reset-state's paths (ADR 0011) go under ROOT too: the bots' folders, root's archive parent, the lock, a fixed
     // clock; the owner checks use this test's own user and uid (o.svcUser, o.archiveUid change them for a refusal).
+    const journalTmp = () => { const d = path.join(tmp, 'journal-tmp'); fs.mkdirSync(d, { recursive: true }); return d; };
     const ctl = (args, extraEnv = {}, { bytes = null, svcUser = null, archiveUid = null, stat = null, lockWait = null } = {}) => {
         const etc = path.join(ROOT, 'etc', 'mindcraft-rotn');
         fs.mkdirSync(etc, { recursive: true });
@@ -364,7 +365,10 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
             .replace('readonly ARCHIVE_DIR=/var/lib/mindcraft-rotn-archive', `readonly ARCHIVE_DIR=${fwd(rootFile('var/lib/mindcraft-rotn-archive'))}`)
             .replace('readonly SVC_USER=mindcraft-rotn', `readonly SVC_USER=${svcUser ?? os.userInfo().username}`)
             .replace('readonly ARCHIVE_UID=0', `readonly ARCHIVE_UID=${archiveUid ?? process.getuid?.() ?? 0}`)
-            .replace('readonly STAT=/usr/bin/stat', `readonly STAT=${stat ?? '/usr/bin/stat'}`);
+            .replace('readonly STAT=/usr/bin/stat', `readonly STAT=${stat ?? '/usr/bin/stat'}`)
+            // The journal's temp file goes to this test's own folder, not the shared /tmp: concurrent runs would
+            // count each other's files there (#527 review). The script's fixed /tmp template is checked below.
+            .replace('"$MKTEMP" /tmp/mindcraft-rotn-journal.XXXXXX', `"$MKTEMP" ${posix(journalTmp())}/mindcraft-rotn-journal.XXXXXX`);
         assert.notEqual(body, SRC);
         fs.writeFileSync(copy, body);
         return run(copy, args, extraEnv);
@@ -447,7 +451,10 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
     });
 
     test('#326 re-review: the byte cap is decided from what arrived, also just past it (no SIGPIPE): at most the cap is printed, a cut always noted', () => {
-        const before = fs.readdirSync('/tmp').filter((f) => f.startsWith('mindcraft-rotn-journal.')).length;
+        // The script's own template is the fixed /tmp one (no TMPDIR from the caller); the copy under test uses this test's folder.
+        assert.match(SRC, /tmpf=\$\("\$MKTEMP" \/tmp\/mindcraft-rotn-journal\.XXXXXX\)/);
+        const journalFiles = () => fs.readdirSync(journalTmp()).filter((f) => f.startsWith('mindcraft-rotn-journal.'));
+        assert.deepEqual(journalFiles(), []);
         // The fake prints the value and a newline: 999 x's are exactly the cap of 1000 bytes.
         for (const n of [999, 1000, 4999, 59999, 100000]) {
             const r = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: 'x'.repeat(n) }, { bytes: 1000 });
@@ -464,8 +471,7 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
         const failed = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: 'partial', FAKE_RC_journalctl: '1' });
         assert.equal(failed.code, 1, 'not hidden by the pipe');
         assert.equal(failed.stdout, 'partial\n');
-        const after = fs.readdirSync('/tmp').filter((f) => f.startsWith('mindcraft-rotn-journal.')).length;
-        assert.ok(after <= before, 'the temp file is removed');
+        assert.deepEqual(journalFiles(), [], 'every temp file is removed');
     });
 
     test('metrics (G4, read-only): systemctl show of exactly the four properties on mindcraft-rotn@BOT.service; nothing else', () => {
