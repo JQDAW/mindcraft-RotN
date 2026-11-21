@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { createRequire } from 'node:module';
-import { spawnFmlEntity, attachFmlEntities, fmlEntityName, fmlEntityTable, looksLiving, LIVING_METADATA } from '../src/fml-entities.js';
+import { spawnFmlEntity, attachFmlEntities, fmlEntityName, fmlEntityTable, fmlEntityTableOrWarn, noFmlEntityTableWarning, looksLiving, LIVING_METADATA } from '../src/fml-entities.js';
 import * as rotnData from '../../rotn-data/index.js';
 import { extendRegistry } from '../src/registry-extension.js';
 import { RegistrySnapshot } from '../src/registries.js';
@@ -299,4 +299,31 @@ test('attachFmlEntities logs each unknown modId#typeId once: name, looks living,
     ]);
     assert.deepEqual(h.unknown, ['charm#2', 'zombieawareness#0', 'iceandfire#8']);
     assert.equal(bot.entities[spectre.entityId + 1].type, 'mob', 'every spawn gets the rule, only the log is once');
+});
+
+test('#553 review: without rotn-data\'s table, initBot\'s warning says plainly that every living modded entity is treated as hostile', () => {
+    const warned = [];
+    const warn = (m) => warned.push(m);
+    // rotn-data throws (for example a missing or broken dump).
+    const broken = { modEntityTable: () => { throw new Error('ENOENT: no such file packages/rotn-data/3.3.4/dump.json'); }, entityByModId: () => null };
+    assert.equal(fmlEntityTableOrWarn(broken, { warn }), null);
+    assert.equal(warned.length, 1);
+    assert.equal(warned[0], noFmlEntityTableWarning('ENOENT: no such file packages/rotn-data/3.3.4/dump.json'));
+    assert.match(warned[0], /^\[forge-bridge\] rotn-data mod entity table unavailable \(ENOENT: no such file packages\/rotn-data\/3\.3\.4\/dump\.json\)\. /);
+    assert.match(warned[0], /every living one is typed "mob", so the bot treats EVERY living modded entity as hostile and may attack it/);
+    assert.match(warned[0], /NPCs such as ToroQuest guards and villagers, and modded animals/);
+    assert.match(warned[0], /vanilla villagers and animals as hostile too/);
+    // Loads, but names nothing (a dump without entities): the same consequence, so the same warning.
+    assert.equal(fmlEntityTableOrWarn({ modEntityTable: () => null, entityByModId: () => null }, { warn }), null);
+    assert.equal(fmlEntityTableOrWarn({}, { warn }), null);
+    assert.equal(warned.length, 3);
+    assert.ok(warned.slice(1).every((m) => m === noFmlEntityTableWarning('the table is empty')));
+    // The real table: returned as fmlEntityTable builds it, nothing warned.
+    const api = { modEntityTable: rotnData.modEntityTable, entityByModId: rotnData.entityByModId };
+    assert.deepEqual(fmlEntityTableOrWarn(api, { warn }), fmlEntityTable(api));
+    assert.equal(warned.length, 3);
+    // initBot calls it (its own try/catch and short warning are gone).
+    const mcdataSrc = fs.readFileSync(new URL('../../../src/utils/mcdata.js', import.meta.url), 'utf8');
+    assert.match(mcdataSrc, /const modEntityTable = fmlEntityTableOrWarn\(\{ modEntityTable: rdModEntityTable, entityByModId: rdEntityByModId \}\);/);
+    assert.doesNotMatch(mcdataSrc, /rotn-data mod entity table unavailable: \$\{e\.message\}/);
 });
