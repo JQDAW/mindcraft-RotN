@@ -1,0 +1,159 @@
+{
+  "scenario": "probe-bc-attack",
+  "gate": "BC",
+  "title": "Probe BC: Better Combat's attack packet against the vanilla attack on the real RotN server (a probe, never a gate)",
+  "runId": "20261121t134605-70a82a",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": false,
+  "weakenedParams": [
+    "probe BC measures Better Combat's attack packet against the vanilla attack; it is never a gate pass"
+  ],
+  "verdict": "FAIL",
+  "passed": 1,
+  "failed": 12,
+  "durationS": 99,
+  "params": {
+    "bot": "<bot>",
+    "loginTimeoutMs": 240000,
+    "settleMs": 10000,
+    "replyTimeoutMs": 90000,
+    "stepAbortMs": 120000,
+    "pollMs": 1000,
+    "tpSettleMs": 3000,
+    "summonSettleMs": 3000,
+    "logTail": 20000,
+    "consoleWaitS": 1,
+    "lateReplyMs": 5000,
+    "latePollMs": 1000
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "The bot logs in with its own account (online mode)"
+    },
+    {
+      "check": "setup",
+      "pass": false,
+      "detail": "Better Combat's path active; lane 10/12 cells as planned",
+      "readyToTry": "The driver's Better Combat path is active, and the lane stands (stone floor, air, roof)"
+    },
+    {
+      "check": "vanilla_stone_sword",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "minecraft:stone_sword, vanilla path (bot.attackVanilla at Better Combat's cooldown): only the first hit lowers the NoAI zombie's health"
+    },
+    {
+      "check": "bc_stone_sword",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "minecraft:stone_sword, Better Combat's path (bot.attack): every hit lowers the health, the hits to kill are in rotn-data's range (every hit a crit to none), no gap under 13 ticks"
+    },
+    {
+      "check": "vanilla_stone_axe",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "minecraft:stone_axe, vanilla path (bot.attackVanilla at Better Combat's cooldown): only the first hit lowers the NoAI zombie's health"
+    },
+    {
+      "check": "bc_stone_axe",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "minecraft:stone_axe, Better Combat's path (bot.attack): every hit lowers the health, the hits to kill are in rotn-data's range (every hit a crit to none), no gap under 50 ticks"
+    },
+    {
+      "check": "vanilla_crude_axe",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "pyrotech:crude_axe, vanilla path (bot.attackVanilla at Better Combat's cooldown): only the first hit lowers the NoAI zombie's health"
+    },
+    {
+      "check": "bc_crude_axe",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "pyrotech:crude_axe, Better Combat's path (bot.attack): every hit lowers the health, the hits to kill are in rotn-data's range (every hit a crit to none), no gap under 22 ticks"
+    },
+    {
+      "check": "vanilla_hand",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "hand, vanilla path (bot.attackVanilla at Better Combat's cooldown): only the first hit lowers the NoAI zombie's health"
+    },
+    {
+      "check": "bc_hand",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "hand, Better Combat's path (bot.attack): every hit lowers the health, the hits to kill are in rotn-data's range (every hit a crit to none), no gap under 13 ticks"
+    },
+    {
+      "check": "bc_ai_zombie",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "A zombie with its AI, Better Combat's path, stone sword: every hit lowers its health and it dies; no gap under 13 ticks"
+    },
+    {
+      "check": "server_log",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "No FMLIndexedMessageCodec exception, no WARN/ERROR naming bettercombat, no kick"
+    },
+    {
+      "check": "self_check",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "The wrapper's self-check (5 hits without a hurt -> vanilla) never tripped"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "checked": false,
+      "why": "this scenario names nothing"
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "bcStatus": {
+      "t": "2026-11-21T13:46:18.447Z",
+      "type": "bc_status",
+      "wrapper": true,
+      "attackVanilla": true,
+      "active": true,
+      "status": "bettercombat attack: on",
+      "capture": "../../mindcraft-RotN-worktrees/harness-ops/captures/raw/bc-probe-20261121/capture.jsonl"
+    },
+    "landing": {
+      "planned": [
+        -45,
+        66,
+        -66
+      ],
+      "teleportedTo": [
+        -44.5,
+        66,
+        -65.5
+      ],
+      "botPosition": [
+        -44.5,
+        66,
+        -65.5
+      ]
+    }
+  },
+  "botExitCode": 0,
+  "botExitSignal": null,
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "b7104fa1cf9b17468de26c9059cf8592ab704c1e",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261121-133952",
+  "driver": "node test/runner/drivers/bc-attack-driver.mjs"
+}
