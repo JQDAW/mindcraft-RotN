@@ -1,7 +1,7 @@
 {
   "format": "rotn-mob-melee/1",
   "pack": "3.3.4",
-  "description": "How hard a mob's melee hit is on this pack, for mobMelee and threatOf(...).melee: damage = its ATTACK_DAMAGE attribute with an empty hand after the pack's attribute changes, which is what a player takes per hit on this pack's difficulty (normal) before armour, enchantments and potions. Hand-written from javap -c -p -constants of the pinned pack zip's jars (vanilla classes from its obfuscated minecraft_server.1.12.2.jar, named through EntityList) and its configs; excerpts in packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/ and melee-gaps-3.3.4/. confidence 'verified' = read from that bytecode and config; 'vanilla' = not read. Fields: damage; maxDamage (with the strongest item it is given that was read, when that is more); reach (blocks from its position to a player's feet, for a player target) and intervalTicks where the code sets them; width and height (its hitbox); hitsThroughWalls (true when that reach passes a 1-block wall with the bot against its far side: the check is distance only, reach > width / 2 + wall + 0.3) and wallBlocks (the thickest such wall); hitsThroughFloor (it hits a bot standing on a 1-block floor from directly below: reach > 1 + ceil(height)); hitsThroughRoof (from on top of a 1-block roof over a 2-high room: reach > 3); attack (absent: melee; 'spell': the damage is a spell's, at reach; 'none': it does no damage itself, so damage 0 is read, not unknown); onHit (effects); weapon (how it gets one); note.",
+  "description": "How hard a mob's melee hit is on this pack, for mobMelee and threatOf(...).melee: damage = its ATTACK_DAMAGE attribute with an empty hand after the pack's attribute changes, which is what a player takes per hit on this pack's difficulty (normal) before armour, enchantments and potions. Hand-written from javap -c -p -constants of the pinned pack zip's jars (vanilla classes from its obfuscated minecraft_server.1.12.2.jar, named through EntityList) and its configs; excerpts in packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/ and melee-gaps-3.3.4/. confidence 'verified' = read from that bytecode and config; 'vanilla' = not read. Fields: damage; maxDamage (with the strongest item it is given that was read, when that is more); reach (blocks from its position to a player's feet, for a player target) and intervalTicks where the code sets them; width and height (its hitbox); hitsThroughWalls (true when that reach passes a 1-block wall with the bot against its far side: the check is distance only, reach > width / 2 + wall + 0.3) and wallBlocks (the thickest such wall, 0 when none); hitsThroughFloor (it hits a bot standing on a 1-block floor from directly below: reach > 1 + ceil(height)); hitsThroughRoof (from on top of a 1-block roof over a 2-high room: reach > 3); attack (absent: melee; 'spell': the damage is a spell's, at reach; 'none': it does no damage itself, so damage 0 is read, not unknown); onHit (effects); weapon (how it gets one); note.",
   "general": {
     "summary": "Compare health with damage: a mob kills an unarmoured player at full health (20) in ceil(20 / damage) hits. Nothing on this pack scales mob damage: the difficulty is normal (vanilla scales mob damage to players only on easy and hard), Scaling Health adds no damage (Damage Modifier 0, Difficulty Weight 0, no mob potions, difficulty stays 0), Epic Siege Mod adds none (Boss Kill Modifier 0), Damage Control keeps the 'mob' source at 1.0 (but cuts what players deal, 'player' and 'arrow', to 0.8: the bot's own hits do 80%), Thicc Entities scales none of these mobs, and Rough Mobs changes ATTACK_DAMAGE only for the mobs it lists (blaze, dread lich, weta among these). A held weapon adds its attack damage (zombies get one 1 time in 5).",
     "confidence": "verified",
@@ -715,6 +715,7 @@
       "height": 1.3,
       "reach": 2.14,
       "hitsThroughWalls": false,
+      "wallBlocks": 0,
       "confidence": "verified",
       "evidence": [
         "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityGiantSpider extends the vanilla spider (2); adjustTypeAttributes adds 2 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
@@ -750,6 +751,7 @@
       "height": 1.3,
       "reach": 2.14,
       "hitsThroughWalls": false,
+      "wallBlocks": 0,
       "confidence": "verified",
       "evidence": [
         "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityHungrySpider extends the vanilla spider (2); adjustTypeAttributes adds -1 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",
@@ -816,6 +818,7 @@
       "height": 1.2,
       "reach": 2.14,
       "hitsThroughWalls": false,
+      "wallBlocks": 0,
       "confidence": "verified",
       "evidence": [
         "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125): EntityMotherSpider extends the vanilla spider (2); adjustTypeAttributes adds 3 to ATTACK_DAMAGE (SpecialMobData.addAttribute: base value += amount) (packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/melee.javap.txt)",

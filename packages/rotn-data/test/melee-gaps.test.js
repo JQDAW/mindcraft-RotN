@@ -322,7 +322,7 @@ test('through-block answers follow from width, height and reach; every one is ci
         let t = 0;
         while (m.reach > m.width / 2 + (t + 1) + 0.3) t++;
         assert.equal(m.hitsThroughWalls, t >= 1, n);
-        assert.equal(m.wallBlocks, t >= 1 ? t : undefined, n);
+        assert.equal(m.wallBlocks, t, n);
         assert.equal(m.hitsThroughFloor === true, m.reach > 1 + Math.ceil(m.height), n);
         assert.equal(m.hitsThroughRoof === true, m.reach > 3, n);
         assert.ok(m.evidence.some((e) => /walls\.javap\.txt|gaps\.javap\.txt|troll-trees-melee/.test(e)), n);
