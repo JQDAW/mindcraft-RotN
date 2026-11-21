@@ -21,7 +21,20 @@
 //   - every attack packet the client wrote: arm_animation, custom_payload on bettercombat, use_entity
 //     ATTACK, and the gaps between consecutive ones of each path (gaps.bettercombat, gaps.vanilla);
 //   - the zombie burning (entity_metadata index 0, bit 0x01): fire would mix with the hits;
-//   - afterDeath on a hit sent after the zombie's death status (it cannot land; the judgments leave it out).
+//   - afterDeath on a hit sent after the zombie's death status (it cannot land; the judgments leave it out);
+//   - the target's identity at the start (after #540, where zombie A started at 8 health): entity id, name,
+//     start health, NoAI (EntityLiving AI_FLAGS bit 0), baby flag, position, equipment and its raw metadata;
+//     its position at the end and how far it moved;
+//   - the bot's own hurts during the series (update_health drops): time, health before and after, amount,
+//     and who may have done it: the entities that swung (animation 0) within 1 s before, and those within 6 blocks.
+//     1.12 sends no damage source, so cause is "melee by NAME #ID" only when exactly one entity swung, else unknown;
+//   - every entity spawned near the lane (#540 review: three entities were created in the second between A's and
+//     B's summons in the stone-axe step): spawn_entity_living and spawn_entity within spawnRange of the bot, with
+//     time, id, name, type and position. Each reply carries those recorded since the previous reply (so the
+//     summons and whatever came with them before the series, and anything during it);
+//   - a census of every entity within censusRange (8) of the bot, with id, name, health (metadata 7, when it has one)
+//     and distance: at the series' start and about once a second after (rotn-data, after #540: a Fish's Undead
+//     Rising parasite or a Special Mobs variant may stay in the lane).
 import { setTimeout as sleepMs } from 'node:timers/promises';
 
 export const BC_REPLY_VERSION = 1;
@@ -29,8 +42,13 @@ export const BC_SENDER = 'Server';
 // leadMs: on Better Combat's path the driver waits until this long before the cooldown is over and checks
 // that the zombie still lives, then calls bot.attack, which waits the rest itself: the wrapper's own pacing
 // still decides when the packet goes out, but no swing is sent at a zombie that died meanwhile.
-export const BC_LIMITS = Object.freeze({ maxHits: 40, maxMs: 60000, settleMs: 1500, aiRange: 3, aiSearch: 16, targetSlack: 1.5, leadMs: 150 });
+// spawnRange: spawns are recorded within this distance of the bot, which stands in the middle of the lane: the lane
+// reaches 4.5 blocks either side of it, so this is about 8 blocks beyond its ends (#540 review). spawnKeep caps them.
+export const BC_LIMITS = Object.freeze({ maxHits: 40, maxMs: 60000, settleMs: 1500, aiRange: 3, aiSearch: 16, targetSlack: 1.5, leadMs: 150, spawnRange: 12.5, spawnKeep: 200, censusRange: 8, censusMs: 1000 });
 const HEALTH = 7;            // EntityLivingBase.HEALTH (1.12): a float
+const AI_FLAGS = 11;         // EntityLiving.AI_FLAGS (1.12): a byte, 0x01 = NoAI. Read as is: a mod that adds data
+                             // keys to Entity or EntityLivingBase would shift it, so the raw metadata is kept too.
+const CHILD = 12;            // EntityZombie.IS_CHILD (1.12): a boolean (the same caveat)
 const FLAGS = 0;             // Entity.FLAGS: a byte, 0x01 on fire
 const STATUS_HURT = 2;
 const STATUS_DEAD = 3;
@@ -124,8 +142,44 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
         if (p?.entityStatus === STATUS_DEAD) record(p.entityId, 'dead', true);
     });
     client.on('entity_destroy', (p) => { for (const id of p?.entityIds ?? []) record(id, 'gone', true); });
+    // Spawns near the bot (the lane), kept until the next reply.
+    let spawns = [];
+    const onSpawn = (packet) => (p) => {
+        const me = bot.entity?.position;
+        if (!me || typeof p?.x !== 'number') return;
+        const d = Math.hypot(p.x - me.x, p.y - me.y, p.z - me.z);
+        if (d > L.spawnRange || spawns.length >= L.spawnKeep) return;
+        spawns.push({ at: now(), packet, id: p.entityId, name: bot.entities?.[p.entityId]?.name ?? null, type: p.type ?? null,
+            pos: [p.x, p.y, p.z].map((v) => Math.round(v * 100) / 100), d: Math.round(d * 100) / 100 });
+    };
+    client.on('spawn_entity_living', onSpawn('spawn_entity_living'));
+    client.on('spawn_entity', onSpawn('spawn_entity'));
+    // The bot's own hurts, and who swung just before them.
+    const swungAt = new Map();
+    client.on('animation', (p) => { if (p?.animation === 0) swungAt.set(p.entityId, now()); });
+    let botHealth = typeof bot.health === 'number' ? bot.health : null;
+    client.on('update_health', (p) => {
+        const h = p?.health;
+        if (typeof h !== 'number') return;
+        if (series && typeof botHealth === 'number' && h < botHealth) {
+            const t = now();
+            const me = bot.entity?.position;
+            const ents = Object.values(bot.entities ?? {}).filter((e) => e !== bot.entity && e?.position && me);
+            const swung = ents.filter((e) => swungAt.has(e.id) && t - swungAt.get(e.id) <= 1000).map((e) => ({ id: e.id, name: e.name ?? null }));
+            const near = ents.map((e) => ({ id: e.id, name: e.name ?? null, d: Math.round(e.position.distanceTo(me) * 100) / 100 }))
+                .filter((e) => e.d <= 6).sort((a, b) => a.d - b.d).slice(0, 5);
+            series.botHurts.push({ t, before: botHealth, after: h, amount: Math.round((botHealth - h) * 1000) / 1000,
+                cause: swung.length === 1 ? `melee by ${swung[0].name ?? '?'} #${swung[0].id}` : 'unknown', swung, near });
+        }
+        botHealth = h;
+    });
 
-    const reply = (data) => emit('bc_hit', { v: BC_REPLY_VERSION, ...data });
+    // Every reply carries the spawns recorded since the previous one (t: ms from this reply's command, < 0 before it).
+    const reply = (data, t0 = now()) => {
+        const near = spawns.map(({ at, ...x }) => ({ t: at - t0, ...x }));
+        spawns = [];
+        emit('bc_hit', { v: BC_REPLY_VERSION, ...data, spawns: near });
+    };
 
     function findTarget(target) {
         const all = Object.values(bot.entities ?? {}).filter((e) => e !== bot.entity && isZombie(e) && e.position);
@@ -154,7 +208,7 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
 
     async function run(cmd) {
         const t0 = now();
-        const fail = (error, extra = {}) => reply({ token: cmd.token, ok: false, path: cmd.path, item: cmd.item, error, ms: now() - t0, ...extra });
+        const fail = (error, extra = {}) => reply({ token: cmd.token, ok: false, path: cmd.path, item: cmd.item, error, ms: now() - t0, ...extra }, t0);
         const bc = bot.forge?.bcAttack;
         if (typeof bot.attackVanilla !== 'function' || !bc) return fail('no Better Combat wrapper on this bot (net-forge #521: bot.attackVanilla, bot.forge.bcAttack)');
         if (cmd.path === 'bc' && !bc.active) return fail(`Better Combat's path is not active: ${bc.status?.() ?? 'no status'}`);
@@ -163,7 +217,42 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
         const target = findTarget(cmd.target);
         if (!target) return fail(`no zombie ${cmd.target === 'ai' ? `within ${L.aiSearch} blocks` : `at ${cmd.target.join(',')}`}`);
         const startHealth = typeof target.metadata?.[HEALTH] === 'number' ? target.metadata[HEALTH] : null;
-        series = { id: target.id, events: [] };
+        const md = target.metadata ?? {};
+        const at = (p) => (p ? [p.x, p.y, p.z].map((v) => Math.round(v * 100) / 100) : null);
+        const startPos = at(target.position);
+        const identity = {
+            id: target.id, name: target.name ?? null, startHealth,
+            noAI: typeof md[AI_FLAGS] === 'number' ? (md[AI_FLAGS] & 0x01) === 0x01 : null,
+            baby: typeof md[CHILD] === 'boolean' ? md[CHILD] : null,
+            entityFlags: typeof md[FLAGS] === 'number' ? md[FLAGS] : null,
+            startPos, equipment: (target.equipment ?? []).filter(Boolean).map((i) => i.name ?? String(i.type)),
+            metadata: Object.fromEntries(Object.entries(md).filter(([, v]) => v !== undefined)
+                .map(([k, v]) => [k, ['number', 'boolean', 'string'].includes(typeof v) ? v : v === null ? null : `(${typeof v})`])),
+        };
+        series = { id: target.id, events: [], botHurts: [] };
+        // The census: every entity near the bot, at the start and then about once a second (waits are cut into
+        // pieces of at most censusMs for it).
+        const census = [];
+        let lastCensus = -Infinity;
+        const takeCensus = () => {
+            const t = now();
+            lastCensus = t;
+            const me = bot.entity?.position;
+            if (!me) return;
+            census.push({ t: t - t0, entities: Object.values(bot.entities ?? {})
+                .filter((e) => e !== bot.entity && e?.position && e.position.distanceTo(me) <= L.censusRange)
+                .map((e) => ({ id: e.id, name: e.name ?? null, health: typeof e.metadata?.[HEALTH] === 'number' ? e.metadata[HEALTH] : null,
+                    d: Math.round(e.position.distanceTo(me) * 100) / 100 }))
+                .sort((a, b) => a.d - b.d) });
+        };
+        const waitMs = async (ms) => {
+            const end = now() + ms;
+            while (now() < end) {
+                if (now() - lastCensus >= L.censusMs) takeCensus();
+                await sleep(Math.max(1, Math.min(end - now(), lastCensus + L.censusMs - now())));
+            }
+        };
+        takeCensus();
         const fromPacket = packets.length;
         const statsBefore = bc.stats;
         const hits = [];
@@ -184,7 +273,7 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
                     reequips.push({ afterHit: hits.length, t: equipAt });
                 }
                 if (cmd.target === 'ai' && target.position.distanceTo(bot.entity.position) > L.aiRange) {
-                    await sleep(TICK_MS);
+                    await waitMs(TICK_MS);
                     continue;
                 }
                 const ticks = bot.forge?.attackCooldownTicks?.() ?? null;
@@ -194,7 +283,7 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
                     if (ticks === null) { end = 'cooldown_unknown'; break; }
                     const last = hits.length ? hits.at(-1).t : -Infinity;
                     const wait = Math.max(last, equipAt) + ticks * TICK_MS - now();
-                    if (wait > 0) await sleep(wait);
+                    if (wait > 0) await waitMs(wait);
                     if (dead()) { end = 'dead'; break; }
                     bot.attackVanilla(target, true);
                     r = { sent: true, path: 'vanilla', waitedMs: Math.max(0, Math.round(wait)) };
@@ -202,7 +291,7 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
                     if (ticks !== null) {
                         const last = hits.length ? hits.at(-1).t : -Infinity;
                         const pre = Math.max(last, equipAt) + ticks * TICK_MS - L.leadMs - now();
-                        if (pre > 0) await sleep(pre);
+                        if (pre > 0) await waitMs(pre);
                         if (dead()) { end = 'dead'; break; }
                     }
                     r = await bot.attack(target, true);
@@ -212,15 +301,19 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
         } catch (e) {
             end = `error: ${String(e?.message ?? e).slice(0, 300)}`;
         }
-        await sleep(L.settleMs);
+        await waitMs(L.settleMs);
+        if (now() - lastCensus >= L.censusMs) takeCensus();
         const endAt = now();
         const events = series.events.slice();
+        const botHurts = series.botHurts.map((h) => ({ ...h, t: h.t - t0 }));
         series = null;
+        const endPos = at(bot.entities?.[target.id]?.position ?? target.position);
         const mine = packets.slice(fromPacket).filter((p) => p.name !== 'use_entity' || p.target === target.id);
         const stamped = attribute(hits, events, startHealth, endAt).map((h) => ({ ...h, t: h.t - t0 }));
         reply({
             token: cmd.token, ok: !String(end).startsWith('error') && end !== 'cooldown_unknown', path: cmd.path, item: cmd.item,
-            target: { id: target.id, name: target.name ?? null, startHealth }, end,
+            target: { ...identity, endPos, moved: startPos && endPos ? Math.round(Math.hypot(endPos[0] - startPos[0], endPos[1] - startPos[1], endPos[2] - startPos[2]) * 100) / 100 : null },
+            end, botHurts, census,
             hits: stamped, hitCount: hits.length,
             healthEnd: stamped.at(-1)?.healthAfter ?? startHealth,
             gaps: { bettercombat: gapsOf(mine.filter((p) => p.name === 'bettercombat').map((p) => p.t)), vanilla: gapsOf(mine.filter((p) => p.name === 'use_entity').map((p) => p.t)) },
@@ -229,7 +322,7 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
             tripped: !!bc.tripped, active: !!bc.active, statsBefore, statsAfter: bc.stats,
             botHealth: bot.health ?? null, ms: endAt - t0,
             ...(String(end).startsWith('error') ? { error: end } : end === 'cooldown_unknown' ? { error: 'the held item\'s Better Combat cooldown is unknown' } : {}),
-        });
+        }, t0);
     }
 
     bot.on('message', (jsonMsg) => {
@@ -238,10 +331,12 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
         if (w.from !== BC_SENDER) { emit('bc_ignored', { from: w.from.slice(0, 32), reason: `not a console whisper (only ${BC_SENDER} is accepted)` }); return; }
         const cmd = parseBcHit(w.msg);
         const token = ANY.exec(w.msg)[1];
-        if (!cmd) { reply({ token, ok: false, error: 'malformed bc-hit command' }); return; }
+        // A refusal does not take the spawns: they belong to the series that runs (or runs next).
+        const refuse = (data) => emit('bc_hit', { v: BC_REPLY_VERSION, ...data });
+        if (!cmd) { refuse({ token, ok: false, error: 'malformed bc-hit command' }); return; }
         if (used.has(cmd.token)) { emit('bc_ignored', { token: cmd.token, reason: 'token already used' }); return; }
         used.add(cmd.token);
-        if (busy) { reply({ token: cmd.token, ok: false, path: cmd.path, item: cmd.item, error: 'another bc-hit is running' }); return; }
+        if (busy) { refuse({ token: cmd.token, ok: false, path: cmd.path, item: cmd.item, error: 'another bc-hit is running' }); return; }
         busy = true;
         emit('bc_heard', { token: cmd.token, path: cmd.path, target: cmd.target, item: cmd.item });
         run(cmd).catch((e) => reply({ token: cmd.token, ok: false, error: `bc-hit failed: ${String(e?.message ?? e).slice(0, 300)}` }))

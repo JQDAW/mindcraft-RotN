@@ -9,8 +9,8 @@ import process from 'node:process';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import {
-    BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, P1_CONSOLE_ALLOW, bcConsoleAllow, bcHit, bcLaneCells, bcLaneFills, bcLogProblems, bcReply, guardBcConsole,
-    bcExpected, judgeSeries, markCrits, projectedHits,
+    BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, P1_CONSOLE_ALLOW, bcConsoleAllow, bcHit, bcLaneCells, bcLaneClear, bcLaneFills, bcLogProblems, bcReply, guardBcConsole,
+    bcExpected, judgeSeries, markCrits, notMeasured, projectedHits, zombieCatalogueHealth,
 } from '../runner/lib/probe.mjs';
 import { attachBcAttack, attribute, gapsOf, parseBcHit, whisperOf } from '../runner/drivers/bc-attack.mjs';
 import probe from '../scenarios/probe/probe-bc-attack.mjs';
@@ -34,10 +34,10 @@ describe('probe BC\'s console: summon and kill for this probe only, on a disposa
         const p = BC_PLAN;
         const sent = [
             'say scenario-probe-bc-attack-r1-begin', 'seed', 'gamerule doDaylightCycle false', 'time set day', 'kill @e[type=zombie]',
-            'fill -49 119 -67 -40 122 -65 minecraft:stone', 'fill -48 120 -66 -41 121 -66 minecraft:air',
+            'fill -49 119 -67 -40 122 -65 minecraft:stone', 'fill -48 120 -66 -41 121 -66 minecraft:air', 'kill @e[type=!player,x=-45,y=120,z=-66,r=8]',
             ...bcLaneCells().map(([x, y, z, b]) => `testforblock ${x} ${y} ${z} ${b}`),
             `tp ${NAME} ${p.landing.join(' ')}`, `tp ${NAME} ~ ~ ~`, `clear ${NAME}`,
-            ...p.weapons.filter((w) => w.give).map((w) => `give ${NAME} ${w.item} ${w.give} 0`), `give ${NAME} ${p.ai.item} 1 0`,
+            ...p.weapons.filter((w) => w.give).map((w) => `give ${NAME} ${w.item} 1 0`), `give ${NAME} ${p.ai.item} 1 0`,
             `summon minecraft:zombie ${p.zombieA.join(' ')} {NoAI:1}`, `summon minecraft:zombie ${p.zombieB.join(' ')} {NoAI:1}`, `summon minecraft:zombie ${p.zombieAi.join(' ')}`,
             ...p.weapons.flatMap((w) => [bcHit(NAME, 'abc123', 'vanilla', p.zombieA, w.item), bcHit(NAME, 'abc123', 'bc', p.zombieB, w.item)]),
             bcHit(NAME, 'abc123', 'bc', 'ai', p.ai.item),
@@ -68,12 +68,15 @@ describe('probe BC\'s console: summon and kill for this probe only, on a disposa
             'summon minecraft:zombie -43 120 -66', 'summon minecraft:zombie -42 120 -66 {NoAI:1}', 'summon minecraft:zombie -42 121 -66',
             'summon minecraft:zombie -47 66 -66 {NoAI:1}', 'summon minecraft:zombie -43 66 -66 {NoAI:1}', 'summon minecraft:zombie -42 66 -66',
             'give JQDAW minecraft:stone_sword 1 0', `give ${NAME} minecraft:iron_sword 1 0`, `give ${NAME} minecraft:stone_sword 64 0`, `give ${NAME} minecraft:stone_sword 1 1`,
-            `give ${NAME} pyrotech:crude_axe 7 0`, `give ${NAME} minecraft:bread 1 0`, 'tp JQDAW -45 66 -66', `tp ${NAME} 0 200 0`, 'tp JQDAW ~ ~ ~', 'clear JQDAW',
+            `give ${NAME} pyrotech:crude_axe 7 0`, `give ${NAME} pyrotech:crude_axe 6 0`, `give ${NAME} minecraft:stone_axe 2 0`, `give ${NAME} minecraft:bread 1 0`, 'tp JQDAW -45 66 -66', `tp ${NAME} 0 200 0`, 'tp JQDAW ~ ~ ~', 'clear JQDAW',
             'setblock -49 65 -66 minecraft:stone', 'setblock -45 66 -65 minecraft:air', 'setblock 0 64 0 minecraft:stone', 'testforblock 0 64 0 minecraft:stone',
             'setblock -45 119 -66 minecraft:stone', 'setblock -45 120 -66 minecraft:air', 'testforblock -45 66 -66 minecraft:air', 'testforblock -49 119 -67 minecraft:stone',
             'fill -49 119 -67 -40 122 -65 minecraft:air', 'fill -49 119 -67 -40 122 -65 minecraft:tnt', 'fill -50 119 -67 -40 122 -65 minecraft:stone',
             'fill -49 119 -67 -40 122 -65 minecraft:stone 0 replace', 'fill -48 120 -66 -41 121 -66 minecraft:air 0 destroy', 'fill 0 0 0 100 100 100 minecraft:stone',
             'fill -48 66 -66 -41 67 -66 minecraft:air', `tp ${NAME} -45 66 -66`,
+            'kill @e[type=!player]', 'kill @e[x=-45,y=120,z=-66,r=8]', 'kill @e[type=!player,x=-45,y=120,z=-66,r=9]', 'kill @e[type=!player,x=-45,y=120,z=-66,r=80]',
+            'kill @e[type=!player,x=-45,y=66,z=-66,r=8]', 'kill @e[type=!zombie,x=-45,y=120,z=-66,r=8]', 'kill @e[type=!player,r=8]',
+            'kill @e[type=!player,x=-45,y=120,z=-66,r=8,c=1]', 'kill @e[type=!player,x=-45,y=120,z=-66,r=8] ', 'kill @e[type=player,x=-45,y=120,z=-66,r=8]',
             `tell ${NAME} bc-hit abc123 bc -47,120,-66 minecraft:stone_sword`, `tell ${NAME} bc-hit abc123 vanilla -43,120,-66 minecraft:stone_sword`,
             `tell ${NAME} bc-hit abc123 vanilla ai minecraft:stone_sword`, `tell ${NAME} bc-hit abc123 bc ai hand`, `tell ${NAME} bc-hit abc123 bc -43,120,-66 minecraft:iron_sword`,
             'tell JQDAW bc-hit abc123 bc -43,120,-66 minecraft:stone_sword', `tell ${NAME} bc-hit abc123 bc 0,64,0 hand`, `tell ${NAME} bc-hit abc123 bc -43,66,-66 hand`,
@@ -105,6 +108,11 @@ describe('probe BC\'s console: summon and kill for this probe only, on a disposa
             if (b === 'minecraft:air') assert.ok(x >= -48 && x <= -41 && y >= 120 && y <= 121 && z === -66);
         }
         assert.ok(BC_ALLOW.every((re) => !re.test('setblock -45 119 -66 minecraft:stone')), 'no setblock at all');
+        // The lane clear (after #540): every lane cell is well inside its radius, and only non-players are matched.
+        assert.equal(bcLaneClear(), 'kill @e[type=!player,x=-45,y=120,z=-66,r=8]');
+        const far = Math.max(...cells.map(([x, y, z]) => Math.hypot(x + 0.5 - -45, y + 0.5 - 120, z + 0.5 - -66)));
+        assert.ok(far < 6, `the farthest lane cell is ${far.toFixed(2)} blocks from the centre`);
+        assert.match(bcLaneClear(), /\[type=!player,/, 'never a player: not the bot, not anyone else');
     });
 
     test('P1\'s list stays without summon and kill', () => {
@@ -168,6 +176,18 @@ describe('the judgments (the plan\'s pass rules)', () => {
         assert.equal(judgeSeries(series([2.733, 2.733, 2.733, 2.733, 2.733, 2.733, 2.733, 0.869]), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).firstHitCrit, false);
         assert.equal(judgeSeries(series([20]), { path: 'bc', expected: { ...SWORD, min: 1 }, cooldownTicks: 13 }).firstHitCrit, true, 'a one-hit kill above a crit\'s drop');
         assert.equal(judgeSeries(series([2]), { path: 'bc', expected: { ...SWORD, min: 1 }, cooldownTicks: 13 }).firstHitCrit, null, 'a killing first hit below the midpoint: unknown');
+    });
+
+    test('after #540: notMeasured flags a start health other than the catalogue\'s; judgeSeries is then inconclusive, not judged', () => {
+        assert.equal(zombieCatalogueHealth(), 20, 'rotn-data combat.json');
+        const r = (h) => ({ ok: true, target: { id: 1, startHealth: h }, end: 'dead', hits: [{ i: 1, t: 0, path: 'vanilla', sent: true, drop: 4, died: true, healthAfter: 0 }], gaps: {} });
+        assert.equal(notMeasured(r(20)), null);
+        assert.equal(notMeasured(r(null)), null, 'not read: not flagged');
+        assert.equal(notMeasured(r(8)), 'not measured: the zombie started at 8 health, not the catalogue\'s 20');
+        const v = judgeSeries(r(8), { path: 'vanilla' });
+        assert.deepEqual([v.ok, v.inconclusive, v.why], [false, true, 'not measured: the zombie started at 8 health, not the catalogue\'s 20']);
+        const judged = judgeSeries(r(20), { path: 'vanilla' });
+        assert.deepEqual([judged.ok, judged.inconclusive, judged.why], [false, false, 'only 1 hit(s)'], 'a fresh zombie is judged as before');
     });
 
     test('markCrits: a drop at least halfway to a crit\'s is a crit; a killing hit below that says nothing', () => {
@@ -397,6 +417,70 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
         assert.match(judgeSeries(await reply('fff666'), { path: 'vanilla' }).why, /later hit\(s\) changed the health \(#2, #3, #4, #5, #6, #7, #8\)/);
     });
 
+    test('after #540: the target\'s identity at the start, and the bot\'s own hurts with who swung', async () => {
+        const w = bcWorld();
+        const { reply } = attach(w);
+        w.give('minecraft:stone_axe');
+        const a = w.summon(-47, 66, -66);
+        const other = w.summon(-46, 66, -65, { ai: true });
+        w.clock.at(w.clock.now() + 1000, () => w.hurtBot(3.333, other.id));
+        w.clock.at(w.clock.now() + 2500, () => w.hurtBot(1));   // more than 1 s after that swing: cause unknown
+        w.whisper('bc-hit aaa111 vanilla -47,66,-66 minecraft:stone_axe');
+        const r = await reply('aaa111');
+        assert.equal(r.target.id, a.id);
+        assert.deepEqual([r.target.name, r.target.startHealth, r.target.noAI, r.target.baby, r.target.startPos, r.target.moved], ['zombie', 20, true, false, [-46.5, 66, -65.5], 0]);
+        assert.deepEqual(r.target.metadata, { 0: 0, 7: 20, 11: 1, 12: false }, 'the raw metadata is kept');
+        assert.deepEqual(r.botHurts.map((h) => [h.before, h.after, h.amount, h.cause]), [[20, 16.667, 3.333, `melee by zombie #${other.id}`], [16.667, 15.667, 1, 'unknown']]);
+        assert.ok(r.botHurts[0].t >= 900 && r.botHurts[0].t <= 1100, String(r.botHurts[0].t));
+        assert.deepEqual(r.botHurts[0].near.map((x) => x.id).sort(), [a.id, other.id].sort(), 'the entities within 6 blocks');
+        // Spawns near the lane: both summons came before the command; something else during the series; one far away is not kept.
+        assert.deepEqual(r.spawns.filter((x) => x.t <= 0).map((x) => x.id), [a.id, other.id]);
+        // A zombie with its AI reads as such.
+        const w2 = bcWorld();
+        const t2 = attach(w2);
+        w2.give('minecraft:stone_sword');
+        w2.summon(-41, 66, -66, { ai: true });
+        w2.whisper('bc-hit bbb222 bc ai minecraft:stone_sword');
+        const r2 = await t2.reply('bbb222');
+        assert.equal(r2.target.noAI, false);
+        assert.ok(r2.target.moved > 0, 'it walked');
+        // Outside a series nothing is recorded.
+        w2.hurtBot(2);
+        w2.whisper('bc-hit ccc333 bc 0,0,0 minecraft:stone_sword');
+        assert.equal((await t2.reply('ccc333')).botHurts, undefined, 'a refused series has no hurts list');
+    });
+
+    test('rotn-data after #540: a census of every entity within 8 blocks (name, id, health) at the start and about once a second', async () => {
+        const w = bcWorld();
+        const { reply } = attach(w);
+        w.give('minecraft:stone_axe');
+        const a = w.summon(-47, 66, -66);
+        const p = w.spawnOther('parasite', 300, -45.5, 66, -65.5);   // 1 block from the bot; zombie A is 2
+        w.spawnOther('cow', 92, 0, 66, -66);   // 44 blocks away: not counted
+        w.whisper('bc-hit aaa111 vanilla -47,66,-66 minecraft:stone_axe');
+        const r = await reply('aaa111');
+        assert.ok(r.census[0].t < 500 && r.census[0].t < r.hits[0].t, `at the start, after the equip and before hit 1 (${r.census[0].t} ms)`);
+        assert.deepEqual(r.census[0].entities.map((e) => [e.id, e.name, e.health]), [[p, 'parasite', null], [a.id, 'zombie', 20]], 'nearest first');
+        const gaps = r.census.slice(1).map((c, k) => c.t - r.census[k].t);
+        assert.ok(r.census.length >= 59 && gaps.every((g) => g >= 1000 && g <= 1100), `${r.census.length} censuses, gaps ${Math.min(...gaps)}-${Math.max(...gaps)} ms`);
+    });
+
+    test('#540 review: spawns within ~8 blocks of the lane (12.5 of the bot) go into the next reply, with name and position; farther ones do not', async () => {
+        const w = bcWorld();
+        const { reply } = attach(w);
+        w.give('minecraft:stone_sword');
+        w.summon(-43, 66, -66);
+        const near = w.spawnOther('item', 2, -40, 66, -66);
+        w.spawnOther('cow', 92, 20, 66, -66);   // 64 blocks away
+        w.clock.at(w.clock.now() + 1200, () => w.spawnOther('lightning_bolt', 200, -44, 67, -64));
+        w.whisper('bc-hit aaa111 bc -43,66,-66 minecraft:stone_sword');
+        const r = await reply('aaa111');
+        assert.deepEqual(r.spawns.map((x) => [x.name, x.type, x.pos, x.t <= 0]), [['zombie', 54, [-42.5, 66, -65.5], true], ['item', 2, [-40, 66, -66], true], ['lightning_bolt', 200, [-44, 67, -64], false]]);
+        assert.ok(r.spawns.find((x) => x.id === near).d < 12.5);
+        w.whisper('bc-hit bbb222 bc 0,0,0 minecraft:stone_sword');
+        assert.deepEqual((await reply('bbb222')).spawns, [], 'each spawn is reported once');
+    });
+
     test('refusals: only the console, each token once, one series at a time, no wrapper, path off, no zombie, no item', async () => {
         const w = bcWorld();
         const { out, reply } = attach(w);
@@ -446,6 +530,7 @@ function sim(opt = {}) {
     const add = (msg, logger = DS, level = 'INFO') => log.push(L(msg, logger, level));
     const output = [];
     let w = null;
+    let parasiteDone = false;
     const cmds = [];
     const server = {
         console(cmd, waitS = 1) {
@@ -475,8 +560,19 @@ function sim(opt = {}) {
             } else if ((m = /^summon minecraft:zombie (-?\d+) (-?\d+) (-?\d+)( \{NoAI:1\})?$/.exec(cmd))) {
                 if (!opt.noSummon) { w?.summon(Number(m[1]), Number(m[2]), Number(m[3]), { ai: !m[4] }); add('Object successfully summoned'); }
                 else add('Unable to summon object');
-            } else if (cmd === 'kill @e[type=zombie]') { w?.kill(); add('Killed Zombie'); }
+            } else if ((m = /^kill @e\[type=!player,x=(-?\d+),y=(-?\d+),z=(-?\d+),r=(\d+)\]$/.exec(cmd))) {
+                const names = w?.killNear(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])) ?? [];
+                for (const n of names) add(`Killed ${n}`);
+                if (!names.length) add('That entity cannot be found');
+            } else if (cmd === 'kill @e[type=zombie]') {
+                const n = (w?.kill() ?? 0) + (opt.worldZombies ?? 0);   // kill @e reaches every loaded zombie, not only the lane's
+                for (let k = 0; k < n; k++) add('Killed Zombie');
+                if (!n) add('That entity cannot be found');
+            }
             else if ((m = /^tell (\S+) (.*)$/.exec(cmd)) && online) {
+                // opt.parasite: before the given bc-hit command, a mob that is not minecraft:zombie stands in the lane
+                // (a Fish's Undead Rising parasite from a dead zombie): kill @e[type=zombie] does not reach it.
+                if (opt.parasite && m[2].includes(opt.parasite.before) && !parasiteDone) { parasiteDone = true; w?.spawnOther('parasite', 300, -46.5, 120, -65.5); }
                 if (opt.kick && m[2].startsWith(opt.kick)) { online = false; add(`${NAME} lost connection: Kicked by an operator`); }
                 else w?.whisper(m[2]);
             } else if (/^(gamerule|time) /.test(cmd)) add('ok');
@@ -497,6 +593,7 @@ function sim(opt = {}) {
             add(`UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`, 'net.minecraft.server.network.NetHandlerLoginServer');
             online = true;
             add(`${NAME} joined the game`);
+            add('Mean tick: 31ms increasing chunk view distance to: 6', 'com.dynamic_view.DynView');
             for (const l of opt.log ?? []) log.push(l);
         },
         alive: () => alive,
@@ -530,12 +627,21 @@ describe('probe-bc-attack on a simulated server and log', () => {
         assert.deepEqual(r.notes.series.map((x) => [x.key, x.reply.hits.length, x.reply.end]), [
             ['vanilla_stone_sword', 40, 'maxHits'], ['bc_stone_sword', 7, 'dead'], ['vanilla_stone_axe', 24, 'maxMs'], ['bc_stone_axe', 9, 'dead'],
             ['vanilla_crude_axe', 40, 'maxHits'], ['bc_crude_axe', 9, 'dead'], ['vanilla_hand', 40, 'maxHits'], ['bc_hand', 40, 'maxHits'], ['bc_ai_zombie', 8, 'dead']]);
-        assert.match(c.bc_stone_sword.detail, /^7 hit\(s\), end dead, health 20 -> 0, 7 to kill \(range 5-8 at measured health 20\), crits #1, hit 1 crit: yes: as planned$/);
-        assert.match(c.bc_hand.detail, /^40 hit\(s\), end maxHits, health 20 -> 4\.97\d, 54 to kill \(projected\) \(range 36-54 at measured health 20\), crits #1, hit 1 crit: yes: as planned$/);
+        assert.match(c.bc_stone_sword.detail, /^7 hit\(s\), end dead, health 20 -> 0, target zombie #\d+ NoAI, 7 to kill \(range 5-8 at measured health 20\), crits #1, hit 1 crit: yes: as planned$/);
+        assert.match(c.bc_hand.detail, /^40 hit\(s\), end maxHits, health 20 -> 4\.97\d, target zombie #\d+ NoAI, 54 to kill \(projected\) \(range 36-54 at measured health 20\), crits #1, hit 1 crit: yes: as planned$/);
         assert.deepEqual(r.notes.series.filter((x) => x.expected).map((x) => [x.key, x.expected.health, x.expected.healthFrom, x.verdict.firstHitCrit]), [
             ['bc_stone_sword', 20, 'measured', true], ['bc_stone_axe', 20, 'measured', true], ['bc_crude_axe', 20, 'measured', true], ['bc_hand', 20, 'measured', true],
             ['bc_ai_zombie', 20, 'measured', false]]);
         assert.deepEqual(r.notes.lane.wrong, []);
+        // #540 review: each kill's count next to DynView's view distance.
+        assert.deepEqual(r.notes.kills.map((k) => [k.step, k.killed, k.viewDistance]), [
+            ['setup', 0, 6], ['stone_sword: before', 0, 6], ['stone_sword: after', 1, 6], ['stone_axe: before', 0, 6], ['stone_axe: after', 1, 6],
+            ['crude_axe: before', 0, 6], ['crude_axe: after', 1, 6], ['hand: before', 0, 6], ['hand: after', 2, 6], ['ai: before', 0, 6], ['ai: after', 0, 6]]);
+        // Each reply carries the spawns near the lane since the previous one: the vanilla series' reply has both summons.
+        const sw = r.notes.series.find((x) => x.key === 'vanilla_stone_sword').reply;
+        assert.deepEqual(sw.spawns.map((x) => [x.packet, x.name, x.pos]), [['spawn_entity_living', 'zombie', [-46.5, 120, -65.5]], ['spawn_entity_living', 'zombie', [-42.5, 120, -65.5]]]);
+        assert.ok(sw.spawns.every((x) => x.t <= 0), 'before the command');
+        assert.deepEqual(r.notes.series.find((x) => x.key === 'bc_stone_sword').reply.spawns, [], 'nothing new before the second series');
         assert.deepEqual(r.notes.landing.botPosition, [-44.5, 120, -65.5]);
         assert.match(c.bc_ai_zombie.detail, /, crits none: as planned$/, 'a zombie with its AI targets the bot: no sneak crit');
         assert.equal(s.blocks.get('-45,119,-66'), 'minecraft:stone', 'the floor');
@@ -569,13 +675,44 @@ describe('probe-bc-attack on a simulated server and log', () => {
         assert.equal(c.bc_stone_sword.detail, 'not reached');
     });
 
-    test('#533 review: the range comes from each zombie\'s measured start health (24 here, not the catalogue\'s 20)', async () => {
-        const r = await run(sim({ world: { zombieHealth: 24 } }));
+    test('after #540: a zombie that does not start at the catalogue\'s 20 is not measured: INCONCLUSIVE, no pass rule applied', async () => {
+        // Attempt 2: zombie A of the stone-axe step (the 3rd zombie summoned) started at 8 health.
+        const r = await run(sim({ world: { healthOf: (n) => (n === 2 ? 8 : 20) } }));
         const c = byName(r);
-        assert.equal(c.bc_stone_sword.pass, true, c.bc_stone_sword.detail);
-        assert.match(c.bc_stone_sword.detail, /^9 hit\(s\), end dead, health 24 -> 0, 9 to kill \(range 6-9 at measured health 24\), crits #1, hit 1 crit: yes: as planned$/);
-        // The catalogue's 20 would have failed it: 9 is outside 5-8.
-        assert.match(judgeSeries(r.notes.series.find((x) => x.key === 'bc_stone_sword').reply, { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /9 hits to kill, not in rotn-data's 5-8/);
+        assert.equal(c.vanilla_stone_axe.pass, false);
+        assert.match(c.vanilla_stone_axe.detail, /^INCONCLUSIVE: \d+ hit\(s\), end \w+, health 8 -> [\d.]+, target zombie #\d+ NoAI: not measured: the zombie started at 8 health, not the catalogue's 20$/);
+        assert.deepEqual(r.notes.inconclusive, [{ key: 'vanilla_stone_axe', why: 'not measured: the zombie started at 8 health, not the catalogue\'s 20' }]);
+        for (const k of Object.keys(probe.checks).filter((x) => x !== 'vanilla_stone_axe')) assert.equal(c[k].pass, true, `${k}: ${c[k].detail}`);
+        // Every zombie at 24: every series inconclusive, none judged by its range.
+        const all = await run(sim({ world: { zombieHealth: 24 } }));
+        assert.equal(all.notes.inconclusive.length, 9);
+        assert.match(byName(all).bc_stone_sword.detail, /^INCONCLUSIVE: .*: not measured: the zombie started at 24 health, not the catalogue's 20$/);
+    });
+
+    test('rotn-data after #540: the lane clear before each step kills what kill @e[type=zombie] leaves (a parasite), and says what it killed', async () => {
+        const s = sim({ parasite: { before: ' bc -43,120,-66 minecraft:stone_sword' } });
+        const r = await run(s);
+        assert.deepEqual(r.notes.laneClears.map((c) => [c.step, c.killed]), [
+            ['stone_sword', []], ['stone_axe', ['parasite']], ['crude_axe', []], ['hand', []], ['ai', []]]);
+        // It comes before the step's summons, so it never kills the step's own zombies.
+        for (const step of ['stone_sword', 'stone_axe']) {
+            const i = s.cmds.indexOf('kill @e[type=!player,x=-45,y=120,z=-66,r=8]', step === 'stone_sword' ? 0 : s.cmds.indexOf('kill @e[type=!player,x=-45,y=120,z=-66,r=8]') + 1);
+            assert.ok(i >= 0 && s.cmds[i + 1] === `clear ${NAME}` && s.cmds.slice(i + 1).find((x) => x.startsWith('summon')), step);
+        }
+        assert.equal(byName(r).bc_stone_axe.pass, true);
+    });
+
+    test('#540 review: the kill counts include the loaded world\'s other zombies', async () => {
+        const r = await run(sim({ worldZombies: 3 }));
+        assert.deepEqual(r.notes.kills.slice(0, 3).map((k) => k.killed), [3, 3, 4]);
+    });
+
+    test('after #540: the crude axe is given one at a time, six times; its two series run', async () => {
+        const s = sim();
+        const r = await run(s);
+        assert.equal(s.cmds.filter((x) => x === `give ${NAME} pyrotech:crude_axe 1 0`).length, 6);
+        assert.ok(!s.cmds.some((x) => /^give \S+ \S+ (?!1 )\d+ /.test(x)), 'every give is of one item');
+        assert.equal(byName(r).bc_crude_axe.pass, true, byName(r).bc_crude_axe.detail);
     });
 
     test('a server where vanilla lands every time fails the four vanilla checks only', async () => {

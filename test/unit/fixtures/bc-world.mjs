@@ -46,7 +46,9 @@ const full = (name) => (name ? (name.includes(':') ? name : `minecraft:${name}`)
  * Combat swing goes out 100 ms early), missAt (the Nth Better Combat hit does no damage), tripped,
  * burn (the zombie catches fire), handDrop (the bare hand's plain drop), breakAfter (crude-axe hits per axe, 4),
  * critAt (Better Combat hit numbers that crit at random), noSneak (no sneak-attack crit), zombieHealth (20),
- * botY (the bot's feet, 66; the scenario's lane is at 120).
+ * botY (the bot's feet, 66; the scenario's lane is at 120), healthOf(n) (the start health of the n-th summoned
+ * zombie, from 0). hurtBot(amount, swingerId) hurts the bot as the server reports it: an animation 0 by the
+ * swinger (if any), then update_health.
  * Better Combat crits (x1.5) a NoAI zombie's first hit (a sneak attack: it targets nobody, #528); a zombie
  * with its AI already targets the bot.
  * A zombie summoned with {ai: true} walks 1 block a second towards the bot, down to 1.5 blocks.
@@ -86,12 +88,16 @@ export function bcWorld(opt = {}) {
     const clear = () => slots.fill(null);
     const held = () => full(bot.heldItem?.name);
 
+    let summoned = 0;
     function summon(x, y, z, { ai = false } = {}) {
         const id = nextId++;
-        const hp = opt.zombieHealth ?? 20;
-        const e = { id, name: 'zombie', height: 1.95, position: new Vec3(x + 0.5, y, z + 0.5), metadata: { 7: hp }, ai };
+        const hp = opt.healthOf?.(summoned) ?? opt.zombieHealth ?? 20;
+        summoned++;
+        // 1.12 metadata: 7 health, 11 AI_FLAGS (0x01 NoAI), 12 IS_CHILD.
+        const e = { id, name: 'zombie', height: 1.95, position: new Vec3(x + 0.5, y, z + 0.5), metadata: { 0: 0, 7: hp, 11: ai ? 0 : 1, 12: false }, ai };
         zombies.set(id, { e, health: hp, ai, bcHits: 0 });
         bot.entities[id] = e;
+        client.emit('spawn_entity_living', { entityId: id, type: 54, x: x + 0.5, y, z: z + 0.5 });
         if (ai) walk(id);
         return e;
     }
@@ -179,7 +185,28 @@ export function bcWorld(opt = {}) {
             },
         };
     }
+    function hurtBot(amount, swingerId = null) {
+        if (swingerId !== null) client.emit('animation', { entityId: swingerId, animation: 0 });
+        bot.health = Math.round((bot.health - amount) * 1000) / 1000;
+        client.emit('update_health', { health: bot.health, food: 20, foodSaturation: 5 });
+    }
     /** The console's whisper as 1.12 sends it to the bot. */
     const whisper = (msg, from = 'Server') => bot.emit('message', { translate: 'commands.message.display.incoming', with: [from, msg] });
-    return { bot, client, clock, writes, summon, give, clear, whisper, zombies, kill: () => { for (const id of zombies.keys()) delete bot.entities[id]; zombies.clear(); } };
+    return { bot, client, clock, writes, summon, give, clear, whisper, zombies, hurtBot, kill: () => { const n = [...zombies.values()].filter((z) => z.health > 0).length;   // the living ones, as kill counts them
+            for (const id of zombies.keys()) delete bot.entities[id]; zombies.clear(); return n; },
+        /** kill @e[type=!player,x,y,z,r]: every non-player entity within r of x,y,z; their names, as the server says them. */
+        killNear: (x, y, z, r) => {
+            const out = [];
+            for (const [id, e] of Object.entries(bot.entities)) {
+                if (!e?.position || Math.hypot(e.position.x - x, e.position.y - y, e.position.z - z) > r) continue;
+                const zz = zombies.get(Number(id));
+                if (zz && zz.health <= 0) continue;
+                out.push(zz ? 'Zombie' : e.name);
+                delete bot.entities[id];
+                zombies.delete(Number(id));
+            }
+            return out;
+        },
+        /** Another entity appears (spawn_entity_living), e.g. a mob the pack spawns next to the lane. */
+        spawnOther: (name, type, x, y, z) => { const id = nextId++; bot.entities[id] = { id, name, position: new Vec3(x, y, z) }; client.emit('spawn_entity_living', { entityId: id, type, x, y, z }); return id; } };
 }
