@@ -9,7 +9,7 @@ import process from 'node:process';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import {
-    BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, P1_CONSOLE_ALLOW, bcConsoleAllow, bcHit, bcLaneBlocks, bcLogProblems, bcReply, guardBcConsole,
+    BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, P1_CONSOLE_ALLOW, bcConsoleAllow, bcHit, bcLaneCells, bcLaneFills, bcLogProblems, bcReply, guardBcConsole,
     bcExpected, judgeSeries, markCrits, projectedHits,
 } from '../runner/lib/probe.mjs';
 import { attachBcAttack, attribute, gapsOf, parseBcHit, whisperOf } from '../runner/drivers/bc-attack.mjs';
@@ -34,8 +34,8 @@ describe('probe BC\'s console: summon and kill for this probe only, on a disposa
         const p = BC_PLAN;
         const sent = [
             'say scenario-probe-bc-attack-r1-begin', 'seed', 'gamerule doDaylightCycle false', 'time set day', 'kill @e[type=zombie]',
-            ...bcLaneBlocks().map(([x, y, z, b]) => `setblock ${x} ${y} ${z} ${b}`),
-            ...[p.landing, p.zombieA, p.zombieB, p.zombieAi].flatMap(([x, y, z]) => [`testforblock ${x} ${y - 1} ${z} minecraft:stone`, `testforblock ${x} ${y} ${z} minecraft:air`, `testforblock ${x} ${y + 2} ${z} minecraft:stone`]),
+            'fill -49 119 -67 -40 122 -65 minecraft:stone', 'fill -48 120 -66 -41 121 -66 minecraft:air',
+            ...bcLaneCells().map(([x, y, z, b]) => `testforblock ${x} ${y} ${z} ${b}`),
             `tp ${NAME} ${p.landing.join(' ')}`, `tp ${NAME} ~ ~ ~`, `clear ${NAME}`,
             ...p.weapons.filter((w) => w.give).map((w) => `give ${NAME} ${w.item} ${w.give} 0`), `give ${NAME} ${p.ai.item} 1 0`,
             `summon minecraft:zombie ${p.zombieA.join(' ')} {NoAI:1}`, `summon minecraft:zombie ${p.zombieB.join(' ')} {NoAI:1}`, `summon minecraft:zombie ${p.zombieAi.join(' ')}`,
@@ -64,14 +64,19 @@ describe('probe BC\'s console: summon and kill for this probe only, on a disposa
 
     test('#527 review: exactly the plan\'s commands: its three summons at their cells, this bot, the BC items and counts, the landing, the lane', () => {
         for (const c of [
-            'summon minecraft:zombie -46 66 -66 {NoAI:1}', 'summon minecraft:zombie 0 64 0 {NoAI:1}', 'summon minecraft:zombie -47 66 -66',
-            'summon minecraft:zombie -43 66 -66', 'summon minecraft:zombie -42 66 -66 {NoAI:1}', 'summon minecraft:zombie -42 67 -66',
+            'summon minecraft:zombie -46 120 -66 {NoAI:1}', 'summon minecraft:zombie 0 64 0 {NoAI:1}', 'summon minecraft:zombie -47 120 -66',
+            'summon minecraft:zombie -43 120 -66', 'summon minecraft:zombie -42 120 -66 {NoAI:1}', 'summon minecraft:zombie -42 121 -66',
+            'summon minecraft:zombie -47 66 -66 {NoAI:1}', 'summon minecraft:zombie -43 66 -66 {NoAI:1}', 'summon minecraft:zombie -42 66 -66',
             'give JQDAW minecraft:stone_sword 1 0', `give ${NAME} minecraft:iron_sword 1 0`, `give ${NAME} minecraft:stone_sword 64 0`, `give ${NAME} minecraft:stone_sword 1 1`,
             `give ${NAME} pyrotech:crude_axe 7 0`, `give ${NAME} minecraft:bread 1 0`, 'tp JQDAW -45 66 -66', `tp ${NAME} 0 200 0`, 'tp JQDAW ~ ~ ~', 'clear JQDAW',
             'setblock -49 65 -66 minecraft:stone', 'setblock -45 66 -65 minecraft:air', 'setblock 0 64 0 minecraft:stone', 'testforblock 0 64 0 minecraft:stone',
-            `tell ${NAME} bc-hit abc123 bc -47,66,-66 minecraft:stone_sword`, `tell ${NAME} bc-hit abc123 vanilla -43,66,-66 minecraft:stone_sword`,
-            `tell ${NAME} bc-hit abc123 vanilla ai minecraft:stone_sword`, `tell ${NAME} bc-hit abc123 bc ai hand`, `tell ${NAME} bc-hit abc123 bc -43,66,-66 minecraft:iron_sword`,
-            'tell JQDAW bc-hit abc123 bc -43,66,-66 minecraft:stone_sword', `tell ${NAME} bc-hit abc123 bc 0,64,0 hand`,
+            'setblock -45 119 -66 minecraft:stone', 'setblock -45 120 -66 minecraft:air', 'testforblock -45 66 -66 minecraft:air', 'testforblock -49 119 -67 minecraft:stone',
+            'fill -49 119 -67 -40 122 -65 minecraft:air', 'fill -49 119 -67 -40 122 -65 minecraft:tnt', 'fill -50 119 -67 -40 122 -65 minecraft:stone',
+            'fill -49 119 -67 -40 122 -65 minecraft:stone 0 replace', 'fill -48 120 -66 -41 121 -66 minecraft:air 0 destroy', 'fill 0 0 0 100 100 100 minecraft:stone',
+            'fill -48 66 -66 -41 67 -66 minecraft:air', `tp ${NAME} -45 66 -66`,
+            `tell ${NAME} bc-hit abc123 bc -47,120,-66 minecraft:stone_sword`, `tell ${NAME} bc-hit abc123 vanilla -43,120,-66 minecraft:stone_sword`,
+            `tell ${NAME} bc-hit abc123 vanilla ai minecraft:stone_sword`, `tell ${NAME} bc-hit abc123 bc ai hand`, `tell ${NAME} bc-hit abc123 bc -43,120,-66 minecraft:iron_sword`,
+            'tell JQDAW bc-hit abc123 bc -43,120,-66 minecraft:stone_sword', `tell ${NAME} bc-hit abc123 bc 0,64,0 hand`, `tell ${NAME} bc-hit abc123 bc -43,66,-66 hand`,
         ]) assert.ok(!allowed(c), c);
         // Another bot name gets its own list; nothing of FRCFLD's.
         const other = bcConsoleAllow('OtherBot');
@@ -80,8 +85,30 @@ describe('probe BC\'s console: summon and kill for this probe only, on a disposa
         for (const bad of ['', 'a b', 'x;op', '@a', 'ab', 'a'.repeat(17), undefined]) assert.throws(() => bcConsoleAllow(bad), /bad bot name/, String(bad));
     });
 
+    test('attempt 1 (#535): the lane is an enclosed stone box in the air; its 68 cells; two fills and nothing else', () => {
+        assert.deepEqual(bcLaneFills(), ['fill -49 119 -67 -40 122 -65 minecraft:stone', 'fill -48 120 -66 -41 121 -66 minecraft:air']);
+        const cells = bcLaneCells();
+        assert.equal(cells.length, 68);
+        assert.equal(new Set(cells.map((c) => c.slice(0, 3).join(','))).size, 68, 'no cell twice');
+        const at = (x, y, z) => cells.find((c) => c[0] === x && c[1] === y && c[2] === z)?.[3];
+        for (const [x, y, z] of [BC_PLAN.landing, BC_PLAN.zombieA, BC_PLAN.zombieB, BC_PLAN.zombieAi]) {
+            assert.equal(at(x, y, z), 'minecraft:air');
+            assert.equal(at(x, y + 1, z), 'minecraft:air');
+            assert.equal(at(x, y - 1, z), 'minecraft:stone', 'floor');
+            assert.equal(at(x, y + 2, z), 'minecraft:stone', 'roof');
+            for (const dz of [-1, 1]) for (const dy of [0, 1]) assert.equal(at(x, y + dy, z + dz), 'minecraft:stone', 'walls');
+        }
+        for (const x of [-49, -40]) for (const dy of [0, 1]) assert.equal(at(x, 120 + dy, -66), 'minecraft:stone', 'end walls');
+        // Every cell lies inside the first fill's box; the air ones inside the second's.
+        for (const [x, y, z, b] of cells) {
+            assert.ok(x >= -49 && x <= -40 && y >= 119 && y <= 122 && z >= -67 && z <= -65, `${x} ${y} ${z}`);
+            if (b === 'minecraft:air') assert.ok(x >= -48 && x <= -41 && y >= 120 && y <= 121 && z === -66);
+        }
+        assert.ok(BC_ALLOW.every((re) => !re.test('setblock -45 119 -66 minecraft:stone')), 'no setblock at all');
+    });
+
     test('P1\'s list stays without summon and kill', () => {
-        for (const c of ['summon minecraft:zombie -47 66 -66 {NoAI:1}', 'summon minecraft:zombie -47 66 -66', 'kill @e[type=zombie]']) {
+        for (const c of ['summon minecraft:zombie -47 120 -66 {NoAI:1}', 'summon minecraft:zombie -42 120 -66', 'kill @e[type=zombie]', 'fill -48 120 -66 -41 121 -66 minecraft:air']) {
             assert.ok(!P1_CONSOLE_ALLOW.some((re) => re.test(c)), c);
         }
     });
@@ -96,10 +123,10 @@ describe('probe BC\'s console: summon and kill for this probe only, on a disposa
         }
         assert.deepEqual(seen, [], 'nothing reached the server');
         const g = guardBcConsole(srv, SERVER, NAME);
-        assert.deepEqual(g.console('summon minecraft:zombie -47 66 -66 {NoAI:1}', 1), ['ok']);
+        assert.deepEqual(g.console('summon minecraft:zombie -47 120 -66 {NoAI:1}', 1), ['ok']);
         assert.throws(() => g.console('kill @e', 1), /console command refused/);
         assert.throws(() => g.console('op FRCFLD', 1), /console command refused/);
-        assert.deepEqual(seen, ['summon minecraft:zombie -47 66 -66 {NoAI:1}']);
+        assert.deepEqual(seen, ['summon minecraft:zombie -47 120 -66 {NoAI:1}']);
     });
 
     test('bcHit builds the driver\'s command, the driver parses it back, and the reply is found by token', () => {
@@ -128,6 +155,19 @@ describe('the judgments (the plan\'s pass rules)', () => {
         assert.deepEqual([SWORD, AXE, CRUDE, HAND].map((e) => [e.min, e.max]), [[5, 8], [6, 9], [6, 9], [36, 54]]);
         for (const e of [SWORD, AXE, CRUDE, HAND]) assert.ok(e.critHit / e.perHit > 1.4 && e.critHit / e.perHit < 1.6, 'x1.5 before armour');
         assert.throws(() => bcExpected('minecraft:no_such_sword'), /no hitsToKill/);
+    });
+
+    test('#533 review: bcExpected takes the measured start health (else the catalogue\'s 20); judgeSeries says whether hit 1 was a crit', () => {
+        assert.deepEqual([SWORD.health, SWORD.healthFrom], [20, 'catalogue']);
+        const at24 = bcExpected('minecraft:stone_sword', { health: 24 });
+        assert.deepEqual([at24.min, at24.max, at24.health, at24.healthFrom], [6, 9, 24, 'measured']);
+        assert.equal(bcExpected('minecraft:stone_sword', { health: null }).healthFrom, 'catalogue');
+        assert.equal(bcExpected('minecraft:stone_sword', { health: 0 }).healthFrom, 'catalogue');
+        const series = (drops) => ({ ok: true, target: { id: 1, startHealth: 20 }, end: 'dead', hits: drops.map((d, k) => ({ i: k + 1, t: k * 650, path: 'bettercombat', sent: true, drop: d, died: k === drops.length - 1, healthAfter: k === drops.length - 1 ? 0 : 1 })), gaps: { bettercombat: [] } });
+        assert.equal(judgeSeries(series([4.133, 2.733, 2.733, 2.733, 2.733, 2.733, 2.202]), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).firstHitCrit, true);
+        assert.equal(judgeSeries(series([2.733, 2.733, 2.733, 2.733, 2.733, 2.733, 2.733, 0.869]), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).firstHitCrit, false);
+        assert.equal(judgeSeries(series([20]), { path: 'bc', expected: { ...SWORD, min: 1 }, cooldownTicks: 13 }).firstHitCrit, true, 'a one-hit kill above a crit\'s drop');
+        assert.equal(judgeSeries(series([2]), { path: 'bc', expected: { ...SWORD, min: 1 }, cooldownTicks: 13 }).firstHitCrit, null, 'a killing first hit below the midpoint: unknown');
     });
 
     test('markCrits: a drop at least halfway to a crit\'s is a crit; a killing hit below that says nothing', () => {
@@ -415,12 +455,22 @@ function sim(opt = {}) {
             if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
             else if (cmd === 'seed') add('Seed: 1880465901402976865');
             else if ((m = /^tp (\S+) (-?\d+) (-?\d+) (-?\d+)$/.exec(cmd))) add(`Teleported ${m[1]} to ${Number(m[2]) + 0.5}, ${m[3]}.0, ${Number(m[4]) + 0.5}`);
-            else if (cmd === `tp ${NAME} ~ ~ ~`) add(`Teleported ${NAME} to -44.5, 66.0, -65.5`);
+            else if (cmd === `tp ${NAME} ~ ~ ~`) add(`Teleported ${NAME} to -44.5, 120.0, -65.5`);
             else if (cmd === `clear ${NAME}`) { w?.clear(); add(`Cleared the inventory of ${NAME}, removing 1 items`); }
             else if ((m = /^give (\S+) (\S+) (\d+) \d+$/.exec(cmd))) { w?.give(m[2], Number(m[3])); add(`Given [${m[2]}] * ${m[3]} to ${m[1]}`); }
-            else if ((m = /^setblock (-?\d+) (-?\d+) (-?\d+) (\S+)$/.exec(cmd))) { blocks.set(`${m[1]},${m[2]},${m[3]}`, m[4]); add('Block placed'); }
-            else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) (\S+)$/.exec(cmd))) {
-                const b = blocks.get(`${m[1]},${m[2]},${m[3]}`) ?? 'minecraft:grass';
+            else if ((m = /^fill (-?\d+) (-?\d+) (-?\d+) (-?\d+) (-?\d+) (-?\d+) (\S+)$/.exec(cmd))) {
+                const [x1, y1, z1, x2, y2, z2] = m.slice(1, 7).map(Number);
+                let n = 0;
+                for (let x = x1; x <= x2; x++) for (let y = y1; y <= y2; y++) for (let z = z1; z <= z2; z++) {
+                    const k = `${x},${y},${z}`;
+                    if (opt.obstacle?.[k] || blocks.get(k) === m[7]) continue;   // a trunk shell stays (attempt 1)
+                    blocks.set(k, m[7]);
+                    n++;
+                }
+                add(n ? `${n} blocks filled` : 'No blocks filled');
+            } else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) (\S+)$/.exec(cmd))) {
+                const k = `${m[1]},${m[2]},${m[3]}`;
+                const b = opt.obstacle?.[k] ?? blocks.get(k) ?? 'minecraft:air';   // y 120: open sky
                 add(b === m[4] ? `Successfully found the block at ${m[1]}, ${m[2]}, ${m[3]}` : `The block at ${m[1]}, ${m[2]}, ${m[3]} is ${b} (expected: ${m[4]})`);
             } else if ((m = /^summon minecraft:zombie (-?\d+) (-?\d+) (-?\d+)( \{NoAI:1\})?$/.exec(cmd))) {
                 if (!opt.noSummon) { w?.summon(Number(m[1]), Number(m[2]), Number(m[3]), { ai: !m[4] }); add('Object successfully summoned'); }
@@ -440,7 +490,7 @@ function sim(opt = {}) {
             startEnv = env;
             alive = true;
             const on = !opt.noEnv && env.ROTN_DRIVER_BC_ATTACK === 'on';
-            w = bcWorld({ ...(opt.world ?? {}), bcActive: on });
+            w = bcWorld({ botY: BC_PLAN.landing[1], ...(opt.world ?? {}), bcActive: on });
             attachBcAttack(w.bot, { emit: (type, data) => output.push(`DRIVER ${JSON.stringify({ type, ...data })}`), now: w.clock.now, sleep: w.clock.sleep });
             output.push(`DRIVER ${JSON.stringify({ type: 'bc_status', wrapper: true, attackVanilla: true, active: on, status: w.bot.forge.bcAttack.status() })}`);
             if (opt.trip) output.push('[forge-bridge] bettercombat attack: 5 hits without a hurt, back to vanilla for this connection');
@@ -480,11 +530,22 @@ describe('probe-bc-attack on a simulated server and log', () => {
         assert.deepEqual(r.notes.series.map((x) => [x.key, x.reply.hits.length, x.reply.end]), [
             ['vanilla_stone_sword', 40, 'maxHits'], ['bc_stone_sword', 7, 'dead'], ['vanilla_stone_axe', 24, 'maxMs'], ['bc_stone_axe', 9, 'dead'],
             ['vanilla_crude_axe', 40, 'maxHits'], ['bc_crude_axe', 9, 'dead'], ['vanilla_hand', 40, 'maxHits'], ['bc_hand', 40, 'maxHits'], ['bc_ai_zombie', 8, 'dead']]);
-        assert.match(c.bc_stone_sword.detail, /^7 hit\(s\), end dead, health 20 -> 0, 7 to kill, crits #1: as planned$/);
-        assert.match(c.bc_hand.detail, /^40 hit\(s\), end maxHits, health 20 -> 4\.97\d, 54 to kill \(projected\), crits #1: as planned$/);
+        assert.match(c.bc_stone_sword.detail, /^7 hit\(s\), end dead, health 20 -> 0, 7 to kill \(range 5-8 at measured health 20\), crits #1, hit 1 crit: yes: as planned$/);
+        assert.match(c.bc_hand.detail, /^40 hit\(s\), end maxHits, health 20 -> 4\.97\d, 54 to kill \(projected\) \(range 36-54 at measured health 20\), crits #1, hit 1 crit: yes: as planned$/);
+        assert.deepEqual(r.notes.series.filter((x) => x.expected).map((x) => [x.key, x.expected.health, x.expected.healthFrom, x.verdict.firstHitCrit]), [
+            ['bc_stone_sword', 20, 'measured', true], ['bc_stone_axe', 20, 'measured', true], ['bc_crude_axe', 20, 'measured', true], ['bc_hand', 20, 'measured', true],
+            ['bc_ai_zombie', 20, 'measured', false]]);
+        assert.deepEqual(r.notes.lane.wrong, []);
+        assert.deepEqual(r.notes.landing.botPosition, [-44.5, 120, -65.5]);
         assert.match(c.bc_ai_zombie.detail, /, crits none: as planned$/, 'a zombie with its AI targets the bot: no sneak crit');
-        assert.equal(s.blocks.get('-45,65,-66'), 'minecraft:stone');
-        assert.equal(s.blocks.get('-45,68,-66'), 'minecraft:stone', 'the roof against daylight');
+        assert.equal(s.blocks.get('-45,119,-66'), 'minecraft:stone', 'the floor');
+        assert.equal(s.blocks.get('-45,122,-66'), 'minecraft:stone', 'the roof against daylight');
+        assert.equal(s.blocks.get('-45,120,-65'), 'minecraft:stone', 'a side wall');
+        assert.equal(s.blocks.get('-45,120,-66'), 'minecraft:air');
+        assert.ok(!s.cmds.some((x) => x.startsWith('setblock')), 'no setblock');
+        assert.equal(s.cmds.filter((x) => x.startsWith('testforblock')).length, 68, 'every lane cell checked');
+        const firstSummon = s.cmds.findIndex((x) => x.startsWith('summon'));
+        assert.ok(s.cmds.slice(0, firstSummon).filter((x) => x.startsWith('testforblock')).length === 68, 'all checked before the first summon');
         // After each step (a weapon's Better Combat series, the AI zombie) a kill comes before anything is summoned again.
         const steps = s.cmds.map((x, i) => [x, i]).filter(([x]) => / bc-hit [0-9a-f]+ bc /.test(x));
         assert.equal(steps.length, 5);
@@ -493,6 +554,28 @@ describe('probe-bc-attack on a simulated server and log', () => {
             assert.equal(next, 'kill @e[type=zombie]', `after ${s.cmds[i]}`);
             assert.equal(s.cmds[i + 1], 'kill @e[type=zombie]', 'at once');
         }
+    });
+
+    test('attempt 1 (#535): a lane cell that the fill cannot change fails setup cleanly: no tp, no summon, the cell named', async () => {
+        const s = sim({ obstacle: { '-43,120,-66': 'tile.trunkshell.name' } });
+        const r = await run(s);
+        const c = byName(r);
+        assert.equal(c.login_online.pass, true);
+        assert.equal(c.setup.pass, false);
+        assert.match(c.setup.detail, /lane 67\/68 cells as planned \(wrong: -43 120 -66: The block at -43, 120, -66 is tile\.trunkshell\.name \(expected: minecraft:air\)\)$/);
+        assert.deepEqual(r.notes.lane.wrong.map((x) => [x.cell, x.want]), [[[-43, 120, -66], 'minecraft:air']]);
+        assert.ok(!s.cmds.some((x) => /^(summon|tp |tell )/.test(x)), 'nothing summoned, the bot not moved, no bc-hit');
+        assert.equal(r.notes.landing, undefined);
+        assert.equal(c.bc_stone_sword.detail, 'not reached');
+    });
+
+    test('#533 review: the range comes from each zombie\'s measured start health (24 here, not the catalogue\'s 20)', async () => {
+        const r = await run(sim({ world: { zombieHealth: 24 } }));
+        const c = byName(r);
+        assert.equal(c.bc_stone_sword.pass, true, c.bc_stone_sword.detail);
+        assert.match(c.bc_stone_sword.detail, /^9 hit\(s\), end dead, health 24 -> 0, 9 to kill \(range 6-9 at measured health 24\), crits #1, hit 1 crit: yes: as planned$/);
+        // The catalogue's 20 would have failed it: 9 is outside 5-8.
+        assert.match(judgeSeries(r.notes.series.find((x) => x.key === 'bc_stone_sword').reply, { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /9 hits to kill, not in rotn-data's 5-8/);
     });
 
     test('a server where vanilla lands every time fails the four vanilla checks only', async () => {
