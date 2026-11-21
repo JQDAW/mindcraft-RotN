@@ -731,7 +731,7 @@ test('#521: hitOutOf awaits bot.attack, counts only the swings that went out (no
         const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95, health: 20 }; // not hurt
         bot.entities = { 1: bot.entity, 7: zombie };
         const tries = [];
-        bot.forge = { attackCooldownTicks: () => 2 }; // 100 ms
+        bot.forge = { bcAttack: { enabled: true }, attackCooldownTicks: () => 2 }; // bc_attack on (g): 100 ms
         bot.attack = () => { tries.push(Date.now()); const r = results[tries.length - 1] ?? { sent: true, path: 'bettercombat' }; return Promise.resolve(r); };
         await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
         return tries;
@@ -793,6 +793,30 @@ test('#532 re-review nit 3: hitOutOf cancels a hit still waiting for its cooldow
     assert.ok(cancelled[0].afterMs < 800, `cancelled within a poll of maxMs (200 ms), not a cooldown later: ${cancelled[0].afterMs} ms`);
     assert.deepEqual(sent, [], 'the waiting hit never went out');
     assert.match(bot.output, /1, 64, 0: a zombie stands in it\)/, 'no hit counted');
+});
+
+test('(g) 3: hitOutOf waits on "sight" or "reach" (not an unsent hit), and gives up on the cell after SHELTER_GAP.blockedMs of only those, saying why', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SHELTER_GAP };
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    const run = async (results) => {
+        Object.assign(SHELTER_GAP, saved, { swingMs: 5, blockedWaitMs: 50, blockedMs: 600 });
+        const { bot } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+        const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95 };
+        bot.entities = { 1: bot.entity, 7: zombie };
+        let tries = 0;
+        bot.attack = () => { const r = results(tries++); if (r.sent) zombie.position = new Vec3(3.5, 64, 0.5); return Promise.resolve(r); }; // a hit knocks it out
+        const out = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+        return { tries, out, output: bot.output };
+    };
+    const sight = { sent: false, path: null, waitedMs: 0, reason: 'sight' };
+    const later = await run((n) => (n < 5 ? sight : { sent: true }));
+    assert.equal(later.tries, 6, 'more than unsentMax (3) looks');
+    assert.equal(later.out.closed, true, later.output);
+    const never = await run(() => sight);
+    assert.ok(never.tries > SHELTER_GAP.unsentMax + 3, `${never.tries} looks`);
+    assert.match(never.output, /Cannot hit the zombie in 1, 64, 0: out of sight for 0\.6 s\./);
+    assert.equal(never.out.closed, false);
 });
 
 test('#333 review, soak 5: a mob rotn-data says to leave alone (a wolf, a polar bear, an enderman) or not to fight (a troll, a creeper, a skeleton) is not hit out of the opening', async (t) => {

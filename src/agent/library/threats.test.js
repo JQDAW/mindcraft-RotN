@@ -7,7 +7,7 @@ import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES, shelterTarget, shelterEnemy, fightRefusal, maxHitOf,
     meleeReach, inMeleeReach, hurtingInReach, weaponCooldownMs, WEAPON_COOLDOWN_MS, fightNumbers, fightOdds, shelterEatBlock, EAT_SAFE,
-    weaponNumbers, weaponOrder, attackPath, weaponRank, WEAPON_ATTACK, attackWatched, ATTACK_WATCH } from './threats.js';
+    weaponNumbers, weaponOrder, attackPath, weaponRank, WEAPON_ATTACK, attackWatched, ATTACK_WATCH, attackCooldownMs, BLOCKED_REASONS } from './threats.js';
 import { weaponStats } from '../../../packages/rotn-data/index.js';
 import { __modeForTest, __resetThreatLease } from '../modes.js';
 
@@ -896,4 +896,17 @@ test('#532 re-review nit 3: attackWatched cancels a waiting bot.attack once stop
     delete old.forge;
     assert.deepEqual(await attackWatched(old, {}, () => 'interrupted'), { sent: true }, 'no cancelAttack: a plain await');
     assert.equal(await attackWatched({ attack: () => undefined, forge: { cancelAttack: () => false } }, {}, () => null), undefined, "mineflayer's own bot.attack");
+});
+
+// (g) 4: bot.forge.attackCooldownTicks() paces swings only while bc_attack is on (bcAttack.enabled):
+// with it off, forge-bridge's ticks for an unknown attack speed are 50 (2.5 s), net-forge #541.
+test('(g) 4: attackCooldownMs uses bot.forge.attackCooldownTicks() only while bc_attack is on; otherwise the vanilla class cooldown', () => {
+    const sword = { name: 'stone_sword' };
+    const bot = (bcAttack) => ({ heldItem: sword, forge: { ...(bcAttack ? { bcAttack } : {}), attackCooldownTicks: () => 50 } });
+    assert.equal(attackCooldownMs(bot(null), sword), 625, 'no bcAttack');
+    assert.equal(attackCooldownMs(bot({ enabled: false, active: false }), sword), 625, 'bc_attack off');
+    assert.equal(attackCooldownMs(bot({ enabled: true, active: true }), sword), 2500, 'on: Better Combat paces it');
+    assert.equal(attackCooldownMs(bot({ enabled: true, active: false }), sword), 2500, 'on, its paced vanilla fallback (no channel, or tripped)');
+    assert.equal(attackCooldownMs({ heldItem: sword, forge: { bcAttack: { enabled: true }, attackCooldownTicks: () => null } }, sword), 625, 'no ticks: the vanilla class cooldown');
+    assert.deepEqual(Object.keys(BLOCKED_REASONS), ['reach', 'sight']);
 });
