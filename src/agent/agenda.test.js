@@ -1063,3 +1063,16 @@ test('soak 7 (d): within FOOD_AFTER_DEATH.windowMs of a death (its time, with or
     const shown = died(soak7(), 20_000);
     assert.equal(shown.agenda.judge(agendaState(shown.bot), { readOnly: true }).step.id, 'food');
 });
+
+test('#552 nit (rotn-data #551): the crude axe text says when it breaks, from its durability: its 9th block (1 a block) and its 5th hit (2 a hit)', async () => {
+    const { weaponStats } = await import('../../packages/rotn-data/index.js');
+    const axe = weaponStats('pyrotech:crude_axe');
+    // An item breaks only when its damage goes above its durability.
+    const ordinal = (n) => `${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}`;
+    const block = ordinal(axe.durability + 1), hit = ordinal(Math.floor(axe.durability / axe.durabilityPerHit) + 1);
+    assert.deepEqual([block, hit], ['9th', '5th']);
+    const step = ROTN_EARLY_GAME.find(s => s.id === 'crude_axe');
+    assert.ok(step.goal.includes(`breaks on its ${block} block`) && step.goal.includes(`breaks on the ${hit} hit`), step.goal);
+    assert.ok(WEAPON_RESERVE_STEP.goal.includes(`breaks on its ${hit} hit, or its ${block} block`), WEAPON_RESERVE_STEP.goal);
+    for (const g of [step.goal, WEAPON_RESERVE_STEP.goal]) assert.doesNotMatch(g, /about 8 uses/);
+});

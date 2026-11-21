@@ -65,7 +65,7 @@ export const ROTN_EARLY_GAME = [
     {
         id: 'crude_axe', short: 'craft a crude axe',
         after: ['rocks', 'sticks'],
-        goal: 'Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks (River Cane or bamboo work too), in your inventory grid. It breaks after about 8 uses: keep 2 uses for your first plank.',
+        goal: 'Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks (River Cane or bamboo work too), in your inventory grid. It breaks on its 9th block (each block costs 1 of its 8 durability; a hit on a mob costs 2, so it breaks on the 5th hit): keep 2 uses for your first plank.',
         done: (s) => s.count('pyrotech:crude_axe') > 0 || s.count('stone_axe') > 0 || s.count('stone_pickaxe') > 0,
     },
     {
@@ -255,7 +255,7 @@ export const WEAPON_RESERVE_STEP = {
     done: (s) => s.hasWeapon?.() !== false,
     goal: 'Night is near and you hold no weapon. Zombies here hit for 6 to 8 and dig into shelters, and bare hands do not hurt them. '
         + 'Craft a stone axe at a crafting table with !craftRecipe("stone_axe", 1): 3 rocks and 2 sticks. Rock piles break by hand: !collectBlocks("pyrotech:rock", 3); sticks: !collectBlocks("stick", 2). '
-        + 'With no crafting table near, a crude axe works too (the same attack, but it wears out after about 8 uses): !craftRecipe("pyrotech:crude_axe", 1) from 1 rock and 2 sticks in your inventory grid. The agenda may use the crude axe up on trees: this reserve then makes a new one (1 rock and 2 sticks) before dusk.',
+        + 'With no crafting table near, a crude axe works too (the same attack, but it breaks on its 5th hit, or its 9th block): !craftRecipe("pyrotech:crude_axe", 1) from 1 rock and 2 sticks in your inventory grid. The agenda may use the crude axe up on trees: this reserve then makes a new one (1 rock and 2 sticks) before dusk.',
     goalNow: (s) => {
         const rocks = s.count?.('pyrotech:rock') ?? 0;
         const sticks = s.countOre?.('stickWood') ?? 0;
