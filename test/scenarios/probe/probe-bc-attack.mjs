@@ -8,22 +8,28 @@
 //
 // Driver: test/runner/drivers/bc-attack-driver.mjs (initBot with the wrapper, plus the bc-hit command of
 // test/runner/drivers/bc-attack.mjs), started with ROTN_DRIVER_BC_ATTACK=on. No LLM, no key.
-// Console: every command goes through guardBcConsole (lib/probe.mjs): BC_CONSOLE_ALLOW only, and nothing
-// at all unless TEST_SERVER_NAME names a disposable test server (mcr-test-...). summon (a plain zombie,
-// with or without {NoAI:1}) and kill (@e[type=zombie]) are on that list for this probe only (the lead,
-// 2026-11-21: on the disposable CPX42 only). The bot never gets op.
+// Console: every command goes through guardBcConsole (lib/probe.mjs): bcConsoleAllow(bot) only, and nothing
+// at all unless TEST_SERVER_NAME names a disposable test server (mcr-test-...). The list admits exactly
+// the plan's commands (#527 review): the three summons at their cells (A and B with {NoAI:1}, the AI zombie
+// bare) and kill @e[type=zombie], for this probe only (the lead, 2026-11-21: on the disposable CPX42 only);
+// give, tp and clear only for this bot, the BC items and the landing; fill only the lane's two fills (no
+// setblock), testforblock only the lane's cells.
+// The bot never gets op.
 //
 // Steps (BC_PLAN):
 //   1. login_online; refused before anything is sent if TEST_SERVER_NAME is not a test server's, or if the
 //      bot is the CX23 service (it has no bc-hit command).
 //   2. setup: the driver says Better Combat's path is active (bc_status); `gamerule doDaylightCycle false`,
-//      `time set day`, `kill @e[type=zombie]`; the lane (stone floor, two air cells, a stone roof against
-//      daylight burning), checked with testforblock; `tp <bot>` onto it.
+//      `time set day`, `kill @e[type=zombie]`; the enclosed lane in the air (attempt 1, #535: a tree trunk
+//      stood in the ground lane): `fill` the box around it with stone, then its two rows with air; every one
+//      of its 68 cells checked with testforblock. Any wrong cell (or the path not active) fails setup before
+//      anything is summoned, and before the bot is moved. Then `tp <bot>` into it.
 //   3. For the stone sword, the stone axe, the Pyrotech crude axe (6 given: it breaks after 4 hits) and an
 //      empty hand: `clear`, the give, two zombies {NoAI:1} 2 blocks west (A) and east (B) of the bot.
 //      bc-hit vanilla on A (bot.attackVanilla at Better Combat's cooldown), then bc-hit bc on B (bot.attack);
 //      each until the zombie dies, 40 hits or 60 s. vanilla_<weapon> and bc_<weapon> judge them
-//      (judgeSeries). Then `kill @e[type=zombie]`.
+//      (judgeSeries; the Better Combat range from the zombie's measured start health, and whether hit 1 was a
+//      crit: #533 review). Then `kill @e[type=zombie]`.
 //   4. bc_ai_zombie: one zombie with its AI, 3 blocks east, Better Combat's path, stone sword: every hit
 //      lands, it dies, no gap under the cooldown. Then `kill @e[type=zombie]`.
 //   5. server_log: from the begin marker, no FMLIndexedMessageCodec exception, no WARN/ERROR or exception
@@ -41,7 +47,7 @@ import { lastTeleport } from '../../runner/lib/server-log.mjs';
 import { giveVerdict, testforblockVerdict } from '../../runner/lib/g2.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
 import {
-    BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, BC_TRIP_RE, TEST_SERVER_NAME_RE, bcHit, bcLaneBlocks, bcLogProblems, bcReply, guardBcConsole, judgeSeries,
+    BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, BC_TRIP_RE, TEST_SERVER_NAME_RE, bcExpected, bcHit, bcLaneCells, bcLaneFills, bcLogProblems, bcReply, guardBcConsole, judgeSeries,
 } from '../../runner/lib/probe.mjs';
 
 const MS = 1000;
@@ -50,11 +56,11 @@ const SUMMONED = /Object successfully summoned/;
 
 const checks = {
     login_online: 'The bot logs in with its own account (online mode)',
-    setup: 'The driver\'s Better Combat path is active, and the lane stands (stone floor, air, roof)',
+    setup: 'The driver\'s Better Combat path is active, and every cell of the enclosed lane in the air is as planned (testforblock), before anything is summoned',
 };
 for (const w of BC_PLAN.weapons) {
     checks[`vanilla_${w.check}`] = `${w.item}, vanilla path (bot.attackVanilla at Better Combat's cooldown): only the first hit lowers the NoAI zombie's health`;
-    checks[`bc_${w.check}`] = `${w.item}, Better Combat's path (bot.attack): every hit lowers the health, the hits to kill are near #518's ${w.hits.join(' or ')}, no gap under ${w.cooldownTicks} ticks`;
+    checks[`bc_${w.check}`] = `${w.item}, Better Combat's path (bot.attack): every hit lowers the health, the hits to kill are in rotn-data's range (every hit a crit to none), no gap under ${w.cooldownTicks} ticks`;
 }
 checks.bc_ai_zombie = 'A zombie with its AI, Better Combat\'s path, stone sword: every hit lowers its health and it dies; no gap under 13 ticks';
 checks.server_log = 'No FMLIndexedMessageCodec exception, no WARN/ERROR naming bettercombat, no kick';
@@ -95,7 +101,7 @@ export default {
             ctx.check('login_online', false, 'not started: probe BC needs its own driver (bc-attack-driver.mjs), not the CX23 service');
             return;
         }
-        const server = guardBcConsole(ctx.server, serverName);
+        const server = guardBcConsole(ctx.server, serverName, name);
         const lc = lateConsole(server, clock, { waitS: p.consoleWaitS, lateMs: p.lateReplyMs, pollMs: p.latePollMs });
         const con = lc.con;
         const confirm = async (cmd, accept) => {
@@ -146,13 +152,20 @@ export default {
             return null;
         };
         const series = [];
-        const judged = (key, r, opts) => {
-            const v = judgeSeries(r, opts);
-            series.push({ key, reply: r, verdict: v });
+        // item: the Better Combat series' item; its range comes from the zombie's measured start health (#533 review), or the
+        // catalogue's 20 when the driver read none. firstHit: say whether hit 1 was a crit (NoAI series: a sneak attack, #528).
+        const judged = (key, r, opts, { item = null, firstHit = false } = {}) => {
+            const expected = item ? bcExpected(item, { health: r?.target?.startHealth }) : null;
+            const v = judgeSeries(r, { ...opts, ...(expected ? { expected } : {}) });
+            series.push({ key, reply: r, expected, verdict: v });
             ctx.note('series', series);
             const n = r?.hits?.length ?? 0;
+            const yes = (x) => (x === true ? 'yes' : x === false ? 'no' : 'unknown');
             ctx.check(key, v.ok, `${r ? `${n} hit(s), end ${r.end ?? '?'}, health ${r.target?.startHealth ?? '?'} -> ${r.healthEnd ?? '?'}`
-                + `${v.projected !== null ? `, ${v.projected} to kill${r.end === 'dead' ? '' : ' (projected)'}` : ''}` : aborted ?? `no reply within ${p.replyTimeoutMs / MS}s`}: ${v.why}`);
+                + `${v.projected !== null ? `, ${v.projected} to kill${r.end === 'dead' ? '' : ' (projected)'}` : ''}`
+                + `${expected && !opts.ai ? ` (range ${expected.min}-${expected.max} at ${expected.healthFrom} health ${expected.health})` : ''}`
+                + `${v.crits ? `, crits ${v.crits.crits.length ? `#${v.crits.crits.join(', #')}` : 'none'}` : ''}`
+                + `${firstHit ? `, hit 1 crit: ${yes(v.firstHitCrit)}` : ''}` : aborted ?? `no reply within ${p.replyTimeoutMs / MS}s`}: ${v.why}`);
             return v;
         };
 
@@ -169,19 +182,23 @@ export default {
         con('gamerule doDaylightCycle false');
         con('time set day');
         con('kill @e[type=zombie]');
-        for (const [x, y, z, block] of bcLaneBlocks(plan.lane)) con(`setblock ${x} ${y} ${z} ${block}`);
+        // The enclosed lane in the air (attempt 1, #535): two fills, then every one of its cells checked before anything else.
+        for (const f of bcLaneFills(plan.lane)) con(f);
         const lane = [];
-        for (const cell of [plan.landing, plan.zombieA, plan.zombieB, plan.zombieAi]) {
-            lane.push(await testfor([cell[0], cell[1] - 1, cell[2]], 'minecraft:stone'), await testfor(cell, 'minecraft:air'), await testfor([cell[0], cell[1] + 2, cell[2]], 'minecraft:stone'));
-        }
-        const teleported = await tp(`tp ${name} ${plan.landing.join(' ')}`);
-        await clock.sleep(p.tpSettleMs);
-        ctx.note('landing', { planned: plan.landing, teleportedTo: teleported, botPosition: await tp(`tp ${name} ~ ~ ~`) });
-        const laneOk = lane.every((v) => v.ok);
+        for (const [x, y, z, block] of bcLaneCells(plan.lane)) lane.push({ cell: [x, y, z], block, ...(await testfor([x, y, z], block)) });
+        const wrong = lane.filter((v) => !v.ok);
+        ctx.note('lane', { fills: bcLaneFills(plan.lane), cells: lane.length, wrong: wrong.map((v) => ({ cell: v.cell, want: v.block, got: v.detail ?? null })) });
+        const laneOk = wrong.length === 0;
         const active = status?.active === true;
+        if (laneOk && active) {
+            const teleported = await tp(`tp ${name} ${plan.landing.join(' ')}`);
+            await clock.sleep(p.tpSettleMs);
+            ctx.note('landing', { planned: plan.landing, teleportedTo: teleported, botPosition: await tp(`tp ${name} ~ ~ ~`) });
+        }
         const setupStop = stopReason();
         ctx.check('setup', laneOk && active && !setupStop, setupStop ? `aborted: ${setupStop}`
-            : `Better Combat's path ${active ? 'active' : `NOT active (${status ? status.status ?? 'no status' : 'no bc_status from the driver'})`}; lane ${lane.filter((v) => v.ok).length}/${lane.length} cells as planned`);
+            : `Better Combat's path ${active ? 'active' : `NOT active (${status ? status.status ?? 'no status' : 'no bc_status from the driver'})`}; lane ${lane.length - wrong.length}/${lane.length} cells as planned`
+            + `${wrong.length ? ` (wrong: ${wrong.slice(0, 4).map((v) => `${v.cell.join(' ')}: ${v.detail ?? 'no reply'}`).join('; ')}${wrong.length > 4 ? '; ...' : ''})` : ''}`);
         if (setupStop) return abort(setupStop);
         if (!laneOk || !active) return;
 
@@ -203,7 +220,7 @@ export default {
             judged(`vanilla_${w.check}`, rv, { path: 'vanilla', cooldownTicks: w.cooldownTicks });
             if (aborted) return;
             const rb = await ask((t) => bcHit(name, t, 'bc', plan.zombieB, w.item));
-            judged(`bc_${w.check}`, rb, { path: 'bc', hits: w.hits, cooldownTicks: w.cooldownTicks, maxHits: plan.maxHits });
+            judged(`bc_${w.check}`, rb, { path: 'bc', cooldownTicks: w.cooldownTicks, maxHits: plan.maxHits }, { item: w.item, firstHit: true });
             if (aborted) return;
             con('kill @e[type=zombie]');
         }
@@ -217,7 +234,7 @@ export default {
         if (!sword.ok || !z) ctx.check('bc_ai_zombie', false, `setup failed: give ${sword.ok ? 'ok' : 'not confirmed'}, zombie ${z ? 'summoned' : 'not summoned'}`);
         else {
             const r = await ask((t) => bcHit(name, t, 'bc', 'ai', plan.ai.item));
-            judged('bc_ai_zombie', r, { path: 'bc', cooldownTicks: plan.ai.cooldownTicks, ai: true });
+            judged('bc_ai_zombie', r, { path: 'bc', cooldownTicks: plan.ai.cooldownTicks, ai: true }, { item: plan.ai.item });
             if (aborted) return;
         }
         con('kill @e[type=zombie]');

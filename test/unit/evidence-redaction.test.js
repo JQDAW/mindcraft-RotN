@@ -137,6 +137,15 @@ describe('UUIDs, the bot name and local paths', () => {
             ['local-path', 'local-path', 'local-path'], 'each path counts');
         // The bot's name below <local> goes with --bot.
         assert.equal(redact('/root/.mindcraft-rotn/FRCFLD/msa', { bot: 'FRCFLD' }), '<local>/.mindcraft-rotn/<bot>/msa');
+        // #535 review: a relative path from a sibling checkout (the batch checkout's driver printed its capture so).
+        both('"capture":"../../mindcraft-RotN-worktrees/harness-ops/captures/raw/bc-probe-20261121/capture.jsonl"',
+            '"capture":"<local>/captures/raw/bc-probe-20261121/capture.jsonl"', 'local-path');
+        both('"capture":"..\\/..\\/mindcraft-RotN-worktrees\\/harness-ops\\/captures\\/raw\\/a.jsonl"', '"capture":"<local>\\/captures\\/raw\\/a.jsonl"', 'local-path');
+        both('at ../mindcraft-RotN-batch/b7104fa1/test/x.mjs', 'at <local>/test/x.mjs', 'local-path');
+        both('see ../../../mindcraft-RotN/src/a.js', 'see <local>/src/a.js', 'local-path');
+        for (const keep of ['../captures/raw/a.jsonl', './mindcraft-RotN-worktrees/x', '../mindcraft-RotN-data/x', 'mindcraft-RotN-worktrees/harness-ops']) {
+            assert.equal(redact(keep), keep, keep);
+        }
     });
 
     test('Linux paths that are no one\'s folder stay, and are not flagged', () => {

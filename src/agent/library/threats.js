@@ -292,6 +292,25 @@ export function weaponCooldownMs(item) {
 }
 
 /**
+ * Better Combat plan step 2 (#521): the ms to wait between two swings: Better Combat's cooldown for the
+ * held item (bot.forge.attackCooldownTicks(), from its attack speed attribute) when forge-bridge has
+ * it, else weaponCooldownMs (the vanilla class's). bot.attack's Better Combat path waits for the same
+ * cooldown itself, so a swing paced by it is not held back or replaced.
+ */
+export function attackCooldownMs(bot, item = bot?.heldItem) {
+    let ticks = null;
+    try { ticks = bot?.forge?.attackCooldownTicks?.(); } catch { ticks = null; }
+    return Number.isFinite(ticks) && ticks > 0 ? ticks * 50 : weaponCooldownMs(item);
+}
+
+/**
+ * Better Combat plan step 2 (#521): whether a bot.attack result was a swing that went out. #521's
+ * bot.attack resolves { sent, path, waitedMs, reason }: sent false when a newer call replaced it or
+ * the connection ended. Mineflayer's own returns nothing, which counts as sent.
+ */
+export const attackSent = (r) => r?.sent !== false;
+
+/**
  * A weapon's rank by its material, a sword above an axe of the same material: the fallback order
  * (weaponOrder) for weapons with no numbers, and the tie-break. A heuristic: RotN's durabilities do
  * not follow damage. (Moved here from skills.js, which re-exports it.)
@@ -311,16 +330,19 @@ export function attackPath(bot) {
 }
 
 /**
- * Soak 7 (e): a weapon's numbers on this pack: {damage, cooldownTicks, from}. From rotn-data's
- * weaponStats (combat.json, #518); for a weapon it does not list, WEAPON_ATTACK's damage with the
- * vanilla cooldown of its class (weaponCooldownMs); null when neither knows it.
+ * Soak 7 (e): a weapon's numbers on this pack on an attack path: {damage, cooldownTicks, from}. From
+ * rotn-data's weaponStats (combat.json, #518): on the vanilla path attackDamage and cooldownTicks;
+ * (f) on the Better Combat path bcAttackDamage and bcCooldownTicks (#528: Better Combat's own damage
+ * and client cooldown). For a weapon it does not list, WEAPON_ATTACK's damage with the vanilla
+ * cooldown of its class (weaponCooldownMs), on either path; null when neither knows it.
  */
-export function weaponNumbers(item) {
+export function weaponNumbers(item, path = 'vanilla') {
     if (typeof item?.name !== 'string') return null;
     const name = fullItemName(item.name.replace(/:\d+$/, ''));
     let w = null;
     try { w = weaponStats(name); } catch { w = null; }
-    if (Number.isFinite(w?.attackDamage) && w.cooldownTicks > 0) return { damage: w.attackDamage, cooldownTicks: w.cooldownTicks, from: 'rotn-data' };
+    const [damage0, ticks0] = path === 'bettercombat' ? [w?.bcAttackDamage, w?.bcCooldownTicks] : [w?.attackDamage, w?.cooldownTicks];
+    if (Number.isFinite(damage0) && ticks0 > 0) return { damage: damage0, cooldownTicks: ticks0, from: 'rotn-data' };
     const damage = WEAPON_ATTACK[name];
     if (Number.isFinite(damage)) return { damage, cooldownTicks: weaponCooldownMs(item) / 50, from: 'WEAPON_ATTACK' };
     return null;
@@ -331,13 +353,13 @@ export function weaponNumbers(item) {
  * will use (attackPath). On the Better Combat path every hit lands in full, so that is the rate. On
  * the vanilla path only the first hit on a mob lands (#518: Better Combat's hurtResistantTime=20
  * leaves later vanilla hits of the same amount at nothing), so the damage of that one hit ranks
- * first and the rate breaks a tie. Stone sword 3.5/12.5 ticks, crude axe 3/22.2, stone axe 3/50: the
- * sword, then the crude axe, then the stone axe, on either path. Weapons with no numbers come after
+ * first and the rate breaks a tie. Stone sword 3.5/12.5 ticks (Better Combat: 13), crude axe 3/22.2
+ * (22), stone axe 3/50 (50): the sword, then the crude axe, then the stone axe, on either path. Weapons with no numbers come after
  * those with numbers, by weaponRank, which also breaks any tie left. Negative when a is better.
  */
 export function weaponOrder(path = 'vanilla') {
     const key = (item) => {
-        const n = weaponNumbers(item);
+        const n = weaponNumbers(item, path);
         if (!n) return null;
         const perTick = n.damage / n.cooldownTicks;
         return path === 'bettercombat' ? [perTick] : [n.damage, perTick];

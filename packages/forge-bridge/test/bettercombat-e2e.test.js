@@ -109,6 +109,18 @@ test('initBot: bot.attack sends Better Combat\'s packet when bc_attack is on and
     withChannel.state.client.write('entity_status', { entityId: ZOMBIE, entityStatus: 2 });
     await within(10000, hurt, 'entityHurt');
     assert.equal(on.bot.forge.bcAttack.stats.misses, 0);
+    // bot.forge.cancelAttack (skills, on an interrupt): a hit waiting for its cooldown never goes out.
+    // A fresh hit first, so the next call surely waits for its cooldown.
+    const fresh = withChannel.state.attacks.length;
+    assert.equal((await on.bot.attack(on.bot.entities[ZOMBIE])).path, 'bettercombat');
+    const waiting = on.bot.attack(on.bot.entities[ZOMBIE]);
+    await until(10000, () => withChannel.state.attacks.length >= fresh + 2, 'the fresh hit on the wire');
+    const sent = withChannel.state.attacks.length;
+    assert.equal(on.bot.forge.cancelAttack('interrupt'), true);
+    assert.equal((await waiting).reason, 'interrupt');
+    await sleep(900); // past the 650 ms cooldown
+    assert.equal(withChannel.state.attacks.length, sent, 'nothing sent after the cancel');
+    assert.equal(on.bot.forge.cancelAttack('interrupt'), false);
     closeBot(on.bot);
     await sleep(300);
 

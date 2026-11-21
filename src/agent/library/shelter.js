@@ -22,7 +22,7 @@ import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe, equipHighestAttack } from './skills.js';
 import { logWeapon } from './survival_log.js';
 import { eatToHeal } from './food.js';
-import { shelterEnemy, shelterTarget, threatFor } from './threats.js';
+import { shelterEnemy, shelterTarget, threatFor, attackCooldownMs, attackSent } from './threats.js';
 import { isTreePart } from './fall_safety.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -39,9 +39,11 @@ export const SHELTER_SPARE = { dirt: 4 };
  * A mob standing in a cell to close: hit it from where the bot stands, with its best weapon, while
  * it stays (CX23 soak: the 5-hit cap gave up on the digging zombie, the repair placed nothing and
  * the bot died a second later). Bounded by maxMs, and by noHurtHits hits on a mob whose known health
- * does not go down.
+ * does not go down. Better Combat plan step 2 (#521): bot.attack is awaited, only a swing that went
+ * out counts, and unsentMax unsent in a row end it; swingMs null: the held item's attack cooldown
+ * (threats.attackCooldownMs; a fixed 600 ms before); a number overrides it (tests).
  */
-export const SHELTER_GAP = { maxMs: 30_000, swingMs: 600, noHurtHits: 6 };
+export const SHELTER_GAP = { maxMs: 30_000, swingMs: null, noHurtHits: 6, unsentMax: 3 };
 
 /**
  * Real fire or lava: rotn-data's material (G3 round 7 B), so a block whose name only holds "fire"
@@ -404,7 +406,7 @@ async function placeOnce(bot, target, interior, mode, why = () => {}) {
  * creeper or a skeleton: threats.shelterTarget. Returns the number of hits.
  */
 async function hitOutOf(bot, cell) {
-    let hits = 0;
+    let hits = 0, unsent = 0;
     const start = Date.now(), fight = {};
     const same = { id: null, health: null, hits: 0 };
     const healthOf = (e) => (Number.isFinite(e?.health) ? e.health : Number.isFinite(e?.metadata?.[7]) ? e.metadata[7] : null);
@@ -417,10 +419,19 @@ async function hitOutOf(bot, cell) {
         try { await equipHighestAttack(bot, fight); } catch { /* fights on with what is in hand */ }
         if (hits === 0) logWeapon(bot, 'cell'); // soak 7 (c)
         await bot.lookAt(mob.position.offset(0, (mob.height ?? 1.8) * 0.8, 0), true);
-        bot.attack(mob);
+        // #521: only a swing that went out counts (noHurtHits); unsentMax unsent in a row ends it.
+        const r = await bot.attack(mob);
+        // #532 review nit 3: Better Combat's wait can outlast an interrupt or maxMs by one cooldown;
+        // a swing that resolves after either is not counted.
+        if (bot.interrupt_code || Date.now() - start >= SHELTER_GAP.maxMs) break;
+        if (!attackSent(r)) {
+            if (r?.reason === 'ended' || ++unsent >= SHELTER_GAP.unsentMax) break;
+            continue;
+        }
+        unsent = 0;
         hits++;
         same.hits++;
-        await sleep(SHELTER_GAP.swingMs);
+        await sleep(SHELTER_GAP.swingMs ?? attackCooldownMs(bot));
     }
     return hits;
 }
