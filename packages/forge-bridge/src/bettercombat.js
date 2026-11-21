@@ -222,6 +222,9 @@ function defaultLineOfSight(bot, eye, target) {
  *   A waiting call whose target is gone (isValid false, or no longer in bot.entities) when
  *   its cooldown is up sends nothing and resolves { sent: false, reason: 'gone' }; it does
  *   not count toward the self-check.
+ * - cancel(reason) ends a waiting call at once: it sends nothing (no swing, no payload) and
+ *   resolves { sent: false, path: null, waitedMs, reason }. A no-op when nothing waits; not a
+ *   miss. Skills call it on an interrupt, so no hit goes out up to one cooldown later.
  * - The clock is performance.now() (monotonic), so a wall-clock step cannot send early.
  * - Vanilla path: any of these sends the vanilla attack instead:
  *   - the setting is off;
@@ -247,7 +250,7 @@ export function installBetterCombatAttack(bot, {
         enabled: !!enabled, tripped: false, misses: 0,
         lastSwingAt: -Infinity, itemKey: undefined, itemChangedAt: -Infinity,
         pending: null,
-        stats: { bettercombat: 0, vanilla: 0, waits: 0, replaced: 0, gone: 0, misses: 0 },
+        stats: { bettercombat: 0, vanilla: 0, waits: 0, replaced: 0, gone: 0, cancelled: 0, misses: 0 },
     };
     const checks = new Map(); // target id -> [{ timer, done }]
 
@@ -383,6 +386,16 @@ export function installBetterCombatAttack(bot, {
         });
     }
 
+    function cancel(reason = 'cancelled') {
+        const p = st.pending;
+        if (!p) return false;
+        clearTimer(p.timer);
+        st.pending = null;
+        st.stats.cancelled++;
+        p.resolve({ sent: false, path: null, waitedMs: now() - p.since, reason });
+        return true;
+    }
+
     function install() {
         if (typeof bot.attack !== 'function' || bot.attack === attack) return;
         st.vanillaAttack = bot.attack;
@@ -407,6 +420,8 @@ export function installBetterCombatAttack(bot, {
         serverHasIt,
         /** The held item's Better Combat cooldown in ticks (null if unknown), for skills' pacing. */
         cooldownTicks,
+        /** Ends a call waiting for its cooldown without sending; true if one was waiting. */
+        cancel,
         /** One line for the login log. */
         status() {
             if (!st.enabled) return 'bettercombat attack: off (bc_attack), vanilla attack';
