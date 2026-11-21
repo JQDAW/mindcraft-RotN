@@ -123,6 +123,24 @@ export function burrowDiggable(bot, b) {
 const sealBlocks = (bot) => countOf(shelterItems(bot)) + placeableDirt(bot.inventory.items());
 
 /**
+ * Soak 7 (C): whether a body (not the bot) overlaps the cell, so nothing can be placed there (a
+ * zombie that walked into the bot's own cell); its hitbox, not just its feet's block.
+ */
+const BODY_TYPES = ['player', 'mob', 'hostile', 'animal', 'passive', 'ambient', 'water_creature']; // as shelter.js mobIn
+
+// #514 review nit 4: this also applies to the troll burrow. A troll (1.2 wide) whose box reaches
+// into the bot's cell (closer than about 1.1 to the bot's middle) refuses every step, so the
+// burrow ends cornered at close range; it starts at 6.97, well before that.
+function bodyOverlaps(bot, c) {
+    return Object.values(bot.entities ?? {}).some(e => {
+        if (!e || e === bot.entity || !e.position || !BODY_TYPES.includes(e.type ?? 'mob')) return false;
+        const w = (Number.isFinite(e.width) ? e.width : 0.6) / 2, h = Number.isFinite(e.height) ? e.height : 1.8;
+        return e.position.x + w > c.x && e.position.x - w < c.x + 1 && e.position.z + w > c.z && e.position.z - w < c.z + 1
+            && e.position.y + h > c.y && e.position.y < c.y + 1;
+    });
+}
+
+/**
  * The next burrow step away from mob, or {why} when there is none. A step: {kind: 'side'|'down',
  * to (the new feet cell), dig (the cells to dig, in order), seal (the cells to fill behind), d (the
  * new distance)}. side: the 1x2 column beside the bot, its far side, both flanks, roof and floor
@@ -130,9 +148,11 @@ const sealBlocks = (bot) => countOf(shelterItems(bot)) + placeableDirt(bot.inven
  * its feet, each one's four sides and the floor below solid ground; seal: the bot's feet cell (the
  * new roof). #507 review 1: the floor never a block that falls; a falling block beside the new cell
  * only on solid ground that is not dug. Each cell to dig must be diggable (burrowDiggable) with no body in it, and the step must
- * take the bot BURROW.minGain farther from the mob; the farthest wins.
+ * take the bot BURROW.minGain farther from the mob; the farthest wins. Soak 7 (C): no step whose
+ * seal cells hold a body (a zombie in the bot's own cell), and with prefer ('down') that step wins
+ * whenever it is allowed.
  */
-export function burrowStep(bot, mob) {
+export function burrowStep(bot, mob, { prefer = null } = {}) {
     const here = bot.entity.position, p = here.floored();
     const now = here.distanceTo(mob.position);
     if (sealBlocks(bot) < 1) return { why: 'no blocks to seal with' };
@@ -164,8 +184,11 @@ export function burrowStep(bot, mob) {
             && (digKeys.has(key(c.offset(0, -1, 0))) || !solid(bot.blockAt(c.offset(0, -1, 0)))));
         if (loose) { why.set(name, `${bot.blockAt(loose).name} at ${at(loose)} has nothing solid under it and would fall in`); continue; }
         if (sealBlocks(bot) < s.seal.length) { why.set(name, `${s.seal.length} blocks to seal with, ${sealBlocks(bot)} held`); continue; }
+        const held = s.seal.find(c => bodyOverlaps(bot, c));
+        if (held) { why.set(name, `a body in ${at(held)}, which the step seals`); continue; }
         const d = s.to.offset(0.5, 0, 0.5).distanceTo(mob.position);
         if (d < now + BURROW.minGain) { why.set(name, `not farther from it (${d.toFixed(1)})`); continue; }
+        if (prefer && s.kind === prefer) return { ...s, d }; // soak 7 (C): the step down first when it is allowed
         if (!best || d > best.d) best = { ...s, d };
     }
     if (best) return best;
@@ -216,9 +239,9 @@ export async function takeBurrowStep(bot, step, { craft = craftRecipe } = {}) {
  *   the bot ended in when it moved (null: it did not); stopped: 'far', 'gone', 'cornered', 'budget',
  *   'time', 'failed' (a step did not work: why).
  */
-export async function burrowAway(bot, mob, { maxSteps = BURROW.maxSteps, maxMs = BURROW.maxMs, craft = craftRecipe, now = () => Date.now() } = {}) {
+export async function burrowAway(bot, mob, { maxSteps = BURROW.maxSteps, maxMs = BURROW.maxMs, craft = craftRecipe, now = () => Date.now(), stopAt = null, prefer = null } = {}) {
     const start = now();
-    const { stop } = burrowRanges(mob);
+    const stop = Number.isFinite(stopAt) ? stopAt : burrowRanges(mob).stop;
     let steps = 0, site = null;
     for (;;) {
         const m = bot.entities?.[mob.id] ?? null;
@@ -227,7 +250,7 @@ export async function burrowAway(bot, mob, { maxSteps = BURROW.maxSteps, maxMs =
         if (d >= stop) return { steps, site, stopped: 'far' };
         if (steps >= maxSteps) return { steps, site, stopped: 'budget' };
         if (now() - start >= maxMs) return { steps, site, stopped: 'time' };
-        const step = burrowStep(bot, m);
+        const step = burrowStep(bot, m, { prefer });
         if (!step.to) return { steps, site, stopped: 'cornered', why: step.why };
         const r = await takeBurrowStep(bot, step, { craft });
         if (r.site) { site = r.site; steps++; }

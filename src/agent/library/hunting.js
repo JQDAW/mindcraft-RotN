@@ -5,6 +5,7 @@
 import * as mc from '../../utils/mcdata.js';
 import { threatFor } from './threats.js';
 import { OWNERSHIP, mayBelongToPlayer } from './ownership.js';
+import { logWeapon } from './survival_log.js';
 
 /**
  * Soak 2 (rotn-v0.1.4): at food 4 or lower (Normal difficulty) Hunger Overhaul gives weakness
@@ -111,6 +112,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  */
 export async function huntAnimal(bot, entity, { keepGoing = () => true, maxMs = HUNT.maxMs, equip = null, stuckMs = HUNT.stuckMs } = {}) {
     try { await equip?.(bot); } catch { /* fights with what is in hand */ }
+    logWeapon(bot, 'hunt'); // soak 7 (c)
     const start = Date.now();
     bot.pvp?.attack?.(entity);
     const health = () => (Number.isFinite(entity.metadata?.[7]) ? entity.metadata[7] : null); // 1.12 EntityLivingBase health

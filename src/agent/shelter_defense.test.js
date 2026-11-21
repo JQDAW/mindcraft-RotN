@@ -97,9 +97,11 @@ test('round 9 B (c): with a wall open, the bot fights the mob in the opening fro
     assert.deepEqual(calls.attacks, [1, 1], 'hit in place until it died');
     assert.ok(self.position.equals(before), 'still in the shelter');
     assert.equal(bot.rotnSheltered, 'open');
-    // G4 #5: the journal's fight lines.
-    assert.deepEqual(logs.filter(l => l.startsWith('[survival] ')).map(l => l.replace(/after \d+ s$/, 'after N s')),
-        ['[survival] fight start zombie (shelter)', '[survival] fight end zombie killed after N s']);
+    // G4 #5: the journal's fight lines; soak 7: one line per swing (the held item, the time since the
+    // swing before, the mob's health before it and at the next look).
+    assert.deepEqual(logs.filter(l => l.startsWith('[survival] ')).map(l => l.replace(/after \d+ s$/, 'after N s').replace(/\+\d+ ms/, '+N ms')),
+        ['[survival] fight start zombie (shelter)', '[survival] weapon hand (shelter)', '[survival] swing zombie with hand first: health unknown -> unknown',
+            '[survival] swing zombie with hand +N ms: health unknown -> gone', '[survival] fight end zombie killed after N s']);
 });
 
 test('round 9 B (c): with a wall open, a mob out of reach is not chased', async (t) => {
@@ -680,4 +682,133 @@ test('PR 5: a troll near the shelter: the bot steps to the far side of its cell 
         assert.deepEqual(morning.interrupts, [], label);
     }
     assert.deepEqual(wallHitters(shelter({ zombieAt: 1 }).bot), [], 'a zombie in the opening: no step');
+});
+
+// ---- Soak 7 (rotn-v0.1.13, death 1, 23:24:24-33) ----
+// The zombie walked into the bot's cell; the shelter fight was capped ("4 hits did not hurt the
+// zombie") while it stood 0.8 m away hitting the bot; then the bot ate okra while being hit.
+
+test('soak 7 (B): a zombie in reach that is hitting the bot is not capped (4 hits that did not hurt it, maxSwings); one that is not hitting still is', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const saved = { ...SHELTER_FIGHT };
+    Object.assign(SHELTER_FIGHT, { swingMs: 10 });
+    t.after(() => Object.assign(SHELTER_FIGHT, saved));
+    const pressed = shelter({ zombieAt: 0.8, killAfter: 12 });
+    pressed.bot.entities[1].health = 20; // known, and it never goes down
+    const attack = pressed.bot.attack;
+    pressed.bot.attack = (e) => { attack(e); Object.assign(pressed.bot, { lastDamageTime: Date.now(), lastDamageTaken: 1 }); }; // it hits back each time
+    await selfDefense(pressed.agent);
+    assert.equal(pressed.calls.attacks.length, 12, 'past sameTargetSwings (4) and maxSwings (8) until it died');
+    assert.ok(logs.some(l => /^\[survival\] fight end zombie killed/.test(l)), logs.join('\n'));
+    const calm = shelter({ zombieAt: 0.8, killAfter: 12 });
+    calm.bot.entities[1].health = 20;
+    await selfDefense(calm.agent);
+    assert.equal(calm.calls.attacks.length, SHELTER_FIGHT.sameTargetSwings, 'not hitting the bot: capped as before');
+});
+
+test('soak 7 (B): each swing waits for the held weapon\'s cooldown (an axe 1.25 s, a sword 0.625 s) and is journaled', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const gaps = async (weapon) => {
+        const { agent, bot } = shelter({ killAfter: 2 });
+        bot.inventory = { items: () => [weapon], slots: [] };
+        bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+        const times = [];
+        const attack = bot.attack;
+        bot.attack = (e) => { times.push(Date.now()); attack(e); };
+        await selfDefense(agent);
+        return times.slice(1).map((ms, i) => ms - times[i]);
+    };
+    const axe = await gaps(AXE);
+    assert.equal(axe.length, 1);
+    assert.ok(axe[0] >= 1250 - 20, `axe: ${axe[0]} ms`);
+    const sword = await gaps({ name: 'stone_sword', metadata: 0, count: 1, type: 272 });
+    assert.ok(sword[0] >= 625 - 20 && sword[0] < 1250, `sword: ${sword[0]} ms`);
+    assert.ok(logs.some(l => /^\[survival\] swing zombie with stone_axe first: health unknown -> unknown$/.test(l)), logs.join('\n'));
+    assert.ok(logs.some(l => /^\[survival\] swing zombie with stone_axe \+1\d\d\d ms: health unknown -> gone$/.test(l)), logs.join('\n'));
+});
+
+test('soak 7 (D): after a shelter fight the bot does not eat while hurt within EAT_SAFE.hurtMs or with a hostile mob within 4 blocks', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const saved = { ...SHELTER_FIGHT };
+    Object.assign(SHELTER_FIGHT, { swingMs: 10 });
+    t.after(() => Object.assign(SHELTER_FIGHT, saved));
+    const eatsAfter = async ({ others = [], hurt = false } = {}) => {
+        const { agent, bot } = shelter({ others });
+        const bread = { name: 'bread', metadata: 0, count: 2, type: reg.itemsByName.bread.id };
+        bot.inventory = { items: () => [AXE, bread].filter(i => i.count > 0), slots: [] };
+        Object.assign(bot, { health: 14, food: 10 });
+        if (hurt) Object.assign(bot, { lastDamageTime: Date.now(), lastDamageTaken: 3 });
+        bot.consume = () => { bread.count--; bot.food += 5; return Promise.resolve(); };
+        await selfDefense(agent);
+        await new Promise(r => setTimeout(r, 100));
+        return 2 - bread.count;
+    };
+    assert.equal(await eatsAfter({ hurt: true }), 0, 'hurt just now');
+    assert.ok(logs.some(l => /^\[reflex\] not eating between fights in the shelter: hurt 0(\.\d)? s ago$/.test(l)), logs.join('\n'));
+    assert.equal(await eatsAfter({ others: [mob(2, 'zombie', 3.5)] }), 0, 'a zombie 3.5 blocks away (out of the fight\'s reach)');
+    assert.ok(logs.includes('[reflex] not eating between fights in the shelter: zombie 3.5 blocks away'), logs.join('\n'));
+    assert.equal(await eatsAfter(), 1, 'nothing near, not hurt: it eats as before');
+});
+
+test('soak 7 (D): hurt in the shelter, the bot does not eat with a hostile mob within 4 blocks (out of reach); at 6 it does', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const run = async (zombieAt) => {
+        const { agent, bot } = shelter({ zombieAt });
+        hurt(bot);
+        bot.food = 10;
+        const bread = { name: 'bread', metadata: 0, count: 2, type: 297 };
+        const eaten = [];
+        bot.inventory = { items: () => [AXE, ...(bread.count > 0 ? [bread] : [])], slots: [] };
+        bot.consume = () => { eaten.push(bot.heldItem?.name); bread.count--; bot.food += 5; return Promise.resolve(); };
+        bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+        await selfPreservation(agent);
+        return eaten;
+    };
+    assert.deepEqual(await run(3.5), []);
+    assert.ok(logs.includes('[reflex] hurt in the shelter: not eating (zombie 3.5 blocks away)'), logs.join('\n'));
+    assert.deepEqual(await run(6), ['bread']);
+});
+
+test('soak 7 replay (the fight in the cell): the zombie at 0.8 m hitting the bot: no cap, the fight stops only at the health it may take in one hit (12.5); no eat while it is there', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const saved = { ...SHELTER_FIGHT };
+    Object.assign(SHELTER_FIGHT, { swingMs: 10 });
+    t.after(() => Object.assign(SHELTER_FIGHT, saved));
+    const { agent, bot, calls } = shelter({ zombieAt: 0.8, killAfter: 1e9 });
+    bot.entities[1].health = 20; // "4 hits did not hurt the zombie"
+    const okra = { name: 'harvestcraft:okraitem', metadata: 0, count: 1 };
+    bot.inventory = { items: () => [AXE, okra].filter(i => i.count > 0), slots: [] };
+    Object.assign(bot, { health: 20, food: 13 });
+    bot.consume = () => { okra.count--; return Promise.resolve(); };
+    const attack = bot.attack;
+    bot.attack = (e) => { attack(e); Object.assign(bot, { health: bot.health - 1.5, lastDamageTime: Date.now(), lastDamageTaken: 1.5 }); };
+    await selfDefense(agent);
+    await new Promise(r => setTimeout(r, 100));
+    assert.equal(calls.attacks.length, 5, '20 -> 12.5 in five swings: more than the 4-hit cap of soak 7');
+    assert.ok(logs.some(l => /^\[survival\] fight end zombie stopped/.test(l)), logs.join('\n'));
+    assert.ok(!logs.some(l => / capped /.test(l)));
+    assert.equal(okra.count, 1, 'no okra while it hits');
+    assert.ok(logs.includes('[reflex] not eating between fights in the shelter: zombie 0.8 blocks away'), logs.join('\n'));
+});
+
+test('soak 7 (c): the shelter fight (fightInShelter -> defendInPlace; also the morning fight-on and hand-fight) holds the stone axe at its first swing, and logs it', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const saved = { ...SHELTER_FIGHT };
+    Object.assign(SHELTER_FIGHT, { swingMs: 10 });
+    t.after(() => Object.assign(SHELTER_FIGHT, saved));
+    const { agent, bot } = shelter({ killAfter: 1 });
+    bot.inventory = { items: () => [{ name: 'pyrotech:crude_axe', metadata: 0, count: 1 }, AXE], slots: [] };
+    bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+    const held = [];
+    const attack = bot.attack;
+    bot.attack = (e) => { held.push(bot.heldItem?.name ?? 'hand'); attack(e); };
+    await selfDefense(agent);
+    assert.deepEqual(held, ['stone_axe']);
+    assert.deepEqual(logs.filter(l => l.startsWith('[survival] ')).slice(0, 2), ['[survival] fight start zombie (shelter)', '[survival] weapon stone_axe (shelter)']);
 });
