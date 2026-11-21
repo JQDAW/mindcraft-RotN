@@ -66,7 +66,11 @@ const LSEP = String.raw`\\?\/`;
 const LSEG = String.raw`[^\\/"'\s*:;,()[\]{}<>]+`;
 const LINUX_PATH = new RegExp(String.raw`(?<![\w.~\\-])${LSEP}(?:home${LSEP}mindcraft-RotN-worktrees${LSEP}${LSEG}`
     + String.raw`|home(?=${LSEP}RotN 3\.3\.4 Server Pack\.zip)|home${LSEP}${LSEG}|root(?=${LSEP}${LSEG}))`, 'g');
-const LOCAL_PATHS = [LOCAL_PATH, LINUX_PATH];
+// The same folders reached by a relative path from a sibling checkout (#535 review: a driver run in the batch
+// checkout printed its capture as ../../mindcraft-RotN-worktrees/harness-ops/captures/raw/...): one or more "../"
+// and then the worktrees folder with the agent's folder, the batch folder with its checkout, or the main checkout.
+const RELATIVE_PATH = new RegExp(String.raw`(?<![\w.~-])(?:\.\.${LSEP})+(?:mindcraft-RotN-(?:worktrees|batch)${LSEP}${LSEG}|mindcraft-RotN(?![\w-]))`, 'g');
+const LOCAL_PATHS = [LOCAL_PATH, LINUX_PATH, RELATIVE_PATH];
 // hcloud's numeric server ids: "(server: N" and "Server N created" (group 1 is kept).
 export const HCLOUD_SERVER_ID = /(\(server: |\bServer )\d{5,}(?=[,) ]|$)/gm;
 // What is left of an address next to a redaction: "<ip>.0.113.7", "203.0.<ip>", "2001:db8:<ip>".

@@ -125,7 +125,7 @@
       "attackVanilla": true,
       "active": true,
       "status": "bettercombat attack: on",
-      "capture": "../../mindcraft-RotN-worktrees/harness-ops/captures/raw/bc-probe-20261121/capture.jsonl"
+      "capture": "<local>/captures/raw/bc-probe-20261121/capture.jsonl"
     },
     "landing": {
       "planned": [
