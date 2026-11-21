@@ -208,5 +208,5 @@ export function bcWorld(opt = {}) {
             return out;
         },
         /** Another entity appears (spawn_entity_living), e.g. a mob the pack spawns next to the lane. */
-        spawnOther: (name, type, x, y, z) => { const id = nextId++; bot.entities[id] = { id, name, position: new Vec3(x, y, z) }; client.emit('spawn_entity_living', { entityId: id, type, x, y, z }); return id; } };
+        spawnOther: (name, type, x, y, z, health = null) => { const id = nextId++; bot.entities[id] = { id, name, type: health === null ? 'object' : 'mob', position: new Vec3(x, y, z), metadata: health === null ? {} : { 7: health } }; client.emit('spawn_entity_living', { entityId: id, type, x, y, z }); return id; } };
 }

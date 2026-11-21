@@ -22,7 +22,7 @@ import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe, equipHighestAttack } from './skills.js';
 import { logWeapon } from './survival_log.js';
 import { eatToHeal } from './food.js';
-import { shelterEnemy, shelterTarget, threatFor, attackCooldownMs, attackSent, attackWatched } from './threats.js';
+import { shelterEnemy, shelterTarget, threatFor, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS } from './threats.js';
 import { isTreePart } from './fall_safety.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -41,9 +41,11 @@ export const SHELTER_SPARE = { dirt: 4 };
  * the bot died a second later). Bounded by maxMs, and by noHurtHits hits on a mob whose known health
  * does not go down. Better Combat plan step 2 (#521): bot.attack is awaited, only a swing that went
  * out counts, and unsentMax unsent in a row end it; swingMs null: the held item's attack cooldown
- * (threats.attackCooldownMs; a fixed 600 ms before); a number overrides it (tests).
+ * (threats.attackCooldownMs; a fixed 600 ms before); a number overrides it (tests). (g), net-forge
+ * #541: a hit Better Combat refuses for 'reach' or 'sight' is not an unsent one: it looks again every
+ * blockedWaitMs, and after blockedMs of only those it gives up on the cell (the repair goes on).
  */
-export const SHELTER_GAP = { maxMs: 30_000, swingMs: null, noHurtHits: 6, unsentMax: 3 };
+export const SHELTER_GAP = { maxMs: 30_000, swingMs: null, noHurtHits: 6, unsentMax: 3, blockedWaitMs: 250, blockedMs: 3000 };
 
 /**
  * Real fire or lava: rotn-data's material (G3 round 7 B), so a block whose name only holds "fire"
@@ -406,7 +408,7 @@ async function placeOnce(bot, target, interior, mode, why = () => {}) {
  * creeper or a skeleton: threats.shelterTarget. Returns the number of hits.
  */
 async function hitOutOf(bot, cell) {
-    let hits = 0, unsent = 0;
+    let hits = 0, unsent = 0, blockedSince = null;
     const start = Date.now(), fight = {};
     const same = { id: null, health: null, hits: 0 };
     const healthOf = (e) => (Number.isFinite(e?.health) ? e.health : Number.isFinite(e?.metadata?.[7]) ? e.metadata[7] : null);
@@ -424,11 +426,22 @@ async function hitOutOf(bot, cell) {
         // check below stays as the backstop (a swing that resolves after either is not counted).
         const r = await attackWatched(bot, mob, () => (bot.interrupt_code ? 'interrupted' : Date.now() - start >= SHELTER_GAP.maxMs ? 'maxMs' : null));
         if (bot.interrupt_code || Date.now() - start >= SHELTER_GAP.maxMs) break;
+        if (!attackSent(r) && BLOCKED_REASONS[r?.reason]) {
+            // (g): in the cell but past Better Combat's reach or out of sight: wait and look again.
+            blockedSince ??= Date.now();
+            if (Date.now() - blockedSince >= SHELTER_GAP.blockedMs) {
+                log(bot, `Cannot hit the ${mob.name ?? 'mob'} in ${cell.x}, ${cell.y}, ${cell.z}: ${BLOCKED_REASONS[r.reason]} for ${SHELTER_GAP.blockedMs / 1000} s.`);
+                break;
+            }
+            await sleep(SHELTER_GAP.blockedWaitMs);
+            continue;
+        }
         if (!attackSent(r)) {
             if (r?.reason === 'ended' || ++unsent >= SHELTER_GAP.unsentMax) break;
             continue;
         }
         unsent = 0;
+        blockedSince = null;
         hits++;
         same.hits++;
         await sleep(SHELTER_GAP.swingMs ?? attackCooldownMs(bot));

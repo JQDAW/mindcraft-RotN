@@ -12,7 +12,7 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
-import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, weaponRank, weaponOrder, attackPath } from "./threats.js";
+import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath } from "./threats.js";
 import { logAte, fightJournal, swingLine, logWeapon } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -667,14 +667,28 @@ export async function attackNearest(bot, mobType, kill=true) {
  * that entity is left alone for skipMs (isUnreachable). tickMs: how often the chase is checked.
  */
 export const ATTACK_PROGRESS = { stallMs: 10_000, skipMs: UNREACHABLE.skipMs, tickMs: 1000 };
+/**
+ * (g), net-forge #541: attackEntity's one hit walks to within `near` blocks of a mob farther than
+ * `approach` (Better Combat sends nothing past 4.0 blocks eye to hitbox, 3.5 without a weapon), and
+ * walks closer once more (`again`) when the hit comes back 'reach' or 'sight'.
+ */
+export const ATTACK_HIT = { approach: 3, near: 2, again: 1 };
+/**
+ * (g): defendSelf's fight ends when the mob it attacks takes no hurt (entityHurt or a drop in its
+ * health) and the bot gets no closer by a block for stallMs: mineflayer-pvp ignores bot.attack's
+ * result, and with Better Combat a mob in reach but out of sight gets nothing (net-forge #541).
+ */
+export const DEFEND_PROGRESS = { stallMs: 10_000 };
 // markUnreachable and isUnreachable live in threats.js since soak 6 (threatPlan uses them).
 export { markUnreachable, isUnreachable };
 
-export async function attackEntity(bot, entity, kill=true) {
+export async function attackEntity(bot, entity, kill=true, { approach = true } = {}) {
     /**
      * Attack mob of the given type.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {Entity} entity, the entity to attack.
+     * @param {{approach?: boolean}} opts kill false: walk to the mob first (ATTACK_HIT); avoidEnemies'
+     *   cornered hit passes false (it is getting away, not closer).
      * @returns {Promise<boolean>} true if the entity was attacked (kill false: the one hit went out), false if interrupted or not sent
      * @example
      * await skills.attackEntity(bot, entity);
@@ -685,14 +699,22 @@ export async function attackEntity(bot, entity, kill=true) {
     logWeapon(bot, 'attack'); // soak 7 (c)
 
     if (!kill) {
-        if (bot.entity.position.distanceTo(pos) > 5) {
-            console.log('moving to mob...')
-            await goToPosition(bot, pos.x, pos.y, pos.z);
-        }
+        // (g), net-forge #541: Better Combat's attack sends nothing past its reach (4.0 blocks eye to
+        // hitbox, 3.5 without a weapon): walk to within ATTACK_HIT.near first (it walked only past 5).
+        const closeIn = async (near) => {
+            console.log('moving to mob...');
+            await goToPosition(bot, entity.position.x, entity.position.y, entity.position.z, near);
+        };
+        if (approach && bot.entity.position.distanceTo(pos) > ATTACK_HIT.approach) await closeIn(ATTACK_HIT.near);
         console.log('attacking mob...')
         // (f), #521: Better Combat's path may wait for its cooldown; a newer call (another reflex's
         // hit) replaces this one, and the end of the connection leaves it unsent. Whether it went out.
-        const r = await bot.attack(entity);
+        let r = await bot.attack(entity);
+        if (approach && !attackSent(r) && BLOCKED_REASONS[r?.reason] && !bot.interrupt_code) {
+            // (g): past its reach or out of sight: walk closer once more, and hit again.
+            await closeIn(ATTACK_HIT.again);
+            r = await bot.attack(entity);
+        }
         if (!attackSent(r)) {
             log(bot, `The hit on the ${entity.name} was not sent (${r?.reason ?? 'unknown'}).`);
             return false;
@@ -758,8 +780,13 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
     let outcome = 'interrupted';
     let enemy = world.getNearestEntityWhere(bot, isEnemy, range);
     let fought = null; // the mob last attacked (soak 6: fights interrupted again and again on it)
+    // (g): the stall guard (DEFEND_PROGRESS): a hurt, a health drop or a block closer is progress.
+    let progress = { id: null, at: Date.now(), best: Infinity, health: null };
+    const onHurt = (e) => { if (e?.id != null && e.id === progress.id) progress.at = Date.now(); };
+    bot.on?.('entityHurt', onHurt);
     try {
         while (enemy) {
+            if (progress.id !== enemy.id) progress = { id: enemy.id, at: Date.now(), best: Infinity, health: healthOf(enemy) };
             await equipHighestAttack(bot, fight);
             if (bot.entity.position.distanceTo(enemy.position) >= 4 && enemy.name !== 'creeper' && enemy.name !== 'phantom') {
                 try {
@@ -780,6 +807,19 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
             bot.pvp.attack(enemy);
             attacked = true;
             await new Promise(resolve => setTimeout(resolve, 500));
+            if (bot.entities?.[fought.id] && progress.id === fought.id) {
+                const d = bot.entity.position.distanceTo(fought.position), h = healthOf(fought);
+                if (d <= progress.best - 1 || (h !== null && progress.health !== null && h < progress.health)) progress.at = Date.now();
+                progress.best = Math.min(progress.best, d);
+                if (h !== null) progress.health = h;
+                if (Date.now() - progress.at >= DEFEND_PROGRESS.stallMs && !bot.interrupt_code) {
+                    bot.pvp.stop();
+                    markUnreachable(bot, fought);
+                    log(bot, `Stopped fighting the ${fought.name}: no hit landed and no closer for ${DEFEND_PROGRESS.stallMs / 1000} s (out of reach or out of sight); leaving it alone for ${UNREACHABLE.skipMs / 60_000} min.`);
+                    outcome = 'stopped';
+                    break;
+                }
+            }
             enemy = world.getNearestEntityWhere(bot, isEnemy, range);
             if (bot.interrupt_code) {
                 bot.pvp.stop();
@@ -794,6 +834,7 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
         }
         if (!enemy) outcome = 'gone'; // no enemy left in range (killed when the first one is dead or gone from the world)
     } finally {
+        bot.removeListener?.('entityHurt', onHurt);
         journal.end(outcome);
         // Soak 6 (the eel loop): the third fight in a row on one mob that ends interrupted gives it up.
         const n = noteFightEnd(bot, fought, outcome);
@@ -818,8 +859,13 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
  * (threats.attackCooldownMs: Better Combat's, else the vanilla class's; 600 ms before, under an axe's
  * 1250); a number overrides it (tests). Better Combat plan step 2 (#521): bot.attack is awaited and
  * only a swing that went out counts; after unsentMax swings in a row that did not, the fight stops.
+ * (g), net-forge #541: a hit Better Combat refuses for 'reach' or 'sight' (the mob in the bot's melee
+ * reach but past Better Combat's, or behind a block's corner) is not an unsent swing: the fight looks
+ * again every blockedWaitMs, and after blockedMs of nothing but those it ends ("in reach but out of
+ * sight"), so the night routine's re-seal and burrow can act; the bot cannot step out of its cell.
  */
-export const SHELTER_FIGHT = { reach: 3, swingMs: null, maxMs: 6000, maxSwings: 8, sameTargetSwings: 4, restMs: 1500, unsentMax: 3 };
+export const SHELTER_FIGHT = { reach: 3, swingMs: null, maxMs: 6000, maxSwings: 8, sameTargetSwings: 4, restMs: 1500, unsentMax: 3, blockedWaitMs: 250, blockedMs: 3000 };
+
 
 /** Whether an entity is within SHELTER_FIGHT.reach of the bot's feet. */
 export function inShelterReach(bot, entity) {
@@ -858,7 +904,7 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
         console.log(swingLine(last.mob.name, last.item, last.sinceMs, last.before, now ? healthOf(now) : 'gone'));
         last = null;
     };
-    let lastSwingAt = null, unsent = 0;
+    let lastSwingAt = null, unsent = 0, blockedSince = null;
     bot.rotnFightingInPlace = true;
     try {
         for (let enemy = nearest(); enemy; enemy = nearest()) {
@@ -885,17 +931,32 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
             // connection) leaves this one unsent: only a swing that went out counts and is journaled.
             // #532 re-review nit 3: a hit still waiting for Better Combat's cooldown when the bot is
             // interrupted or maxMs passes (the mob not hurting it) is cancelled (#536): it never goes out.
-            const r = await attackWatched(bot, enemy, () => (bot.interrupt_code ? 'interrupted'
-                : !pressed && Date.now() - start >= SHELTER_FIGHT.maxMs ? 'maxMs' : null));
+            // (g) nit 5: whether the mob is hurting the bot is looked at live, so one that starts hurting
+            // during a long wait (a stone axe: 2.5 s) is not capped.
+            const pastCap = () => !hurtingInReach(bot, enemy) && Date.now() - start >= SHELTER_FIGHT.maxMs;
+            const r = await attackWatched(bot, enemy, () => (bot.interrupt_code ? 'interrupted' : pastCap() ? 'maxMs' : null));
             // The backstop: a swing that resolves after an interrupt or past maxMs (no cancelAttack, or
             // it went out between two looks) is not counted or journaled, and the fight ends.
             if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
-            if (!pressed && Date.now() - start >= SHELTER_FIGHT.maxMs) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; outcome = 'capped'; break; }
+            if (pastCap()) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; outcome = 'capped'; break; }
+            if (!attackSent(r) && BLOCKED_REASONS[r?.reason]) {
+                // (g): in the bot's reach but not Better Combat's, or out of sight: wait and look again.
+                blockedSince ??= Date.now();
+                if (Date.now() - blockedSince >= SHELTER_FIGHT.blockedMs) {
+                    why = `the ${enemy.name} is in reach but ${BLOCKED_REASONS[r.reason]} for ${secsText(SHELTER_FIGHT.blockedMs)}`;
+                    outcome = 'stopped';
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, SHELTER_FIGHT.blockedWaitMs));
+                if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
+                continue;
+            }
             if (!attackSent(r)) {
                 if (r?.reason === 'ended' || ++unsent >= SHELTER_FIGHT.unsentMax) { why = `the attack was not sent (${r?.reason ?? 'unknown'})`; outcome = 'stopped'; break; }
                 continue;
             }
             unsent = 0;
+            blockedSince = null;
             const swungAt = Date.now();
             last = { mob: enemy, item: item?.name ?? null, sinceMs: lastSwingAt === null ? null : swungAt - lastSwingAt, before };
             lastSwingAt = swungAt;
@@ -3443,7 +3504,7 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
             break;
         }
         if (enemy && blocked >= AVOID.blockedTicks && bot.entity.position.distanceTo(enemy.position) < 3 && canHit(enemy)) {
-            await attackEntity(bot, enemy, false);
+            await attackEntity(bot, enemy, false, { approach: false }); // (g): no walk toward it
         }
     }
     bot.pathfinder.stop();
