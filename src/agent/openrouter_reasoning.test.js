@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 
 let reasoningLine;
 before(async () => {
-    ({ reasoningLine } = await import('./openrouter.js'));
+    ({ reasoningLine } = await import('../models/openrouter.js'));
 });
 
 // test/runner/lib/survival.mjs llmUsage's pattern: the new line must never be counted as a usage line.
