@@ -2893,3 +2893,49 @@ test('#514 re-review: the fight still under way at the cap with a quiet mob in r
     assert.ok(agent.chat.includes('[night] morning: 5 min are up: leaving the shelter at 0, 64, 0 by the side away from a zombie at 1, 64, 1'), agent.chat.join('\n'));
     assert.equal(nightState(agent).state, 'day');
 });
+
+test('#517 review: before the past-cap leave, the opening toward the quiet mob is re-sealed once (no body in it); a failed re-seal is said and the bot leaves with it open', async (t) => {
+    quiet(t);
+    const { MORNING: RULE } = await import('./night_routine.js');
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5) }; // diagonal, in reach, quiet
+    const run = async (closes) => {
+        const m = await closeMorning({ ...zombie });
+        m.o.open = [SITE.offset(1, 0, 0), SITE.offset(1, 1, 0)];
+        // The morning order (C) already tried its one re-seal; here it failed and the bot hit back.
+        m.o.buildShelter = (bot, opts = {}) => { m.o.builds.push(opts.site ?? null); return Promise.resolve({ closed: false, placed: 0, line: 'no block left to place' }); };
+        await m.tick();
+        await m.tick();
+        await m.tick();
+        const before = m.o.builds.length;
+        m.o.buildShelter = (bot, opts = {}) => {
+            m.o.builds.push(opts.site ?? null);
+            if (closes) m.o.open = [];
+            return Promise.resolve(closes ? { closed: true } : { closed: false, placed: 0, line: 'no block left to place' });
+        };
+        await m.tick(10 + RULE.capMs + 1);
+        assert.equal(m.o.builds.length, before + 1, 'one more re-seal');
+        assert.equal(m.o.digs, 0, 'not yet');
+        assert.ok(m.agent.chat.includes('[night] morning: closing the opening at 1, 64, 0; 1, 65, 0 before leaving'), m.agent.chat.join('\n'));
+        await m.tick(10 + RULE.capMs + 2);
+        await m.tick(10 + RULE.capMs + 3);
+        assert.equal(m.o.builds.length, before + 1, 'only once');
+        return m;
+    };
+    const closed = await run(true);
+    assert.equal(closed.o.digs, 1, 'then the far-side leave');
+    assert.equal(closed.agent.bot.rotnSheltered, false, 'handed back');
+    const open = await run(false);
+    assert.equal(open.o.digs, 1, 'the leave goes ahead with it open');
+    assert.ok(open.agent.chat.includes('[night] morning: the opening at 1, 64, 0; 1, 65, 0 did not close (no block left to place); leaving with it open'), open.agent.chat.join('\n'));
+    // A body in the opening: no re-seal; said, and the leave goes ahead.
+    const held = await closeMorning({ ...zombie });
+    held.o.open = [SITE.offset(1, 0, 0), SITE.offset(1, 1, 0)];
+    held.o.heldCells = () => [{ cell: SITE.offset(1, 0, 0), mob: { name: 'zombie' } }];
+    await held.tick();
+    await held.tick();
+    const b = held.o.builds.length;
+    await held.tick(10 + RULE.capMs + 1);
+    assert.equal(held.o.builds.length, b);
+    assert.ok(held.agent.chat.includes('[night] morning: the opening at 1, 64, 0; 1, 65, 0 stays open (a zombie holds it); leaving anyway'), held.agent.chat.join('\n'));
+    assert.equal(held.o.digs, 1);
+});

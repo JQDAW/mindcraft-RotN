@@ -13,7 +13,7 @@ import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
 import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, weaponCooldownMs } from "./threats.js";
-import { logAte, fightJournal, swingLine } from "./survival_log.js";
+import { logAte, fightJournal, swingLine, logWeapon } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
 import pf from 'mineflayer-pathfinder';
@@ -688,6 +688,7 @@ export async function attackEntity(bot, entity, kill=true) {
 
     let pos = entity.position;
     await equipHighestAttack(bot)
+    logWeapon(bot, 'attack'); // soak 7 (c)
 
     if (!kill) {
         if (bot.entity.position.distanceTo(pos) > 5) {
@@ -773,6 +774,7 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
                 } catch (err) {/* might error if entity dies, ignore */}
             }
             journal.start(enemy); // #384 nit 1: at the first attack, not before the equip and the walk
+            journal.weapon(); // soak 7 (c): what it holds
             fought = enemy;
             bot.pvp.attack(enemy);
             attacked = true;
@@ -865,6 +867,7 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
             else if (!pressed && same.hits >= SHELTER_FIGHT.sameTargetSwings) { why = `${same.hits} hits did not hurt the ${enemy.name}`; outcome = 'capped'; break; }
             journal.start(enemy);
             await equipHighestAttack(bot, fight); // just before the swing (#334 nit)
+            journal.weapon(); // soak 7 (c): what it holds
             const item = bot.heldItem ?? null;
             const cooldown = SHELTER_FIGHT.swingMs ?? weaponCooldownMs(item);
             if (lastSwingAt !== null && Date.now() - lastSwingAt < cooldown) {

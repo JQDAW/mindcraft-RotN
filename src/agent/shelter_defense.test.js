@@ -100,7 +100,7 @@ test('round 9 B (c): with a wall open, the bot fights the mob in the opening fro
     // G4 #5: the journal's fight lines; soak 7: one line per swing (the held item, the time since the
     // swing before, the mob's health before it and at the next look).
     assert.deepEqual(logs.filter(l => l.startsWith('[survival] ')).map(l => l.replace(/after \d+ s$/, 'after N s').replace(/\+\d+ ms/, '+N ms')),
-        ['[survival] fight start zombie (shelter)', '[survival] swing zombie with hand first: health unknown -> unknown',
+        ['[survival] fight start zombie (shelter)', '[survival] weapon hand (shelter)', '[survival] swing zombie with hand first: health unknown -> unknown',
             '[survival] swing zombie with hand +N ms: health unknown -> gone', '[survival] fight end zombie killed after N s']);
 });
 
@@ -794,4 +794,21 @@ test('soak 7 replay (the fight in the cell): the zombie at 0.8 m hitting the bot
     assert.ok(!logs.some(l => / capped /.test(l)));
     assert.equal(okra.count, 1, 'no okra while it hits');
     assert.ok(logs.includes('[reflex] not eating between fights in the shelter: zombie 0.8 blocks away'), logs.join('\n'));
+});
+
+test('soak 7 (c): the shelter fight (fightInShelter -> defendInPlace; also the morning fight-on and hand-fight) holds the stone axe at its first swing, and logs it', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const saved = { ...SHELTER_FIGHT };
+    Object.assign(SHELTER_FIGHT, { swingMs: 10 });
+    t.after(() => Object.assign(SHELTER_FIGHT, saved));
+    const { agent, bot } = shelter({ killAfter: 1 });
+    bot.inventory = { items: () => [{ name: 'pyrotech:crude_axe', metadata: 0, count: 1 }, AXE], slots: [] };
+    bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+    const held = [];
+    const attack = bot.attack;
+    bot.attack = (e) => { held.push(bot.heldItem?.name ?? 'hand'); attack(e); };
+    await selfDefense(agent);
+    assert.deepEqual(held, ['stone_axe']);
+    assert.deepEqual(logs.filter(l => l.startsWith('[survival] ')).slice(0, 2), ['[survival] fight start zombie (shelter)', '[survival] weapon stone_axe (shelter)']);
 });

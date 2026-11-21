@@ -20,6 +20,7 @@ import { formatName } from './rotn_names.js';
 import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe, equipHighestAttack } from './skills.js';
+import { logWeapon } from './survival_log.js';
 import { eatToHeal } from './food.js';
 import { shelterEnemy, shelterTarget, threatFor } from './threats.js';
 import { isTreePart } from './fall_safety.js';
@@ -414,6 +415,7 @@ async function hitOutOf(bot, cell) {
         if (same.id !== mob.id || health === null || health !== same.health) Object.assign(same, { id: mob.id, health, hits: 0 });
         else if (same.hits >= SHELTER_GAP.noHurtHits) break; // it does not get hurt: no use
         try { await equipHighestAttack(bot, fight); } catch { /* fights on with what is in hand */ }
+        if (hits === 0) logWeapon(bot, 'cell'); // soak 7 (c)
         await bot.lookAt(mob.position.offset(0, (mob.height ?? 1.8) * 0.8, 0), true);
         bot.attack(mob);
         hits++;
