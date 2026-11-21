@@ -8,6 +8,7 @@ import { Buffer } from 'node:buffer';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
 import { createRequire } from 'node:module';
+import { hitsToKill } from '../../../packages/rotn-data/index.js';
 
 const require = createRequire(import.meta.url);
 const { Vec3 } = require('vec3');
@@ -32,9 +33,10 @@ export function virtualClock(start = 1_000_000) {
     return { now: () => t, sleep, at, pending: () => due.length };
 }
 
-// #518's damage on Better Combat's packet, as per-hit health drops against an unarmoured zombie (20 health):
-// 20 / drop rounded up is #518's hitsToKill (stone sword 8, stone axe 9, hand 27).
-export const BC_DROP = { 'minecraft:stone_sword': 2.6, 'minecraft:stone_axe': 2.3, 'pyrotech:crude_axe': 2.3, hand: 0.75 };
+// rotn-data's damage on Better Combat's packet against an unarmoured zombie (hitsToKill's perHit and critHit,
+// #518, #528): the hand takes 0.5 off, a crit is x1.5.
+const k = (weapon) => hitsToKill({ mob: 'minecraft:zombie', weapon, path: 'bettercombat' });
+export const BC_DROP = Object.fromEntries(['minecraft:stone_sword', 'minecraft:stone_axe', 'pyrotech:crude_axe', 'hand'].map((w) => [w, { plain: k(w).perHit, crit: k(w).critHit }]));
 export const COOLDOWN = { 'minecraft:stone_sword': 13, 'minecraft:stone_axe': 50, 'pyrotech:crude_axe': 22, hand: 13 };
 const full = (name) => (name ? (name.includes(':') ? name : `minecraft:${name}`) : 'hand');
 
@@ -42,7 +44,10 @@ const full = (name) => (name ? (name.includes(':') ? name : `minecraft:${name}`)
  * opt: bcActive (true), noWrapper, vanillaAlways (a vanilla hit lands every time: a server without Better
  * Combat's rule), offPathAt (the Nth Better Combat call falls back to vanilla), earlyAt (the Nth Better
  * Combat swing goes out 100 ms early), missAt (the Nth Better Combat hit does no damage), tripped,
- * burn (the zombie catches fire), handDrop (the bare hand's drop), breakAfter (crude-axe hits per axe, 4).
+ * burn (the zombie catches fire), handDrop (the bare hand's plain drop), breakAfter (crude-axe hits per axe, 4),
+ * critAt (Better Combat hit numbers that crit at random), noSneak (no sneak-attack crit).
+ * Better Combat crits (x1.5) a NoAI zombie's first hit (a sneak attack: it targets nobody, #528); a zombie
+ * with its AI already targets the bot.
  * A zombie summoned with {ai: true} walks 1 block a second towards the bot, down to 1.5 blocks.
  */
 export function bcWorld(opt = {}) {
@@ -83,7 +88,7 @@ export function bcWorld(opt = {}) {
     function summon(x, y, z, { ai = false } = {}) {
         const id = nextId++;
         const e = { id, name: 'zombie', height: 1.95, position: new Vec3(x + 0.5, y, z + 0.5), metadata: { 7: 20 }, ai };
-        zombies.set(id, { e, health: 20, ai });
+        zombies.set(id, { e, health: 20, ai, bcHits: 0 });
         bot.entities[id] = e;
         if (ai) walk(id);
         return e;
@@ -118,13 +123,20 @@ export function bcWorld(opt = {}) {
             bot.emit('heldItemChanged');
         }
     }
-    const dropFor = () => (held() === 'hand' && opt.handDrop !== undefined ? opt.handDrop : BC_DROP[held()] ?? 1);
+    const dropFor = (crit = false) => {
+        const d = BC_DROP[held()] ?? { plain: 1, crit: 1.5 };
+        if (held() === 'hand' && opt.handDrop !== undefined) return crit ? opt.handDrop * 1.5 : opt.handDrop;
+        return crit ? d.crit : d.plain;
+    };
     client.write = (name, params) => {
         writes.push({ t: clock.now(), name, params });
         if (name === 'custom_payload' && params.channel === 'bettercombat') {
             const id = params.data[2];
             bcN++;
-            hit(id, opt.missAt === bcN ? 0 : dropFor());
+            const z = zombies.get(id);
+            const sneak = !!z && !z.ai && z.bcHits === 0 && !opt.noSneak;
+            if (z) z.bcHits++;
+            hit(id, opt.missAt === bcN ? 0 : dropFor(sneak || (opt.critAt ?? []).includes(bcN)));
         }
         if (name === 'use_entity' && params.mouse === 1) {
             const first = !landedVanilla.has(params.target) || opt.vanillaAlways;

@@ -9,8 +9,8 @@ import process from 'node:process';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import {
-    BC_CONSOLE_ALLOW, BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, P1_CONSOLE_ALLOW, bcHit, bcLaneBlocks, bcLogProblems, bcReply, guardBcConsole,
-    judgeSeries, nearHits, projectedHits,
+    BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, P1_CONSOLE_ALLOW, bcConsoleAllow, bcHit, bcLaneBlocks, bcLogProblems, bcReply, guardBcConsole,
+    bcExpected, judgeSeries, markCrits, projectedHits,
 } from '../runner/lib/probe.mjs';
 import { attachBcAttack, attribute, gapsOf, parseBcHit, whisperOf } from '../runner/drivers/bc-attack.mjs';
 import probe from '../scenarios/probe/probe-bc-attack.mjs';
@@ -21,7 +21,13 @@ const SERVER = 'mcr-test-20261121-101500';
 const DS = 'net.minecraft.server.dedicated.DedicatedServer';
 const L = (msg, logger = DS, level = 'INFO') => `[12:00:00] [Server thread/${level}] [${logger}]: ${msg}`;
 const tick = () => new Promise((r) => setImmediate(r));
-const allowed = (cmd) => BC_CONSOLE_ALLOW.some((re) => re.test(cmd));
+const BC_ALLOW = bcConsoleAllow(NAME);
+// rotn-data's hitsToKill as ranges (#518, #528): every hit a crit to none.
+const SWORD = bcExpected('minecraft:stone_sword');
+const AXE = bcExpected('minecraft:stone_axe');
+const CRUDE = bcExpected('pyrotech:crude_axe');
+const HAND = bcExpected('hand');
+const allowed = (cmd) => BC_ALLOW.some((re) => re.test(cmd));
 
 describe('probe BC\'s console: summon and kill for this probe only, on a disposable test server only', () => {
     test('every command the scenario sends is on the list', () => {
@@ -29,9 +35,9 @@ describe('probe BC\'s console: summon and kill for this probe only, on a disposa
         const sent = [
             'say scenario-probe-bc-attack-r1-begin', 'seed', 'gamerule doDaylightCycle false', 'time set day', 'kill @e[type=zombie]',
             ...bcLaneBlocks().map(([x, y, z, b]) => `setblock ${x} ${y} ${z} ${b}`),
-            `testforblock -45 65 -66 minecraft:stone`, `testforblock -45 66 -66 minecraft:air`,
+            ...[p.landing, p.zombieA, p.zombieB, p.zombieAi].flatMap(([x, y, z]) => [`testforblock ${x} ${y - 1} ${z} minecraft:stone`, `testforblock ${x} ${y} ${z} minecraft:air`, `testforblock ${x} ${y + 2} ${z} minecraft:stone`]),
             `tp ${NAME} ${p.landing.join(' ')}`, `tp ${NAME} ~ ~ ~`, `clear ${NAME}`,
-            ...p.weapons.filter((w) => w.give).map((w) => `give ${NAME} ${w.item} ${w.give} 0`),
+            ...p.weapons.filter((w) => w.give).map((w) => `give ${NAME} ${w.item} ${w.give} 0`), `give ${NAME} ${p.ai.item} 1 0`,
             `summon minecraft:zombie ${p.zombieA.join(' ')} {NoAI:1}`, `summon minecraft:zombie ${p.zombieB.join(' ')} {NoAI:1}`, `summon minecraft:zombie ${p.zombieAi.join(' ')}`,
             ...p.weapons.flatMap((w) => [bcHit(NAME, 'abc123', 'vanilla', p.zombieA, w.item), bcHit(NAME, 'abc123', 'bc', p.zombieB, w.item)]),
             bcHit(NAME, 'abc123', 'bc', 'ai', p.ai.item),
@@ -56,6 +62,24 @@ describe('probe BC\'s console: summon and kill for this probe only, on a disposa
         ]) assert.ok(!allowed(c), c);
     });
 
+    test('#527 review: exactly the plan\'s commands: its three summons at their cells, this bot, the BC items and counts, the landing, the lane', () => {
+        for (const c of [
+            'summon minecraft:zombie -46 66 -66 {NoAI:1}', 'summon minecraft:zombie 0 64 0 {NoAI:1}', 'summon minecraft:zombie -47 66 -66',
+            'summon minecraft:zombie -43 66 -66', 'summon minecraft:zombie -42 66 -66 {NoAI:1}', 'summon minecraft:zombie -42 67 -66',
+            'give JQDAW minecraft:stone_sword 1 0', `give ${NAME} minecraft:iron_sword 1 0`, `give ${NAME} minecraft:stone_sword 64 0`, `give ${NAME} minecraft:stone_sword 1 1`,
+            `give ${NAME} pyrotech:crude_axe 7 0`, `give ${NAME} minecraft:bread 1 0`, 'tp JQDAW -45 66 -66', `tp ${NAME} 0 200 0`, 'tp JQDAW ~ ~ ~', 'clear JQDAW',
+            'setblock -49 65 -66 minecraft:stone', 'setblock -45 66 -65 minecraft:air', 'setblock 0 64 0 minecraft:stone', 'testforblock 0 64 0 minecraft:stone',
+            `tell ${NAME} bc-hit abc123 bc -47,66,-66 minecraft:stone_sword`, `tell ${NAME} bc-hit abc123 vanilla -43,66,-66 minecraft:stone_sword`,
+            `tell ${NAME} bc-hit abc123 vanilla ai minecraft:stone_sword`, `tell ${NAME} bc-hit abc123 bc ai hand`, `tell ${NAME} bc-hit abc123 bc -43,66,-66 minecraft:iron_sword`,
+            'tell JQDAW bc-hit abc123 bc -43,66,-66 minecraft:stone_sword', `tell ${NAME} bc-hit abc123 bc 0,64,0 hand`,
+        ]) assert.ok(!allowed(c), c);
+        // Another bot name gets its own list; nothing of FRCFLD's.
+        const other = bcConsoleAllow('OtherBot');
+        assert.ok(other.some((re) => re.test('clear OtherBot')));
+        assert.ok(!other.some((re) => re.test(`clear ${NAME}`)));
+        for (const bad of ['', 'a b', 'x;op', '@a', 'ab', 'a'.repeat(17), undefined]) assert.throws(() => bcConsoleAllow(bad), /bad bot name/, String(bad));
+    });
+
     test('P1\'s list stays without summon and kill', () => {
         for (const c of ['summon minecraft:zombie -47 66 -66 {NoAI:1}', 'summon minecraft:zombie -47 66 -66', 'kill @e[type=zombie]']) {
             assert.ok(!P1_CONSOLE_ALLOW.some((re) => re.test(c)), c);
@@ -66,12 +90,12 @@ describe('probe BC\'s console: summon and kill for this probe only, on a disposa
         const seen = [];
         const srv = { console: (c) => { seen.push(c); return ['ok']; }, log: () => [] };
         for (const name of [undefined, null, '', 'live', 'rotn-live', 'mcr-test-2026', 'mcr-test-20261121-101500x', 'xmcr-test-20261121-101500']) {
-            const g = guardBcConsole(srv, name);
+            const g = guardBcConsole(srv, name, NAME);
             assert.throws(() => g.console('kill @e[type=zombie]', 1), /not a disposable test server/, String(name));
             assert.throws(() => g.console('time set day', 1), /not a disposable test server/, String(name));
         }
         assert.deepEqual(seen, [], 'nothing reached the server');
-        const g = guardBcConsole(srv, SERVER);
+        const g = guardBcConsole(srv, SERVER, NAME);
         assert.deepEqual(g.console('summon minecraft:zombie -47 66 -66 {NoAI:1}', 1), ['ok']);
         assert.throws(() => g.console('kill @e', 1), /console command refused/);
         assert.throws(() => g.console('op FRCFLD', 1), /console command refused/);
@@ -100,14 +124,16 @@ describe('the judgments (the plan\'s pass rules)', () => {
     const bc = (drops, extra = {}) => ({ ok: true, target: { id: 1, startHealth: 20 }, end: 'dead', hits: drops.map((d, k) => hit(k + 1, d)), gaps: { bettercombat: drops.slice(1).map(() => 650) }, ...extra });
     const van = (drops, extra = {}) => ({ ok: true, target: { id: 1, startHealth: 20 }, end: 'maxMs', hits: drops.map((d, k) => hit(k + 1, d, 'vanilla')), gaps: { bettercombat: [] }, ...extra });
 
-    test('nearHits: within max(1, 15%) of one expected count', () => {
-        assert.equal(nearHits(8, [8]), 8);
-        assert.equal(nearHits(9, [8]), 8);
-        assert.equal(nearHits(10, [8]), null);
-        assert.equal(nearHits(31, [27, 54]), 27);
-        assert.equal(nearHits(50, [27, 54]), 54);
-        assert.equal(nearHits(40, [27, 54]), null);
-        assert.equal(nearHits(null, [8]), null);
+    test('bcExpected: rotn-data\'s hitsToKill as a range (#528): every hit a crit (x1.5) to none; the hand takes 0.5 off', () => {
+        assert.deepEqual([SWORD, AXE, CRUDE, HAND].map((e) => [e.min, e.max]), [[5, 8], [6, 9], [6, 9], [36, 54]]);
+        for (const e of [SWORD, AXE, CRUDE, HAND]) assert.ok(e.critHit / e.perHit > 1.4 && e.critHit / e.perHit < 1.6, 'x1.5 before armour');
+        assert.throws(() => bcExpected('minecraft:no_such_sword'), /no hitsToKill/);
+    });
+
+    test('markCrits: a drop at least halfway to a crit\'s is a crit; a killing hit below that says nothing', () => {
+        const hs = [{ i: 1, drop: 4.133 }, { i: 2, drop: 2.733 }, { i: 3, drop: 2.733 }, { i: 4, drop: 4.133 }, { i: 5, drop: 0 }, { i: 6, drop: 1.2, died: true, healthAfter: 0 }];
+        assert.deepEqual(markCrits(hs, SWORD), { crits: [1, 4], plain: [2, 3], unknown: [6] });
+        assert.deepEqual(markCrits([{ i: 7, drop: 4.2, died: true, healthAfter: 0 }], SWORD).crits, [7], 'a killing crit still shows');
     });
 
     test('vanilla: the first hit lowers the health and no later one does', () => {
@@ -121,29 +147,32 @@ describe('the judgments (the plan\'s pass rules)', () => {
     });
 
     test('Better Combat: every hit lands, it dies near #518\'s count, no gap under the cooldown, no trip', () => {
-        const ok = judgeSeries(bc(Array(8).fill(2.6)), { path: 'bc', hits: [8], cooldownTicks: 13 });
-        assert.deepEqual([ok.ok, ok.projected, ok.matched], [true, 8, 8]);
-        assert.match(judgeSeries(bc([2.6, 0, 2.6, 2.6, 2.6, 2.6, 2.6, 2.6, 2.6]), { path: 'bc', hits: [8], cooldownTicks: 13 }).why, /1 hit\(s\) did not lower the health \(#2\)/);
-        assert.match(judgeSeries(bc(Array(12).fill(1.7)), { path: 'bc', hits: [8], cooldownTicks: 13 }).why, /12 hits to kill, not near #518's 8/);
-        assert.match(judgeSeries(bc(Array(8).fill(2.6), { gaps: { bettercombat: [650, 549, 650] } }), { path: 'bc', hits: [8], cooldownTicks: 13 }).why, /1 gap\(s\) between Better Combat packets under 13 ticks \(549 ms\)/);
-        assert.equal(judgeSeries(bc(Array(8).fill(2.6), { gaps: { bettercombat: [649, 648] } }), { path: 'bc', hits: [8], cooldownTicks: 13 }).ok, true, 'a timer may fire up to 2 ms early');
-        assert.match(judgeSeries(bc(Array(8).fill(2.6), { tripped: true }), { path: 'bc', hits: [8], cooldownTicks: 13 }).why, /self-check tripped/);
-        assert.match(judgeSeries(bc(Array(8).fill(2.6), { end: 'maxMs' }), { path: 'bc', hits: [8], cooldownTicks: 13 }).why, /did not die \(maxMs\)/);
+        const ok = judgeSeries(bc(Array(8).fill(2.6)), { path: 'bc', expected: SWORD, cooldownTicks: 13 });
+        assert.deepEqual([ok.ok, ok.projected, ok.inRange], [true, 8, true]);
+        assert.match(judgeSeries(bc(Array(4).fill(5)), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /4 hits to kill, not in rotn-data's 5-8/, 'fewer than every hit a crit');
+        assert.match(judgeSeries(bc([2.6, 0, 2.6, 2.6, 2.6, 2.6, 2.6, 2.6, 2.6]), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /1 hit\(s\) did not lower the health \(#2\)/);
+        assert.match(judgeSeries(bc(Array(12).fill(1.7)), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /12 hits to kill, not in rotn-data's 5-8/);
+        assert.match(judgeSeries(bc(Array(8).fill(2.6), { gaps: { bettercombat: [650, 549, 650] } }), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /1 gap\(s\) between Better Combat packets under 13 ticks \(549 ms\)/);
+        assert.equal(judgeSeries(bc(Array(8).fill(2.6), { gaps: { bettercombat: [649, 648] } }), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).ok, true, 'a timer may fire up to 2 ms early');
+        assert.match(judgeSeries(bc(Array(8).fill(2.6), { tripped: true }), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /self-check tripped/);
+        assert.match(judgeSeries(bc(Array(8).fill(2.6), { end: 'maxMs' }), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /did not die \(maxMs\)/);
         const off = bc(Array(8).fill(2.6));
         off.hits[3].path = 'vanilla';
-        assert.match(judgeSeries(off, { path: 'bc', hits: [8], cooldownTicks: 13 }).why, /1 hit\(s\) not on the bettercombat path \(#4\)/);
+        assert.match(judgeSeries(off, { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /1 hit\(s\) not on the bettercombat path \(#4\)/);
         const replaced = bc(Array(8).fill(2.6));
         replaced.hits[2].sent = false;
-        assert.match(judgeSeries(replaced, { path: 'bc', hits: [8], cooldownTicks: 13 }).why, /1 call\(s\) sent nothing/);
+        assert.match(judgeSeries(replaced, { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /1 call\(s\) sent nothing/);
     });
 
-    test('the bare hand: 40 hits without a kill is judged by the projection (#518: 27, or about 54 with the 0.5 reduction)', () => {
-        const half = bc(Array(40).fill(0.37), { end: 'maxHits' });
-        assert.equal(projectedHits(half), 55);
-        assert.deepEqual([judgeSeries(half, { path: 'bc', hits: [27, 54], cooldownTicks: 13 }).ok, judgeSeries(half, { path: 'bc', hits: [27, 54], cooldownTicks: 13 }).matched], [true, 54]);
-        assert.match(judgeSeries(bc(Array(40).fill(0.2), { end: 'maxHits' }), { path: 'bc', hits: [27, 54], cooldownTicks: 13 }).why, /100 hits to kill \(projected\), not near #518's 27 or 54/);
-        assert.match(judgeSeries(bc(Array(40).fill(0.37), { end: 'maxHits' }), { path: 'bc', hits: [8], cooldownTicks: 13 }).why, /did not die \(maxHits\)/, 'a weapon must kill');
-        assert.equal(judgeSeries(bc(Array(27).fill(0.75)), { path: 'bc', hits: [27, 54], cooldownTicks: 13 }).matched, 27);
+    test('the bare hand: 40 hits without a kill is judged by the projection (rotn-data: 36 to 54, with 0.5 taken off)', () => {
+        const plain = bc(Array(40).fill(0.3712), { end: 'maxHits' });
+        assert.equal(projectedHits(plain), 54);
+        const v = judgeSeries(plain, { path: 'bc', expected: HAND, cooldownTicks: 13 });
+        assert.deepEqual([v.ok, v.inRange], [true, true], v.why);
+        assert.match(judgeSeries(bc(Array(40).fill(0.2), { end: 'maxHits' }), { path: 'bc', expected: HAND, cooldownTicks: 13 }).why, /100 hits to kill \(projected\), not in rotn-data's 36-54/);
+        assert.match(judgeSeries(bc(Array(40).fill(0.75), { end: 'maxHits' }), { path: 'bc', expected: HAND, cooldownTicks: 13 }).why, /27 hits to kill \(projected\), not in rotn-data's 36-54/, '#518\'s 27 (no 0.5 off) fails now');
+        assert.match(judgeSeries(bc(Array(40).fill(0.37), { end: 'maxHits' }), { path: 'bc', expected: SWORD, cooldownTicks: 13 }).why, /did not die \(maxHits\)/, 'a weapon must kill');
+        assert.equal(judgeSeries(bc(Array(36).fill(0.5592)), { path: 'bc', expected: HAND, cooldownTicks: 13 }).ok, true, 'every hit a crit: dead in 36');
     });
 
     test('the AI zombie: every hit lands and it dies; no count is judged', () => {
@@ -186,7 +215,7 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
         return { out, reply };
     };
 
-    test('stone sword: vanilla lands once in 40 hits paced at 13 ticks; Better Combat kills in 8 with 650-ms gaps', async () => {
+    test('stone sword: vanilla lands once in 40 hits paced at 13 ticks; Better Combat kills in 7 (the first a sneak crit, #528) with 650-ms gaps', async () => {
         const w = bcWorld();
         const { reply } = attach(w);
         w.give('minecraft:stone_sword');
@@ -198,7 +227,7 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
         assert.equal(rv.target.id, a.id);
         assert.equal(rv.end, 'maxHits');
         assert.equal(rv.hits.length, 40);
-        assert.deepEqual(rv.hits.slice(0, 3).map((h) => [h.path, h.healthBefore, h.healthAfter, h.drop, h.hurt]), [['vanilla', 20, 17.4, 2.6, true], ['vanilla', 17.4, 17.4, 0, false], ['vanilla', 17.4, 17.4, 0, false]]);
+        assert.deepEqual(rv.hits.slice(0, 3).map((h) => [h.path, h.healthBefore, h.healthAfter, h.drop, h.hurt]), [['vanilla', 20, 17.267, 2.733, true], ['vanilla', 17.267, 17.267, 0, false], ['vanilla', 17.267, 17.267, 0, false]]);
         assert.ok(rv.gaps.vanilla.every((g) => g >= 650), rv.gaps.vanilla.join(','));
         assert.equal(rv.packets.use_entity, 40);
         assert.equal(rv.packets.bettercombat, 0);
@@ -207,14 +236,14 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
         const rb = await reply('bbb222');
         assert.equal(rb.target.id, b.id);
         assert.equal(rb.end, 'dead');
-        assert.equal(rb.hits.length, 8);
+        assert.equal(rb.hits.length, 7);
         assert.ok(rb.hits.every((h) => h.path === 'bettercombat' && h.drop > 0 && h.hurt === (h.healthAfter > 0)), JSON.stringify(rb.hits));
         assert.equal(rb.hits.at(-1).healthAfter, 0);
-        assert.ok(rb.gaps.bettercombat.length === 7 && rb.gaps.bettercombat.every((g) => g >= 650), rb.gaps.bettercombat.join(','));
+        assert.ok(rb.gaps.bettercombat.length === 6 && rb.gaps.bettercombat.every((g) => g >= 650), rb.gaps.bettercombat.join(','));
         assert.equal(rb.packets.use_entity, 0, 'never use_entity on Better Combat\'s path');
-        assert.deepEqual([rb.statsAfter.bettercombat - rb.statsBefore.bettercombat, rb.tripped, rb.burned], [8, false, false]);
-        const v = judgeSeries(rb, { path: 'bc', hits: [8], cooldownTicks: 13 });
-        assert.deepEqual([v.ok, v.projected], [true, 8], v.why);
+        assert.deepEqual([rb.statsAfter.bettercombat - rb.statsBefore.bettercombat, rb.tripped, rb.burned], [7, false, false]);
+        const v = judgeSeries(rb, { path: 'bc', expected: SWORD, cooldownTicks: 13 });
+        assert.deepEqual([v.ok, v.projected, v.crits], [true, 7, { crits: [1], plain: [2, 3, 4, 5, 6], unknown: [7] }], v.why);
     });
 
     test('stone axe: vanilla paced at 50 ticks (60 s: 24 hits); Better Combat in 9', async () => {
@@ -231,7 +260,7 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
         w.whisper('bc-hit bbb222 bc -43,66,-66 minecraft:stone_axe');
         const rb = await reply('bbb222');
         assert.deepEqual([rb.end, rb.hits.length], ['dead', 9]);
-        assert.equal(judgeSeries(rb, { path: 'bc', hits: [9], cooldownTicks: 50 }).ok, true);
+        assert.equal(judgeSeries(rb, { path: 'bc', expected: AXE, cooldownTicks: 50 }).ok, true);
     });
 
     test('crude axe: it breaks after 4 hits; the driver takes the next one (the cooldown restarts) and kills in 9', async () => {
@@ -244,7 +273,7 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
         assert.deepEqual([rb.end, rb.hits.length], ['dead', 9]);
         assert.deepEqual(rb.reequips.map((x) => x.afterHit), [4, 8]);
         assert.ok(rb.gaps.bettercombat.every((g) => g >= 1100), rb.gaps.bettercombat.join(','));
-        assert.equal(judgeSeries(rb, { path: 'bc', hits: [9], cooldownTicks: 22 }).ok, true);
+        assert.equal(judgeSeries(rb, { path: 'bc', expected: CRUDE, cooldownTicks: 22 }).ok, true);
         // Out of axes: the series ends item_gone.
         const w2 = bcWorld();
         const t2 = attach(w2);
@@ -253,25 +282,43 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
         w2.whisper('bc-hit ccc333 bc -43,66,-66 pyrotech:crude_axe');
         const r2 = await t2.reply('ccc333');
         assert.deepEqual([r2.end, r2.hits.length], ['item_gone', 4]);
-        assert.match(judgeSeries(r2, { path: 'bc', hits: [9], cooldownTicks: 22 }).why, /did not die \(item_gone\)/);
+        assert.match(judgeSeries(r2, { path: 'bc', expected: CRUDE, cooldownTicks: 22 }).why, /did not die \(item_gone\)/);
     });
 
-    test('empty hand: an empty hotbar slot; 27 hits on Better Combat\'s path; with the 0.5 reduction, 40 hits and a projection of 54', async () => {
+    test('empty hand: an empty hotbar slot; with 0.5 off, 40 hits and a projection of 54; every hit a crit kills in 36', async () => {
         const w = bcWorld();
         const { reply } = attach(w);
         w.summon(-43, 66, -66);
         w.whisper('bc-hit bbb222 bc -43,66,-66 hand');
         const rb = await reply('bbb222');
-        assert.deepEqual([rb.end, rb.hits.length], ['dead', 27]);
-        assert.equal(judgeSeries(rb, { path: 'bc', hits: [27, 54], cooldownTicks: 13 }).matched, 27);
-        const w2 = bcWorld({ handDrop: 0.375 });
+        assert.deepEqual([rb.end, rb.hits.length], ['maxHits', 40]);
+        const v = judgeSeries(rb, { path: 'bc', expected: HAND, cooldownTicks: 13 });
+        assert.deepEqual([v.ok, v.projected, v.crits.crits], [true, 54, [1]], v.why);
+        const w2 = bcWorld({ critAt: Array.from({ length: 40 }, (_, i) => i + 1) });
         const t2 = attach(w2);
         w2.summon(-43, 66, -66);
         w2.whisper('bc-hit ccc333 bc -43,66,-66 hand');
         const r2 = await t2.reply('ccc333');
-        assert.deepEqual([r2.end, r2.hits.length], ['maxHits', 40]);
-        const v = judgeSeries(r2, { path: 'bc', hits: [27, 54], cooldownTicks: 13 });
-        assert.deepEqual([v.ok, v.projected, v.matched], [true, 54, 54], v.why);
+        assert.deepEqual([r2.end, r2.hits.length], ['dead', 36]);
+        assert.equal(judgeSeries(r2, { path: 'bc', expected: HAND, cooldownTicks: 13 }).ok, true);
+    });
+
+    test('random crits shorten a series, inside the range; the crits are marked', async () => {
+        const w = bcWorld({ critAt: [3, 5] });
+        const { reply } = attach(w);
+        w.give('minecraft:stone_sword');
+        w.summon(-43, 66, -66);
+        w.whisper('bc-hit ddd444 bc -43,66,-66 minecraft:stone_sword');
+        const r = await reply('ddd444');
+        const v = judgeSeries(r, { path: 'bc', expected: SWORD, cooldownTicks: 13 });
+        assert.deepEqual([r.hits.length, v.ok, v.crits.crits], [6, true, [1, 3, 5]], v.why);
+        const w2 = bcWorld({ noSneak: true });
+        const t2 = attach(w2);
+        w2.give('minecraft:stone_sword');
+        w2.summon(-43, 66, -66);
+        w2.whisper('bc-hit eee555 bc -43,66,-66 minecraft:stone_sword');
+        const r2 = await t2.reply('eee555');
+        assert.deepEqual([r2.hits.length, judgeSeries(r2, { path: 'bc', expected: SWORD, cooldownTicks: 13 }).crits.crits], [8, []], 'no crit at all: the plain 8');
     });
 
     test('the AI zombie: no swing until it is within 3 blocks; then Better Combat kills it', async () => {
@@ -288,7 +335,7 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
     });
 
     test('a wrong world is caught: a fallback to vanilla, an early swing, a hit that does not land, fire, a tripped self-check', async () => {
-        const series = async (opt, judge = { path: 'bc', hits: [8], cooldownTicks: 13 }) => {
+        const series = async (opt, judge = { path: 'bc', expected: SWORD, cooldownTicks: 13 }) => {
             const w = bcWorld(opt);
             const { reply } = attach(w);
             w.give('minecraft:stone_sword');
@@ -431,9 +478,11 @@ describe('probe-bc-attack on a simulated server and log', () => {
         assert.ok(r.weakenedParams.includes(BC_NOT_GATE));
         assert.deepEqual(s.startEnv().ROTN_DRIVER_BC_ATTACK, 'on');
         assert.deepEqual(r.notes.series.map((x) => [x.key, x.reply.hits.length, x.reply.end]), [
-            ['vanilla_stone_sword', 40, 'maxHits'], ['bc_stone_sword', 8, 'dead'], ['vanilla_stone_axe', 24, 'maxMs'], ['bc_stone_axe', 9, 'dead'],
-            ['vanilla_crude_axe', 40, 'maxHits'], ['bc_crude_axe', 9, 'dead'], ['vanilla_hand', 40, 'maxHits'], ['bc_hand', 27, 'dead'], ['bc_ai_zombie', 8, 'dead']]);
-        assert.match(c.bc_stone_sword.detail, /^8 hit\(s\), end dead, health 20 -> 0, 8 to kill: as planned$/);
+            ['vanilla_stone_sword', 40, 'maxHits'], ['bc_stone_sword', 7, 'dead'], ['vanilla_stone_axe', 24, 'maxMs'], ['bc_stone_axe', 9, 'dead'],
+            ['vanilla_crude_axe', 40, 'maxHits'], ['bc_crude_axe', 9, 'dead'], ['vanilla_hand', 40, 'maxHits'], ['bc_hand', 40, 'maxHits'], ['bc_ai_zombie', 8, 'dead']]);
+        assert.match(c.bc_stone_sword.detail, /^7 hit\(s\), end dead, health 20 -> 0, 7 to kill, crits #1: as planned$/);
+        assert.match(c.bc_hand.detail, /^40 hit\(s\), end maxHits, health 20 -> 4\.97\d, 54 to kill \(projected\), crits #1: as planned$/);
+        assert.match(c.bc_ai_zombie.detail, /, crits none: as planned$/, 'a zombie with its AI targets the bot: no sneak crit');
         assert.equal(s.blocks.get('-45,65,-66'), 'minecraft:stone');
         assert.equal(s.blocks.get('-45,68,-66'), 'minecraft:stone', 'the roof against daylight');
         // After each step (a weapon's Better Combat series, the AI zombie) a kill comes before anything is summoned again.
