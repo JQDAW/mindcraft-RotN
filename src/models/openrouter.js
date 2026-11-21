@@ -11,6 +11,17 @@ export function usageLine(usage) {
     return `[openrouter] usage prompt_tokens ${num(usage?.prompt_tokens)}, completion_tokens ${num(usage?.completion_tokens)}, cost_usd ${num(usage?.cost)}`;
 }
 
+// The hidden reasoning share of completion_tokens (soak 7: 5.2 times the completion tokens of soak 6 for
+// about the same text). Its own line, so the harness's usage-line pattern stays as it is. null (no line)
+// when OpenRouter sent no completion_tokens_details at all.
+export function reasoningLine(usage) {
+    const d = usage?.completion_tokens_details;
+    if (!d || typeof d !== 'object') return null;
+    const v = d.reasoning_tokens;
+    const n = (typeof v === 'number' && Number.isFinite(v) && v >= 0) ? String(v) : 'unknown';
+    return `[openrouter] reasoning_tokens ${n}`;
+}
+
 export class OpenRouter {
     static prefix = 'openrouter';
     constructor(model_name, url) {
@@ -53,6 +64,8 @@ export class OpenRouter {
             const provider = clean(completion?.provider, 'unknown');
             console.log(`[openrouter] provider ${provider}, finish_reason ${clean(c0?.finish_reason, 'none')}, content ${typeof c0?.message?.content === 'string' ? c0.message.content.length : 'null'} chars`);
             console.log(usageLine(completion?.usage));
+            const reasoning = reasoningLine(completion?.usage);
+            if (reasoning) console.log(reasoning);
             if (!completion?.choices?.[0]) {
                 // Never the whole response body; only its error summary, if any.
                 console.error(`No completion or choices returned (model ${this.model_name}):`, completion?.error ? safeError(completion.error) : 'no choices in the response');
