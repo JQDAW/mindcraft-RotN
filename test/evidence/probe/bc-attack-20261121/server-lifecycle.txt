@@ -1,0 +1,28 @@
+# deploy/test-server.sh up (GO G-BC-PROBE-20261121), its log as written:
+[test-server 13:39:58] sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 14.6, 15.2 min, newest 44909218607 9.1 min ago
+[test-server 13:39:58] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 13:39:59] creating mcr-test-20261121-133952: delete-after 2026-11-21T15:39:58Z (TTL 2h)
+Waiting for create_server (server: <server-id>, image: 161547269) ...
+Waiting for start_server (server: <server-id>) ...
+Waiting for create_server (server: <server-id>, image: 161547269) ... done
+Waiting for start_server (server: <server-id>) ... done
+Server <server-id> created
+[test-server 13:40:11] server mcr-test-20261121-133952 is at <ip>
+[test-server 13:40:11] waiting for SSH and the build (up to 120 min)
+[test-server 13:40:21] phase: unreachable
+[test-server 13:40:39] phase: booting:running
+[test-server 13:41:27] phase: unpack
+[test-server 13:41:43] phase: starting
+[test-server 13:45:56] phase: ready
+[test-server 13:45:57] mod-director: pinned mods/esmtweaks-1.12.2-0.4.5.jar sha256 b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 OK
+[test-server 13:45:57] mod-director: OK: 1 pinned download(s) match; 337 jars of the pinned zip match; 0 extra mod(s)
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 13:45:59] READY: mcr-test-20261121-133952 at <ip>:25565 (delete-after 2026-11-21T15:39:58Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261121-133952
+# deploy/test-server.sh starts, right after up:
+starts=1 files=1
+# deploy/test-server.sh down, its log as written:
+[test-server 13:48:23] deleting batch mcr-test-20261121-133952 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261121-133952)
+Waiting for delete_server (server: <server-id>) ...
+Waiting for delete_server (server: <server-id>) ... done
+[test-server 13:48:36] batch mcr-test-20261121-133952: ran 8 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 13:48:36] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261121-133952

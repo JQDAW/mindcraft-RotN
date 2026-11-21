@@ -45,7 +45,8 @@ const full = (name) => (name ? (name.includes(':') ? name : `minecraft:${name}`)
  * Combat's rule), offPathAt (the Nth Better Combat call falls back to vanilla), earlyAt (the Nth Better
  * Combat swing goes out 100 ms early), missAt (the Nth Better Combat hit does no damage), tripped,
  * burn (the zombie catches fire), handDrop (the bare hand's plain drop), breakAfter (crude-axe hits per axe, 4),
- * critAt (Better Combat hit numbers that crit at random), noSneak (no sneak-attack crit).
+ * critAt (Better Combat hit numbers that crit at random), noSneak (no sneak-attack crit), zombieHealth (20),
+ * botY (the bot's feet, 66; the scenario's lane is at 120).
  * Better Combat crits (x1.5) a NoAI zombie's first hit (a sneak attack: it targets nobody, #528); a zombie
  * with its AI already targets the bot.
  * A zombie summoned with {ai: true} walks 1 block a second towards the bot, down to 1.5 blocks.
@@ -59,7 +60,7 @@ export function bcWorld(opt = {}) {
     const landedVanilla = new Set();
     const zombies = new Map();
     bot._client = client;
-    bot.entity = { position: new Vec3(-44.5, 66, -65.5) };
+    bot.entity = { position: new Vec3(-44.5, opt.botY ?? 66, -65.5) };
     bot.health = 20;
     bot.entities = {};
     const slots = new Array(46).fill(null);
@@ -87,8 +88,9 @@ export function bcWorld(opt = {}) {
 
     function summon(x, y, z, { ai = false } = {}) {
         const id = nextId++;
-        const e = { id, name: 'zombie', height: 1.95, position: new Vec3(x + 0.5, y, z + 0.5), metadata: { 7: 20 }, ai };
-        zombies.set(id, { e, health: 20, ai, bcHits: 0 });
+        const hp = opt.zombieHealth ?? 20;
+        const e = { id, name: 'zombie', height: 1.95, position: new Vec3(x + 0.5, y, z + 0.5), metadata: { 7: hp }, ai };
+        zombies.set(id, { e, health: hp, ai, bcHits: 0 });
         bot.entities[id] = e;
         if (ai) walk(id);
         return e;

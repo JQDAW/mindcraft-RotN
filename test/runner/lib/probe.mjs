@@ -169,15 +169,13 @@ const exact = (cmd) => new RegExp(`^${esc(cmd)}$`);
  * allowed `summon` and `kill` for this probe only, on the disposable CPX42: summon only the plan's three
  * zombies (A and B with exactly {NoAI:1}, the AI zombie bare) at their fixed cells; kill exactly
  * @e[type=zombie]. give, tp, clear, setblock and testforblock only for this bot, the BC items with the plan's
- * counts, the landing spot and the lane's cells; bc-hit only as the plan pairs path, zombie and item.
+ * counts and the landing spot; fill only the lane's two fills (no setblock at all), testforblock only the
+ * lane's cells; bc-hit only as the plan pairs path, zombie and item.
  * P1's list (P1_CONSOLE_ALLOW) is separate and gets none of this.
  */
 export function bcConsoleAllow(bot, plan = BC_PLAN) {
     if (typeof bot !== 'string' || !new RegExp(`^${NAME}$`).test(bot)) throw new Error(`bad bot name '${bot}'`);
     const cell = (c) => c.join(' ');
-    const lane = bcLaneBlocks(plan.lane);
-    const checked = [plan.landing, plan.zombieA, plan.zombieB, plan.zombieAi]
-        .flatMap(([x, y, z]) => [[x, y - 1, z, 'minecraft:stone'], [x, y, z, 'minecraft:air'], [x, y + 2, z, 'minecraft:stone']]);
     const gives = [...plan.weapons.filter((w) => w.give).map((w) => [w.item, w.give]), [plan.ai.item, 1]];
     const items = `(${plan.weapons.map((w) => esc(w.item)).join('|')})`;
     const T = '[0-9a-f]{6,32}';
@@ -190,8 +188,8 @@ export function bcConsoleAllow(bot, plan = BC_PLAN) {
         exact(`tp ${bot} ${cell(plan.landing)}`),
         exact(`clear ${bot}`),
         ...gives.map(([item, n]) => exact(`give ${bot} ${item} ${n} 0`)),
-        ...lane.map(([x, y, z, b]) => exact(`setblock ${x} ${y} ${z} ${b}`)),
-        ...checked.map(([x, y, z, b]) => exact(`testforblock ${x} ${y} ${z} ${b}`)),
+        ...bcLaneFills(plan.lane).map(exact),
+        ...bcLaneCells(plan.lane).map(([x, y, z, b]) => exact(`testforblock ${x} ${y} ${z} ${b}`)),
         exact(`summon minecraft:zombie ${cell(plan.zombieA)} {NoAI:1}`),
         exact(`summon minecraft:zombie ${cell(plan.zombieB)} {NoAI:1}`),
         exact(`summon minecraft:zombie ${cell(plan.zombieAi)}`),
@@ -241,23 +239,24 @@ export function bcReply(output, t) {
 }
 
 /**
- * Probe BC's plan (the lead's step 4). The bot stands at `bot` on a stone floor in a roofed 1-wide lane along
- * x (floor y-1, air at y and y+1, a stone roof at y+2, so no zombie burns in daylight). For each weapon two
- * NoAI zombies stand 2 blocks from it: A (west) is hit on the vanilla path at Better Combat's cooldown,
- * B (east) on Better Combat's path. Then one zombie with its AI, 3 blocks east, on Better Combat's path
- * with a stone sword.
- *
- * The expected hits to kill come from rotn-data's hitsToKill (#518, #528) at run time: bcExpected(item).
+ * Probe BC's plan (the lead's step 4). The bot stands in an enclosed stone lane in the air (attempt 1, #535: a
+ * Dynamic Trees trunk stood in the ground lane, and setblock cannot replace a trunk shell; the lead approved
+ * this lane): 1 wide, 2 high, along x at y 120, with a stone floor, a stone roof, stone walls on both sides and
+ * at both ends. Nothing grows there, no zombie burns (the roof), the AI zombie cannot leave the lane or be
+ * knocked off it, and no mob spawns within 24 blocks of the bot. For each weapon two NoAI zombies stand 2
+ * blocks from the bot: A (west) is hit on the vanilla path at Better Combat's cooldown, B (east) on Better
+ * Combat's path. Then one zombie with its AI, 3 blocks east, on Better Combat's path with a stone sword.
+ * The expected hits to kill come from rotn-data's hitsToKill (#518, #528) at run time: bcExpected(item, {health}).
  * The crude axe's durability is 8 and it loses 2 a hit, so it breaks after 4 landed hits: 6 are given and
  * the driver takes the next one when one breaks.
  * cooldownTicks: net-forge's plan (3): stone sword 13, stone axe 50, crude axe 22, hand 13.
  */
 export const BC_PLAN = Object.freeze({
-    landing: [-45, 66, -66],                      // P1's landing spot (G2 batch 8), on the G2 seed
-    lane: { xFrom: -48, xTo: -41, y: 66, z: -66 },
-    zombieA: [-47, 66, -66],
-    zombieB: [-43, 66, -66],
-    zombieAi: [-42, 66, -66],
+    landing: [-45, 120, -66],
+    lane: { xFrom: -48, xTo: -41, y: 120, z: -66 },   // the air cells; y is the bot's feet
+    zombieA: [-47, 120, -66],
+    zombieB: [-43, 120, -66],
+    zombieAi: [-42, 120, -66],
     weapons: Object.freeze([
         { check: 'stone_sword', item: 'minecraft:stone_sword', give: 1, cooldownTicks: 13 },
         { check: 'stone_axe', item: 'minecraft:stone_axe', give: 1, cooldownTicks: 50 },
@@ -269,12 +268,31 @@ export const BC_PLAN = Object.freeze({
     maxMs: 60000,
 });
 
-/** The lane's cells: [x, y, z, block] for every setblock, floor first, then the air, then the roof. */
-export function bcLaneBlocks(lane = BC_PLAN.lane) {
+/**
+ * The lane's two fills, in order: the whole box around it stone (x from xFrom-1 to xTo+1, y from y-1 to y+2, z
+ * from z-1 to z+1), then its two rows of air. Nothing else is ever placed.
+ */
+export function bcLaneFills(lane = BC_PLAN.lane) {
+    return [
+        `fill ${lane.xFrom - 1} ${lane.y - 1} ${lane.z - 1} ${lane.xTo + 1} ${lane.y + 2} ${lane.z + 1} minecraft:stone`,
+        `fill ${lane.xFrom} ${lane.y} ${lane.z} ${lane.xTo} ${lane.y + 1} ${lane.z} minecraft:air`,
+    ];
+}
+
+/**
+ * Every cell that makes the lane, [x, y, z, block]: the air (2 rows), the floor and the roof under and over it,
+ * the side walls (both rows, both sides) and the two end walls. The setup checks each with testforblock before
+ * anything is summoned. 68 cells for an 8-long lane.
+ */
+export function bcLaneCells(lane = BC_PLAN.lane) {
     const out = [];
-    for (let x = lane.xFrom; x <= lane.xTo; x++) out.push([x, lane.y - 1, lane.z, 'minecraft:stone']);
-    for (let x = lane.xFrom; x <= lane.xTo; x++) out.push([x, lane.y, lane.z, 'minecraft:air'], [x, lane.y + 1, lane.z, 'minecraft:air']);
-    for (let x = lane.xFrom; x <= lane.xTo; x++) out.push([x, lane.y + 2, lane.z, 'minecraft:stone']);
+    const xs = [];
+    for (let x = lane.xFrom; x <= lane.xTo; x++) xs.push(x);
+    const { y, z } = lane;
+    for (const x of xs) out.push([x, y, z, 'minecraft:air'], [x, y + 1, z, 'minecraft:air']);
+    for (const x of xs) out.push([x, y - 1, z, 'minecraft:stone'], [x, y + 2, z, 'minecraft:stone']);
+    for (const x of xs) for (const dz of [-1, 1]) out.push([x, y, z + dz, 'minecraft:stone'], [x, y + 1, z + dz, 'minecraft:stone']);
+    for (const x of [lane.xFrom - 1, lane.xTo + 1]) out.push([x, y, z, 'minecraft:stone'], [x, y + 1, z, 'minecraft:stone']);
     return out;
 }
 
@@ -283,13 +301,15 @@ export function bcLaneBlocks(lane = BC_PLAN.lane) {
  * (#518, #528), as a range: min every hit a crit (x1.5), max no crit at all. Better Combat crits a sneak attack
  * (an IMob whose attack and revenge targets are both not the player: a NoAI zombie's first hit) and at random
  * (5% base, +0.1 sword, +0.25 axe), so any count in the range is possible. With an empty hand it takes 0.5 off
- * (#528): 36 to 54. perHit and critHit are one hit's health drop without and with a crit.
- * @returns {{min: number, max: number, perHit: number, critHit: number}}
+ * (#528): 36 to 54. perHit and critHit are one hit's health drop without and with a crit. health: the zombie's
+ * start health as measured (#533 review: entity_metadata at the series' start); without it, the catalogue's 20.
+ * @returns {{min: number, max: number, perHit: number, critHit: number, health: number, healthFrom: 'measured'|'catalogue'}}
  */
-export function bcExpected(item, { mob = 'minecraft:zombie' } = {}) {
-    const k = hitsToKill({ mob, weapon: item === 'hand' ? 'hand' : item, path: 'bettercombat' });
+export function bcExpected(item, { mob = 'minecraft:zombie', health } = {}) {
+    const h = typeof health === 'number' && health > 0 ? health : undefined;
+    const k = hitsToKill({ mob, weapon: item === 'hand' ? 'hand' : item, path: 'bettercombat', ...(h === undefined ? {} : { health: h }) });
     if (!k) throw new Error(`rotn-data has no hitsToKill for ${item} against ${mob}`);
-    return { min: k.minHits, max: k.hits, perHit: k.perHit, critHit: k.critHit };
+    return { min: k.minHits, max: k.hits, perHit: k.perHit, critHit: k.critHit, health: k.health, healthFrom: h === undefined ? 'catalogue' : 'measured' };
 }
 
 /**
@@ -332,11 +352,12 @@ export function projectedHits(r) {
  * from the drops stands for the count; the count is in rotn-data's range (bcExpected: all crits to no crit);
  * no gap between Better Combat packets is under the cooldown; the self-check did not trip. Both: the reply
  * is ok, the zombie was found and did not burn. With expected's perHit and critHit, the crits are marked
- * (markCrits). Returns {ok, why, projected, inRange, crits}.
+ * (markCrits), and whether the first hit was one (firstHitCrit: true, false or null for unknown; a NoAI zombie's
+ * first Better Combat hit is a sneak attack, #528). Returns {ok, why, projected, inRange, crits, firstHitCrit}.
  */
 export function judgeSeries(r, { path, expected = null, cooldownTicks = null, maxHits = BC_PLAN.maxHits, ai = false } = {}) {
     const bad = [];
-    if (!r) return { ok: false, why: 'no reply', projected: null, inRange: null, crits: null };
+    if (!r) return { ok: false, why: 'no reply', projected: null, inRange: null, crits: null, firstHitCrit: null };
     if (!r.ok) bad.push(`driver: ${r.error ?? 'not ok'}`);
     if (!r.target) bad.push('no zombie found');
     if (r.burned) bad.push('the zombie burned (fire damage mixes with the hits)');
@@ -350,6 +371,7 @@ export function judgeSeries(r, { path, expected = null, cooldownTicks = null, ma
     let projected = null;
     let inRange = null;
     let crits = null;
+    let firstHitCrit = null;
     if (path === 'vanilla') {
         if (sent.length < 2) bad.push(`only ${sent.length} hit(s)`);
         else {
@@ -362,6 +384,7 @@ export function judgeSeries(r, { path, expected = null, cooldownTicks = null, ma
         if (none.length) bad.push(`${none.length} hit(s) did not lower the health (#${none.map((h) => h.i).join(', #')})`);
         projected = projectedHits(r);
         if (expected?.perHit > 0 && expected?.critHit > 0) crits = markCrits(sent, expected);
+        if (crits && sent.length) firstHitCrit = crits.crits.includes(sent[0].i) ? true : crits.plain.includes(sent[0].i) ? false : null;
         if (!ai) {
             const canProject = !!expected && expected.max > maxHits && r.end !== 'dead';
             if (r.end !== 'dead' && !canProject) bad.push(`the zombie did not die (${r.end ?? 'no end'})`);
@@ -373,7 +396,7 @@ export function judgeSeries(r, { path, expected = null, cooldownTicks = null, ma
         const short = minGap === null ? [] : gaps.filter((g) => g < minGap);
         if (short.length) bad.push(`${short.length} gap(s) between Better Combat packets under ${cooldownTicks} ticks (${short.join(', ')} ms)`);
     }
-    return { ok: bad.length === 0, why: bad.join('; ') || 'as planned', projected, inRange, crits };
+    return { ok: bad.length === 0, why: bad.join('; ') || 'as planned', projected, inRange, crits, firstHitCrit };
 }
 
 /**
