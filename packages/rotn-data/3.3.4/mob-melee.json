@@ -439,11 +439,19 @@
     "mod_lavacow:parasite": {
       "damage": 1,
       "onHit": "nausea II for 7 s (rotm, 15%) and Soiled for 60 s (10%)",
+      "width": 0.4,
+      "height": 0.3,
+      "reach": 0.84,
+      "intervalTicks": 20,
+      "hitsThroughWalls": false,
+      "wallBlocks": 0,
       "confidence": "verified",
       "evidence": [
         "Fish's Undead Rising-1.3.2.jar (in the pack as mods/Fish's Undead Rising-1.3.2.jar, SHA-256 f45662c8b3ba6a46d251fbb56044bdc5290d1102d23500ad0dfd927aa9bf5c50): EntityParasite applyEntityAttributes ATTACK_DAMAGE = Modconfig.Parasite_Attack; config/Fishs_Undead_Rising.cfg:613 D:\"parasite attack\"=1.0",
-        "config/rotm.cfg:519 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)"
-      ]
+        "config/rotm.cfg:519 \"Mob Offense\" (config only; format <entity>;<potion>;<health %>;<level from 0>;<seconds>;<chance %>, :433)",
+        "Fish's Undead Rising-1.3.2.jar: EntityParasite <init>(World, boolean) setSize(0.4, 0.3); initEntityAI adds EntityParasite$AIParasiteAttack (extends EntityAIAttackMelee: a hit every 20 ticks), whose getAttackReachSqr (func_179512_a) is the target's width + 0.1 (packages/rotn-data/test/fixtures/zombie-awareness-3.3.4/za.javap.txt \"## EntityParasite\")"
+      ],
+      "note": "It rides (latches onto) a player it touches and bites every 20 ticks; unattached its reach is the target's width + 0.1, squared (0.84 to a player): it does not hit through a wall, floor or roof."
     },
     "mod_lavacow:sludgelord": {
       "damage": 7,
