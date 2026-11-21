@@ -10,8 +10,8 @@
 - **One death, by day:** on the first morning the bot opened its shelter to fight a zombie that had waited by it for 2 min, and was slain by it (23:24:33).
 - **The failed `low` line came right after that death:** the bot had respawned with food 12 and no food in its inventory. Its next food was foraged 5 min 48 s later. Food never went below 12.
 - **Cost:**
-  - **Daytime:** USD 0.091/h, above the 0.05 target; all 263 completions came by day.
-  - **While self-prompting:** USD 0.098/h.
+  - **Daytime:** USD 0.090/h, above the 0.05 target; all 263 completions came by day.
+  - **While self-prompting:** USD 0.094/h.
   - **The 2-hour figure of 0.034 passes** only because the nights (75.3 min) made no call.
   - **Each completion cost 70% more than in soak 6** (USD 0.000257 against 0.000151). The bot wrote about as much text (46,724 characters against 50,303), but the provider billed 5.2 times the completion tokens (176,595 against 34,013). The profile and the model code did not change between the two tags. See *The LLM spend*.
 - **Soak 6's budget-stop items are fixed in this release:** the stop now writes a console line, and the command of the turn in flight still runs (23:35:18–23:35:24).
@@ -45,19 +45,19 @@ All figures sum `cost_usd` over the bot's `[openrouter] usage …` lines in `dri
 | Measure (which window) | Minutes | Completions | USD per hour |
 | --- | --- | --- | --- |
 | **Overall**: the runner's 120-min soak (`usd_per_hour`, PASS) | 120 | 263 | **0.0338** |
-| **Daytime**: from the join or each `[night] morning` line to the next `[night] sunset is near` line. Every completion falls in one of these windows | 44.8 | 263 | **0.0906** (above 0.05) |
+| **Daytime**: from the join or each `[night] morning` line to the next `[night] sunset is near` line. Every completion falls in one of these windows | 44.9 (incl. day 4's 7 s) | 263 | **0.0904** (above 0.05) |
 | – day 1: 22:42:21 (join) to 22:57:01 | 14.7 | 138 | 0.085 |
 | – day 2: 23:22:19 to 23:36:46 (the death at 23:24:33; the standing goal's budget ran out at 23:35:18) | 14.4 | 68 | 0.077 |
 | – day 3: 00:02:23 to 00:18:01 | 15.6 | 57 | 0.109 |
 | – day 4: the morning line at 00:42:25, 7 s before the stop | 0.1 | 0 | – |
-| **While self-prompting**: from each `Self-prompting started.` to the `self prompt loop stopped` after which it did not start again within 2 s | 40.4 | 262 | **0.0984** |
+| **While self-prompting**: from each `Self-prompting started.` to the `self prompt loop stopped` after which it did not start again within 2 s. A completion logged after the window's stop line is outside it | 40.4 | 261 | **0.0945** |
 | – 22:42:21 to 22:57:01 (sunset) | 14.7 | 138 | 0.085 |
 | – 23:24:49 (after the respawn) to 23:35:24 (the budget stop) | 10.6 | 68 | 0.105 |
-| – 00:02:23 to 00:10:50 | 8.4 | 37 | 0.112 |
+| – 00:02:23 to 00:10:50 | 8.4 | 36 | 0.093 |
 | – 00:11:24 to 00:18:00 (sunset) | 6.6 | 19 | 0.103 |
 
 - **Nights:** each measured from its `sunset is near` line to its `morning` line: 25.3 min (22:57:01–23:22:19), 25.6 min (23:36:46–00:02:23) and 24.4 min (00:18:01–00:42:25). That is 75.3 min with no LLM call.
-- **Daytime without the self-prompter: 4.4 min.** The one completion outside the self-prompting windows is a memory summary at 00:11:15. The 4.4 min are:
+- **Daytime without the self-prompter: 4.4 min.** Two completions fall outside the self-prompting windows, both memory summaries in the gap after 00:10:50: 00:10:51 (`driver.log` line 3899, 14,322 completion tokens, USD 0.002669) and 00:11:15 (USD 0.001282). The 4.4 min are:
   - 23:22:19 to 23:24:49 (2.5 min): the morning wait for the zombie, the fight, the death and the respawn walk;
   - 23:35:24 to 23:36:46 (1.4 min): **the standing goal's daily budget.** It started at 23:30:18 (`agenda standing goal started (day 1)`, `server.log`). At 23:35:18 the journal now shows `[agenda] standing goal budget spent: 5 min of self-prompting for day 1; the self-prompter stops after the turn in flight (its command still runs)`. The `!goToCoordinates(65, 72, -75, 2)` parsed at 23:35:15 ran to its end (23:35:24), then `[self-prompt] stopping after the turn …`, then `self prompt loop stopped`. `server.log` line 810 (23:35:24) has the chat line `agenda standing goal: its 5 min of self-prompting for day 1 are spent; none until the next day`;
   - 00:10:50 to 00:11:24 (0.6 min): after the eel fight.
@@ -87,7 +87,7 @@ All figures sum `cost_usd` over the bot's `[openrouter] usage …` lines in `dri
 | `naming` (#2) | PASS: `[naming] <bot> near spawn: 17 kinds; unknown 0` (`dirt`, `undergroundbiomes:metamorphic_stone`, `grass`, …, `pyrotech_compat:rock_metamorphic`, `osv:simpleores_tin_ore_undergroundbiomes_metamorphic_stone_6`). Entities at +120 s: 1 kind, unknown 0 (`zombieawareness:entityscent`) |
 | `no_crash` (#7) | PASS: 120 min up, 25 samples, NRestarts 0 throughout, no agent exit |
 | `peak_memory` (#7) | PASS: 585 MiB (target 850) |
-| `usd_per_hour` (#7) | PASS: USD 0.033759/h overall (target 0.05). It was USD 0.091/h by day and 0.098/h while self-prompting; see above |
+| `usd_per_hour` (#7) | PASS: USD 0.033759/h overall (target 0.05). It was USD 0.090/h by day and 0.094/h while self-prompting; see above |
 | `agenda_done` (#4) | PASS: `agenda done` in chat at 22:54:42, 12.4 min after the server's join line |
 | `food_floor` (#5) | PASS: lowest food 12 (floor 6), over 124 food lines |
 | `ate_when_low` (#5) | **FAIL**: 1 of 9 `low` food lines had no eat within the 5 food lines after it (below) |
@@ -160,7 +160,7 @@ Sources: the bot's `[survival]`, `[night]`, `[reflex]`, `[death]` and `[respawn]
 
 ## For the owners (not judged here)
 - **lead (cost): the per-completion price rose 70%, and the working rate is now almost twice the ADR 0010 target.**
-  - Rates: USD 0.091/h by day and 0.098/h while self-prompting. The 2-hour check passes (0.034) only because 75 of the 120 min were night.
+  - Rates: USD 0.090/h by day and 0.094/h while self-prompting. The 2-hour check passes (0.034) only because 75 of the 120 min were night.
   - The text the bot wrote is about the same as in soak 6. The billed completion tokens are 5.2 times as many: 671 against 113 per completion, 38 completions over 1,000.
   - The memory summaries alone went from USD 0.0047 to 0.0238.
   - No repo change explains it (`profiles/` and `src/models/` are unchanged between the tags; same provider, `Wafer`). This suggests the OpenRouter preset `glm-5-3-flash-cheap-reliable`, or its model, now reasons. The preset's settings are on OpenRouter, outside the repo.
