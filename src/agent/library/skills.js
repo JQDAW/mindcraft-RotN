@@ -12,7 +12,7 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
-import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, weaponRank, weaponOrder, attackPath } from "./threats.js";
+import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, weaponRank, weaponOrder, attackPath } from "./threats.js";
 import { logAte, fightJournal, swingLine, logWeapon } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -883,10 +883,12 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
             const before = healthOf(enemy);
             // #521: Better Combat's path may wait for its cooldown, and a newer call (or the end of the
             // connection) leaves this one unsent: only a swing that went out counts and is journaled.
-            const r = await bot.attack(enemy);
-            // #532 review nit 3: Better Combat's wait can outlast an interrupt or maxMs by one cooldown
-            // (a stone axe: 2.5 s; #521 has no cancel). Checked as soon as it resolves: a swing that
-            // came after either is not counted or journaled, and the fight ends.
+            // #532 re-review nit 3: a hit still waiting for Better Combat's cooldown when the bot is
+            // interrupted or maxMs passes (the mob not hurting it) is cancelled (#536): it never goes out.
+            const r = await attackWatched(bot, enemy, () => (bot.interrupt_code ? 'interrupted'
+                : !pressed && Date.now() - start >= SHELTER_FIGHT.maxMs ? 'maxMs' : null));
+            // The backstop: a swing that resolves after an interrupt or past maxMs (no cancelAttack, or
+            // it went out between two looks) is not counted or journaled, and the fight ends.
             if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
             if (!pressed && Date.now() - start >= SHELTER_FIGHT.maxMs) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; outcome = 'capped'; break; }
             if (!attackSent(r)) {

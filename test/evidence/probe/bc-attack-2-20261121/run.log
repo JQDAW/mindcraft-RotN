@@ -1,0 +1,17 @@
+[scenario 14:48:39] probe-bc-attack (BC) run 20261121t144838-86a652; git b9d2bdea5cfc594f79a9579ce3693cfe8a8d73e8; driver: node test/runner/drivers/bc-attack-driver.mjs; out: <local>/captures/raw/bc-probe-2-20261121
+[scenario 14:48:39] not a gate run: probe BC measures Better Combat's attack packet against the vanilla attack; it is never a gate pass
+[scenario 14:48:47] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 14:50:47] PASS setup: Better Combat's path active; lane 68/68 cells as planned
+[scenario 14:51:26] PASS vanilla_stone_sword: 40 hit(s), end maxHits, health 20 -> 17.267200469970703: as planned
+[scenario 14:51:35] PASS bc_stone_sword: 7 hit(s), end dead, health 20 -> 0, 7 to kill (range 5-8 at measured health 20), crits #4, hit 1 crit: no: as planned
+[scenario 14:51:54] FAIL vanilla_stone_axe: 1 hit(s), end dead, health 8 -> 0: only 1 hit(s)
+[scenario 14:52:22] PASS bc_stone_axe: 9 hit(s), end dead, health 20 -> 0, 9 to kill (range 6-9 at measured health 20), crits #1, hit 1 crit: yes: as planned
+[scenario 14:52:39] FAIL vanilla_crude_axe: setup for pyrotech:crude_axe failed: give The number you have entered (6) is too big, it must be at most 1, zombie A summoned, zombie B summoned
+[scenario 14:52:39] FAIL bc_crude_axe: setup for pyrotech:crude_axe failed: give The number you have entered (6) is too big, it must be at most 1, zombie A summoned, zombie B summoned
+[scenario 14:53:16] PASS vanilla_hand: 40 hit(s), end maxHits, health 20 -> 19.25119972229004: as planned
+[scenario 14:53:45] PASS bc_hand: 40 hit(s), end maxHits, health 20 -> 4.776001453399658, 53 to kill (projected) (range 36-54 at measured health 20), crits #6, #18, hit 1 crit: no: as planned
+[scenario 14:54:08] PASS bc_ai_zombie: 8 hit(s), end dead, health 20 -> 0, 8 to kill, crits none: as planned
+[scenario 14:54:11] PASS server_log: 0 codec or bettercombat problem line(s); 0 kick(s) or lost connection(s)
+[scenario 14:54:11] PASS self_check: never tripped over 7 series
+[scenario 14:54:12] SMOKE run, not a BC pass: probe BC measures Better Combat's attack packet against the vanilla attack; it is never a gate pass
+[scenario 14:54:12] probe-bc-attack: FAIL; 10 passed, 3 failed (<local>/captures/raw/bc-probe-2-20261121/result.json)

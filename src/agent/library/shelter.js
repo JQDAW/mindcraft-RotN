@@ -22,7 +22,7 @@ import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe, equipHighestAttack } from './skills.js';
 import { logWeapon } from './survival_log.js';
 import { eatToHeal } from './food.js';
-import { shelterEnemy, shelterTarget, threatFor, attackCooldownMs, attackSent } from './threats.js';
+import { shelterEnemy, shelterTarget, threatFor, attackCooldownMs, attackSent, attackWatched } from './threats.js';
 import { isTreePart } from './fall_safety.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -420,9 +420,9 @@ async function hitOutOf(bot, cell) {
         if (hits === 0) logWeapon(bot, 'cell'); // soak 7 (c)
         await bot.lookAt(mob.position.offset(0, (mob.height ?? 1.8) * 0.8, 0), true);
         // #521: only a swing that went out counts (noHurtHits); unsentMax unsent in a row ends it.
-        const r = await bot.attack(mob);
-        // #532 review nit 3: Better Combat's wait can outlast an interrupt or maxMs by one cooldown;
-        // a swing that resolves after either is not counted.
+        // #532 re-review nit 3: cancelled while it waits on an interrupt or past maxMs (#536); the
+        // check below stays as the backstop (a swing that resolves after either is not counted).
+        const r = await attackWatched(bot, mob, () => (bot.interrupt_code ? 'interrupted' : Date.now() - start >= SHELTER_GAP.maxMs ? 'maxMs' : null));
         if (bot.interrupt_code || Date.now() - start >= SHELTER_GAP.maxMs) break;
         if (!attackSent(r)) {
             if (r?.reason === 'ended' || ++unsent >= SHELTER_GAP.unsentMax) break;
