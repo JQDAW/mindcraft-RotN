@@ -98,8 +98,13 @@ export function attributeValue(attr) {
 // subclasses count: pyrotech:crude_axe has the weapon reach, 4.0.
 const WEAPON_NAME = /(?:^|[_:])(?:sword|axe|pickaxe|shovel|spade|hoe)$/;
 
+// Better Combat non-weapons whose names look like a weapon's (rotn-data 3.3.4/weapons.json,
+// bcWeapon false: a plain Item, not on the class list). The other six of its seven non-weapons
+// (mason picks, mattock, crowbar, staff, pickarang) do not match WEAPON_NAME anyway.
+const NON_WEAPON_NAMES = new Set(['earthworks:tool_hand_axe']);
+
 export function isBcWeaponName(name) {
-    return typeof name === 'string' && WEAPON_NAME.test(name);
+    return typeof name === 'string' && WEAPON_NAME.test(name) && !NON_WEAPON_NAMES.has(name);
 }
 
 function swordTweak(name) {
@@ -128,6 +133,13 @@ export function bcCooldownTicks({ itemName = null, attackSpeed = null } = {}) {
     const own = ticksForSpeed(attackSpeed + swordTweak(itemName));
     return isBcWeaponName(itemName) ? own : Math.max(own, nonWeapon);
 }
+
+/**
+ * The cooldown when the held weapon's attack speed is unknown (no attribute from the server):
+ * the slowest main-hand speed on the pack, 0.4 (rotn-data 3.3.4/weapons.json, e.g. the stone
+ * and steel axes; its largest bcCooldownTicks is 50), so the bot is never faster than a client.
+ */
+export const UNKNOWN_SPEED_TICKS = ticksForSpeed(0.4);
 
 /** Reach for the held item: 4.0 for a weapon, 3.5 for an empty hand or a non-weapon. */
 export function bcReach(itemName) {
@@ -165,6 +177,13 @@ function botAttackSpeed(bot) {
     if (!attrs) return null;
     for (const k of ATTACK_SPEED_KEYS) if (attrs[k]) return attributeValue(attrs[k]);
     return null;
+}
+
+// A living entity's health: mineflayer's entity.health, else 1.12's EntityLivingBase metadata 7.
+function healthOf(entity) {
+    if (Number.isFinite(entity?.health)) return entity.health;
+    const m = entity?.metadata?.[7];
+    return Number.isFinite(m) ? m : null;
 }
 
 function eyeOf(bot) {
@@ -226,14 +245,17 @@ function defaultLineOfSight(bot, eye, target) {
  *   resolves { sent: false, path: null, waitedMs, reason }. A no-op when nothing waits; not a
  *   miss. Skills call it on an interrupt, so no hit goes out up to one cooldown later.
  * - The clock is performance.now() (monotonic), so a wall-clock step cannot send early.
- * - Vanilla path: any of these sends the vanilla attack instead:
- *   - the setting is off;
- *   - the server lacks the mod or the channel;
- *   - the self-check has tripped;
- *   - the target is out of Better Combat's reach or out of sight;
- *   - the held weapon's attack speed is unknown.
+ * - While Better Combat's path is active, a target out of its reach (or without a position)
+ *   or out of sight gets nothing: the call resolves { sent: false, reason: 'reach' } or
+ *   { sent: false, reason: 'sight' }, checked at the call and again when a wait ends. No
+ *   use_entity goes out instead. An unknown attack speed is paced at UNKNOWN_SPEED_TICKS.
+ * - Vanilla fallback, only when bc_attack is on but the server lacks the mod or the channel,
+ *   or the self-check has tripped: the vanilla attack, paced, waiting, replaced, gone and
+ *   cancelled exactly like the Better Combat path; its swing restarts the cooldown.
+ * - Setting off: the vanilla attack at once, unpaced, as mineflayer sends it.
  * - Self-check: each Better Combat hit should give an entityHurt or entityDead for the
- *   target within checkMs. After maxMisses hits in a row without one, the bot is back on
+ *   target, or a drop in its health metadata, within checkMs (#540: a hit lowered the health
+ *   but its entity_status 2 never came). After maxMisses hits in a row without one, the bot is back on
  *   vanilla for this connection.
  *
  * @param {object} bot mineflayer bot
@@ -250,7 +272,7 @@ export function installBetterCombatAttack(bot, {
         enabled: !!enabled, tripped: false, misses: 0,
         lastSwingAt: -Infinity, itemKey: undefined, itemChangedAt: -Infinity,
         pending: null,
-        stats: { bettercombat: 0, vanilla: 0, waits: 0, replaced: 0, gone: 0, cancelled: 0, misses: 0 },
+        stats: { bettercombat: 0, vanilla: 0, waits: 0, replaced: 0, gone: 0, cancelled: 0, reach: 0, sight: 0, misses: 0 },
     };
     const checks = new Map(); // target id -> [{ timer, done }]
 
@@ -273,9 +295,10 @@ export function installBetterCombatAttack(bot, {
     // Durability changes also fire heldItemChanged; only a different item restarts the cooldown.
     bot.on?.('heldItemChanged', noteItem);
 
+    // The ticks the wrapper paces the held item at: Better Combat's, or UNKNOWN_SPEED_TICKS.
     function cooldownTicks() {
         noteItem();
-        return bcCooldownTicks({ itemName: st.itemKey, attackSpeed: botAttackSpeed(bot) });
+        return bcCooldownTicks({ itemName: st.itemKey, attackSpeed: botAttackSpeed(bot) }) ?? UNKNOWN_SPEED_TICKS;
     }
 
     function readyAt(ticks) { return Math.max(st.lastSwingAt, st.itemChangedAt) + ticks * TICK_MS; }
@@ -292,6 +315,18 @@ export function installBetterCombatAttack(bot, {
             log(`bettercombat attack: ${st.misses} hits without a hurt, back to vanilla for this connection`);
         }
     }
+    // A drop in the target's health metadata is a hurt too: the status packet can be missing.
+    bot.on?.('entityUpdate', (entity) => {
+        const list = entity && checks.get(entity.id);
+        if (!list) return;
+        const h = healthOf(entity);
+        if (h === null) return;
+        for (const c of [...list]) {
+            if (c.health !== null && h < c.health) { list.splice(list.indexOf(c), 1); settle(c, true); }
+        }
+        if (!list.length) checks.delete(entity.id);
+    });
+
     function onHurt(entity) {
         const list = entity && checks.get(entity.id);
         if (!list) return;
@@ -308,8 +343,8 @@ export function installBetterCombatAttack(bot, {
         for (const c of list) { c.done = true; clearTimer(c.timer); }
     });
 
-    function watch(id) {
-        const c = { done: false, timer: null };
+    function watch(id, target) {
+        const c = { done: false, timer: null, health: healthOf(bot.entities?.[id] ?? target) };
         c.timer = setTimer(() => {
             const list = checks.get(id);
             if (list) { const i = list.indexOf(c); if (i >= 0) list.splice(i, 1); if (!list.length) checks.delete(id); }
@@ -325,19 +360,32 @@ export function installBetterCombatAttack(bot, {
         return { sent: true, path: 'vanilla', waitedMs };
     }
 
-    // Better Combat path, or vanilla if this target or item does not qualify (checked when the swing goes out).
+    function unsent(reason, waitedMs) {
+        st.stats[reason]++;
+        return { sent: false, path: null, waitedMs, reason };
+    }
+
+    // One paced hit, with bc_attack on: Better Combat's packet while its path is active (nothing
+    // for a target out of its reach or sight), else the vanilla fallback. null: not ready, wait.
     function fire(target, swing, waitedMs) {
-        const eye = eyeOf(bot);
         const ticks = cooldownTicks();
-        if (!eye || !target?.position || ticks === null) return vanilla(target, swing, waitedMs);
-        if (reachDistance(eye, target) > bcReach(st.itemKey) || !lineOfSight(bot, eye, target)) return vanilla(target, swing, waitedMs);
+        const bc = active();
+        if (bc) {
+            const eye = eyeOf(bot);
+            if (!eye || !target?.position || reachDistance(eye, target) > bcReach(st.itemKey)) return unsent('reach', waitedMs);
+            if (!lineOfSight(bot, eye, target)) return unsent('sight', waitedMs);
+        }
         const t = now();
-        if (t < readyAt(ticks)) return null; // the held item changed while waiting: wait again
+        if (t < readyAt(ticks)) return null; // the cooldown, or the held item changed while waiting: wait again
+        if (!bc) {
+            st.lastSwingAt = t;
+            return vanilla(target, swing, waitedMs);
+        }
         if (swing) bot._client.write('arm_animation', { hand: 0 });
         bot._client.write('custom_payload', { channel: BC_CHANNEL, data: encodeMainhandAttack(target.id) });
         st.lastSwingAt = t;
         st.stats.bettercombat++;
-        watch(target.id);
+        watch(target.id, target);
         return { sent: true, path: 'bettercombat', waitedMs };
     }
 
@@ -350,8 +398,7 @@ export function installBetterCombatAttack(bot, {
 
     function schedule() {
         const p = st.pending;
-        const ticks = cooldownTicks();
-        const delay = ticks === null ? 0 : Math.max(0, readyAt(ticks) - now());
+        const delay = Math.max(0, readyAt(cooldownTicks()) - now());
         p.timer = setTimer(() => {
             if (st.pending !== p) return;
             if (gone(p.target)) {
@@ -360,7 +407,6 @@ export function installBetterCombatAttack(bot, {
                 p.resolve({ sent: false, path: null, waitedMs: now() - p.since, reason: 'gone' });
                 return;
             }
-            if (!active()) { st.pending = null; p.resolve(vanilla(p.target, p.swing, now() - p.since)); return; }
             const r = fire(p.target, p.swing, now() - p.since);
             if (r === null) { schedule(); return; }
             st.pending = null;
@@ -369,7 +415,7 @@ export function installBetterCombatAttack(bot, {
     }
 
     function attack(target, swing = true) {
-        if (!active()) return Promise.resolve(vanilla(target, swing));
+        if (!st.enabled) return Promise.resolve(vanilla(target, swing));
         if (st.pending) {
             const old = st.pending;
             clearTimer(old.timer);
@@ -418,7 +464,7 @@ export function installBetterCombatAttack(bot, {
         get tripped() { return st.tripped; },
         get stats() { return { ...st.stats }; },
         serverHasIt,
-        /** The held item's Better Combat cooldown in ticks (null if unknown), for skills' pacing. */
+        /** The ticks the held item is paced at (Better Combat's, or UNKNOWN_SPEED_TICKS), for skills' pacing. */
         cooldownTicks,
         /** Ends a call waiting for its cooldown without sending; true if one was waiting. */
         cancel,
