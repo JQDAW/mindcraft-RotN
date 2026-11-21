@@ -147,7 +147,7 @@ export function resetNight(agent, why) {
  * The morning rule's state (#477 review 1: resetNight, leaveShelterFor and the hand-back clear it all;
  * a stale "leaving" would silence the shelter fight, the hurt-eating and the hand fight a whole night).
  */
-const MORNING_CLEAR = { morningAct: null, morningWhy: null, morningLeaving: false, mobFirst: null, mobStateSaid: false, mobGoneAt: null, closeSaid: null, closeBurrowTried: null, closeBurrowWhy: null };
+const MORNING_CLEAR = { morningAct: null, morningWhy: null, morningLeaving: false, mobFirst: null, mobStateSaid: false, mobGoneAt: null, closeSaid: null, closeBurrowTried: null, closeBurrowWhy: null, closeSealTried: null, capHeldSaid: false };
 
 export function leaveShelterFor(agent, why) {
     const n = agent?._night;
@@ -725,11 +725,29 @@ function burrowedInto(bot, n, ops) {
  * (iv) a melee mob and no burrow step: hit back (handFight). A mob that is no melee mob with no seal
  * or burrow: the leave as before. Returns the tick's result while it holds the bot, else null.
  */
-function closeQuarters(agent, n, ops) {
-    const bot = agent.bot;
+/** closeMob for the shelter now: {close, todo}, with the shelter's open cells (exposed when any, or when 'open'). */
+function closeNow(bot, n, ops) {
     const need = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody: n.tolerated });
     const todo = need?.todo ?? [];
-    const close = (ops.closeMob ?? closeMob)(bot, n.site, { exposed: bot.rotnSheltered === 'open' || todo.length > 0 });
+    return { close: (ops.closeMob ?? closeMob)(bot, n.site, { exposed: bot.rotnSheltered === 'open' || todo.length > 0 }), todo };
+}
+
+/**
+ * #514 review 2: MORNING.capMs never hands back with a mob in the bot's cell or in reach (closeNow):
+ * the bot stays sheltered (handFight kept) and the hand-back waits until the mob is gone. Returns
+ * the tick's result while it holds, else null.
+ */
+function holdPastCap(agent, n, ops) {
+    const { close } = closeNow(agent.bot, n, ops);
+    if (!close) return null;
+    const text = `[night] morning: ${MORNING.capMs / 60_000} min are up, but ${aMob(close.mob.name ?? 'hostile mob')} is still ${close.inCell ? 'in the bot\'s cell' : 'in reach'} at ${at(n.site)}: staying sheltered until it is gone`;
+    if (n.capHeldSaid) console.log(text); else { n.capHeldSaid = true; line(agent, text); }
+    return 'night:inside';
+}
+
+function closeQuarters(agent, n, ops) {
+    const bot = agent.bot;
+    const { close, todo } = closeNow(bot, n, ops);
     if (!close) { n.handFight = false; return null; }
     const { mob, inCell } = close;
     const name = mob.name ?? 'hostile mob';
@@ -737,7 +755,11 @@ function closeQuarters(agent, n, ops) {
     const said = (k, text) => { if (n.closeSaid === k) console.log(text); else { n.closeSaid = k; line(agent, text); } };
     const lead = `[night] morning: ${aMob(name)} ${inCell ? `in the bot's cell at ${at(n.site)}` : `${close.d.toFixed(1)} blocks away, in its reach`}: not leaving past it`;
     const held = todo.length ? (ops.heldCells?.(bot, n.site, todo) ?? []) : [];
-    if (todo.length && !held.length && !inCell) {
+    // #514 review 1: the re-seal is tried once per mob and opening; a failed one (no blocks, a
+    // placement that fails) falls through to (ii)-(iv), so the repair does not hold the fight off.
+    const sealKey = `${mob.id ?? name}:${todo.map(key3).join(';')}`;
+    if (todo.length && !held.length && !inCell && n.closeSealTried !== sealKey) {
+        n.closeSealTried = sealKey;
         said(`seal:${todo.map(key3).join(';')}`, `${lead}; closing the shelter again at ${todo.map(at).join('; ')}`);
         startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody: n.tolerated }), (r) => {
             if (r?.closed) { bot.rotnSheltered = true; n.handFight = false; console.log(`[night] morning: the shelter at ${at(n.site)} is closed again`); }
@@ -1178,9 +1200,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     // Soak 7 (C): no leave past a mob in the bot's cell or in reach of it.
                     const holding = closeQuarters(agent, n, ops);
                     if (holding) {
-                        if (waited < MORNING.capMs) return holding;
-                        handBack(`[night] morning: ${mobText(mob)} still in reach of the shelter at ${at(n.site)} after ${MORNING.capMs / 60_000} min; back to work (the reflexes decide)`);
-                        return null;
+                        if (waited >= MORNING.capMs) holdPastCap(agent, n, ops); // #514 review 2: said, no hand-back
+                        return holding;
                     }
                     n.morningAct = 'leaving';
                     n.morningLeaving = true; // #477 review 2: busy from the first leave decision until the hand-back
@@ -1201,6 +1222,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     return 'night:inside';
                 }
                 if (waited >= MORNING.capMs) {
+                    const held = holdPastCap(agent, n, ops);
+                    if (held) return held;
                     handBack(`[night] morning: ${mobText(mob)} still near the shelter at ${at(n.site)} after ${MORNING.capMs / 60_000} min; back to work (the agenda and the reflexes decide; the shelter may still be closed)`);
                     return null;
                 }

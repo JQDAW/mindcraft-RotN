@@ -128,6 +128,9 @@ const sealBlocks = (bot) => countOf(shelterItems(bot)) + placeableDirt(bot.inven
  */
 const BODY_TYPES = ['player', 'mob', 'hostile', 'animal', 'passive', 'ambient', 'water_creature']; // as shelter.js mobIn
 
+// #514 review nit 4: this also applies to the troll burrow. A troll (1.2 wide) whose box reaches
+// into the bot's cell (closer than about 1.1 to the bot's middle) refuses every step, so the
+// burrow ends cornered at close range; it starts at 6.97, well before that.
 function bodyOverlaps(bot, c) {
     return Object.values(bot.entities ?? {}).some(e => {
         if (!e || e === bot.entity || !e.position || !BODY_TYPES.includes(e.type ?? 'mob')) return false;

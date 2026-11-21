@@ -2722,7 +2722,7 @@ async function closeMorning(mob, { health = 11, armed = true } = {}) {
     for (; now <= 10 + RULE.waitMs; now += RETRY_MS) { nightTick(agent, { now, ops: o }); await settle(agent); }
     assert.equal(agent.bot.rotnSheltered, 'open', 'the fight began');
     agent.bot.health = health;
-    const tick = async () => { now += 1000; const r = nightTick(agent, { now, ops: o }); await settle(agent); return r; };
+    const tick = async (at = null) => { now = at ?? now + 1000; const r = nightTick(agent, { now, ops: o }); await settle(agent); return r; };
     return { agent, o, tick };
 }
 
@@ -2794,4 +2794,55 @@ test('soak 7 (C): a burrow step out of its reach moves the shelter; then the bot
     await tick();
     assert.equal(o.digs, 1);
     assert.ok(o.outs[0].feet.equals(new Vec3(0, 62, 0)), 'dug out from the new cell');
+});
+
+test('#514 review 1: a re-seal that fails is tried once per mob and opening; then the order goes on (the burrow, then hitting back)', async (t) => {
+    quiet(t);
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5) }; // diagonal, in reach
+    const { agent, o, tick } = await closeMorning(zombie);
+    o.open = [SITE.offset(1, 0, 0), SITE.offset(1, 1, 0)];
+    o.buildShelter = (bot, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: false, placed: 0, line: 'no block left to place' }); };
+    const builds = o.builds.length;
+    await tick();
+    assert.equal(o.builds.length, builds + 1, 'one re-seal try');
+    await tick();
+    assert.equal(o.burrows.length, 1, 'then the burrow');
+    await tick();
+    await tick();
+    assert.equal(o.builds.length, builds + 1, 'no second re-seal of the same opening for the same mob');
+    assert.equal(nightState(agent).handFight, true, 'no burrow step: it hits back, never held off by a repair');
+    assert.equal(o.digs, 0);
+});
+
+test('#514 review 2: at MORNING.capMs with the mob still in the bot\'s cell (or in reach) there is no hand-back: it stays sheltered and hits back; once the mob is gone it leaves', async (t) => {
+    quiet(t);
+    const { MORNING: RULE } = await import('./night_routine.js');
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5) };
+    const { agent, o, tick } = await closeMorning(zombie);
+    zombie.position = new Vec3(0.7, 64, 0.2);
+    await tick();
+    await tick();
+    assert.equal(nightState(agent).handFight, true);
+    assert.equal(await tick(10 + RULE.capMs + 1), 'night:inside');
+    assert.equal(nightState(agent).state, 'inside', 'no hand-back');
+    assert.notEqual(agent.bot.rotnSheltered, false, 'still sheltered: threatPlan would flee past it');
+    assert.equal(nightState(agent).handFight, true, 'it keeps hitting back');
+    assert.equal(agent.chat.at(-1), '[night] morning: 5 min are up, but a zombie is still in the bot\'s cell at 0, 64, 0: staying sheltered until it is gone');
+    await tick(10 + RULE.capMs + 30_000);
+    assert.equal(nightState(agent).state, 'inside');
+    assert.equal(o.digs, 0);
+    // Gone (killed): after the goneMs window the usual exit, then the hand-back.
+    delete agent.bot.entities[2];
+    o.hostileNear = () => null;
+    await tick(10 + RULE.capMs + 31_000);
+    await tick(10 + RULE.capMs + 31_000 + RULE.goneMs);
+    assert.equal(o.digs, 1);
+    assert.equal(nightState(agent).state, 'day');
+    assert.equal(nightState(agent).handFight, false);
+
+    // The fight still under way at the cap (health 20, the zombie in the cell): no hand-back either.
+    const fight = await closeMorning({ ...zombie, position: new Vec3(0.7, 64, 0.2) }, { health: 20 });
+    assert.equal(await fight.tick(10 + RULE.capMs + 1), 'night:inside');
+    assert.equal(nightState(fight.agent).state, 'inside');
+    assert.match(fight.agent.chat.at(-1), /5 min are up, but a zombie is still in the bot's cell at 0, 64, 0: staying sheltered until it is gone$/);
 });
