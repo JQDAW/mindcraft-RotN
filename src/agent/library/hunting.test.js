@@ -180,11 +180,11 @@ test('soak 7 (c): a hunt takes the best weapon (equipHighestAttack) before its f
     Object.assign(HUNT, { checkMs: 10 });
     t.after(() => Object.assign(HUNT, saved));
     const bot = world({ animals: [cow(2)] });
-    Object.assign(bot, { heldItem: null, inventory: { items: () => [{ name: 'pyrotech:crude_axe', count: 1 }, { name: 'stone_axe', count: 1 }], slots: [] } });
+    Object.assign(bot, { heldItem: null, inventory: { items: () => [{ name: 'pyrotech:crude_axe', count: 1 }, { name: 'stone_axe', count: 1 }, { name: 'stone_sword', count: 1 }], slots: [] } });
     bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
     const held = [];
     bot.pvp = { attack: () => { held.push(bot.heldItem?.name ?? 'hand'); setTimeout(() => delete bot.entities[1], 20); }, stop() {} };
     assert.equal(await huntAnimal(bot, bot.entities[1], { equip: (b) => equipHighestAttack(b), maxMs: 2000 }), 'killed');
-    assert.deepEqual(held, ['stone_axe']);
-    assert.ok(logs.includes('[survival] weapon stone_axe (hunt)'), logs.join('\n'));
+    assert.deepEqual(held, ['stone_sword']);
+    assert.ok(logs.includes('[survival] weapon stone_sword (hunt)'), logs.join('\n'));
 });

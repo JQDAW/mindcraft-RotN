@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES, shelterTarget, shelterEnemy, fightRefusal, maxHitOf,
-    meleeReach, inMeleeReach, hurtingInReach, weaponCooldownMs, WEAPON_COOLDOWN_MS, fightNumbers, fightOdds, shelterEatBlock, EAT_SAFE } from './threats.js';
+    meleeReach, inMeleeReach, hurtingInReach, weaponCooldownMs, WEAPON_COOLDOWN_MS, fightNumbers, fightOdds, shelterEatBlock, EAT_SAFE,
+    weaponNumbers, weaponOrder, attackPath, weaponRank } from './threats.js';
+import { weaponStats } from '../../../packages/rotn-data/index.js';
 import { __modeForTest, __resetThreatLease } from '../modes.js';
 
 let nextId = 1;
@@ -777,4 +779,35 @@ test('soak 7 (D): shelterEatBlock: a hostile mob within EAT_SAFE.distance, or a 
     assert.equal(shelterEatBlock(fakeBot([far], { lastDamageTime: now - 5000, lastDamageTaken: 1, food: 0 }), { now }), null, 'starving');
     assert.equal(shelterEatBlock(fakeBot([far], { lastDamageTime: now - 5000, lastDamageTaken: 3, food: 13 }), { now, withHurt: false }), null);
     assert.equal(shelterEatBlock(fakeBot([mob('cow', 1)]), { now }), null, 'not a hostile mob');
+});
+
+// Soak 7 (e), the lead's rule: weapons rank by rotn-data's weaponStats (#518), damage per tick of
+// cooldown on the path bot.attack takes (#521); weaponRank is the fallback.
+test('soak 7 (e): weapons rank by rotn-data weaponStats: damage per tick of cooldown on the attack path (vanilla: the one hit that lands, then the rate); weaponRank for the rest', () => {
+    for (const [item, full] of [['stone_sword', 'minecraft:stone_sword'], ['stone_axe:0', 'minecraft:stone_axe'], ['pyrotech:crude_axe', 'pyrotech:crude_axe']]) {
+        const w = weaponStats(full);
+        assert.ok(w, `rotn-data lists ${full}`);
+        assert.deepEqual(weaponNumbers({ name: item }), { damage: w.attackDamage, cooldownTicks: w.cooldownTicks, from: 'rotn-data' }, item);
+    }
+    assert.deepEqual(weaponNumbers({ name: 'iron_axe' }), { damage: 9, cooldownTicks: 25, from: 'WEAPON_ATTACK' }, 'not in combat.json: the cited table and the vanilla class cooldown');
+    assert.equal(weaponNumbers({ name: 'somemod:mystery_sword' }), null);
+    assert.equal(weaponNumbers(null), null);
+
+    const ranked = (names, path) => names.map(name => ({ name })).sort(weaponOrder(path)).map(i => i.name);
+    for (const path of ['vanilla', 'bettercombat']) {
+        // The early game: sword 3.5 / 12.5 ticks, crude axe 3 / 22.2, stone axe 3 / 50, on either path.
+        assert.deepEqual(ranked(['stone_axe', 'pyrotech:crude_axe', 'stone_sword'], path), ['stone_sword', 'pyrotech:crude_axe', 'stone_axe'], path);
+        // A weapon with numbers before one without; two without by weaponRank.
+        assert.deepEqual(ranked(['somemod:obsidian_sword', 'pyrotech:crude_axe'], path), ['pyrotech:crude_axe', 'somemod:obsidian_sword'], path);
+        assert.deepEqual(ranked(['somemod:wood_sword', 'somemod:obsidian_axe'], path), ['somemod:obsidian_axe', 'somemod:wood_sword'], path);
+    }
+    // The path decides: on vanilla only the first hit lands, so the iron axe's 9 beats the diamond
+    // sword's 8; on Better Combat every hit lands, and 8 per 12.5 ticks beats 9 per 25.
+    assert.deepEqual(ranked(['diamond_sword', 'iron_axe'], 'vanilla'), ['iron_axe', 'diamond_sword']);
+    assert.deepEqual(ranked(['iron_axe', 'diamond_sword'], 'bettercombat'), ['diamond_sword', 'iron_axe']);
+    assert.ok(weaponRank({ name: 'stone_sword' }) > weaponRank({ name: 'stone_axe' }), 'weaponRank, moved here from skills.js');
+
+    assert.equal(attackPath({}), 'vanilla');
+    assert.equal(attackPath({ forge: { bcAttack: { active: false } } }), 'vanilla', 'bc_attack off, or the server lacks the channel');
+    assert.equal(attackPath({ forge: { bcAttack: { active: true } } }), 'bettercombat');
 });
