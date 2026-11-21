@@ -94,10 +94,10 @@ export function bcWorld(opt = {}) {
         const hp = opt.healthOf?.(summoned) ?? opt.zombieHealth ?? 20;
         summoned++;
         // 1.12 metadata: 7 health, 11 AI_FLAGS (0x01 NoAI), 12 IS_CHILD.
-        const e = { id, name: 'zombie', height: 1.95, position: new Vec3(x + 0.5, y, z + 0.5), metadata: { 0: 0, 7: hp, 11: ai ? 0 : 1, 12: false }, ai };
+        const e = { id, name: 'zombie', type: 'mob', height: 1.95, position: new Vec3(x + 0.5, y, z + 0.5), metadata: { 0: 0, 7: hp, 11: ai ? 0 : 1, 12: false }, ai };
         zombies.set(id, { e, health: hp, ai, bcHits: 0 });
         bot.entities[id] = e;
-        client.emit('spawn_entity_living', { entityId: id, type: 54, x: x + 0.5, y, z: z + 0.5 });
+        bot.emit('entitySpawn', e);   // mineflayer's event, after its spawn handler
         if (ai) walk(id);
         return e;
     }
@@ -127,8 +127,10 @@ export function bcWorld(opt = {}) {
         // A Pyrotech crude axe loses 2 of its 8 durability a landed hit: it breaks after 4 (#518).
         const it = bot.heldItem;
         if (it?.name === 'pyrotech:crude_axe' && ++it.hits >= (opt.breakAfter ?? 4)) {
-            slots[36 + quick] = null;
-            bot.emit('heldItemChanged');
+            const slot = 36 + quick;
+            const brk = () => { if (slots[slot] === it) { slots[slot] = null; bot.emit('heldItemChanged'); } };
+            // breakDelayMs: the server's slot update comes later (attempt 3: during the driver's pre-wait)
+            if (opt.breakDelayMs) clock.at(clock.now() + opt.breakDelayMs, brk); else brk();
         }
     }
     const dropFor = (crit = false) => {
@@ -208,5 +210,16 @@ export function bcWorld(opt = {}) {
             return out;
         },
         /** Another entity appears (spawn_entity_living), e.g. a mob the pack spawns next to the lane. */
-        spawnOther: (name, type, x, y, z, health = null) => { const id = nextId++; bot.entities[id] = { id, name, type: health === null ? 'object' : 'mob', position: new Vec3(x, y, z), metadata: health === null ? {} : { 7: health } }; client.emit('spawn_entity_living', { entityId: id, type, x, y, z }); return id; } };
+        /** An item lands in the selected hotbar slot (a pickup while the hand was empty). */
+        putInHand: (name) => { slots[36 + quick] = { name: name.replace(/^minecraft:/, ''), type: 1, count: 1, hits: 0 }; bot.emit('heldItemChanged'); },
+        // spawnOther(name, x, y, z, health, { entityType, kind }): another entity appears, as mineflayer reports it
+        // ('entitySpawn'). entityType overrides 'mob' (with health) or 'object'; kind 'Modded' is how forge-bridge marks
+        // an FML EntitySpawn (fml-entities.js).
+        spawnOther: (name, x, y, z, health = null, { entityType, kind } = {}) => {
+            const id = nextId++;
+            const e = { id, name, type: entityType ?? (health === null ? 'object' : 'mob'), kind, position: new Vec3(x, y, z), metadata: health === null ? {} : { 7: health } };
+            bot.entities[id] = e;
+            bot.emit('entitySpawn', e);
+            return id;
+        } };
 }

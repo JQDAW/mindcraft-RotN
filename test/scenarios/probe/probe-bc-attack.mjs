@@ -81,8 +81,8 @@ export default {
         tpSettleMs: 3 * MS,
         summonSettleMs: 3 * MS,    // the zombies' spawn packets reach the bot
         logTail: 20000,
-        viewDistanceTail: 5000,
-        parasiteWaitMs: 1500,      // between a zombie kill and the lane clear: a death animation is 20 ticks, a parasite comes after it    // server log lines searched for DynView's latest view distance at each kill
+        viewDistanceTail: 5000,    // server log lines searched for DynView's latest view distance at each kill
+        parasiteWaitMs: 1500,      // between a zombie kill and the lane clear: a death animation is 20 ticks, a parasite comes after it
         consoleWaitS: 1,
         lateReplyMs: 5 * MS,
         latePollMs: 1 * MS,
