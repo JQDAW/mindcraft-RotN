@@ -1,0 +1,112 @@
+# Config lines from the pinned pack zip (default configs, ADR 0005), path:line: text.
+
+
+## server.properties
+server.properties:12: difficulty=2
+
+## ZombieAwareness/General.cfg
+config/ZombieAwareness/General.cfg:5:     B:awareness_Light_OnlyZombies=true
+config/ZombieAwareness/General.cfg:8:     B:blockBreakEvent_Active=true
+config/ZombieAwareness/General.cfg:11:     B:blockBreakEvent_PlayersOnly=true
+config/ZombieAwareness/General.cfg:14:     B:blockHittingEvent_Active=false
+config/ZombieAwareness/General.cfg:17:     I:blockHittingEvent_OddsTo1=20
+config/ZombieAwareness/General.cfg:20:     D:daysBeforeFeaturesActivate=0.0
+config/ZombieAwareness/General.cfg:21:     B:debugConsole=false
+config/ZombieAwareness/General.cfg:22:     B:debugConsoleOmniscient=false
+config/ZombieAwareness/General.cfg:23:     B:debugConsoleSpawns=false
+config/ZombieAwareness/General.cfg:24:     B:debugConsoleSuperDetailed=false
+config/ZombieAwareness/General.cfg:27:     D:extraScentCutoffRange=14.0
+config/ZombieAwareness/General.cfg:30:     I:frequentSoundThreshold=3000
+config/ZombieAwareness/General.cfg:33:     I:maxPFRangeSense=50
+config/ZombieAwareness/General.cfg:36:     B:omniscient=false
+config/ZombieAwareness/General.cfg:39:     I:scentStrength=40
+config/ZombieAwareness/General.cfg:42:     B:seeThroughWalls=false
+config/ZombieAwareness/General.cfg:45:     I:senseMaxStrength=300
+config/ZombieAwareness/General.cfg:48:     I:sightRange=16
+config/ZombieAwareness/General.cfg:51:     I:soundStrength=50
+config/ZombieAwareness/General.cfg:54:     I:tickRateAILoop=40
+config/ZombieAwareness/General.cfg:57:     I:tickRatePlayerLoop=5
+config/ZombieAwareness/General.cfg:60:     D:zombieRandSpeedBoost=0.5
+
+## ZombieAwareness/Features.cfg
+config/ZombieAwareness/Features.cfg:5:     B:awareness_Light=true
+config/ZombieAwareness/Features.cfg:8:     B:awareness_Scent=true
+config/ZombieAwareness/Features.cfg:11:     B:awareness_Sound=true
+config/ZombieAwareness/Features.cfg:14:     B:awareness_Sound_OverworldOnly=false
+config/ZombieAwareness/Features.cfg:17:     B:extraSpawningCave=true
+config/ZombieAwareness/Features.cfg:20:     B:extraSpawningSurface=true
+config/ZombieAwareness/Features.cfg:23:     B:noisyPistons=true
+config/ZombieAwareness/Features.cfg:26:     B:noisyZombies=true
+config/ZombieAwareness/Features.cfg:27:     B:soundAlerts=true
+config/ZombieAwareness/Features.cfg:28:     B:soundInvestigates=true
+config/ZombieAwareness/Features.cfg:31:     B:soundUseAlternateAlertNoise=false
+config/ZombieAwareness/Features.cfg:34:     D:soundVolumeAlertTarget=0.0
+config/ZombieAwareness/Features.cfg:37:     D:soundVolumeInvestigate=0.0
+config/ZombieAwareness/Features.cfg:40:     B:wanderingHordes=true
+config/ZombieAwareness/Features.cfg:43:     D:zombieBabyChance=-1.0
+config/ZombieAwareness/Features.cfg:46:     D:zombieSummonHelpBaseChance=0.1
+
+## ZombieAwareness/Spawning.cfg
+config/ZombieAwareness/Spawning.cfg:5:     B:extraSpawningAutoTarget=false
+config/ZombieAwareness/Spawning.cfg:8:     I:extraSpawningCavesDistMax=100
+config/ZombieAwareness/Spawning.cfg:11:     I:extraSpawningCavesDistMin=50
+config/ZombieAwareness/Spawning.cfg:14:     I:extraSpawningCavesMaxCount=40
+config/ZombieAwareness/Spawning.cfg:17:     I:extraSpawningCavesMaxGroupSize=5
+config/ZombieAwareness/Spawning.cfg:20:     I:extraSpawningCavesRandomPool=1
+config/ZombieAwareness/Spawning.cfg:23:     I:extraSpawningCavesTryCount=15
+config/ZombieAwareness/Spawning.cfg:26:     I:extraSpawningDistMax=100
+config/ZombieAwareness/Spawning.cfg:29:     I:extraSpawningDistMin=40
+config/ZombieAwareness/Spawning.cfg:32:     I:extraSpawningSurfaceMaxCount=50
+config/ZombieAwareness/Spawning.cfg:35:     I:extraSpawningSurfaceMaxGroupSize=30
+config/ZombieAwareness/Spawning.cfg:38:     I:extraSpawningSurfaceRandomPool=1
+config/ZombieAwareness/Spawning.cfg:41:     B:extraSpawningUseNaturalSpawnList=true
+config/ZombieAwareness/Spawning.cfg:44:     I:maxZombiesNight=40
+config/ZombieAwareness/Spawning.cfg:47:     I:maxZombiesNightBaseRarity=1000
+config/ZombieAwareness/Spawning.cfg:50:     I:zombieSpawnTickDelay=100
+
+## ZombieAwareness/MobLists.cfg
+config/ZombieAwareness/MobLists.cfg:9: tickable_entities {
+config/ZombieAwareness/MobLists.cfg:77:     B:Husk=true
+config/ZombieAwareness/MobLists.cfg:163:     B:Zombie=true
+config/ZombieAwareness/MobLists.cfg:166:     B:ZombieVillager=true
+config/ZombieAwareness/MobLists.cfg:274:     B:mod_lavacow.parasite=true
+
+## aggrotp.cfg
+config/aggrotp.cfg:4:     # Whether the mod should log aggro events to debug.log. [default: false]
+config/aggrotp.cfg:5:     B:"Debug Mode"=false
+config/aggrotp.cfg:7:     # The default sound that will play when mobs teleport players. [default: minecraft:entity.enderman.teleport]
+config/aggrotp.cfg:8:     S:"Default Sound"=minecraft:entity.enderman.teleport
+config/aggrotp.cfg:10:     # The default radius that mobs will teleport players to. [range: 1 ~ 2147483647, default: 25]
+config/aggrotp.cfg:11:     I:"Default Teleport Radius"=25
+config/aggrotp.cfg:13:     # Configure mob teleport on aggro in the form <entity id>;<whether to tp all players>;<delay in seconds>;<permitted random offset from delay>;?<tp range>;?<played sound> [default: [minecraft:enderman;false;10;5]]
+config/aggrotp.cfg:14:     S:"Player-teleporting Mobs" <
+config/aggrotp.cfg:15:         betterslimes:quazar;false;25;4;7
+config/aggrotp.cfg:16:      >
+
+## Fishs_Undead_Rising.cfg
+config/Fishs_Undead_Rising.cfg:604: parasite {
+config/Fishs_Undead_Rising.cfg:605:     # Allow Parasite to spawn from listed mob. Ex. "minecraft:zombie" or "mod_lavacow:zombiefrozen" [default: [minecraft:zombie], [minecraft:husk], [mod_lavacow:zombiefrozen], [mod_lavacow:zombiemushroom], [mod_lavacow:unburied], [mod_lavacow:mummy]]
+config/Fishs_Undead_Rising.cfg:606:     S:"available host for parasite" <
+config/Fishs_Undead_Rising.cfg:607:         minecraft:zombie
+config/Fishs_Undead_Rising.cfg:608:         mod_lavacow:zombiefrozen
+config/Fishs_Undead_Rising.cfg:609:         mod_lavacow:zombiemushroom
+config/Fishs_Undead_Rising.cfg:610:      >
+config/Fishs_Undead_Rising.cfg:611: 
+config/Fishs_Undead_Rising.cfg:612:     # Parasite strength [1-1000]
+config/Fishs_Undead_Rising.cfg:613:     D:"parasite attack"=1.0
+config/Fishs_Undead_Rising.cfg:614: 
+config/Fishs_Undead_Rising.cfg:615:     # Parasite will attack their target by attaching on them [false/true]
+config/Fishs_Undead_Rising.cfg:616:     B:"parasite attacks by attaching onto target"=true
+config/Fishs_Undead_Rising.cfg:617: 
+config/Fishs_Undead_Rising.cfg:618:     # Should Parasite attack ALL livings [false/true]
+config/Fishs_Undead_Rising.cfg:619:     B:"parasite attacks everything"=false
+config/Fishs_Undead_Rising.cfg:620: 
+config/Fishs_Undead_Rising.cfg:621:     # Rate of spawning Parasite when destroying sand blocks in the desert [0-100]
+config/Fishs_Undead_Rising.cfg:622:     I:"parasite from sand blocks"=1
+config/Fishs_Undead_Rising.cfg:623: 
+config/Fishs_Undead_Rising.cfg:624:     # Maximum Parasite health [1-1000]
+config/Fishs_Undead_Rising.cfg:625:     D:"parasite health"=7.0
+config/Fishs_Undead_Rising.cfg:626: 
+config/Fishs_Undead_Rising.cfg:627:     # Set the spawn rate of Parasite [0-100]
+config/Fishs_Undead_Rising.cfg:628:     I:"parasite spawn rate"=5
+config/Fishs_Undead_Rising.cfg:629: }
