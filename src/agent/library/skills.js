@@ -12,7 +12,7 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
-import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, weaponCooldownMs, weaponRank, weaponOrder, attackPath } from "./threats.js";
+import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, weaponRank, weaponOrder, attackPath } from "./threats.js";
 import { logAte, fightJournal, swingLine, logWeapon } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -675,7 +675,7 @@ export async function attackEntity(bot, entity, kill=true) {
      * Attack mob of the given type.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {Entity} entity, the entity to attack.
-     * @returns {Promise<boolean>} true if the entity was attacked, false if interrupted
+     * @returns {Promise<boolean>} true if the entity was attacked (kill false: the one hit went out), false if interrupted or not sent
      * @example
      * await skills.attackEntity(bot, entity);
      **/
@@ -690,7 +690,14 @@ export async function attackEntity(bot, entity, kill=true) {
             await goToPosition(bot, pos.x, pos.y, pos.z);
         }
         console.log('attacking mob...')
-        await bot.attack(entity);
+        // (f), #521: Better Combat's path may wait for its cooldown; a newer call (another reflex's
+        // hit) replaces this one, and the end of the connection leaves it unsent. Whether it went out.
+        const r = await bot.attack(entity);
+        if (!attackSent(r)) {
+            log(bot, `The hit on the ${entity.name} was not sent (${r?.reason ?? 'unknown'}).`);
+            return false;
+        }
+        return true;
     }
     else {
         bot.pvp.attack(entity);
@@ -808,9 +815,11 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
  * self_defense waits restMs before it fights again, so the repair starts first.
  * Soak 7 (death 1): never capped while the mob is in reach and hurting the bot (the cap ended the
  * bot's hits, not the zombie's). swingMs null: each swing waits for the held weapon's cooldown
- * (threats.weaponCooldownMs; 600 ms before, under an axe's 1250); a number overrides it (tests).
+ * (threats.attackCooldownMs: Better Combat's, else the vanilla class's; 600 ms before, under an axe's
+ * 1250); a number overrides it (tests). Better Combat plan step 2 (#521): bot.attack is awaited and
+ * only a swing that went out counts; after unsentMax swings in a row that did not, the fight stops.
  */
-export const SHELTER_FIGHT = { reach: 3, swingMs: null, maxMs: 6000, maxSwings: 8, sameTargetSwings: 4, restMs: 1500 };
+export const SHELTER_FIGHT = { reach: 3, swingMs: null, maxMs: 6000, maxSwings: 8, sameTargetSwings: 4, restMs: 1500, unsentMax: 3 };
 
 /** Whether an entity is within SHELTER_FIGHT.reach of the bot's feet. */
 export function inShelterReach(bot, entity) {
@@ -849,7 +858,7 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
         console.log(swingLine(last.mob.name, last.item, last.sinceMs, last.before, now ? healthOf(now) : 'gone'));
         last = null;
     };
-    let lastSwingAt = null;
+    let lastSwingAt = null, unsent = 0;
     bot.rotnFightingInPlace = true;
     try {
         for (let enemy = nearest(); enemy; enemy = nearest()) {
@@ -863,7 +872,7 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
             await equipHighestAttack(bot, fight); // just before the swing (#334 nit)
             journal.weapon(); // soak 7 (c): what it holds
             const item = bot.heldItem ?? null;
-            const cooldown = SHELTER_FIGHT.swingMs ?? weaponCooldownMs(item);
+            const cooldown = SHELTER_FIGHT.swingMs ?? attackCooldownMs(bot, item);
             if (lastSwingAt !== null && Date.now() - lastSwingAt < cooldown) {
                 await new Promise(resolve => setTimeout(resolve, cooldown - (Date.now() - lastSwingAt)));
                 if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
@@ -871,10 +880,23 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
             }
             sayLast();
             await bot.lookAt(enemy.position.offset(0, (enemy.height ?? 1.8) * 0.8, 0), true);
+            const before = healthOf(enemy);
+            // #521: Better Combat's path may wait for its cooldown, and a newer call (or the end of the
+            // connection) leaves this one unsent: only a swing that went out counts and is journaled.
+            const r = await bot.attack(enemy);
+            // #532 review nit 3: Better Combat's wait can outlast an interrupt or maxMs by one cooldown
+            // (a stone axe: 2.5 s; #521 has no cancel). Checked as soon as it resolves: a swing that
+            // came after either is not counted or journaled, and the fight ends.
+            if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
+            if (!pressed && Date.now() - start >= SHELTER_FIGHT.maxMs) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; outcome = 'capped'; break; }
+            if (!attackSent(r)) {
+                if (r?.reason === 'ended' || ++unsent >= SHELTER_FIGHT.unsentMax) { why = `the attack was not sent (${r?.reason ?? 'unknown'})`; outcome = 'stopped'; break; }
+                continue;
+            }
+            unsent = 0;
             const swungAt = Date.now();
-            last = { mob: enemy, item: item?.name ?? null, sinceMs: lastSwingAt === null ? null : swungAt - lastSwingAt, before: healthOf(enemy) };
+            last = { mob: enemy, item: item?.name ?? null, sinceMs: lastSwingAt === null ? null : swungAt - lastSwingAt, before };
             lastSwingAt = swungAt;
-            bot.attack(enemy);
             swings++;
             same.hits++;
             if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
@@ -886,7 +908,8 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
         bot.rotnFightEndedAt = Date.now();
         journal.end(outcome);
     }
-    log(bot, swings > 0 ? `Fought from inside the shelter: ${swings} swing${swings === 1 ? '' : 's'}, stopped: ${why}.` : 'Nothing in reach to fight.');
+    log(bot, swings > 0 ? `Fought from inside the shelter: ${swings} swing${swings === 1 ? '' : 's'}, stopped: ${why}.`
+        : outcome === 'gone' ? 'Nothing in reach to fight.' : `No swing went out from inside the shelter, stopped: ${why}.`); // #532 review: say why
     return swings > 0;
 }
 
