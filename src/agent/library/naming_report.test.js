@@ -231,6 +231,18 @@ test('net-forge types an unknown living FML entity "mob": it is keyed #<entityTy
     }
 });
 
+test('#552 nit: an entity forge-bridge does not know (nameKnown false) is keyed by its type and counted in "unknown <n>", even with a real-looking name', () => {
+    const ents = [
+        { name: 'mocreatures:wraith', type: 'mob', entityType: null, forge: { modId: 'mocreatures', modEntityTypeId: 4, nameKnown: false } },
+        { name: 'mocreatures:bigcat', type: 'mob', entityType: null, forge: { modId: 'mocreatures', modEntityTypeId: 5, nameKnown: true } },
+        { name: 'zombie', type: 'mob' },
+    ];
+    const line = entityLine('FRCFLD', entitiesNearSpawn(worldBot([], ents).bot), 0);
+    assert.equal(line, '[naming] FRCFLD entities +0s: 3 kinds; unknown 1; #mocreatures:4:1 mocreatures:bigcat:1 zombie:1');
+    const { m, entries } = parse(line, ENTITY_RE);
+    assert.equal(m[4], String(entries.filter(([k]) => k.startsWith('#')).length), 'every #-keyed kind is counted unknown, and only those');
+});
+
 test('#396 nit 2: a failure is logged with safeError (one line, no stack)', async (t) => {
     const warns = [];
     t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));

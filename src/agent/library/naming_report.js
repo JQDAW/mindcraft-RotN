@@ -80,6 +80,11 @@ function census(items, keyOf, isUnknown) {
 
 const blockKey = (b) => (noName(b?.name) ? `#${b?.type ?? '?'}:${b?.metadata ?? 0}` : String(b.name));
 /**
+ * An entity with no real name: forge-bridge does not know it, or its name is not a real one (none,
+ * "unknown", a placeholder). The entity line keys these by type and counts them in "unknown <n>".
+ */
+const unknownEntity = (e) => e?.forge?.nameKnown === false || unknownEntityName(e?.name);
+/**
  * An unknown entity (no name, "unknown", or a name forge-bridge does not know) is keyed by its type,
  * like a block (#396 nit 1): "#<entityType>", else forge-bridge's "#<modId>:<modEntityTypeId>", else
  * "#?". Any type: forge-bridge types an unknown modded entity that looks living "mob", others "other".
@@ -87,8 +92,7 @@ const blockKey = (b) => (noName(b?.name) ? `#${b?.type ?? '?'}:${b?.metadata ?? 
  */
 const entityKey = (e) => {
     const name = e?.name;
-    const unknown = e?.forge?.nameKnown === false || unknownEntityName(name); // unknownEntityName covers no name and "unknown"
-    if (!unknown) return String(name);
+    if (!unknownEntity(e)) return String(name);
     const mod = e?.forge?.modId != null && e?.forge?.modEntityTypeId != null ? `${e.forge.modId}:${e.forge.modEntityTypeId}` : null;
     return `#${e?.entityType ?? mod ?? '?'}`;
 };
@@ -99,7 +103,7 @@ export function namingLine(botName, blocks) {
 }
 /** The entity line, from the entities found (each {name, entityType}), taken `secs` after the block scan began. */
 export function entityLine(botName, entities, secs = 0) {
-    return `[naming] ${botName} entities +${Math.max(0, Math.round(secs))}s: ${census(entities, entityKey, (e) => unknownEntityName(e?.name)).text}`;
+    return `[naming] ${botName} entities +${Math.max(0, Math.round(secs))}s: ${census(entities, entityKey, unknownEntity).text}`;
 }
 const kindsOf = (blocks) => census(blocks, blockKey, () => false).kinds;
 
