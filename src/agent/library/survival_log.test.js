@@ -155,7 +155,7 @@ test('G4 #5: defendSelf (a fight in the open) logs its start and end: killed', a
         nearestEntity: (match) => Object.values(bot.entities).filter(e => e !== self && match(e))[0] ?? null,
     };
     assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
-    assert.deepEqual(survival(logs).map(l => l.replace(/after \d+ s/, 'after N s')), ['[survival] fight start zombie (open)', '[survival] fight end zombie killed after N s']);
+    assert.deepEqual(survival(logs).map(l => l.replace(/after \d+ s/, 'after N s')), ['[survival] fight start zombie (open)', '[survival] weapon hand (open)', '[survival] fight end zombie killed after N s']);
 });
 
 /** A defendSelf bot: a zombie `at` blocks away; calls (walks, attacks) go into `logs` in order. */
@@ -180,7 +180,7 @@ test('#384 nit 1: defendSelf logs the fight start at its first attack, after the
     const bot = openFight(logs, { at: 5, attack: (b) => { if (++hits >= 1) delete b.entities[1]; } });
     assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
     const seq = logs.filter(l => l.startsWith('<') || l.startsWith('[survival] ')).map(l => l.replace(/after \d+ s/, 'after N s'));
-    assert.deepEqual(seq, ['<walk>', '[survival] fight start zombie (open)', '<attack>', '[survival] fight end zombie killed after N s']);
+    assert.deepEqual(seq, ['<walk>', '[survival] fight start zombie (open)', '[survival] weapon hand (open)', '<attack>', '[survival] fight end zombie killed after N s']);
 });
 
 test('#384 nit 2: a defendSelf fight that throws after its start still logs its end (interrupted)', async (t) => {
@@ -189,14 +189,14 @@ test('#384 nit 2: a defendSelf fight that throws after its start still logs its 
     const bot = openFight(logs, { attack: () => { if (++hits === 2) throw new Error('the server closed the window'); } });
     await assert.rejects(skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), /closed the window/);
     assert.deepEqual(survival(logs).map(l => l.replace(/after \d+ s/, 'after N s')),
-        ['[survival] fight start zombie (open)', '[survival] fight end zombie interrupted after N s']);
+        ['[survival] fight start zombie (open)', '[survival] weapon hand (open)', '[survival] fight end zombie interrupted after N s']);
     // A stop (interrupt_code) after the start: one end, interrupted; nothing logged without an attack.
     const stopped = [];
     t.mock.method(console, 'log', (...a) => stopped.push(a.join(' ')));
     const b2 = openFight(stopped, { attack: (b) => { b.interrupt_code = true; } });
     assert.equal(await skills.defendSelf(b2, 8, (e) => e.name === 'zombie'), false);
     assert.deepEqual(survival(stopped).map(l => l.replace(/after \d+ s/, 'after N s')),
-        ['[survival] fight start zombie (open)', '[survival] fight end zombie interrupted after N s']);
+        ['[survival] fight start zombie (open)', '[survival] weapon hand (open)', '[survival] fight end zombie interrupted after N s']);
     const none = [];
     t.mock.method(console, 'log', (...a) => none.push(a.join(' ')));
     const b3 = openFight(none);
@@ -372,4 +372,30 @@ test('#502 nit 1: the falling-block source is only one above the bot', async () 
     assert.equal(hurtSource(at(1, 0.5, 1), { now: 0 }), 'falling_block', 'at head height, beside');
     assert.equal(hurtSource(at(0, -2, 0), { now: 0 }), 'unknown', 'below the bot');
     assert.equal(hurtSource(at(3, 1, 0), { now: 0 }), 'unknown', '3 blocks sideways');
+});
+
+// Soak 7 (c): every fight path takes its best weapon in hand before its first hit and says what it holds.
+const AXES = () => [{ name: 'pyrotech:crude_axe', metadata: 0, count: 1, slot: 36 }, { name: 'stone_axe', metadata: 0, count: 1, slot: 37 }];
+
+test('soak 7 (c): defendSelf (the open field) holds the stone axe (its best weapon) at its first hit, and logs it', async (t) => {
+    const logs = capture(t);
+    const held = [];
+    const bot = openFight(logs, { attack: (b) => { held.push(b.heldItem?.name ?? 'hand'); delete b.entities[1]; } });
+    bot.inventory = { items: AXES, slots: [] };
+    bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+    assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
+    assert.deepEqual(held, ['stone_axe']);
+    assert.ok(logs.includes('[survival] weapon stone_axe (open)'), logs.join('\n'));
+});
+
+test('soak 7 (c): attackEntity (the !attack command, a cornered hit) holds the stone axe at its hit, and logs it', async (t) => {
+    const logs = capture(t);
+    const held = [];
+    const bot = openFight(logs);
+    bot.inventory = { items: AXES, slots: [] };
+    bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+    bot.attack = () => { held.push(bot.heldItem?.name ?? 'hand'); return Promise.resolve(); };
+    await skills.attackEntity(bot, bot.entities[1], false);
+    assert.deepEqual(held, ['stone_axe']);
+    assert.ok(logs.includes('[survival] weapon stone_axe (attack)'), logs.join('\n'));
 });
