@@ -2846,3 +2846,50 @@ test('#514 review 2: at MORNING.capMs with the mob still in the bot\'s cell (or 
     assert.equal(nightState(fight.agent).state, 'inside');
     assert.match(fight.agent.chat.at(-1), /5 min are up, but a zombie is still in the bot's cell at 0, 64, 0: staying sheltered until it is gone$/);
 });
+
+test('#514 re-review: past the cap, a mob in reach (not in the cell) that has not hurt the bot for 30 s lets the far-side leave go ahead; one that hurt it within 30 s, or one in the cell, still holds it', async (t) => {
+    quiet(t);
+    const { MORNING: RULE } = await import('./night_routine.js');
+    assert.equal(RULE.capQuietMs, 30_000);
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5) }; // diagonal, 1.4 m: in reach, not in the cell
+    const { agent, o, tick } = await closeMorning(zombie);
+    Object.assign(agent.bot, { lastDamageTime: Date.now(), lastDamageTaken: 3, food: 20 }); // it hit the bot just now
+    await tick();
+    await tick();
+    assert.equal(nightState(agent).handFight, true, 'held: no burrow step, hitting back');
+    assert.equal(await tick(10 + RULE.capMs + 1), 'night:inside');
+    assert.equal(o.digs, 0, 'hurt within 30 s: held past the cap');
+    assert.equal(agent.chat.at(-1), '[night] morning: 5 min are up, but a zombie is still in reach and hurt the bot within 30 s at 0, 64, 0: staying sheltered until it is gone');
+    agent.bot.lastDamageTime = Date.now() - RULE.capQuietMs - 1000; // quiet for 31 s
+    await tick(10 + RULE.capMs + 31_000);
+    assert.equal(o.digs, 1, 'the far-side leave');
+    assert.deepEqual(o.outs[0].away, zombie.position, 'away from it');
+    assert.ok(agent.chat.includes('[night] morning: 5 min are up and a zombie 1.4 blocks away has not hurt the bot for 30 s: leaving by the side away from it'), agent.chat.join('\n'));
+    assert.equal(nightState(agent).handFight, false);
+    assert.equal(nightState(agent).state, 'day', 'left, then handed back');
+
+    // In the bot's cell and quiet for 31 s: never past it.
+    const cell = await closeMorning({ ...zombie, position: new Vec3(0.7, 64, 0.2) });
+    cell.agent.bot.lastDamageTime = Date.now() - RULE.capQuietMs - 1000;
+    await cell.tick();
+    assert.equal(await cell.tick(10 + RULE.capMs + 1), 'night:inside');
+    await cell.tick(10 + RULE.capMs + 31_000);
+    assert.equal(cell.o.digs, 0);
+    assert.ok(cell.agent.chat.includes('[night] morning: 5 min are up, but a zombie is still in the bot\'s cell at 0, 64, 0: staying sheltered until it is gone'), cell.agent.chat.join('\n'));
+    assert.equal(cell.o.digs, 0, 'still no leave');
+});
+
+test('#514 re-review: the fight still under way at the cap with a quiet mob in reach (not in the cell): the far-side leave instead of the hand-back', async (t) => {
+    quiet(t);
+    const { MORNING: RULE } = await import('./night_routine.js');
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5) };
+    const { agent, o, tick } = await closeMorning(zombie, { health: 20 });
+    await tick();
+    assert.equal(nightState(agent).morningAct, 'fight');
+    await tick(10 + RULE.capMs + 1);
+    assert.equal(nightState(agent).morningAct, 'leave');
+    await tick(10 + RULE.capMs + 2);
+    assert.equal(o.digs, 1);
+    assert.ok(agent.chat.includes('[night] morning: 5 min are up: leaving the shelter at 0, 64, 0 by the side away from a zombie at 1, 64, 1'), agent.chat.join('\n'));
+    assert.equal(nightState(agent).state, 'day');
+});

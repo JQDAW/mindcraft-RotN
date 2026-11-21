@@ -267,10 +267,11 @@ export function inMeleeReach(bot, entity, slack = REACH_SLACK) {
 /**
  * Soak 7 (death 1, 23:24:27): the shelter fight was capped ("4 hits did not hurt the zombie") while
  * the zombie stood 0.8 m away and hit the bot. Whether this mob is hurting the bot now: a hit within
- * PROVOKED_MS that the world did not do (a fall, starving), with the mob within its reach.
+ * withinMs (default PROVOKED_MS) that the world did not do (a fall, starving), with the mob within
+ * its reach.
  */
-export function hurtingInReach(bot, entity, now = Date.now()) {
-    return now - (bot?.lastDamageTime ?? -Infinity) <= PROVOKED_MS && !worldDamage(bot) && inMeleeReach(bot, entity);
+export function hurtingInReach(bot, entity, now = Date.now(), withinMs = PROVOKED_MS) {
+    return now - (bot?.lastDamageTime ?? -Infinity) <= withinMs && !worldDamage(bot) && inMeleeReach(bot, entity);
 }
 
 /**
