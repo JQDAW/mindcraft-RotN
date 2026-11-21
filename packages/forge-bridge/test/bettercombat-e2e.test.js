@@ -12,7 +12,8 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { startFakeForgeServer, DEFAULT_SERVER_CHANNELS } from './fake-forge-server.js';
-import { pinnedModList, syntheticRegistries, PING_FIXTURE } from './helpers.js';
+import { pinnedModList, syntheticRegistries, PING_FIXTURE, tmpFile } from './helpers.js';
+import { readCapture } from '../src/capture.js';
 import { joinFakeWorld } from './fake-world.js';
 import { decodeMainhandAttack } from '../src/bettercombat.js';
 
@@ -38,6 +39,7 @@ function closeBot(bot) {
     try { bot.quit(); bot._client.socket?.destroy(); clearTimeout(bot._client.closeTimer); } catch { /* already gone */ }
 }
 after(async () => {
+    delete process.env.FORGE_CAPTURE;
     for (const b of bots) closeBot(b);
     for (const s of servers) await s.close();
 });
@@ -54,6 +56,8 @@ function onJoin(client) {
 }
 
 async function attackOnce(server, { bcAttack, name }) {
+    const captureFile = tmpFile(`${name}.jsonl`);
+    process.env.FORGE_CAPTURE = captureFile;
     const { setSettings } = await import('../../../src/agent/settings.js');
     setSettings({ host: '127.0.0.1', port: server.port, auth: 'offline', minecraft_version: '1.12.2', bc_attack: bcAttack });
     const { initBot } = await import('../../../src/utils/mcdata.js');
@@ -67,7 +71,11 @@ async function attackOnce(server, { bcAttack, name }) {
     await until(10000, () => server.state.attacks.length >= before + 2, 'the attack on the wire');
     await sleep(100);
     const wire = server.state.attacks.slice(before);
-    return { bot, res, wire };
+    // The capture keeps the attack packets of both paths, timed, for the step-4 run's gaps.
+    const cap = () => readCapture(captureFile).filter((l) => l.dir === 'C2S'
+        && ((l.kind === 'packet' && ['use_entity', 'arm_animation'].includes(l.name)) || (l.kind === 'payload' && l.channel === 'bettercombat')))
+        .map((l) => ({ what: l.kind === 'packet' ? l.name : l.channel, t: l.t }));
+    return { bot, res, wire, cap };
 }
 
 test('initBot: bot.attack sends Better Combat\'s packet when bc_attack is on and the server has the channel; vanilla otherwise', { timeout: 300000 }, async () => {
@@ -93,6 +101,8 @@ test('initBot: bot.attack sends Better Combat\'s packet when bc_attack is on and
     assert.deepEqual(decodeMainhandAttack(on.wire[1].data), { disc: 5, entityId: ZOMBIE });
     assert.equal(on.wire[1].data.toString('hex'), '0501f403');
     assert.equal(on.bot.heldItem?.name, 'stone');
+    assert.deepEqual(on.cap().map((c) => c.what), ['arm_animation', 'bettercombat']);
+    assert.ok(on.cap().every((c) => c.t !== undefined), 'each captured attack packet is timed');
     assert.equal(on.bot.forge.attackCooldownTicks(), 13, 'stone in hand: Better Combat\'s non-weapon pacing (1.5), not the attribute\'s 4');
     // The server's hurt status settles the self-check.
     const hurt = once(on.bot, 'entityHurt');
@@ -108,6 +118,7 @@ test('initBot: bot.attack sends Better Combat\'s packet when bc_attack is on and
     assert.deepEqual(off.wire.map((w) => w.name), ['use_entity', 'arm_animation']);
     assert.equal(off.wire[0].params.target, ZOMBIE);
     assert.equal(off.wire[0].params.mouse, 1, 'ATTACK');
+    assert.deepEqual(off.cap().map((c) => c.what), ['use_entity', 'arm_animation']);
     closeBot(off.bot);
 
     // 3. On, but the server does not list the channel: vanilla.

@@ -29,6 +29,9 @@ const DEFAULT_CAPTURED_PACKETS = {
 const DEFAULT_CAPTURED_C2S = {
     window_click: 300, set_creative_slot: 20, held_item_slot: 50,
     transaction: 300, close_window: 20, block_place: 100, use_item: 50,
+    // Both attack paths (G4 soak 7): the vanilla use_entity and every swing, so a run can
+    // measure the gaps between hits; Better Combat's own packet is a bettercombat payload.
+    use_entity: 2000, arm_animation: 2000,
 };
 
 const RING_SIZE = 200;
