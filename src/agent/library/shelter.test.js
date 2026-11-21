@@ -772,6 +772,29 @@ test('#532 review: hitOutOf stops at once on reason "ended", and does not count 
     assert.match(late.output, /1, 64, 0: a zombie stands in it\)/, 'the late hit is not counted');
 });
 
+test('#532 re-review nit 3: hitOutOf cancels a hit still waiting for its cooldown at maxMs (bot.forge.cancelAttack): it never goes out and is not counted', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SHELTER_GAP };
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    Object.assign(SHELTER_GAP, { swingMs: 5, maxMs: 200 });
+    const { bot } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95, health: 20 };
+    bot.entities = { 1: bot.entity, 7: zombie };
+    const sent = [], cancelled = [];
+    let pending = null;
+    bot.attack = () => new Promise(resolve => {
+        const timer = setTimeout(() => { pending = null; sent.push(Date.now()); resolve({ sent: true, path: 'bettercombat', waitedMs: 2500 }); }, 2500);
+        pending = { resolve, timer, since: Date.now() };
+    });
+    bot.forge = { cancelAttack: (reason) => { if (!pending) return false; clearTimeout(pending.timer); cancelled.push({ reason, afterMs: Date.now() - pending.since }); pending.resolve({ sent: false, path: null, waitedMs: 0, reason }); pending = null; return true; } };
+    await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    await new Promise(r => setTimeout(r, 2600));
+    assert.deepEqual(cancelled.map(c => c.reason), ['maxMs']);
+    assert.ok(cancelled[0].afterMs < 800, `cancelled within a poll of maxMs (200 ms), not a cooldown later: ${cancelled[0].afterMs} ms`);
+    assert.deepEqual(sent, [], 'the waiting hit never went out');
+    assert.match(bot.output, /1, 64, 0: a zombie stands in it\)/, 'no hit counted');
+});
+
 test('#333 review, soak 5: a mob rotn-data says to leave alone (a wolf, a polar bear, an enderman) or not to fight (a troll, a creeper, a skeleton) is not hit out of the opening', async (t) => {
     t.mock.method(console, 'log', () => {});
     const saved = { ...SHELTER_GAP };
