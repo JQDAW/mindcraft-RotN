@@ -884,9 +884,13 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
             // #521: Better Combat's path may wait for its cooldown, and a newer call (or the end of the
             // connection) leaves this one unsent: only a swing that went out counts and is journaled.
             const r = await bot.attack(enemy);
+            // #532 review nit 3: Better Combat's wait can outlast an interrupt or maxMs by one cooldown
+            // (a stone axe: 2.5 s; #521 has no cancel). Checked as soon as it resolves: a swing that
+            // came after either is not counted or journaled, and the fight ends.
+            if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
+            if (!pressed && Date.now() - start >= SHELTER_FIGHT.maxMs) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; outcome = 'capped'; break; }
             if (!attackSent(r)) {
                 if (r?.reason === 'ended' || ++unsent >= SHELTER_FIGHT.unsentMax) { why = `the attack was not sent (${r?.reason ?? 'unknown'})`; outcome = 'stopped'; break; }
-                if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
                 continue;
             }
             unsent = 0;
@@ -904,7 +908,8 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
         bot.rotnFightEndedAt = Date.now();
         journal.end(outcome);
     }
-    log(bot, swings > 0 ? `Fought from inside the shelter: ${swings} swing${swings === 1 ? '' : 's'}, stopped: ${why}.` : 'Nothing in reach to fight.');
+    log(bot, swings > 0 ? `Fought from inside the shelter: ${swings} swing${swings === 1 ? '' : 's'}, stopped: ${why}.`
+        : outcome === 'gone' ? 'Nothing in reach to fight.' : `No swing went out from inside the shelter, stopped: ${why}.`); // #532 review: say why
     return swings > 0;
 }
 

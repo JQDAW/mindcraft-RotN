@@ -750,6 +750,28 @@ test('#521: hitOutOf awaits bot.attack, counts only the swings that went out (no
     assert.ok(gap >= 90 && gap < 450, `paced by attackCooldownTicks: ${gap} ms`);
 });
 
+test('#532 review: hitOutOf stops at once on reason "ended", and does not count a hit that resolves past maxMs (a Better Combat wait)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SHELTER_GAP };
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    const run = async (attack, gap) => {
+        Object.assign(SHELTER_GAP, saved, { swingMs: 5, noHurtHits: 6 }, gap);
+        const { bot } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+        const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95, health: 20 };
+        bot.entities = { 1: bot.entity, 7: zombie };
+        let tries = 0;
+        bot.attack = () => { tries++; return attack(); };
+        await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+        return { tries, output: bot.output };
+    };
+    const ended = await run(() => Promise.resolve({ sent: false, path: null, waitedMs: 0, reason: 'ended' }), { maxMs: 3000 });
+    assert.equal(ended.tries, 1, 'not retried');
+    assert.match(ended.output, /1, 64, 0: a zombie stands in it\)/, 'no hits counted');
+    const late = await run(() => new Promise(r => setTimeout(() => r({ sent: true, path: 'bettercombat', waitedMs: 120 }), 120)), { maxMs: 60 });
+    assert.equal(late.tries, 1);
+    assert.match(late.output, /1, 64, 0: a zombie stands in it\)/, 'the late hit is not counted');
+});
+
 test('#333 review, soak 5: a mob rotn-data says to leave alone (a wolf, a polar bear, an enderman) or not to fight (a troll, a creeper, a skeleton) is not hit out of the opening', async (t) => {
     t.mock.method(console, 'log', () => {});
     const saved = { ...SHELTER_GAP };

@@ -421,6 +421,9 @@ async function hitOutOf(bot, cell) {
         await bot.lookAt(mob.position.offset(0, (mob.height ?? 1.8) * 0.8, 0), true);
         // #521: only a swing that went out counts (noHurtHits); unsentMax unsent in a row ends it.
         const r = await bot.attack(mob);
+        // #532 review nit 3: Better Combat's wait can outlast an interrupt or maxMs by one cooldown;
+        // a swing that resolves after either is not counted.
+        if (bot.interrupt_code || Date.now() - start >= SHELTER_GAP.maxMs) break;
         if (!attackSent(r)) {
             if (r?.reason === 'ended' || ++unsent >= SHELTER_GAP.unsentMax) break;
             continue;

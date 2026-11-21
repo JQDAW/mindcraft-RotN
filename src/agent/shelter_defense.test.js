@@ -862,3 +862,38 @@ test('#521: the shelter fight awaits bot.attack: only a swing that went out is c
     const since = Number(/\+(\d+) ms/.exec(paced.swings[1] ?? '')?.[1]);
     assert.ok(since >= 90 && since < 600, `paced by attackCooldownTicks: ${paced.swings.join(' | ')}`);
 });
+
+// #532 review: nit 4, a connection that ended stops the fight at once; nit 3, Better Combat's wait can
+// outlast an interrupt or maxMs by one cooldown: a swing that resolves after either is not counted.
+test('#532 review: reason "ended" stops the shelter fight at once; a swing that resolves after an interrupt or past maxMs is not counted or journaled', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const saved = { ...SHELTER_FIGHT };
+    t.after(() => Object.assign(SHELTER_FIGHT, saved));
+    const fight = async (attack, opts = {}) => {
+        Object.assign(SHELTER_FIGHT, saved, { swingMs: 10 }, opts);
+        logs.length = 0;
+        const { agent, bot } = shelter({ killAfter: 1e9 });
+        let tries = 0;
+        bot.attack = (e) => { tries++; return attack(bot, e); };
+        await selfDefense(agent);
+        await new Promise(r => setTimeout(r, 30));
+        return { tries, swings: logs.filter(l => l.startsWith('[survival] swing ')), ends: logs.filter(l => l.startsWith('[survival] fight end ')), output: bot.output };
+    };
+    const ended = await fight(() => Promise.resolve({ sent: false, path: null, waitedMs: 0, reason: 'ended' }));
+    assert.equal(ended.tries, 1, 'not retried');
+    assert.deepEqual(ended.swings, []);
+    assert.match(ended.output, /stopped: the attack was not sent \(ended\)/);
+    assert.deepEqual(ended.ends, ['[survival] fight end zombie stopped after 0 s']);
+    // The interrupt comes while the call waits for Better Combat's cooldown; the swing then goes out.
+    const interrupted = await fight((bot) => new Promise(r => setTimeout(() => { bot.interrupt_code = true; r({ sent: true, path: 'bettercombat', waitedMs: 80 }); }, 80)));
+    assert.equal(interrupted.tries, 1);
+    assert.deepEqual(interrupted.swings, [], 'not journaled');
+    assert.deepEqual(interrupted.ends, ['[survival] fight end zombie interrupted after 0 s']);
+    // maxMs passes while it waits (the mob is not hurting the bot, so the cap applies).
+    const late = await fight(() => new Promise(r => setTimeout(() => r({ sent: true, path: 'bettercombat', waitedMs: 120 }), 120)), { maxMs: 60 });
+    assert.equal(late.tries, 1);
+    assert.deepEqual(late.swings, []);
+    assert.match(late.output, /stopped: time limit of/);
+    assert.deepEqual(late.ends, ['[survival] fight end zombie capped after 0 s']);
+});
