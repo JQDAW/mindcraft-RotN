@@ -38,11 +38,37 @@
       "resetsTargetInvulnerability": true,
       "serverReachCheck": false,
       "clientPacing": {
+        "formula": "max(8, int(20 / attackSpeed + 0.5))",
         "minimumTicks": 8,
         "addedTicks": 0.5,
-        "note": "Better Combat's client waits for the weapon's cooldown; the server neither checks nor scales it (config/bettercombat.cfg:6, :12; the client code was not read)"
+        "unarmedAttackSpeed": 1.5,
+        "note": "Better Combat's client waits this many ticks between attacks (bcCooldownTicks in weapons); the server neither checks nor scales it. attackSpeed is the attribute's base 4.0 plus the held item's modifiers for an item in the weapon class whitelist, else \"Unarmed & Non-Weapon Attack Speed\" 1.5 plus the modifiers; a vanilla sword matched in the Sword Tweaker list adds its \"Additional Attack Speed\" (stone -0.1, wooden and golden +0.2)",
+        "evidence": [
+          "ImmersiveCombat-12-13-25.jar (Better Combat, modid bettercombat, version 1.5.6): EventHandlersClient.getMainhandCooldown: hasConfigWeapon (set only when ConfigurationHandler.isConfigWeapon) ? the ATTACK_SPEED base : fistAndNonWeaponAttackSpeed; adds the attribute's op-0 modifiers, then for an ItemSword the first ConfigurationHandler.swords entry whose name the registry name contains; calculateAttackSpeedTicks = (int)(20 / clamp(speed x op1 x op2, 0.1, 20) + addedSwingTickCooldown); BetterCombatHand.setAttackCooldown raises it to minimumAttackSpeedTicks (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+          "config/bettercombat.cfg:66 \"attributes (advanced settings)\" (category \"Attributes (Advanced settings)\"): \"Added Attack Speed Tick Cooldown\"=0.5, \"Minimum Attack Speed Tick Cooldown\"=8; :727 unarmed: :729 \"Unarmed & Non-Weapon Attack Speed\"=1.5; :674 swords: :686-689 \"Sword Tweaker\" (packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+        ]
       },
-      "damage": "the attackDamage attribute (base + op-0 modifiers, x (1 + op-1 sum), x each (1 + op-2)); Better Combat's own crit chance is not modelled",
+      "damage": "the attackDamage attribute (base + op-0 modifiers, x (1 + op-1 sum), x each (1 + op-2)), minus unarmedDamageReduction (0.5, flat) for an empty hand or any item outside weaponClasses, x the crit multiplier on a crit; then the target's attackEntityFrom (Damage Control x0.8, armour, Protection)",
+      "unarmedDamageReduction": 0.5,
+      "weaponClasses": [
+        "net.minecraft.item.ItemSword",
+        "net.minecraft.item.ItemTool",
+        "net.minecraft.item.ItemHoe",
+        "com.oblivioussp.spartanweaponry.item.ItemThrowingWeapon"
+      ],
+      "unarmedEvidence": [
+        "ImmersiveCombat-12-13-25.jar (Better Combat, modid bettercombat, version 1.5.6): Helpers.playerAttackVictimWithWeapon: damage = getMainhandAttackDamage; when ConfigurationHandler.isConfigWeapon(item) is false (isItemClassWhiteList: an instance of a \"(Class) Item Weapon Whitelist\" class, and not blacklisted; an empty stack is air, in no listed class) it subtracts fistAndNonWeaponDamageReduction (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+        "config/bettercombat.cfg:727 unarmed: :732 \"Unarmed & Non-Weapon Damage Reduction\"=0.5 (category \"Unarmed\"); :803 \"white/black lists\": :839-844 \"(Class) Item Weapon Whitelist\" ItemSword, ItemTool, ItemHoe, Spartan ItemThrowingWeapon (packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+      ],
+      "crit": {
+        "multiplier": 1.5,
+        "chance": "the weapon's bcCritChance: the [Crit Chance] of the first \"Custom Weapon Tweaker\" entry its registry name contains (_sword 0.1, _axe 0.25), else 0.05; +0.1 while falling, +0.1 per point of Luck",
+        "sneakAttack": "always a crit on a mob (IMob) whose attack target and revenge target are both not the player: the first hit on a mob that has not noticed the bot; a zombie already attacking the bot gets none",
+        "evidence": [
+          "ImmersiveCombat-12-13-25.jar (Better Combat, modid bettercombat, version 1.5.6): Helpers.playerAttackVictimWithWeapon: crit chance = the player's CRIT_CHANCE value + (the matched ConfigWeapon's critChanceMod - CRIT_CHANCE base); autoCritOnSneakAttacks and an IMob EntityLiving whose getAttackTarget and getRevengeTarget are not the player sets the crit; else, with baseCritPercentChance >= 0, + jumpCrits when falling, + LUCK x luckCritModifier, crit when chance > nextFloat; a crit multiplies the damage by CRIT_DAMAGE + additionalCritDamageMod (ForgeHooks.getCriticalHit's modifier when an event handler allows it), before playerAttackedVictim; EventHandlers static init: CRIT_CHANCE base baseCritPercentChance, CRIT_DAMAGE base baseCritPercentDamage (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+          "config/bettercombat.cfg:10/:80 \"Base Critical Percent Chance\"=0.05, :11/:83 \"Base Critical Percent Damage\"=1.5; :173 \"critical strikes\": :175 \"Add Critical Chance On Falling\"=0.1, :178 \"Auto Critical On Sneak Attacks\"=true, :184 \"Luck Affects Critical Chance\"=0.1; :315 \"Custom Weapon Tweaker\": :343 _sword [Crit Chance=0.1] [Additional Crit Damage=0.0], :350 _axe [Crit Chance=0.25] [Additional Crit Damage=0.0] (packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+        ]
+      },
       "summary": "The server sets the target's hurtResistantTime to 0 before and after attackEntityFrom, so every hit lands in full, and it never calls getCooledAttackStrength. Whether the server accepts the message from a client that did not register the bettercombat channel in its handshake is not settled (net-forge).",
       "confidence": "verified",
       "evidence": [
@@ -61,14 +87,25 @@
       "attackDamage": 1,
       "attackSpeed": 4,
       "cooldownTicks": 5,
+      "bcWeapon": false,
+      "bcAttackDamage": 0.5,
+      "bcAttackSpeed": 1.5,
+      "bcCooldownTicks": 13,
+      "bcCritChance": 0.05,
       "evidence": [
-        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): adh (SharedMonsterAttributes) attackSpeed default 4.0; ImmersiveCombat-12-13-25.jar (Better Combat, modid bettercombat, version 1.5.6): EventHandlers.entityJoinWorldEvent sets a player's base attackDamage to 1.0 and attackSpeed to 4.0 (config/bettercombat.cfg:7-8, the vanilla values) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): adh (SharedMonsterAttributes) attackSpeed default 4.0; ImmersiveCombat-12-13-25.jar (Better Combat, modid bettercombat, version 1.5.6): EventHandlers.entityJoinWorldEvent sets a player's base attackDamage to 1.0 and attackSpeed to 4.0 (config/bettercombat.cfg:7-8, the vanilla values) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+        "Better Combat's packet: an empty hand is not a weapon, so 1 - 0.5 (Unarmed & Non-Weapon Damage Reduction) = 0.5, paced at max(8, int(20 / 1.5 + 0.5)) = 13 ticks, crit chance 0.05 (no Custom Weapon Tweaker entry) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt bettercombat.cfg:729, :732)"
       ]
     },
     "minecraft:stone_axe": {
       "attackDamage": 3,
       "attackSpeed": 0.4,
       "cooldownTicks": 50,
+      "bcWeapon": true,
+      "bcAttackDamage": 3,
+      "bcAttackSpeed": 0.4,
+      "bcCooldownTicks": 50,
+      "bcCritChance": 0.25,
       "vanilla": {
         "attackDamage": 9,
         "attackSpeed": 0.8
@@ -76,13 +113,19 @@
       "durabilityPerHit": 2,
       "evidence": [
         "materialchanger1.0.3-1.12.2.jar: at postInit an ItemTool's declared field 2 (ahq.b, attackDamage) is set to value - 1 and field 3 (ahq.c, attackSpeed) to value - 4, which ItemTool.getItemAttributeModifiers adds to the player's 1 and 4 (\"Tool modifier\"); config/materialchanger.cfg:481 ATTACK_SPEED;minecraft:stone_axe;0.4 and :482 ATTACK_DAMAGE;minecraft:stone_axe;3 inside the changer list (:82-:2145) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)",
-        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): agy (ItemAxe) static arrays: STONE would be +8 and -3.2 without Material Changer (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): agy (ItemAxe) static arrays: STONE would be +8 and -3.2 without Material Changer (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+        "Better Combat's packet: an ItemAxe, so an ItemTool, in the weapon class whitelist: no unarmed reduction, 3; speed 0.4, paced at max(8, int(20 / 0.4 + 0.5)) = 50 ticks; crit chance 0.25 from the first Custom Weapon Tweaker substring its registry name contains, _axe (:350) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt bettercombat.cfg)"
       ]
     },
     "pyrotech:crude_axe": {
       "attackDamage": 3,
       "attackSpeed": 0.9,
       "cooldownTicks": 22.2,
+      "bcWeapon": true,
+      "bcAttackDamage": 3,
+      "bcAttackSpeed": 0.9,
+      "bcCooldownTicks": 22,
+      "bcCritChance": 0.25,
       "vanilla": {
         "attackDamage": 9,
         "attackSpeed": 0.8
@@ -92,13 +135,19 @@
       "note": "Durability 8 and an axe loses 2 a hit on a mob: it breaks after 4 hits.",
       "evidence": [
         "pyrotech-1.12.2-1.5.25.jar: ItemCrudeAxe extends ItemAxeBase extends ItemAxe with ToolMaterial STONE and no attribute override (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
-        "config/materialchanger.cfg:1727 DURABILITY;pyrotech:crude_axe;8, :1728 ATTACK_DAMAGE;pyrotech:crude_axe;3, :1729 ATTACK_SPEED;pyrotech:crude_axe;0.9 (packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+        "config/materialchanger.cfg:1727 DURABILITY;pyrotech:crude_axe;8, :1728 ATTACK_DAMAGE;pyrotech:crude_axe;3, :1729 ATTACK_SPEED;pyrotech:crude_axe;0.9 (packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)",
+        "Better Combat's packet: an ItemAxe, so an ItemTool, in the weapon class whitelist: no unarmed reduction, 3; speed 0.9, paced at max(8, int(20 / 0.9 + 0.5)) = 22 ticks; crit chance 0.25 from the first Custom Weapon Tweaker substring its registry name contains, _axe (:350) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt bettercombat.cfg)"
       ]
     },
     "minecraft:stone_sword": {
       "attackDamage": 3.5,
       "attackSpeed": 1.6,
       "cooldownTicks": 12.5,
+      "bcWeapon": true,
+      "bcAttackDamage": 3.5,
+      "bcAttackSpeed": 1.5,
+      "bcCooldownTicks": 13,
+      "bcCritChance": 0.1,
       "vanilla": {
         "attackDamage": 5,
         "attackSpeed": 1.6
@@ -107,17 +156,24 @@
       "durabilityPerHit": 1,
       "evidence": [
         "materialchanger1.0.3-1.12.2.jar: an ItemSword's declared field 0 (ajy.a, attackDamage) is set to value - 1; it cannot change a sword's speed; config/materialchanger.cfg:1717 ATTACK_DAMAGE;minecraft:stone_sword;3.5, :1718 durability 99 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)",
-        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): ajy (ItemSword) getItemAttributeModifiers: \"Weapon modifier\" attackDamage = field a, attackSpeed -2.4 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): ajy (ItemSword) getItemAttributeModifiers: \"Weapon modifier\" attackDamage = field a, attackSpeed -2.4 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+        "Better Combat's packet: an ItemSword, in the weapon class whitelist: no unarmed reduction, 3.5; speed 1.6 - 0.1 (Sword Tweaker stone_sword, :688) = 1.5, paced at max(8, int(20 / 1.5 + 0.5)) = 13 ticks; crit chance 0.1 from the first Custom Weapon Tweaker substring its registry name contains, _sword (:343) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt bettercombat.cfg)"
       ]
     },
     "minecraft:wooden_sword": {
       "attackDamage": 4,
       "attackSpeed": 1.6,
       "cooldownTicks": 12.5,
+      "bcWeapon": true,
+      "bcAttackDamage": 4,
+      "bcAttackSpeed": 1.8,
+      "bcCooldownTicks": 11,
+      "bcCritChance": 0.1,
       "durabilityPerHit": 1,
       "note": "Not obtainable by crafting on this pack: scripts remove and hide it (JEI.removeAndHide, Anvil.remove).",
       "evidence": [
-        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): ajy (ItemSword): 3 + WOOD's 0, attackSpeed -2.4; no Material Changer entry; scripts/minecraft_(max-file-size).zs:916, :1079 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): ajy (ItemSword): 3 + WOOD's 0, attackSpeed -2.4; no Material Changer entry; scripts/minecraft_(max-file-size).zs:916, :1079 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)",
+        "Better Combat's packet: an ItemSword, in the weapon class whitelist: no unarmed reduction, 4; speed 1.6 + 0.2 (Sword Tweaker wooden_sword, :689) = 1.8, paced at max(8, int(20 / 1.8 + 0.5)) = 11 ticks; crit chance 0.1 from the first Custom Weapon Tweaker substring its registry name contains, _sword (:343) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt bettercombat.cfg)"
       ]
     }
   },
@@ -353,9 +409,9 @@
       "WorseHurtTimer-1.12.2-1.5.0.3.jar (Better Hurt Timer): HurtCapability$Handler sets EntityLivingBase.ticksSinceLastSwing (BHTAPI.ticksSinceLastSwingField = field_184617_aD, vp.aE) to -1 when it attaches the capability; Events.canSwing returns false when it is below 0, so getHurtTime never reaches getCoolPeriod for a mob; minecraft_server.1.12.2.jar after Forge 14.23.5.2860's server binpatches (forge-1.12.2-14.23.5.2860.jar in the zip root: binpatches.pack.lzma, LZMA -> pack200 -> a GDiff patch per class, each input class's Adler-32 checksum matched): only aed (EntityPlayer) writes aE (B_ onUpdate, ds resetCooldown), vp (EntityLivingBase) never does (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
     ]
   },
+  "weaponsNote": "cooldownTicks, attackSpeed: vanilla's 20 / attackSpeed (the vanilla packet); bc*: Better Combat's packet (bcAttackDamage before Damage Control, bcCooldownTicks its client's pacing, bcCritChance its random crit; bcWeapon false: the unarmed reduction applies). bc fields: playerAttack.betterCombatPacket ({FX}; {CF})",
   "notSettled": [
     "Whether the server accepts Better Combat's PacketMainhandAttack from a client that did not register the bettercombat channel (net-forge).",
-    "Which item In Control picks from a two-item armour list.",
-    "Better Combat's client-side pacing (Minimum Attack Speed Tick Cooldown 8, Added 0.5) was read from the config only."
+    "Which item In Control picks from a two-item armour list."
   ]
 }
