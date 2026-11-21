@@ -293,11 +293,15 @@ export function weaponCooldownMs(item) {
 
 /**
  * Better Combat plan step 2 (#521): the ms to wait between two swings: Better Combat's cooldown for the
- * held item (bot.forge.attackCooldownTicks(), from its attack speed attribute) when forge-bridge has
- * it, else weaponCooldownMs (the vanilla class's). bot.attack's Better Combat path waits for the same
+ * held item (bot.forge.attackCooldownTicks(), from its attack speed attribute) while bc_attack is on,
+ * else weaponCooldownMs (the vanilla class's). bot.attack's Better Combat path waits for the same
  * cooldown itself, so a swing paced by it is not held back or replaced.
  */
 export function attackCooldownMs(bot, item = bot?.heldItem) {
+    // (g): only while bc_attack is on (bcAttack.enabled), when bot.attack paces every call itself (its
+    // Better Combat path, and its paced vanilla fallback). With it off, forge-bridge's ticks for an
+    // unknown attack speed are its slowest (50: 2.5 s), which would slow vanilla swings for nothing.
+    if (bot?.forge?.bcAttack?.enabled !== true) return weaponCooldownMs(item);
     let ticks = null;
     try { ticks = bot?.forge?.attackCooldownTicks?.(); } catch { ticks = null; }
     return Number.isFinite(ticks) && ticks > 0 ? ticks * 50 : weaponCooldownMs(item);
@@ -309,6 +313,13 @@ export function attackCooldownMs(bot, item = bot?.heldItem) {
  * the connection ended. Mineflayer's own returns nothing, which counts as sent.
  */
 export const attackSent = (r) => r?.sent !== false;
+
+/**
+ * (g), net-forge #541: with Better Combat's attack active, bot.attack sends nothing for a target past
+ * its reach (eye to hitbox over 4.0 with a weapon, 3.5 without) or out of sight, and resolves
+ * { sent: false, reason: 'reach' | 'sight' }. Those mean "move or wait", not "this swing failed".
+ */
+export const BLOCKED_REASONS = { reach: 'beyond the attack reach', sight: 'out of sight' };
 
 /** #532 re-review nit 3: how often a waiting bot.attack is checked for a reason to cancel it. */
 export const ATTACK_WATCH = { pollMs: 100 };
