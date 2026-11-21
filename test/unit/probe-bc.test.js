@@ -10,7 +10,7 @@ import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import {
     BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, P1_CONSOLE_ALLOW, bcConsoleAllow, bcHit, bcLaneCells, bcLaneClear, bcLaneFills, bcLogProblems, bcReply, guardBcConsole,
-    bcExpected, judgeSeries, markCrits, notMeasured, projectedHits, zombieCatalogueHealth,
+    bcExpected, judgeSeries, markCrits, noAiIntrusion, notMeasured, projectedHits, zombieCatalogueHealth,
 } from '../runner/lib/probe.mjs';
 import { attachBcAttack, attribute, gapsOf, parseBcHit, whisperOf } from '../runner/drivers/bc-attack.mjs';
 import probe from '../scenarios/probe/probe-bc-attack.mjs';
@@ -188,6 +188,30 @@ describe('the judgments (the plan\'s pass rules)', () => {
         assert.deepEqual([v.ok, v.inconclusive, v.why], [false, true, 'not measured: the zombie started at 8 health, not the catalogue\'s 20']);
         const judged = judgeSeries(r(20), { path: 'vanilla' });
         assert.deepEqual([judged.ok, judged.inconclusive, judged.why], [false, false, 'only 1 hit(s)'], 'a fresh zombie is judged as before');
+    });
+
+    test('after #543: noAiIntrusion: anything else alive in the lane box, or a hurt to the bot; the step\'s own zombies, the dead and the outside do not count', () => {
+        const cells = [BC_PLAN.zombieA, BC_PLAN.zombieB];
+        const r = (entities, botHurts = []) => ({ census: [{ t: 0, entities }, { t: 1000, entities }], botHurts });
+        const z = (id, pos, health = 20, name = 'zombie') => ({ id, name, health, pos, d: 1 });
+        assert.equal(noAiIntrusion(r([z(1, [-46.5, 120, -65.5]), z(2, [-42.5, 120, -65.5])]), { cells }), null, 'A and B themselves');
+        assert.equal(noAiIntrusion(r([z(3, [-46.5, 120, -65.5], 0, 'parasite')]), { cells }), null, 'a dead one');
+        assert.equal(noAiIntrusion(r([{ id: 4, name: 'item', health: null, pos: [-45, 120, -66], d: 0.5 }]), { cells }), null, 'an item has no health');
+        assert.equal(noAiIntrusion(r([z(5, [-45, 124, -66], 10, 'bat')]), { cells }), null, 'above the box');
+        assert.equal(noAiIntrusion(r([z(6, [-45, 120, -68.1], 10, 'spider')]), { cells }), null, 'beside the box');
+        assert.equal(noAiIntrusion(r([z(7, [-44.5, 120, -65.5], 8, 'parasite')]), { cells }), 'not clean: the census saw parasite #7 at -44.5 120 -65.5 (t 0 ms) in the lane', 'once, at its first sighting');
+        assert.equal(noAiIntrusion(r([z(8, [-45.5, 120, -65.5], 20, 'zombie')]), { cells }), 'not clean: the census saw zombie #8 at -45.5 120 -65.5 (t 0 ms) in the lane', 'a third zombie, not at A or B');
+        assert.equal(noAiIntrusion(r([], [{ t: 500, amount: 3.333, cause: 'melee by parasite #7' }]), { cells }), 'not clean: the bot was hurt 1x (3.333 at t 500 ms, melee by parasite #7)');
+        // judgeSeries applies it only with noAiCells (the AI step has none).
+        const s = { ok: true, target: { id: 1, startHealth: 20 }, end: 'dead', hits: [], gaps: {}, census: [{ t: 0, entities: [z(7, [-44.5, 120, -65.5], 8, 'parasite')] }] };
+        assert.equal(judgeSeries(s, { path: 'bc', noAiCells: cells }).inconclusive, true);
+        assert.equal(judgeSeries(s, { path: 'bc', ai: true }).inconclusive, false);
+    });
+
+    test('#541: a call the wrapper refuses (out of reach or sight) is named as the wrapper refusing', () => {
+        const s = { ok: true, target: { id: 1, startHealth: 20 }, end: 'dead', gaps: { bettercombat: [] },
+            hits: [{ i: 1, sent: true, path: 'bettercombat', drop: 20, died: true, healthAfter: 0 }, { i: 2, sent: false, path: null, reason: 'reach' }, { i: 3, sent: false, path: null, reason: 'sight' }] };
+        assert.match(judgeSeries(s, { path: 'bc', ai: true }).why, /2 call\(s\) sent nothing \(reach, sight\)/);
     });
 
     test('markCrits: a drop at least halfway to a crit\'s is a crit; a killing hit below that says nothing', () => {
@@ -457,10 +481,13 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
         const a = w.summon(-47, 66, -66);
         const p = w.spawnOther('parasite', 300, -45.5, 66, -65.5);   // 1 block from the bot; zombie A is 2
         w.spawnOther('cow', 92, 0, 66, -66);   // 44 blocks away: not counted
+        const pid = w.spawnOther('player', 'player', -44, 66, -65.5);   // a player beside the bot: never in the census (after #543)
+        w.bot.entities[pid].type = 'player';
         w.whisper('bc-hit aaa111 vanilla -47,66,-66 minecraft:stone_axe');
         const r = await reply('aaa111');
         assert.ok(r.census[0].t < 500 && r.census[0].t < r.hits[0].t, `at the start, after the equip and before hit 1 (${r.census[0].t} ms)`);
-        assert.deepEqual(r.census[0].entities.map((e) => [e.id, e.name, e.health]), [[p, 'parasite', null], [a.id, 'zombie', 20]], 'nearest first');
+        assert.deepEqual(r.census[0].entities.map((e) => [e.id, e.name, e.health]), [[p, 'parasite', null], [a.id, 'zombie', 20]], 'nearest first; no player');
+        assert.deepEqual(r.census[0].entities.map((e) => e.pos), [[-45.5, 66, -65.5], [-46.5, 66, -65.5]], 'each with its position');
         const gaps = r.census.slice(1).map((c, k) => c.t - r.census[k].t);
         assert.ok(r.census.length >= 59 && gaps.every((g) => g >= 1000 && g <= 1100), `${r.census.length} censuses, gaps ${Math.min(...gaps)}-${Math.max(...gaps)} ms`);
     });
@@ -532,9 +559,11 @@ function sim(opt = {}) {
     let w = null;
     let parasiteDone = false;
     const cmds = [];
+    const cmdsAt = [];
     const server = {
         console(cmd, waitS = 1) {
             cmds.push(cmd);
+            cmdsAt.push([t, cmd]);
             const before = log.length;
             let m;
             if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
@@ -572,7 +601,9 @@ function sim(opt = {}) {
             else if ((m = /^tell (\S+) (.*)$/.exec(cmd)) && online) {
                 // opt.parasite: before the given bc-hit command, a mob that is not minecraft:zombie stands in the lane
                 // (a Fish's Undead Rising parasite from a dead zombie): kill @e[type=zombie] does not reach it.
-                if (opt.parasite && m[2].includes(opt.parasite.before) && !parasiteDone) { parasiteDone = true; w?.spawnOther('parasite', 300, -46.5, 120, -65.5); }
+                if (opt.parasite && m[2].includes(opt.parasite.before) && !parasiteDone) { parasiteDone = true; w?.spawnOther('parasite', 300, -46.5, 120, -65.5, 8); }
+                // opt.hurtDuring: the bot is hurt 1 s into the given bc-hit command's series.
+                if (opt.hurtDuring && m[2].includes(opt.hurtDuring) && w) { const ww = w; ww.clock.at(ww.clock.now() + 1000, () => ww.hurtBot(4)); }
                 if (opt.kick && m[2].startsWith(opt.kick)) { online = false; add(`${NAME} lost connection: Kicked by an operator`); }
                 else w?.whisper(m[2]);
             } else if (/^(gamerule|time) /.test(cmd)) add('ok');
@@ -603,7 +634,7 @@ function sim(opt = {}) {
     };
     // Each scenario sleep lets the core (on its own virtual clock) run many steps.
     const clock = { now: () => t, sleep: async (ms) => { t += ms; for (let i = 0; i < 400; i++) await tick(); } };
-    return { server, bot, clock, blocks, cmds, sent: log, startEnv: () => startEnv, world: () => w };
+    return { server, bot, clock, blocks, cmds, cmdsAt, sent: log, startEnv: () => startEnv, world: () => w };
 }
 
 const fast = { settleMs: 1000, tpSettleMs: 1000, summonSettleMs: 1000, consoleWaitS: 0, pollMs: 1000 };
@@ -700,6 +731,24 @@ describe('probe-bc-attack on a simulated server and log', () => {
             assert.ok(i >= 0 && s.cmds[i + 1] === `clear ${NAME}` && s.cmds.slice(i + 1).find((x) => x.startsWith('summon')), step);
         }
         assert.equal(byName(r).bc_stone_axe.pass, true);
+        // The parasite stood in A's cell during the stone sword's Better Combat series: that series is INCONCLUSIVE (after #543).
+        assert.match(byName(r).bc_stone_sword.detail, /^INCONCLUSIVE: .*: not clean: the census saw parasite #\d+ at -46\.5 120 -65\.5 \(t \d+ ms\) in the lane$/);
+        assert.equal(byName(r).vanilla_stone_sword.pass, true, 'it came after the vanilla series');
+        // #543 review: 1.5 s between each zombie kill and the lane clear after it (a parasite comes after the death animation).
+        const at = s.cmdsAt;
+        for (let i = 0; i < at.length; i++) {
+            if (!at[i][1].startsWith('kill @e[type=!player')) continue;
+            const kill = at.slice(0, i).reverse().find(([, c]) => c === 'kill @e[type=zombie]');
+            assert.ok(kill && at[i][0] - kill[0] >= 1500, `${at[i][0] - (kill?.[0] ?? 0)} ms`);
+        }
+    });
+
+    test('after #543: a hurt to the bot during a NoAI series makes it INCONCLUSIVE', async () => {
+        const r = await run(sim({ hurtDuring: ' bc -43,120,-66 minecraft:stone_axe' }));
+        const c = byName(r);
+        assert.match(c.bc_stone_axe.detail, /^INCONCLUSIVE: .*bot hurt 1x \(4\): not clean: the bot was hurt 1x \(4 at t \d+ ms, unknown\)$/);
+        assert.equal(c.vanilla_stone_axe.pass, true);
+        assert.deepEqual(r.notes.inconclusive.map((x) => x.key), ['bc_stone_axe']);
     });
 
     test('#540 review: the kill counts include the loaded world\'s other zombies', async () => {

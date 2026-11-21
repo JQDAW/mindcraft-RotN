@@ -59,7 +59,7 @@ const settings = {
 
     "spawn_timeout": 30, // num seconds allowed for the bot to spawn before throwing error. Increase when spawning takes a while.
     "block_place_delay": 0, // delay between placing blocks (ms) if using newAction. helps avoid bot being kicked by anti-cheat mechanisms on servers.
-    "bc_attack": false, // RotN: melee through Better Combat's own attack packet (forge-bridge, #521), which hits in full; the vanilla packet lands only the first hit per mob (#518). Off until the test-server run passes. FORGE_BC_ATTACK=on|off overrides.
+    "bc_attack": true, // RotN: melee through Better Combat's own attack packet (forge-bridge #521/#526/#536/#541), which hits in full; the vanilla packet lands only the first hit per mob (#518). On since probe attempt 2 (#540): every BC hit landed, kill counts in rotn-data's ranges, no gap under the cooldown, clean server log. FORGE_BC_ATTACK=on|off overrides.
   
     "log_all_prompts": false, // log ALL prompts to file
 };
