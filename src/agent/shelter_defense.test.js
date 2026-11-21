@@ -17,6 +17,12 @@ import { __modeForTest, __resetThreatLease } from './modes.js';
 import { SHELTER_FIGHT } from './library/skills.js';
 import { HEAD_DIG } from './modes.js';
 import { REPAIR_LABEL, resetNight } from './night_routine.js';
+import { maxHitOf } from './library/threats.js';
+
+/** rotn-data #518: what a zombie may hit for is data (12.5, then 10.5); UNDER/OVER: the whole healths just below and above it. */
+const ZOMBIE_HIT = maxHitOf({ name: 'zombie', type: 'mob' });
+const UNDER = Number.isInteger(ZOMBIE_HIT) ? ZOMBIE_HIT - 1 : Math.floor(ZOMBIE_HIT);
+const OVER = Math.floor(ZOMBIE_HIT) + 1;
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -130,7 +136,7 @@ test('decision (1): hurt in the open shelter and cornered, the bot hits the mob 
     t.mock.method(console, 'log', () => {});
     const { agent, bot, calls, ran, self } = shelter();
     hurt(bot);
-    // Soak 5 (death 4): at a health a zombie's hit may take (12.5, PR 5) only a cornered bot hits back (the night routine found
+    // Soak 5 (death 4): at a health a zombie's hit may take (ZOMBIE_HIT, PR 5) only a cornered bot hits back (the night routine found
     // no way to back away and set handFight).
     agent._night = { handFight: true };
     const before = self.position.clone();
@@ -141,20 +147,20 @@ test('decision (1): hurt in the open shelter and cornered, the bot hits the mob 
     assert.ok(self.position.equals(before));
 });
 
-test('soak 5 (death 4) / PR 5: armed but at a health the zombie may take in one hit (12.5) and not cornered, the bot does not fight from the shelter (the night routine backs away)', async (t) => {
+test('soak 5 (death 4) / PR 5: armed but at a health the zombie may take in one hit (its maxDamage) and not cornered, the bot does not fight from the shelter (the night routine backs away)', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
-    for (const health of [12, 3]) {
+    for (const health of [UNDER, 3]) {
         const { agent, bot, calls } = shelter();
         bot.health = health;
         await selfDefense(agent);
         assert.deepEqual(calls.attacks, [], `health ${health}: no swing`);
     }
-    assert.ok(logs.includes('[shelter] health 12, a zombie hits up to 12.5: not fighting from the shelter unless cornered'), logs.join('\n'));
+    assert.ok(logs.includes(`[shelter] health ${UNDER}, a zombie hits up to ${ZOMBIE_HIT}: not fighting from the shelter unless cornered`), logs.join('\n'));
     const fit = shelter();
-    fit.bot.health = 13;
+    fit.bot.health = OVER;
     await selfDefense(fit.agent);
-    assert.deepEqual(fit.calls.attacks, [1, 1], 'health 13, armed: fought as before');
+    assert.deepEqual(fit.calls.attacks, [1, 1], `health ${OVER}, armed: fought as before`);
 });
 
 test('decision (1): hurt in the shelter with nothing in reach, the bot eats instead of fleeing; it never interrupts the repair', async (t) => {
@@ -773,7 +779,7 @@ test('soak 7 (D): hurt in the shelter, the bot does not eat with a hostile mob w
     assert.deepEqual(await run(6), ['bread']);
 });
 
-test('soak 7 replay (the fight in the cell): the zombie at 0.8 m hitting the bot: no cap, the fight stops only at the health it may take in one hit (12.5); no eat while it is there', async (t) => {
+test('soak 7 replay (the fight in the cell): the zombie at 0.8 m hitting the bot: no cap, the fight stops only at the health it may take in one hit (its maxDamage); no eat while it is there', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
     const saved = { ...SHELTER_FIGHT };
@@ -789,7 +795,9 @@ test('soak 7 replay (the fight in the cell): the zombie at 0.8 m hitting the bot
     bot.attack = (e) => { attack(e); Object.assign(bot, { health: bot.health - 1.5, lastDamageTime: Date.now(), lastDamageTaken: 1.5 }); };
     await selfDefense(agent);
     await new Promise(r => setTimeout(r, 100));
-    assert.equal(calls.attacks.length, 5, '20 -> 12.5 in five swings: more than the 4-hit cap of soak 7');
+    const swings = Math.ceil((20 - ZOMBIE_HIT) / 1.5); // 1.5 a swing from 20 down to ZOMBIE_HIT or below
+    assert.ok(swings > 4, 'more than the 4-hit cap of soak 7');
+    assert.equal(calls.attacks.length, swings, `20 -> ${ZOMBIE_HIT} or below in ${swings} swings`);
     assert.ok(logs.some(l => /^\[survival\] fight end zombie stopped/.test(l)), logs.join('\n'));
     assert.ok(!logs.some(l => / capped /.test(l)));
     assert.equal(okra.count, 1, 'no okra while it hits');

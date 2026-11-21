@@ -26,7 +26,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { SHELTER_LEAD_MIN, dirtPileRecipes, isFullDay } from './library/night.js';
-import { foodShortfall, FOOD_TARGET, EMERGENCY_FOOD, emergencyFoodText, NEVER_EAT_TEXT } from './library/food.js';
+import { foodShortfall, FOOD_TARGET, EMERGENCY_FOOD, EAT_AT, emergencyFoodText, NEVER_EAT_TEXT } from './library/food.js';
 import { HUNT_MIN_FOOD } from './library/hunting.js';
 
 /**
@@ -267,6 +267,22 @@ export const WEAPON_RESERVE_STEP = {
     },
 };
 
+/**
+ * Soak 7 (d), the lead's rule: the bot respawned at food 12 with nothing to eat; the agenda put the
+ * shelter blocks and the weapon first, and the bot first ate 5 min 48 s after its "low" food line
+ * (ate_when_low allows 5 min). Within windowMs of a death, at food EAT_AT (12) or lower with no
+ * safe food held, the food reserve comes before the shelter reserve and the weapon (with no weapon
+ * its goal forages, never hunts: Fix H). windowMs bounds it, so the shelter blocks still get their
+ * time before night.
+ */
+export const FOOD_AFTER_DEATH = { windowMs: 4 * 60_000 };
+/** Whether the food reserve comes first now (FOOD_AFTER_DEATH). */
+export function foodFirstAfterDeath(s) {
+    let since = Infinity, food = null, held = 0;
+    try { since = s.sinceDeathMs?.() ?? Infinity; food = s.food?.(); held = s.foodHeld?.() ?? 0; } catch { return false; }
+    return Number.isFinite(since) && since <= FOOD_AFTER_DEATH.windowMs && Number.isFinite(food) && food <= EAT_AT && held <= 0;
+}
+
 /** After the food reserve's budget is spent, it is not asked again for this long (G4 #5). */
 export const FOOD_RETRY_MS = 10 * 60_000;
 /**
@@ -425,7 +441,11 @@ export class Agenda {
     /** Whether a step id is one of the reserves (the shelter blocks, the weapon, the food). */
     isReserveId(id) { return id != null && (id === this.reserve?.id || id === this.weapon?.id || id === this.food?.id); }
     /** A reserve, if one is wanted now: the shelter reserve first, then the weapon, then food (G4 #5). */
-    anyReserveWanted(state) { return this.reserveWanted(state) ?? this.weaponWanted(state, { foodDue: this.foodDue(state) }) ?? this.foodWanted(state); }
+    anyReserveWanted(state) {
+        // Soak 7 (d): after a death, hungry with nothing to eat: food first (FOOD_AFTER_DEATH).
+        const first = foodFirstAfterDeath(state) ? this.foodWanted(state) : null;
+        return first ?? this.reserveWanted(state) ?? this.weaponWanted(state, { foodDue: this.foodDue(state) }) ?? this.foodWanted(state);
+    }
     /** A reserve's budget is spent: the shelter reserve and the weapon until the night is past; food for FOOD_RETRY_MS. */
     reserveStuck(id) {
         if (id === this.food?.id) this.foodOffUntil = this.now() + FOOD_RETRY_MS;
@@ -642,7 +662,9 @@ export class Agenda {
         // Soak 5 (Fix H): with no weapon, the weapon before food at any time of day (unless food is
         // WEAPON_FIRST.foodAtMost or lower).
         const foodDue = this.foodDue(state, { standing: blocked });
-        const pick = this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly, foodDue })
+        // Soak 7 (d): after a death, hungry with nothing to eat: food before the other reserves.
+        const first = foodFirstAfterDeath(state) ? this.foodWanted(state, { standing: blocked, readOnly }) : null;
+        const pick = first ?? this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly, foodDue })
             ?? this.foodWanted(state, { standing: blocked, readOnly }) ?? step;
         return { step: pick, newlyDone, waiting: blocked };
     }

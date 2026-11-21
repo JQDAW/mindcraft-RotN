@@ -11,6 +11,7 @@ import { __setRegistryForTest } from '../utils/mcdata.js';
 import { nightTick, nightState, resetNight, isFullDay, resumeNightGoal, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS, FREE_INTERRUPTS, THREAT_INTERRUPTS, EXPOSED_RETRY_MS, EXPOSED_RETRIES } from './night_routine.js';
 import settings from './settings.js';
 import { autonomyTick } from './priority.js';
+import { maxHitOf } from './library/threats.js';
 import { shelterQuiet, SHELTER_QUIET_MODES, __modeForTest } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
 import { PIT } from './library/pit.js';
@@ -22,6 +23,15 @@ __setRegistryForTest(reg);
 const DUSK = NIGHT_START - 3 * TICKS_PER_MIN; // 3 min before sunset
 const NIGHT = 15000, SUNRISE = 23600, MORNING = 1000;
 const SITE = new Vec3(0, 64, 0);
+/**
+ * rotn-data #518: what a zombie may hit for is data (12.5, then 10.5): the health thresholds come from
+ * it. UNDER/OVER: the whole healths just below and above it. LOW: a health at or below it and below
+ * MORNING.fleeHealth (12), so a morning fight leaves (11, or 10).
+ */
+const ZOMBIE_HIT = maxHitOf({ name: 'zombie', type: 'mob' });
+const UNDER = Number.isInteger(ZOMBIE_HIT) ? ZOMBIE_HIT - 1 : Math.floor(ZOMBIE_HIT);
+const OVER = Math.floor(ZOMBIE_HIT) + 1;
+const LOW = Math.min(11, UNDER);
 
 function fakeAgent({ t = MORNING } = {}) {
     const chat = [], calls = { stop: 0, builds: [], digs: 0 };
@@ -2057,7 +2067,7 @@ test('#470 review 3: a back-away whose seal fails with the bot in plan.to keeps 
 
 // Soak 5 (death 4: a zombie dug into the dirt shelter and hit the bot from 20 to 0 while it fought
 // back from the opening), the lead's rule: unarmed at any health, or at a health one hit of the mob
-// may take armed or not (PR 5: its maxDamage, a zombie 12.5, a spider 2; Fix G used 8), with a melee
+// may take armed or not (PR 5: its maxDamage, a zombie ZOMBIE_HIT, a spider 2; Fix G used 8), with a melee
 // mob in the opening or in reach through it, the bot backs away; only cornered does it hit back.
 // Armed above that health it fights from the shelter as before.
 test('soak 5 (death 4): unarmed at full health or armed at health 8 or less, a mob in the opening or in reach: back away; cornered: hit back; armed and healthy: the whole repair', async (t) => {
@@ -2084,18 +2094,18 @@ test('soak 5 (death 4): unarmed at full health or armed at health 8 or less, a m
     assert.deepEqual(nobody.labels.filter(l => l === 'action:backAway'), [], 'nothing in reach: no back-away, the repair');
     assert.deepEqual(nobody.o.repairs, [{ site: SITE, skip: [] }]);
 
-    const twelve = reach(heldSetup({ weapon: true, health: 12 }));
+    const twelve = reach(heldSetup({ weapon: true, health: UNDER }));
     await breachAt(twelve);
-    assert.deepEqual(twelve.labels, ['action:buildShelter', 'action:backAway'], 'PR 5: armed at health 12, a zombie (up to 12.5): backed away');
+    assert.deepEqual(twelve.labels, ['action:buildShelter', 'action:backAway'], `PR 5: armed at health ${UNDER}, a zombie (up to ${ZOMBIE_HIT}): backed away`);
 
     const spider = heldSetup({ weapon: true, health: 6 });
     spider.o.mobInReach = () => ({ id: 11, name: 'spider', position: new Vec3(1.5, 64, 1.5) });
     await breachAt(spider);
     assert.deepEqual(spider.labels.filter(l => l === 'action:backAway'), [], 'PR 5: armed at health 6, a spider (up to 2): no back-away');
 
-    const healthy = reach(heldSetup({ weapon: true, health: 13 }));
+    const healthy = reach(heldSetup({ weapon: true, health: OVER }));
     await breachAt(healthy);
-    assert.deepEqual(healthy.labels.filter(l => l === 'action:backAway'), [], 'armed at health 13: no back-away');
+    assert.deepEqual(healthy.labels.filter(l => l === 'action:backAway'), [], `armed at health ${OVER}: no back-away`);
     assert.equal(nightState(healthy.agent).handFight, false);
     assert.deepEqual(healthy.o.repairs, [{ site: SITE, skip: [] }]);
 });
@@ -2276,9 +2286,9 @@ test('soak 4: morningChoice: fight only armed, health 14 or more, one hostile mo
     const winnable = () => ({ health: 20, mobHealth: 20, mobHit: 2, mobIntervalMs: 1000, hitDamage: 10, cooldownMs: 1250 });
     assert.deepEqual(morningChoice(botWith(), SITE, { numbers: winnable }),
         { action: 'fight', why: 'armed, health 20, one zombie near (2 hits in about 1.3 s, taking about 4: health 16 left)' });
-    const close = () => ({ health: 20, mobHealth: 20, mobHit: 3, mobIntervalMs: 1000, hitDamage: 7, cooldownMs: 1250 });
+    const close = () => ({ health: 20, mobHealth: 20, mobHit: 3, mobIntervalMs: 1000, hitDamage: 5, cooldownMs: 1250 });
     assert.deepEqual(morningChoice(botWith(), SITE, { numbers: close }),
-        { action: 'leave', why: 'armed, health 20, but 3 hits in about 2.5 s, taking about 9: health 11 left, not above the 12.5 it may hit for' });
+        { action: 'leave', why: `armed, health 20, but 4 hits in about 3.8 s, taking about 12: health 8 left, not above the ${ZOMBIE_HIT} it may hit for` });
     // Today (rotn-data has no mob health, attack interval or weapon damage): leave.
     assert.deepEqual(morningChoice(botWith(), SITE),
         { action: 'leave', why: 'armed, health 20, but the fight cannot be judged yet (unknown: its health, its attack interval, our weapon damage)' });
@@ -2702,7 +2712,7 @@ test('soak 7 replay (A): armed at health 20, a zombie at the corner for 120 s: n
 });
 
 /** Soak 7 (C): a morning fight under way (the wall opened toward a mob), then the mob comes close. */
-async function closeMorning(mob, { health = 11, armed = true } = {}) {
+async function closeMorning(mob, { health = LOW, armed = true } = {}) {
     const { MORNING: RULE } = await import('./night_routine.js');
     const agent = fakeAgent({ t: NIGHT });
     Object.assign(agent.bot, { health: 20, inventory: { items: () => (armed ? [{ name: 'stone_axe', count: 1 }] : []), slots: [] }, entities: { 2: mob } });
@@ -2726,7 +2736,7 @@ async function closeMorning(mob, { health = 11, armed = true } = {}) {
     return { agent, o, tick };
 }
 
-test('soak 7 replay (C): the zombie in the bot\'s cell at health 11: no leave past it; the burrow finds no step (a body in the cell); the bot hits back', async (t) => {
+test('soak 7 replay (C): the zombie in the bot\'s cell at health LOW (11): no leave past it; the burrow finds no step (a body in the cell); the bot hits back', async (t) => {
     quiet(t);
     const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5) };
     const { agent, o, tick } = await closeMorning(zombie);
@@ -2737,11 +2747,11 @@ test('soak 7 replay (C): the zombie in the bot\'s cell at health 11: no leave pa
     assert.equal(o.burrows[0].prefer, 'down');
     assert.equal(o.burrows[0].maxSteps, 3);
     assert.ok(Math.abs(o.burrows[0].stopAt - (Math.sqrt(1.2 ** 2 + 0.6) + 0.5)) < 1e-9, 'its reach + 0.5');
-    assert.ok(agent.chat.includes('[night] morning: a zombie in the bot\'s cell at 0, 64, 0: not leaving past it; health 11, and it may hit for 12.5: burrowing away from it (a step down first)'), agent.chat.join('\n'));
+    assert.ok(agent.chat.includes(`[night] morning: a zombie in the bot's cell at 0, 64, 0: not leaving past it; health ${LOW}, and it may hit for ${ZOMBIE_HIT}: burrowing away from it (a step down first)`), agent.chat.join('\n'));
     assert.ok(agent.chat.includes('[night] morning: did not burrow (still at 0, 64, 0): down: a body in 0, 64, 0, which the step seals'), agent.chat.join('\n'));
     assert.equal(await tick(), 'night:inside');
     assert.equal(nightState(agent).handFight, true, 'cornered: modes.fightInShelter hits back at any health');
-    assert.equal(agent.chat.at(-1), '[night] morning: a zombie in the bot\'s cell at 0, 64, 0: not leaving past it; health 11, and no burrow step (down: a body in 0, 64, 0, which the step seals): hitting back');
+    assert.equal(agent.chat.at(-1), `[night] morning: a zombie in the bot's cell at 0, 64, 0: not leaving past it; health ${LOW}, and no burrow step (down: a body in 0, 64, 0, which the step seals): hitting back`);
     assert.deepEqual([o.digs, o.burrows.length], [0, 1], 'one burrow try per mob; still no leave');
     // It is killed (gone): the morning goes on with the usual exit.
     delete agent.bot.entities[2];
@@ -2775,11 +2785,11 @@ test('soak 7 (C): armed and above what the mob in reach may hit for (a spider, 2
     assert.equal(fit.o.digs, 0);
     assert.equal(fit.o.burrows.length, 0);
     assert.equal(nightState(fit.agent).handFight, false);
-    assert.equal(fit.agent.chat.at(-1), '[night] morning: a spider 1.4 blocks away, in its reach: not leaving past it; armed, health 11 above the 2 it may hit for: fighting it from the shelter');
+    assert.equal(fit.agent.chat.at(-1), `[night] morning: a spider 1.4 blocks away, in its reach: not leaving past it; armed, health ${LOW} above the 2 it may hit for: fighting it from the shelter`);
     const bare = await closeMorning({ ...spider }, { armed: false });
     await bare.tick();
     assert.equal(bare.o.burrows.length, 1);
-    assert.match(bare.agent.chat.join('\n'), /not leaving past it; no weapon, health 11, and it may hit for 2: burrowing away from it/);
+    assert.ok(bare.agent.chat.join('\n').includes(`not leaving past it; no weapon, health ${LOW}, and it may hit for 2: burrowing away from it`), bare.agent.chat.join('\n'));
 });
 
 test('soak 7 (C): a burrow step out of its reach moves the shelter; then the bot leaves from the new cell', async (t) => {
