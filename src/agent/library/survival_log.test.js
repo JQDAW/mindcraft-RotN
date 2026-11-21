@@ -467,3 +467,79 @@ test('(f): attackEntity (one hit) returns whether bot.attack sent it; a replaced
     assert.equal(await skills.attackEntity(bot, bot.entities[1], false), true);
     assert.equal(bot.output, '');
 });
+
+// (g), net-forge #541: with Better Combat's attack, a target past its reach (4.0 blocks eye to hitbox
+// with a weapon) or out of sight gets nothing ({ sent: false, reason: 'reach' | 'sight' }).
+test('(g): attackEntity\'s one hit walks to within ATTACK_HIT.near of a mob past ATTACK_HIT.approach, and walks closer once more on "reach" or "sight"', async (t) => {
+    const logs = capture(t);
+    assert.deepEqual(skills.ATTACK_HIT, { approach: 3, near: 2, again: 1 });
+    const walkBot = (at, results) => {
+        const bot = openFight(logs, { at });
+        const goals = [];
+        bot.pathfinder.getPathTo = () => ({ status: 'success', path: [] });
+        bot.pathfinder.goto = (g) => { goals.push(Math.sqrt(g.rangeSq)); return Promise.resolve(); };
+        let n = 0;
+        bot.attack = () => Promise.resolve(results[n++] ?? { sent: true, path: 'bettercombat' });
+        return { bot, goals, tries: () => n };
+    };
+    // 4 blocks away (it walked only past 5): walk to within 2, then hit.
+    const far = walkBot(4, []);
+    assert.equal(await skills.attackEntity(far.bot, far.bot.entities[1], false), true);
+    assert.deepEqual(far.goals, [2]);
+    // 2 blocks away: no walk.
+    const near = walkBot(2, []);
+    assert.equal(await skills.attackEntity(near.bot, near.bot.entities[1], false), true);
+    assert.deepEqual(near.goals, []);
+    // "reach", then sent: one walk closer (to within 1) and one more hit.
+    const reach = walkBot(2, [{ sent: false, path: null, reason: 'reach' }]);
+    assert.equal(await skills.attackEntity(reach.bot, reach.bot.entities[1], false), true);
+    assert.deepEqual([reach.goals, reach.tries()], [[1], 2]);
+    // "sight" twice: one re-approach only, then it says so.
+    const sight = walkBot(2, [{ sent: false, reason: 'sight' }, { sent: false, reason: 'sight' }]);
+    assert.equal(await skills.attackEntity(sight.bot, sight.bot.entities[1], false), false);
+    assert.deepEqual([sight.goals, sight.tries()], [[1], 2]);
+    assert.match(sight.bot.output, /The hit on the zombie was not sent \(sight\)\./);
+    // "replaced" is not a reason to walk.
+    const replaced = walkBot(2, [{ sent: false, reason: 'replaced' }]);
+    assert.equal(await skills.attackEntity(replaced.bot, replaced.bot.entities[1], false), false);
+    assert.deepEqual([replaced.goals, replaced.tries()], [[], 1]);
+    // avoidEnemies' cornered hit (approach false): never a walk toward the mob.
+    const cornered = walkBot(4, [{ sent: false, reason: 'reach' }]);
+    assert.equal(await skills.attackEntity(cornered.bot, cornered.bot.entities[1], false, { approach: false }), false);
+    assert.deepEqual([cornered.goals, cornered.tries()], [[], 1]);
+});
+
+// (g): mineflayer-pvp ignores bot.attack's result; a mob in reach but out of sight now gets nothing.
+test('(g): defendSelf ends a fight in which the mob takes no hurt and the bot gets no closer for DEFEND_PROGRESS.stallMs, and leaves the mob alone; a hurt keeps it going', async (t) => {
+    const logs = capture(t);
+    const saved = { ...skills.DEFEND_PROGRESS };
+    t.after(() => Object.assign(skills.DEFEND_PROGRESS, saved));
+    Object.assign(skills.DEFEND_PROGRESS, { stallMs: 1200 });
+    const events = () => {
+        const on = {};
+        return { on: (ev, f) => { (on[ev] ??= []).push(f); }, removeListener: (ev, f) => { on[ev] = (on[ev] ?? []).filter(x => x !== f); }, emit: (ev, e) => (on[ev] ?? []).forEach(f => f(e)), count: (ev) => (on[ev] ?? []).length };
+    };
+    // Out of sight at 2 blocks: pvp swings, nothing lands; no health drop, no hurt.
+    const stuck = openFight(logs);
+    const ev = events();
+    Object.assign(stuck, { on: ev.on, removeListener: ev.removeListener });
+    stuck.entities[1].metadata = { 7: 20 };
+    const t0 = Date.now();
+    assert.equal(await skills.defendSelf(stuck, 8, (e) => e.name === 'zombie'), true);
+    assert.ok(Date.now() - t0 < 4000, 'ended by the stall guard');
+    assert.match(stuck.output, /Stopped fighting the zombie: no hit landed and no closer for 1\.2 s/);
+    assert.ok(logs.some(l => /^\[survival\] fight end zombie stopped/.test(l)), logs.join('\n'));
+    assert.equal(skills.isUnreachable(stuck, stuck.entities[1]), true, 'left alone for a while');
+    assert.equal(ev.count('entityHurt'), 0, 'the listener is removed');
+
+    // Hurt every 500 ms (entityHurt; its health unknown): no stall; it ends when the mob dies.
+    const hitting = openFight(logs);
+    const ev2 = events();
+    Object.assign(hitting, { on: ev2.on, removeListener: ev2.removeListener });
+    const zombie = hitting.entities[1];
+    let hurts = 0;
+    hitting.pvp.attack = () => { setTimeout(() => { ev2.emit('entityHurt', zombie); if (++hurts >= 6) delete hitting.entities[1]; }, 50); };
+    assert.equal(await skills.defendSelf(hitting, 8, (e) => e.name === 'zombie'), true);
+    assert.ok(hurts >= 6, `fought on past stallMs while it was hurt: ${hurts}`);
+    assert.doesNotMatch(hitting.output, /Stopped fighting/);
+});

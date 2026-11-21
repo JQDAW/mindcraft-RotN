@@ -835,7 +835,7 @@ test('#521: the shelter fight awaits bot.attack: only a swing that went out is c
         logs.length = 0;
         const { agent, bot, calls } = shelter({ killAfter: 1e9 });
         bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
-        bot.forge = { attackCooldownTicks: () => 2 }; // 100 ms; a stone axe's vanilla class cooldown is 1250
+        bot.forge = { bcAttack: { enabled: true }, attackCooldownTicks: () => 2 }; // bc_attack on (g): 100 ms; a stone axe's vanilla class cooldown is 1250
         let sent = 0;
         bot.attack = (e) => {
             const r = results[calls.attacks.length] ?? { sent: true, path: 'bettercombat', waitedMs: 0 };
@@ -958,4 +958,56 @@ test('#532 re-review nit 3: the shelter fight cancels a hit still waiting for it
     assert.deepEqual(pressed.cancelled, []);
     assert.equal(pressed.sent.length, 1);
     assert.equal(pressed.swings.length, 1, pressed.swings.join('\n'));
+});
+
+// (g) 3, net-forge #541: Better Combat sends nothing to a mob past its reach or out of sight
+// ({ sent: false, reason: 'reach' | 'sight' }). In the shelter that is a mob in the bot's melee reach
+// behind a block's corner: wait and look again, never three "unsent" swings and the fight over.
+test('(g) 3: the shelter fight waits on "sight" or "reach" (not an unsent swing): it hits once the mob comes into sight, and after SHELTER_FIGHT.blockedMs of only those it ends, saying why', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const saved = { ...SHELTER_FIGHT };
+    t.after(() => Object.assign(SHELTER_FIGHT, saved));
+    const fight = async (results) => {
+        Object.assign(SHELTER_FIGHT, saved, { swingMs: 10, blockedWaitMs: 50, blockedMs: 600, maxMs: 60_000 });
+        logs.length = 0;
+        const { agent, bot } = shelter({ killAfter: 1e9 });
+        let tries = 0;
+        bot.attack = () => {
+            const r = results(tries++);
+            if (r.sent) delete bot.entities[1];
+            return Promise.resolve(r);
+        };
+        await selfDefense(agent);
+        await new Promise(r => setTimeout(r, 30));
+        return { tries, swings: logs.filter(l => l.startsWith('[survival] swing ')), ends: logs.filter(l => l.startsWith('[survival] fight end ')), output: bot.output };
+    };
+    const sight = { sent: false, path: null, waitedMs: 0, reason: 'sight' };
+    // Out of sight for 5 looks, then in sight: the hit goes out.
+    const later = await fight((n) => (n < 5 ? sight : { sent: true, path: 'bettercombat', waitedMs: 0 }));
+    assert.equal(later.tries, 6, 'more than unsentMax (3) looks');
+    assert.equal(later.swings.length, 1);
+    assert.match(later.output, /Fought from inside the shelter: 1 swing/);
+    // Never in sight: it ends after blockedMs, not after 3.
+    const never = await fight(() => sight);
+    assert.ok(never.tries > SHELTER_FIGHT.unsentMax + 3, `${never.tries} looks in 600 ms at 50 ms`);
+    assert.match(never.output, /No swing went out from inside the shelter, stopped: the zombie is in reach but out of sight for 0\.6 s\./);
+    assert.deepEqual(never.ends, ['[survival] fight end zombie stopped after 1 s']);
+    const reach = await fight(() => ({ sent: false, reason: 'reach' }));
+    assert.match(reach.output, /the zombie is in reach but beyond the attack reach for 0\.6 s/);
+});
+
+// (g) 5, the #539 nit: whether the mob is hurting the bot is looked at live during the wait.
+test('(g) 5: a mob that starts hurting the bot while a hit waits for its cooldown is not capped at maxMs: the hit is not cancelled', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SHELTER_FIGHT };
+    t.after(() => Object.assign(SHELTER_FIGHT, saved));
+    Object.assign(SHELTER_FIGHT, { swingMs: 10, maxMs: 200 });
+    const { agent, bot } = shelter({ zombieAt: 0.8, killAfter: 1e9 });
+    const got = waitingAttack(bot, 600, () => delete bot.entities[1]);
+    setTimeout(() => Object.assign(bot, { lastDamageTime: Date.now(), lastDamageTaken: 1.5 }), 100); // it starts hitting
+    await selfDefense(agent);
+    await new Promise(r => setTimeout(r, 700));
+    assert.deepEqual(got.cancelled, [], 'hurting in reach: no cap');
+    assert.equal(got.sent.length, 1);
 });
