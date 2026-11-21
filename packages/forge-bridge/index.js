@@ -27,3 +27,4 @@ export { spawnFmlEntity, attachFmlEntities, fmlEntityName, fmlEntityTable } from
 export { METADATA_SERIALIZER_TYPES, METADATA_SERIALIZER_CLASSES, rotnMetadataSerializers, metadataSerializersFromDump } from './src/reid.js';
 export { buildStateIdRemap, attachStateIdRemap, stateIdRemapStatus } from './src/state-remap.js';
 export { installGracefulQuit, GRACEFUL_STOP_SIGNALS, STOP_SIGNAL_CATEGORY } from './src/graceful-quit.js';
+export { installBetterCombatAttack, encodeMainhandAttack, decodeMainhandAttack, bcCooldownTicks, bcReach, bcAttackSetting, attributeValue, isBcWeaponName, ticksForSpeed, reachDistance, BC_MODID, BC_CHANNEL, BC_DISC, BC_CONFIG } from './src/bettercombat.js';

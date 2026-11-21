@@ -122,9 +122,9 @@ test('off: no ping, no bridge', async () => {
 
 test('env switches', () => {
     const now = new Date('2026-11-01T02:03:04.567Z');
-    assert.deepEqual(forgeOptionsFromEnv('FRCFLD', {}, now), { mode: 'auto', captureFile: null, modListFile: null, profilesFolder: null, pingTimeoutMs: null, placeBlockTimeoutRaw: null });
-    const e = forgeOptionsFromEnv('FRCFLD', { FORGE_BRIDGE: 'on', FORGE_CAPTURE: '1', FORGE_MODLIST_FILE: 'p.json', MINDCRAFT_PROFILES_FOLDER: 'C:/x/msa', FORGE_PING_TIMEOUT_MS: '60000', MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS: '2000' }, now);
-    assert.deepEqual(e, { mode: 'on', captureFile: 'captures/raw/FRCFLD-2026-11-01T02-03-04-567Z.jsonl', modListFile: 'p.json', profilesFolder: 'C:/x/msa', pingTimeoutMs: 60000, placeBlockTimeoutRaw: '2000' });
+    assert.deepEqual(forgeOptionsFromEnv('FRCFLD', {}, now), { mode: 'auto', captureFile: null, modListFile: null, profilesFolder: null, pingTimeoutMs: null, placeBlockTimeoutRaw: null, bcAttackRaw: null });
+    const e = forgeOptionsFromEnv('FRCFLD', { FORGE_BRIDGE: 'on', FORGE_CAPTURE: '1', FORGE_MODLIST_FILE: 'p.json', MINDCRAFT_PROFILES_FOLDER: 'C:/x/msa', FORGE_PING_TIMEOUT_MS: '60000', MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS: '2000', FORGE_BC_ATTACK: 'on' }, now);
+    assert.deepEqual(e, { mode: 'on', captureFile: 'captures/raw/FRCFLD-2026-11-01T02-03-04-567Z.jsonl', modListFile: 'p.json', profilesFolder: 'C:/x/msa', pingTimeoutMs: 60000, placeBlockTimeoutRaw: '2000', bcAttackRaw: 'on' });
     assert.equal(forgeOptionsFromEnv('b', { FORGE_PING_TIMEOUT_MS: 'nope' }).pingTimeoutMs, null);
     assert.equal(forgeOptionsFromEnv('b', { FORGE_BRIDGE: 'bogus', FORGE_CAPTURE: '0' }).mode, 'auto');
     assert.equal(forgeOptionsFromEnv('b', { FORGE_CAPTURE: 'C:/tmp/c.jsonl' }).captureFile, 'C:/tmp/c.jsonl');
