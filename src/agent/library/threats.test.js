@@ -811,3 +811,26 @@ test('soak 7 (e): weapons rank by rotn-data weaponStats: damage per tick of cool
     assert.equal(attackPath({ forge: { bcAttack: { active: false } } }), 'vanilla', 'bc_attack off, or the server lacks the channel');
     assert.equal(attackPath({ forge: { bcAttack: { active: true } } }), 'bettercombat');
 });
+
+// (f), before bc_attack goes on: on the Better Combat path the numbers are Better Combat's own (#528:
+// bcAttackDamage, bcCooldownTicks from its client's attack speed), not the vanilla ones.
+test('(f): on the Better Combat path weaponNumbers and weaponOrder use weaponStats bcAttackDamage and bcCooldownTicks (#528): an iron axe and a wooden sword swap places', () => {
+    for (const [item, full] of [['stone_sword', 'minecraft:stone_sword'], ['stone_axe', 'minecraft:stone_axe'], ['pyrotech:crude_axe', 'pyrotech:crude_axe'], ['wooden_sword', 'minecraft:wooden_sword']]) {
+        const w = weaponStats(full);
+        assert.deepEqual(weaponNumbers({ name: item }, 'bettercombat'), { damage: w.bcAttackDamage, cooldownTicks: w.bcCooldownTicks, from: 'rotn-data' }, item);
+        assert.deepEqual(weaponNumbers({ name: item }, 'vanilla'), { damage: w.attackDamage, cooldownTicks: w.cooldownTicks, from: 'rotn-data' }, item);
+        assert.deepEqual(weaponNumbers({ name: item }), weaponNumbers({ name: item }, 'vanilla'), 'vanilla by default');
+    }
+    const wooden = weaponStats('minecraft:wooden_sword');
+    assert.ok(wooden.bcCooldownTicks < wooden.cooldownTicks, `Better Combat paces a wooden sword faster (${wooden.bcCooldownTicks} ticks) than vanilla (${wooden.cooldownTicks})`);
+    assert.deepEqual(weaponNumbers({ name: 'iron_axe' }, 'bettercombat'), { damage: 9, cooldownTicks: 25, from: 'WEAPON_ATTACK' }, 'not in combat.json: the same fallback on either path');
+
+    const ranked = (names, path) => names.map(name => ({ name })).sort(weaponOrder(path)).map(i => i.name);
+    // Vanilla: the one hit that lands, 9 against 4. Better Combat: 4 per 11 ticks beats 9 per 25
+    // (with the vanilla 12.5 ticks it would not: 4/12.5 < 9/25).
+    assert.deepEqual(ranked(['wooden_sword', 'iron_axe'], 'vanilla'), ['iron_axe', 'wooden_sword']);
+    assert.deepEqual(ranked(['iron_axe', 'wooden_sword'], 'bettercombat'), ['wooden_sword', 'iron_axe']);
+    assert.ok(wooden.attackDamage / wooden.cooldownTicks < 9 / 25, 'the swap needs the Better Combat numbers');
+    // The early game keeps its order on Better Combat's numbers too.
+    assert.deepEqual(ranked(['stone_axe', 'pyrotech:crude_axe', 'stone_sword'], 'bettercombat'), ['stone_sword', 'pyrotech:crude_axe', 'stone_axe']);
+});

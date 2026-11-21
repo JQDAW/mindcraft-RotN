@@ -1,0 +1,6 @@
+[scenario 13:46:06] probe-bc-attack (BC) run 20261121t134605-70a82a; git b7104fa1cf9b17468de26c9059cf8592ab704c1e; driver: node test/runner/drivers/bc-attack-driver.mjs; out: <local>/captures/raw/bc-probe-20261121
+[scenario 13:46:06] not a gate run: probe BC measures Better Combat's attack packet against the vanilla attack; it is never a gate pass
+[scenario 13:46:19] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 13:47:44] FAIL setup: Better Combat's path active; lane 10/12 cells as planned
+[scenario 13:47:44] SMOKE run, not a BC pass: probe BC measures Better Combat's attack packet against the vanilla attack; it is never a gate pass
+[scenario 13:47:45] probe-bc-attack: FAIL; 1 passed, 12 failed (<local>/captures/raw/bc-probe-20261121/result.json)

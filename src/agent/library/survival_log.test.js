@@ -436,3 +436,34 @@ test('soak 7 (e): the weapon line is logged only when the held item changes', as
     assert.deepEqual(survival(logs).filter(l => l.includes(' weapon ')), ['[survival] weapon stone_sword (attack)', '[survival] weapon pyrotech:crude_axe (attack)'], 'a new line for the new item only');
     assert.equal(skills.weaponRank({ name: 'stone_sword' }), 5, 'still exported from skills.js');
 });
+
+// (f): equipHighestAttack on the Better Combat path ranks by Better Combat's numbers (#528).
+test('(f): with Better Combat\'s attack on, equipHighestAttack takes the wooden sword over the iron axe; on vanilla the iron axe', async (t) => {
+    capture(t);
+    const held = async (bc) => {
+        const bot = openFight([]);
+        if (bc) bot.forge = { bcAttack: { active: true } };
+        bot.inventory = { items: () => [{ name: 'iron_axe', metadata: 0, count: 1, slot: 36 }, { name: 'wooden_sword', metadata: 0, count: 1, slot: 37 }], slots: [] };
+        bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+        await skills.equipHighestAttack(bot);
+        return bot.heldItem?.name;
+    };
+    assert.equal(await held(false), 'iron_axe');
+    assert.equal(await held(true), 'wooden_sword');
+});
+
+// (f), #521: attackEntity's one hit (the !attack command without kill, avoidEnemies' cornered hit)
+// uses bot.attack's result: false, and a line, when the hit was not sent.
+test('(f): attackEntity (one hit) returns whether bot.attack sent it; a replaced hit is said', async (t) => {
+    capture(t);
+    const bot = openFight([]);
+    bot.attack = () => Promise.resolve({ sent: false, path: null, waitedMs: 120, reason: 'replaced' });
+    assert.equal(await skills.attackEntity(bot, bot.entities[1], false), false);
+    assert.match(bot.output, /The hit on the zombie was not sent \(replaced\)\./);
+    bot.output = '';
+    bot.attack = () => Promise.resolve({ sent: true, path: 'bettercombat', waitedMs: 0 });
+    assert.equal(await skills.attackEntity(bot, bot.entities[1], false), true);
+    bot.attack = () => undefined; // mineflayer's own: no result, counts as sent
+    assert.equal(await skills.attackEntity(bot, bot.entities[1], false), true);
+    assert.equal(bot.output, '');
+});
