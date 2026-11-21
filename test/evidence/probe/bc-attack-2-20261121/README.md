@@ -80,6 +80,21 @@ rotn-data #528 expects every such hit 1 to be a sneak-attack crit, because a NoA
 
 **Not known:** what hurt both this zombie and the bot. Possibilities include another mob in or near the lane, a pack mechanic, or a summoned zombie that the pack replaced with a variant. The driver does not record the bot's own hurts, nor anything about the target beyond its health.
 
+## The #540 review's finding on the anomaly
+**From the review (as the lead relayed it):**
+- Three entities were created in the second between A's and B's summons in the stone-axe step: entity ids 62918 to 62920, between A's 62917 and B's 62921.
+- Something unrecorded hurt both A and the bot, about 4 each, every 1.5 to 2 s.
+
+**What the committed data adds:**
+- forge-bridge's capture holds no `spawn_entity_living` for those ids, because its cap of 100 was used up by then. Its only `spawn_entity` packets in that window are items (object type 2): one at the bot's position before the step, and two at A's cell after A died. So what those three entities were is still not known.
+- DynView raised the view distance step by step, from 5 (14:48:59) to 20 (14:52:45), in `server.log`. So the loaded world, and the zombies `kill @e[type=zombie]` reaches, grew during the run.
+
+**What changes for attempt 3** (the follow-up PR):
+- the driver records every `spawn_entity_living` and `spawn_entity` near the lane, with name, id and position, in each reply;
+- it records the bot's own hurts, with whoever swung just before;
+- it records the target's identity at the start: name, NoAI flag, baby flag, entity flags, equipment and raw metadata;
+- the scenario prints each kill count next to DynView's current view distance.
+
 ## For the lead (before attempt 3)
 A small harness-ops PR, then a new GO:
 - **(a) The crude axe:** give 1, six times. The allowlist admits exactly `give <bot> pyrotech:crude_axe 1 0`.

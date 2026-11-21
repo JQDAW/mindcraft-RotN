@@ -780,8 +780,8 @@ Step 3 of the lead's Better Combat plan (2026-11-21). On RotN 3.3.4 a vanilla `u
     | Command | What is admitted |
     | --- | --- |
     | `summon` | Only the plan's three zombies at their fixed cells: `summon minecraft:zombie -47 120 -66 {NoAI:1}` (A), `... -43 120 -66 {NoAI:1}` (B) and `... -42 120 -66` (the AI zombie, bare) |
-    | `kill` | Exactly `kill @e[type=zombie]` |
-    | `give` | Only to this bot, and only the BC items with the plan's counts: stone sword 1, stone axe 1, crude axe 6 |
+    | `kill` | Exactly `kill @e[type=zombie]`, and the lane clear `kill @e[type=!player,x=-45,y=120,z=-66,r=8]`. The lane clear has fixed numbers only; `type=!player` cannot match the bot or any other player, and the radius covers every lane cell (the farthest is under 6 blocks away) |
+    | `give` | Only to this bot, only the BC items, and exactly one at a time: `give <bot> ITEM 1 0` (attempt 2, #540: 1.12 refuses a count above an item's stack size, 1 for a tool). The scenario gives the stone sword once, the stone axe once and the crude axe 6 times |
     | `tp` | Only this bot, to the landing spot or `~ ~ ~` |
     | `clear` | Only `clear <bot>` |
     | `fill` | Only the lane's two fills, `fill -49 119 -67 -40 122 -65 minecraft:stone` then `fill -48 120 -66 -41 121 -66 minecraft:air`. There is no `setblock` at all |
@@ -800,11 +800,12 @@ Step 3 of the lead's Better Combat plan (2026-11-21). On RotN 3.3.4 a vanilla `u
      - **The check:** each of its 68 cells (`bcLaneCells`) is checked with `testforblock`. If any cell is wrong, or the path is not active, setup fails before anything is summoned and before the bot is moved, and the detail names the wrong cells (`notes.lane.wrong`).
      - Then the bot is teleported to -45 120 -66.
   3. **The weapons:** stone sword, stone axe, Pyrotech crude axe (6 given, since one breaks after 4 hits) and an empty hand. For each:
-     - `clear`, the give, and two zombies with `{NoAI:1}`, A at -47 (2 blocks west) and B at -43 (2 blocks east);
+     - **the lane clear** (rotn-data, after #540): `kill @e[type=zombie]` matches only `minecraft:zombie`, so a Fish's Undead Rising parasite (spawned from a dying vanilla zombie; it attaches to and hits the player) or a Special Mobs variant survives it and stays in the lane. That is the likely cause of attempt 2's stone-axe anomaly. So before each step's summons, `kill @e[type=!player,…,r=8]` kills every non-player entity around the lane. What it killed is logged (`notes.laneClears`);
+     - `clear`, the gives (one item each), and two zombies with `{NoAI:1}`, A at -47 (2 blocks west) and B at -43 (2 blocks east);
      - `bc-hit vanilla` on A: `bot.attackVanilla`, paced at Better Combat's cooldown;
      - `bc-hit bc` on B: `bot.attack`;
-     - each series runs until the zombie dies, 40 hits or 60 s; then `kill @e[type=zombie]`.
-  4. **The AI zombie:** one zombie with its AI at -42 (3 blocks east), Better Combat's path, stone sword. Then `kill @e[type=zombie]` and `clear`.
+     - each series runs until the zombie dies, 40 hits or 60 s; then `kill @e[type=zombie]`. Each kill's count is logged with DynView's current view distance (`notes.kills`, #540 review): `kill @e` reaches every loaded zombie, and DynView widens the loaded world during a run (attempt 2: from 5 to 20).
+  4. **The AI zombie:** after the lane clear, one zombie with its AI at -42 (3 blocks east), Better Combat's path, stone sword. Then `kill @e[type=zombie]` and `clear`.
      - **This step is uncontrolled.** The zombie may spawn as a baby, with equipment or with the pack's augments. It hits back, and it may step or be pushed within the lane. Read a `bc_ai_zombie` failure in that light: the NoAI series are the controlled measurement.
   5. **`server_log`** reads from the begin marker. It fails on an `FMLIndexedMessageCodec` exception (how a bad `bettercombat` payload shows), a WARN or ERROR line or exception naming `bettercombat`, or any kick or lost connection.
   6. **`self_check`:** the wrapper's "5 hits without a hurt, back to vanilla" never appeared in the driver's output, and no reply says `tripped`.
@@ -816,6 +817,7 @@ Step 3 of the lead's Better Combat plan (2026-11-21). On RotN 3.3.4 a vanilla `u
   | Better Combat | Every hit is on Better Combat's path and lowers the health. The zombie dies, and the hits to kill are in rotn-data's range from `hitsToKill` (#518, #528; `bcExpected`), from every hit a crit (`minHits`) to none (`hits`). The range is computed from **that zombie's measured start health** (`entity_metadata` at the series' start, #533 review), or from the catalogue's 20 when the driver read none; `notes.series[].expected` says which. At 20 health: stone sword 5-8, stone axe 6-9, crude axe 6-9 and bare hand 36-54 (Better Combat takes 0.5 off an empty hand). Only the bare hand may stop at 40 hits (its plain count is 54); it is then judged by `ceil(start health / mean drop)`. No gap between Better Combat packets is under the cooldown: 13, 50, 22 and 13 ticks, with 2 ms of timer slack. The self-check did not trip. |
   | AI zombie | Every hit lands, it dies, and no gap is under 13 ticks. No count is judged. |
   | Both | The zombie was found and did not burn. |
+  | Not measured | **A zombie whose measured start health is not the catalogue's** (rotn-data `maxHealth`, 20) is not a fresh zombie (attempt 2, #540: zombie A started at 8 health and was hurt before the bot's first swing). Its series is **INCONCLUSIVE**: no pass rule is applied (`verdict.inconclusive`, listed in `notes.inconclusive`). The runner has only pass and fail, so its check does not pass, but its detail starts `INCONCLUSIVE:`, and it is read as not measured, not as a failure of Better Combat or of the vanilla rule. A start health that was not read is not flagged; the range then uses the catalogue's. |
 
   **Crits** (rotn-data #528). Better Combat crits (x1.5):
   - every sneak attack: an IMob whose attack target and revenge target are both not the player. A NoAI zombie has neither before its first hit, so the first Better Combat hit on each crits. After that the bot is its revenge target until 100 ticks pass without a hit; a longer pause would make the next hit another sneak crit, and the slowest cooldown, the stone axe's 50 ticks, stays under that;
@@ -832,6 +834,16 @@ Step 3 of the lead's Better Combat plan (2026-11-21). On RotN 3.3.4 a vanilla `u
   - **The target:** `X,Y,Z` is the NoAI zombie standing in that block; `ai` is the nearest zombie within 16 blocks. With `ai`, the bot swings only while the zombie is within 3 blocks, inside the 4-block weapon reach.
   - **`end`:** `dead`, `maxHits`, `maxMs`, `lost` or `item_gone` (no more of the item).
   - **The sender:** only the console (`Server`) is accepted, read from the raw 1.12 component as P1's driver does. Each token runs once, one series at a time.
+  - **The target's identity at the start** (`target`, after #540):
+    - `id`, `name` and `startHealth`;
+    - `noAI`: the EntityLiving AI_FLAGS bit 0, metadata index 11;
+    - `baby`: EntityZombie IS_CHILD, index 12;
+    - `entityFlags` (index 0), `startPos` and `equipment`;
+    - the raw `metadata`, because a mod that adds data keys to Entity or EntityLivingBase would shift those indices;
+    - at the end, `endPos` and `moved`.
+  - **The bot's own hurts during the series** (`botHurts`): from `update_health` drops, each with `t`, `before`, `after` and `amount`. `cause` is `melee by NAME #ID` when exactly one entity swung (animation 0) within 1 s before, else `unknown`; 1.12 sends no damage source. Each hurt also lists `swung` and `near`, the entities within 6 blocks.
+  - **Spawns near the lane** (`spawns`, #540 review): every `spawn_entity_living` and `spawn_entity` within 12.5 blocks of the bot, which is about 8 beyond the lane's ends. Each has `t` (ms from this reply's command, 0 or less before it), `packet`, `id`, `name`, `type`, `pos` and `d`. Each reply carries those recorded since the previous reply: the summons and whatever came with them, and anything during the series. A refusal does not take them.
+  - **A census of every entity within 8 blocks of the bot** (`census`, rotn-data after #540): at the series' start and about once a second after, each with `t` and `entities`. Each entity has `id`, `name`, `health` (metadata 7, when it has one) and `d`, nearest first.
   - **Per hit:** `t` (ms from the command), `path` (the wrapper's answer), `sent`, `waitedMs`, `cooldownTicks`, `healthBefore`, `healthAfter`, `drop`, `hurt` (entity_status 2), `died` and `afterDeath`.
   - **How health is read:** from the raw packets, `entity_metadata` index 7 (EntityLivingBase HEALTH). The updates are given to the latest hit before them. A swing sent after the zombie's death status (`afterDeath`) cannot land, and the judgments leave it out.
   - **The packets:** every attack packet the client writes is timed (`arm_animation`, `custom_payload` on `bettercombat`, `use_entity` ATTACK). The gaps are between consecutive ones of each path.

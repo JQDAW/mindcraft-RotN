@@ -31,7 +31,7 @@
 //   The driver reports neither window-click transactions nor the FastWorkbench window per command; those
 //   come from the capture (ROTN_DRIVER_CAPTURE=1) in the evidence step, as net-forge's plan says.
 import { guardConsole } from './g3.mjs';
-import { hitsToKill } from '../../../packages/rotn-data/index.js';
+import { combatOf, hitsToKill } from '../../../packages/rotn-data/index.js';
 import { playerScores } from './s1.mjs';
 
 export const P1_NOT_GATE = 'P1 is a probe of crafting, placing and eating, never a gate pass';
@@ -176,7 +176,8 @@ const exact = (cmd) => new RegExp(`^${esc(cmd)}$`);
 export function bcConsoleAllow(bot, plan = BC_PLAN) {
     if (typeof bot !== 'string' || !new RegExp(`^${NAME}$`).test(bot)) throw new Error(`bad bot name '${bot}'`);
     const cell = (c) => c.join(' ');
-    const gives = [...plan.weapons.filter((w) => w.give).map((w) => [w.item, w.give]), [plan.ai.item, 1]];
+    // One item per give (attempt 2, #540: 1.12 refuses a count above an item's stack size, 1 for a tool).
+    const gives = [...new Set([...plan.weapons.filter((w) => w.give).map((w) => w.item), plan.ai.item])];
     const items = `(${plan.weapons.map((w) => esc(w.item)).join('|')})`;
     const T = '[0-9a-f]{6,32}';
     return [
@@ -187,9 +188,10 @@ export function bcConsoleAllow(bot, plan = BC_PLAN) {
         exact(`tp ${bot} ~ ~ ~`),
         exact(`tp ${bot} ${cell(plan.landing)}`),
         exact(`clear ${bot}`),
-        ...gives.map(([item, n]) => exact(`give ${bot} ${item} ${n} 0`)),
+        ...gives.map((item) => exact(`give ${bot} ${item} 1 0`)),
         ...bcLaneFills(plan.lane).map(exact),
         ...bcLaneCells(plan.lane).map(([x, y, z, b]) => exact(`testforblock ${x} ${y} ${z} ${b}`)),
+        exact(bcLaneClear(plan)),
         exact(`summon minecraft:zombie ${cell(plan.zombieA)} {NoAI:1}`),
         exact(`summon minecraft:zombie ${cell(plan.zombieB)} {NoAI:1}`),
         exact(`summon minecraft:zombie ${cell(plan.zombieAi)}`),
@@ -247,8 +249,9 @@ export function bcReply(output, t) {
  * blocks from the bot: A (west) is hit on the vanilla path at Better Combat's cooldown, B (east) on Better
  * Combat's path. Then one zombie with its AI, 3 blocks east, on Better Combat's path with a stone sword.
  * The expected hits to kill come from rotn-data's hitsToKill (#518, #528) at run time: bcExpected(item, {health}).
- * The crude axe's durability is 8 and it loses 2 a hit, so it breaks after 4 landed hits: 6 are given and
- * the driver takes the next one when one breaks.
+ * give: how many of the item the scenario gives, one `give <bot> ITEM 1 0` each (attempt 2, #540: a tool's
+ * give count is at most 1). The crude axe's durability is 8 and it loses 2 a hit, so it breaks after 4
+ * landed hits: 6 are given and the driver takes the next one when one breaks.
  * cooldownTicks: net-forge's plan (3): stone sword 13, stone axe 50, crude axe 22, hand 13.
  */
 export const BC_PLAN = Object.freeze({
@@ -257,6 +260,7 @@ export const BC_PLAN = Object.freeze({
     zombieA: [-47, 120, -66],
     zombieB: [-43, 120, -66],
     zombieAi: [-42, 120, -66],
+    laneClearRadius: 8,
     weapons: Object.freeze([
         { check: 'stone_sword', item: 'minecraft:stone_sword', give: 1, cooldownTicks: 13 },
         { check: 'stone_axe', item: 'minecraft:stone_axe', give: 1, cooldownTicks: 50 },
@@ -267,6 +271,19 @@ export const BC_PLAN = Object.freeze({
     maxHits: 40,
     maxMs: 60000,
 });
+
+/**
+ * The lane clear before each step (rotn-data, after #540): kill @e[type=zombie] matches only minecraft:zombie,
+ * so a Fish's Undead Rising parasite (spawned from a dying vanilla zombie; it attaches to and hits the player) or a
+ * Special Mobs variant survives it and stays in the lane, the likely cause of attempt 2's stone-axe anomaly. This
+ * kills every entity that is not a player within laneClearRadius of the lane's centre (the landing cell), fixed
+ * numbers only. type=!player cannot match the bot or any other player. The radius covers every lane cell
+ * (the farthest, an end wall's corner, is under 6 blocks away) and reaches only the air around the lane at y 120.
+ */
+export function bcLaneClear(plan = BC_PLAN) {
+    const [x, y, z] = plan.landing;
+    return `kill @e[type=!player,x=${x},y=${y},z=${z},r=${plan.laneClearRadius}]`;
+}
 
 /**
  * The lane's two fills, in order: the whole box around it stone (x from xFrom-1 to xTo+1, y from y-1 to y+2, z
@@ -329,6 +346,20 @@ export function markCrits(hits, { perHit, critHit }) {
     return out;
 }
 
+/** The catalogue's zombie health (rotn-data combat.json maxHealth, 20): a target that starts otherwise is not a fresh zombie. */
+export const zombieCatalogueHealth = () => combatOf('minecraft:zombie')?.maxHealth ?? 20;
+
+/**
+ * A series whose zombie was not a fresh one cannot be judged (attempt 2, #540: zombie A started at 8 health and
+ * was hurt before the bot's first hit): its measured start health differs from the catalogue's. Returns the
+ * reason, or null. A start health that was not read is not flagged (the range then uses the catalogue's).
+ */
+export function notMeasured(r, catalogue = zombieCatalogueHealth()) {
+    const h = r?.target?.startHealth;
+    if (typeof h !== 'number') return null;
+    return Math.abs(h - catalogue) > 1e-3 ? `not measured: the zombie started at ${h} health, not the catalogue's ${catalogue}` : null;
+}
+
 /** A timer may fire up to 1 ms early against Date.now: a gap this much under the cooldown still counts as on time. */
 export const GAP_SLACK_MS = 2;
 
@@ -353,11 +384,15 @@ export function projectedHits(r) {
  * no gap between Better Combat packets is under the cooldown; the self-check did not trip. Both: the reply
  * is ok, the zombie was found and did not burn. With expected's perHit and critHit, the crits are marked
  * (markCrits), and whether the first hit was one (firstHitCrit: true, false or null for unknown; a NoAI zombie's
- * first Better Combat hit is a sneak attack, #528). Returns {ok, why, projected, inRange, crits, firstHitCrit}.
+ * first Better Combat hit is a sneak attack, #528). A zombie that did not start at the catalogue's health
+ * (notMeasured) makes the series inconclusive: not ok, but inconclusive: true and no pass rule applied (the
+ * lead, after #540). Returns {ok, inconclusive, why, projected, inRange, crits, firstHitCrit}.
  */
-export function judgeSeries(r, { path, expected = null, cooldownTicks = null, maxHits = BC_PLAN.maxHits, ai = false } = {}) {
+export function judgeSeries(r, { path, expected = null, cooldownTicks = null, maxHits = BC_PLAN.maxHits, ai = false, catalogueHealth = zombieCatalogueHealth() } = {}) {
     const bad = [];
-    if (!r) return { ok: false, why: 'no reply', projected: null, inRange: null, crits: null, firstHitCrit: null };
+    if (!r) return { ok: false, inconclusive: false, why: 'no reply', projected: null, inRange: null, crits: null, firstHitCrit: null };
+    const nm = notMeasured(r, catalogueHealth);
+    if (nm) return { ok: false, inconclusive: true, why: nm, projected: null, inRange: null, crits: null, firstHitCrit: null };
     if (!r.ok) bad.push(`driver: ${r.error ?? 'not ok'}`);
     if (!r.target) bad.push('no zombie found');
     if (r.burned) bad.push('the zombie burned (fire damage mixes with the hits)');
@@ -396,7 +431,7 @@ export function judgeSeries(r, { path, expected = null, cooldownTicks = null, ma
         const short = minGap === null ? [] : gaps.filter((g) => g < minGap);
         if (short.length) bad.push(`${short.length} gap(s) between Better Combat packets under ${cooldownTicks} ticks (${short.join(', ')} ms)`);
     }
-    return { ok: bad.length === 0, why: bad.join('; ') || 'as planned', projected, inRange, crits, firstHitCrit };
+    return { ok: bad.length === 0, inconclusive: false, why: bad.join('; ') || 'as planned', projected, inRange, crits, firstHitCrit };
 }
 
 /**
