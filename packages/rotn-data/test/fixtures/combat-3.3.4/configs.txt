@@ -1,0 +1,262 @@
+# Config lines from the pinned pack zip (default configs, ADR 0005), path:line: text.
+
+
+## server.properties
+server.properties:12: difficulty=2
+
+## bettercombat.cfg
+config/bettercombat.cfg:6:     D:"Added Attack Speed Tick Cooldown"=0.5
+config/bettercombat.cfg:7:     D:"Attribute Base Attack Damage"=1.0
+config/bettercombat.cfg:8:     D:"Attribute Base Attack Speed"=4.0
+config/bettercombat.cfg:9:     D:"Attribute Base Reach Distance"=4.0
+config/bettercombat.cfg:10:     D:"Base Critical Percent Chance"=0.05
+config/bettercombat.cfg:11:     D:"Base Critical Percent Damage"=1.5
+config/bettercombat.cfg:12:     I:"Minimum Attack Speed Tick Cooldown"=8
+config/bettercombat.cfg:68:     D:"Added Attack Speed Tick Cooldown"=0.5
+config/bettercombat.cfg:71:     D:"Attribute Base Attack Damage"=1.0
+config/bettercombat.cfg:74:     D:"Attribute Base Reach Distance"=4.0
+config/bettercombat.cfg:77:     D:"Attribute Base Weapon Attack Speed"=4.0
+config/bettercombat.cfg:80:     D:"Base Critical Percent Chance"=0.05
+config/bettercombat.cfg:83:     D:"Base Critical Percent Damage"=1.5
+config/bettercombat.cfg:86:     I:"Minimum Attack Speed Tick Cooldown"=8
+config/bettercombat.cfg:803: "white/black lists" {
+config/bettercombat.cfg:834:     S:"(Class) Item Left/Right Click Blacklist" <
+config/bettercombat.cfg:835:      >
+config/bettercombat.cfg:850:      >
+config/bettercombat.cfg:851:     S:"(Resource Location) Item Blacklist" <
+config/bettercombat.cfg:852:         pyrotech:bucket_wood
+config/bettercombat.cfg:853:      >
+config/bettercombat.cfg:857:     S:"(Resource Location) Item Left/Right Click Blacklist" <
+config/bettercombat.cfg:858:      >
+
+## betterhurttimer.cfg
+config/betterhurttimer.cfg:72:             I:hurtResistantTime=0
+config/betterhurttimer.cfg:76:             D:nextAttackDamageDifference=0.5
+config/betterhurttimer.cfg:77:             B:nextAttackDamageDifferenceApply=true
+config/betterhurttimer.cfg:98:             S:attackSources <
+config/betterhurttimer.cfg:99:                 player
+config/betterhurttimer.cfg:100:                 mob
+config/betterhurttimer.cfg:123:             D:attackThresholdDefault=1.0
+config/betterhurttimer.cfg:128:             D:attackThresholdPlayer=0.0
+config/betterhurttimer.cfg:146:             B:turnOffMixins=false
+
+## combatrefined.cfg
+config/combatrefined.cfg:5:     B:shieldFix=true
+config/combatrefined.cfg:8:     B:stgEnabled=false
+config/combatrefined.cfg:11:     B:waDisabled=false
+
+## Universal Tweaks - Tweaks.cfg
+config/Universal Tweaks - Tweaks.cfg:416:             B:"[1] No Attack Cooldown Toggle"=false
+config/Universal Tweaks - Tweaks.cfg:419:             B:"[2] Only Affect Swords"=false
+
+## materialchanger.cfg
+config/materialchanger.cfg:82:     S:changer <
+config/materialchanger.cfg:480:         ATTACK_SPEED;minecraft:wooden_axe;0.6
+config/materialchanger.cfg:481:         ATTACK_SPEED;minecraft:stone_axe;0.4
+config/materialchanger.cfg:482:         ATTACK_DAMAGE;minecraft:stone_axe;3
+config/materialchanger.cfg:483:         ATTACK_SPEED;atop:mud_axe;0.4
+config/materialchanger.cfg:667:         DURABILITY;minecraft:iron_helmet;190
+config/materialchanger.cfg:668:         DURABILITY;minecraft:iron_chestplate;276
+config/materialchanger.cfg:669:         DURABILITY;minecraft:iron_leggings;259
+config/materialchanger.cfg:670:         DURABILITY;minecraft:iron_boots;224
+config/materialchanger.cfg:672:         DURABILITY;minecraft:iron_sword;288
+config/materialchanger.cfg:678:         HARVEST_LEVEL;minecraft:iron_sword;1
+config/materialchanger.cfg:688:         DURABILITY;atop:mud_pickaxe;331
+config/materialchanger.cfg:689:         DURABILITY;atop:mud_axe;331
+config/materialchanger.cfg:692:         DURABILITY;atop:mud_sword;331
+config/materialchanger.cfg:1167:         DURABILITY;spartanweaponry:dagger_copper;150
+config/materialchanger.cfg:1176:         DURABILITY;spartanweaponry:dagger_iron;217
+config/materialchanger.cfg:1199:         DURABILITY;spartanweaponry:dagger_gold;109
+config/materialchanger.cfg:1222:         DURABILITY;spartanweaponry:dagger_silver;227
+config/materialchanger.cfg:1245:         DURABILITY;spartanweaponry:dagger_bronze;250
+config/materialchanger.cfg:1265:         DURABILITY;spartanweaponry:dagger_steel;1171
+config/materialchanger.cfg:1285:         DURABILITY;spartanweaponry:dagger_diamond;1347
+config/materialchanger.cfg:1704:         ENCHANTABILITY;atop:mud_sword;16
+config/materialchanger.cfg:1706:         ATTACK_DAMAGE;atop:mud_sword;6
+config/materialchanger.cfg:1707:         HARVEST_LEVEL;atop:mud_pickaxe;1
+config/materialchanger.cfg:1708:         EFFICIENCY;atop:mud_pickaxe;6
+config/materialchanger.cfg:1709:         EFFICIENCY;atop:mud_axe;6
+config/materialchanger.cfg:1717:         ATTACK_DAMAGE;minecraft:stone_sword;3.5
+config/materialchanger.cfg:1718:         DURABILITY;minecraft:stone_sword;99
+config/materialchanger.cfg:1720:         DURABILITY;minecraft:wooden_axe;12
+config/materialchanger.cfg:1727:         DURABILITY;pyrotech:crude_axe;8
+config/materialchanger.cfg:1728:         ATTACK_DAMAGE;pyrotech:crude_axe;3
+config/materialchanger.cfg:1729:         ATTACK_SPEED;pyrotech:crude_axe;0.9
+config/materialchanger.cfg:2145:      >
+
+## dmgcontrol.cfg
+config/dmgcontrol.cfg:10:     S:DamageModifier_arrow=0.8
+config/dmgcontrol.cfg:63:     S:DamageModifier_mob=1.0
+config/dmgcontrol.cfg:70:     S:DamageModifier_player=0.8
+config/dmgcontrol.cfg:86:     B:AllowHealthModification=false
+config/dmgcontrol.cfg:206:     S:"MaxHealth_iceandfire:if_troll"=200.0
+config/dmgcontrol.cfg:220:     S:"MaxHealth_minecraft:cave_spider"=12.0
+config/dmgcontrol.cfg:223:     S:"MaxHealth_minecraft:creeper"=20.0
+config/dmgcontrol.cfg:233:     S:"MaxHealth_minecraft:husk"=20.0
+config/dmgcontrol.cfg:246:     S:"MaxHealth_minecraft:skeleton"=20.0
+config/dmgcontrol.cfg:249:     S:"MaxHealth_minecraft:spider"=16.0
+config/dmgcontrol.cfg:258:     S:"MaxHealth_minecraft:zombie"=20.0
+config/dmgcontrol.cfg:261:     S:"MaxHealth_minecraft:zombie_villager"=20.0
+
+## roughmobsrevamped.cfg
+config/roughmobsrevamped.cfg:19:         zombie;generic.knockbackResistance;0;0.5
+config/roughmobsrevamped.cfg:29:         zombie_players:zombie_player;generic.knockbackResistance;0;0.2
+config/roughmobsrevamped.cfg:31:         zombie_villager;generic.knockbackResistance;0;0.5
+config/roughmobsrevamped.cfg:33:         husk;generic.knockbackResistance;0;0.5
+config/roughmobsrevamped.cfg:37:         spider;generic.movementSpeed;1;0.1
+config/roughmobsrevamped.cfg:38:         cave_spider;generic.movementSpeed;1;0.1
+config/roughmobsrevamped.cfg:3137:     I:_zombieEquipmentArmorChance=0
+config/roughmobsrevamped.cfg:3144:     I:_zombieEquipmentEnchantChance=20
+config/roughmobsrevamped.cfg:3148:     S:_zombieEquipmentEnchantMultiplier=0.3
+config/roughmobsrevamped.cfg:3153:     I:_zombieEquipmentWeaponChance=5
+config/roughmobsrevamped.cfg:3176:     S:zombieEquipmentMainhand <
+config/roughmobsrevamped.cfg:3177:         stone_pickaxe;3
+config/roughmobsrevamped.cfg:3178:         atop:mud_pickaxe;3
+config/roughmobsrevamped.cfg:3179:         iron_pickaxe;1
+config/roughmobsrevamped.cfg:3180:         wooden_axe;2
+config/roughmobsrevamped.cfg:3181:         stone_axe;2
+config/roughmobsrevamped.cfg:3182:         atop:mud_axe;2
+config/roughmobsrevamped.cfg:3183:         stone_sword;2
+config/roughmobsrevamped.cfg:3184:         iron_sword;2
+config/roughmobsrevamped.cfg:3185:         atop:mud_sword;2
+config/roughmobsrevamped.cfg:3186:         spartanweaponry:club_wood;2
+config/roughmobsrevamped.cfg:3187:         spartanweaponry:club_studded;2
+config/roughmobsrevamped.cfg:3188:         spartanweaponry:dagger_stone;2
+config/roughmobsrevamped.cfg:3189:         spartanweaponry:dagger_iron;2
+config/roughmobsrevamped.cfg:3190:         spartanweaponry:dagger_gold;2
+config/roughmobsrevamped.cfg:3191:      >
+config/roughmobsrevamped.cfg:3212:     S:zombieEquipmentWeaponEnchants <
+config/roughmobsrevamped.cfg:3213:         sharpness;4
+
+## spartanweaponry.cfg
+config/spartanweaponry.cfg:128:     S:damageBase=4.0
+config/spartanweaponry.cfg:129: 
+config/spartanweaponry.cfg:130:     # Damage Multiplier. Final damage of weapons are calculated with the formula: ([WeaponMultiplier] * [BaseMaterialDamage]) + [WeaponBaseDamage] [range: 0.1 ~ 100.0, default: 1.0]
+config/spartanweaponry.cfg:131:     S:damageMultiplier=1.0
+config/spartanweaponry.cfg:178:     S:damageBase=2.5
+config/spartanweaponry.cfg:179: 
+config/spartanweaponry.cfg:180:     # Damage Multiplier. Final damage of weapons are calculated with the formula: ([WeaponMultiplier] * [BaseMaterialDamage]) + [WeaponBaseDamage] [range: 0.1 ~ 100.0, default: 0.5]
+config/spartanweaponry.cfg:181:     S:damageMultiplier=0.50
+
+## thiccentities.cfg (health)
+config/thiccentities.cfg:9648:     zombie {
+config/thiccentities.cfg:9659:         D:health=1.0
+config/thiccentities.cfg:9284:     husk {
+config/thiccentities.cfg:9295:         D:health=1.0
+config/thiccentities.cfg:9310:     zombie_villager {
+config/thiccentities.cfg:9321:         D:health=1.0
+config/thiccentities.cfg:9596:     spider {
+config/thiccentities.cfg:9607:         D:health=1.0
+config/thiccentities.cfg:9778:     cave_spider {
+config/thiccentities.cfg:9789:         D:health=1.0
+config/thiccentities.cfg:9570:     skeleton {
+config/thiccentities.cfg:9581:         D:health=1.0
+config/thiccentities.cfg:9544:     creeper {
+config/thiccentities.cfg:9555:         D:health=1.0
+config/thiccentities.cfg:8167:     zombie_player {
+config/thiccentities.cfg:8178:         D:health=1.0
+config/thiccentities.cfg:15490:     zombie_player {
+config/thiccentities.cfg:15501:         D:health=1.0
+config/thiccentities.cfg:8619:     if_troll {
+config/thiccentities.cfg:8630:         D:health=1.0
+
+## scalinghealth/main.cfg
+config/scalinghealth/main.cfg:36:         S:"Difficulty Per Kill"=0.00
+config/scalinghealth/main.cfg:64:         S:"Increase Per Second"=0.0
+config/scalinghealth/main.cfg:84:         S:"Starting Value"=0.0
+config/scalinghealth/main.cfg:380:             B:"Allow Hostile Extra Health"=false
+config/scalinghealth/main.cfg:386:             S:"Base Health Modifier"=0.0
+
+## esm/entity_ai.json
+config/esm/entity_ai.json:79:     "Health": 1.0,
+config/esm/entity_ai.json:142:     "minecraft:zombie_villager": {
+config/esm/entity_ai.json:176:     "minecraft:husk": {
+config/esm/entity_ai.json:218:     "minecraft:spider": {
+config/esm/entity_ai.json:331:     "minecraft:zombie": {
+
+## esm/epicsiegemod.cfg
+config/esm/epicsiegemod.cfg:5:     S:"AI Blacklist" <
+config/esm/epicsiegemod.cfg:47:         minecraft:creeper
+config/esm/epicsiegemod.cfg:48:         minecraft:skeleton
+config/esm/epicsiegemod.cfg:693:         zombie_players:zombie_player
+config/esm/epicsiegemod.cfg:903:     S:"Boss Kill Modifier"=0.0
+
+## incontrol/spawn.json
+config/incontrol/spawn.json:1: [
+config/incontrol/spawn.json:2: /* {
+config/incontrol/spawn.json:3:     "mob": "aether_legacy:sentry",
+config/incontrol/spawn.json:4:     "onjoin": true,
+config/incontrol/spawn.json:5:     "healthmultiply": 0.9
+config/incontrol/spawn.json:6: }, */
+config/incontrol/spawn.json:7: 
+config/incontrol/spawn.json:8: /////////////////// ANTI SKY BASE ///////////////////
+config/incontrol/spawn.json:9: /*{
+config/incontrol/spawn.json:10:     "dimension": 0,
+config/incontrol/spawn.json:11:     "mob": "roughmobsrevamped:hostilebat",
+config/incontrol/spawn.json:12:     "minheight": 100,
+config/incontrol/spawn.json:13: 	"random": 0.3,
+config/incontrol/spawn.json:14: 
+config/incontrol/spawn.json:15:     "result": "default"
+config/incontrol/spawn.json:16:  },*/
+config/incontrol/spawn.json:17: 
+config/incontrol/spawn.json:18: 
+config/incontrol/spawn.json:19:  {
+config/incontrol/spawn.json:20:     "dimension": 4,
+config/incontrol/spawn.json:21:     "block": ["aether_legacy:aercloud"],
+config/incontrol/spawn.json:22:     "onjoin": true,
+config/incontrol/spawn.json:23:     "result": "deny"
+config/incontrol/spawn.json:24: 
+config/incontrol/spawn.json:25:  },
+config/incontrol/spawn.json:26: {
+config/incontrol/spawn.json:27:     "mob": ["betteranimalsplus:boar"],
+config/incontrol/spawn.json:28:     "onjoin": true,
+config/incontrol/spawn.json:29:     "speedmultiply": 0.9
+config/incontrol/spawn.json:30: },
+config/incontrol/spawn.json:31: 
+config/incontrol/spawn.json:32:   // Zombies
+config/incontrol/spawn.json:33: 
+config/incontrol/spawn.json:34:   //////////////// DEFAULT //////////////////////////
+config/incontrol/spawn.json:35: 
+config/incontrol/spawn.json:36:   {
+config/incontrol/spawn.json:37:     "mob": ["minecraft:zombie","minecraft:skeleton","primitivemobs:skeleton_warrior"],
+config/incontrol/spawn.json:38:     "random": 0.1,
+config/incontrol/spawn.json:39:     "armorhelmet": ["minecraft:leather_helmet", "minecraft:chainmail_helmet"]
+config/incontrol/spawn.json:40: },
+config/incontrol/spawn.json:41: {
+config/incontrol/spawn.json:42:     "mob": ["minecraft:zombie","minecraft:skeleton","primitivemobs:skeleton_warrior"],
+config/incontrol/spawn.json:43:     "random": 0.1,
+config/incontrol/spawn.json:44:     "armorchest": ["minecraft:leather_chestplate", "minecraft:chainmail_chestplate"]
+config/incontrol/spawn.json:45: },
+config/incontrol/spawn.json:46: {
+config/incontrol/spawn.json:47:     "mob": ["minecraft:zombie","minecraft:skeleton","primitivemobs:skeleton_warrior"],
+config/incontrol/spawn.json:48:     "random": 0.1,
+config/incontrol/spawn.json:49:     "armorlegs": ["minecraft:leather_leggings", "minecraft:chainmail_leggings"]
+config/incontrol/spawn.json:50: 
+config/incontrol/spawn.json:51: },
+config/incontrol/spawn.json:52: {
+config/incontrol/spawn.json:53:     "mob": ["minecraft:zombie","minecraft:skeleton","primitivemobs:skeleton_warrior"],
+config/incontrol/spawn.json:54:     "random": 0.1,
+config/incontrol/spawn.json:55:     "armorboots": ["minecraft:leather_boots", "minecraft:chainmail_boots"]
+config/incontrol/spawn.json:56: },
+
+## scripts
+scripts/minecraft_(max-file-size).zs:916: Anvil.remove(<minecraft:wooden_sword>);
+scripts/minecraft_(max-file-size).zs:1079: JEI.removeAndHide(<minecraft:wooden_sword>);
+scripts/recipe_cohesion.zs:11: recipes.remove(<minecraft:stone_sword>);
+scripts/recipe_cohesion.zs:14: recipes.remove(<aether_legacy:holystone_sword>);
+scripts/recipe_cohesion.zs:54: val stonesword = <minecraft:stone_sword>;
+scripts/recipe_cohesion.zs:58: val holystonesword = <aether_legacy:holystone_sword>;
+scripts/recipe_cohesion.zs:79: recipes.remove(<minecraft:stone_axe>);
+scripts/recipe_cohesion.zs:80: recipes.addShapedMirrored("stone_axe", <minecraft:stone_axe>,[
+scripts/recipe_cohesion.zs:85: recipes.addShapedMirrored("flintstone_axe", <minecraft:stone_axe>,[
+scripts/recipe_cohesion.zs:157: recipes.addShaped("stone_sword", stonesword,
+
+## ice_and_fire.cfg
+config/ice_and_fire.cfg:459:     B:"Spawn Trolls"=true
+config/ice_and_fire.cfg:491:     # Troll attack strength [range: 1.0 ~ 10000.0, default: 10.0]
+config/ice_and_fire.cfg:492:     S:"Troll Attack Strength"=18.0
+config/ice_and_fire.cfg:495:     S:"Troll Max Health"=200.0
+config/ice_and_fire.cfg:498:     I:"Troll Spawn Check Chance"=1
+config/ice_and_fire.cfg:500:     # Troll spawn weight. Lower = lower chance to spawn [range: 1 ~ 10000, default: 60]
+config/ice_and_fire.cfg:501:     I:"Troll Spawn Weight"=55
+config/ice_and_fire.cfg:504:     B:"Trolls Drop Weapon"=true
