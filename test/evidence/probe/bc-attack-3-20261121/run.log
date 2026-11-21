@@ -1,0 +1,33 @@
+[scenario 16:58:26] probe-bc-attack (BC) run 20261121t165825-80304c; git 102bc9e78fdd581217177b38088b1a6e72970ba3; driver: node test/runner/drivers/bc-attack-driver.mjs; out: <local>/captures/raw/bc-probe-3-20261121
+[scenario 16:58:26] not a gate run: probe BC measures Better Combat's attack packet against the vanilla attack; it is never a gate pass
+[scenario 16:58:35] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 16:58:50] kill @e[type=zombie] (setup): 1 killed; view distance 5
+[scenario 17:00:36] PASS setup: Better Combat's path active; lane 68/68 cells as planned
+[scenario 17:00:38] kill @e[type=zombie] (stone_sword: before): 9 killed; view distance 12
+[scenario 17:00:46] lane clear (stone_sword): nothing
+[scenario 17:01:25] PASS vanilla_stone_sword: 40 hit(s), end maxHits, health 20 -> 17.267200469970703, target zombie #47659 NoAI: as planned
+[scenario 17:01:33] PASS bc_stone_sword: 7 hit(s), end dead, health 20 -> 0, target zombie #47661 NoAI, 7 to kill (range 5-8 at measured health 20), crits #2, #3, hit 1 crit: no: as planned
+[scenario 17:01:35] kill @e[type=zombie] (stone_sword: after): 10 killed; view distance 16
+[scenario 17:01:43] kill @e[type=zombie] (stone_axe: before): 0 killed; view distance 17
+[scenario 17:01:46] lane clear (stone_axe): killed item.item.rottenFlesh, item.item.rottenFlesh
+[scenario 17:02:58] FAIL vanilla_stone_axe: INCONCLUSIVE: 24 hit(s), end maxMs, health 20 -> 17.676799774169922, target zombie #71193 NoAI: not clean: the census saw zombieawareness:entityscent #87789 at -42.5 121.74 -65.5 (t 37025 ms) in the lane
+[scenario 17:03:24] FAIL bc_stone_axe: INCONCLUSIVE: 8 hit(s), end dead, health 20 -> 0, target zombie #71195 NoAI (range 6-9 at measured health 20), hit 1 crit: unknown: not clean: the census saw zombieawareness:entityscent #87789 at -42.5 121.74 -65.5 (t 1 ms) in the lane
+[scenario 17:03:26] kill @e[type=zombie] (stone_axe: after): 6 killed; view distance 20
+[scenario 17:03:34] kill @e[type=zombie] (crude_axe: before): 0 killed; view distance 20
+[scenario 17:03:37] lane clear (crude_axe): killed item.item.skull.zombie, item.item.rottenFlesh, item.item.rottenFlesh
+[scenario 17:04:40] PASS vanilla_crude_axe: 40 hit(s), end maxHits, health 20 -> 17.676799774169922, target zombie #115649 NoAI: as planned
+[scenario 17:04:54] FAIL bc_crude_axe: INCONCLUSIVE: 9 hit(s), end dead, health 20 -> 0, target zombie #115651 NoAI (range 6-9 at measured health 20), hit 1 crit: unknown: not clean: the census saw mod_lavacow:parasite #137509 at -43.37 121 -66.37 (t 10614 ms) in the lane
+[scenario 17:04:56] kill @e[type=zombie] (crude_axe: after): 9 killed; view distance 20
+[scenario 17:05:04] kill @e[type=zombie] (hand: before): 0 killed; view distance 20
+[scenario 17:05:07] lane clear (hand): killed item.item.rottenFlesh
+[scenario 17:05:43] PASS vanilla_hand: 40 hit(s), end maxHits, health 20 -> 19.25119972229004, target zombie #144683 NoAI: as planned
+[scenario 17:06:13] PASS bc_hand: 40 hit(s), end maxHits, health 20 -> 5.152002334594727, target zombie #144684 NoAI, 54 to kill (projected) (range 36-54 at measured health 20), crits none, hit 1 crit: no: as planned
+[scenario 17:06:15] kill @e[type=zombie] (hand: after): 6 killed; view distance 20
+[scenario 17:06:22] kill @e[type=zombie] (ai: before): 0 killed; view distance 20
+[scenario 17:06:25] lane clear (ai): killed item.item.rottenFlesh
+[scenario 17:07:02] FAIL bc_ai_zombie: INCONCLUSIVE: 40 hit(s), end maxHits, health 538 -> 1, target zombieawareness:entityscent #172114: not measured: the zombie started at 538 health, not the catalogue's 20
+[scenario 17:07:04] kill @e[type=zombie] (ai: after): 5 killed; view distance 20
+[scenario 17:07:06] PASS server_log: 0 codec or bettercombat problem line(s); 0 kick(s) or lost connection(s)
+[scenario 17:07:06] PASS self_check: never tripped over 9 series
+[scenario 17:07:06] SMOKE run, not a BC pass: probe BC measures Better Combat's attack packet against the vanilla attack; it is never a gate pass
+[scenario 17:07:07] probe-bc-attack: FAIL; 9 passed, 4 failed (<local>/captures/raw/bc-probe-3-20261121/result.json)

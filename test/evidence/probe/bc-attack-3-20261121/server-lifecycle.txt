@@ -1,0 +1,36 @@
+# deploy/test-server.sh up, try 1 (GO G-BC-PROBE-3-20261121): stopped before creating anything
+[test-server 16:54:32] ERROR: could not resolve the UUID of '<bot>' (Mojang profile API); pass --whitelist <bot>:<uuid>
+# deploy/test-server.sh up, try 2: stopped before creating anything
+[test-server 16:55:01] ERROR: could not resolve the UUID of 'JQDAW' (Mojang profile API); pass --whitelist JQDAW:<uuid>
+# deploy/test-server.sh up, try 3, its log as written:
+[test-server 16:55:18] sweeper OK: scheduled run 44919780501 on JQDAW/mindcraft-RotN succeeded 82 min ago (limit 120 min)
+[test-server 16:55:18] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 16:55:19] creating mcr-test-20261121-165516: delete-after 2026-11-21T18:55:18Z (TTL 2h)
+Waiting for create_server (server: <server-id>, image: 161547269) ...
+Waiting for start_server (server: <server-id>) ...
+Waiting for create_server (server: <server-id>, image: 161547269) ... done
+Waiting for start_server (server: <server-id>) ... done
+Server <server-id> created
+[test-server 16:55:29] server mcr-test-20261121-165516 is at <ip>
+[test-server 16:55:29] waiting for SSH and the build (up to 120 min)
+[test-server 16:55:39] phase: unreachable
+[test-server 16:55:55] phase: booting:running
+[test-server 16:56:27] phase: starting
+[test-server 16:58:16] phase: ready
+[test-server 16:58:16] mod-director: pinned mods/esmtweaks-1.12.2-0.4.5.jar sha256 b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 OK
+[test-server 16:58:16] mod-director: OK: 1 pinned download(s) match; 337 jars of the pinned zip match; 0 extra mod(s)
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 16:58:18] READY: mcr-test-20261121-165516 at <ip>:25565 (delete-after 2026-11-21T18:55:18Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261121-165516
+# deploy/test-server.sh starts, right after up:
+starts=1 files=1
+# deploy/test-server.sh down, its log as written:
+[test-server 17:07:25] deleting batch mcr-test-20261121-165516 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261121-165516)
+Waiting for delete_server (server: <server-id>) ...
+Waiting for delete_server (server: <server-id>) ... done
+[test-server 17:07:38] batch mcr-test-20261121-165516: ran 12 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 17:07:38] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261121-165516
+# hcloud counts, saved right after the delete:
+# after the delete, 2026-11-21T17:07:38Z:
+hcloud server list -o noheader | grep -c . -> 0
+hcloud primary-ip list -o noheader | grep -c . -> 0
+hcloud ssh-key list -o json, keys with labels -> 0
