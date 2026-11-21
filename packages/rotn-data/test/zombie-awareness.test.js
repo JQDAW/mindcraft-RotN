@@ -60,11 +60,24 @@ test('Zombie Awareness: every 40 ticks a tickable mob without a target takes the
     for (const [re, val] of [[/tickRateAILoop=/, '40'], [/sightRange=/, '16'], [/seeThroughWalls=/, 'false'], [/omniscient=/, 'false'], [/scentStrength=/, '40'], [/soundStrength=/, '50'], [/maxPFRangeSense=/, '50']]) {
         assert.ok(cfg('ZombieAwareness/General.cfg', re).endsWith(`=${val}`), String(re));
     }
-    for (const n of ['Husk', 'Zombie', 'ZombieVillager', 'mod_lavacow\\.parasite']) assert.match(cfg('ZombieAwareness/MobLists.cfg', new RegExp(`B:${n}=`)), /=true$/, n);
+    // The tickable list is the whole tickable_entities category: every entry set true, keyed by the old-style entity name.
+    const ml = configs.split('\n').filter((l) => l.startsWith('config/ZombieAwareness/MobLists.cfg:')).map((l) => l.split(': ').slice(1).join(': '));
+    assert.ok(ml.some((l) => /^tickable_entities \{/.test(l)) && ml.at(-1).trim() === '}');
+    const entries = ml.map((l) => l.match(/^\s+B:"?([^"=]+)"?=(true|false)\s*$/)).filter(Boolean);
+    const enabled = entries.filter((m) => m[2] === 'true').map((m) => m[1]);
+    assert.deepEqual([entries.length, enabled.length], [422, 126]);
+    assert.deepEqual(ZA.tickable.enabled, enabled);
+    assert.deepEqual([ZA.tickable.entries, ZA.tickable.enabledCount], [422, 126]);
+    for (const n of ['Zombie', 'Husk', 'ZombieVillager', 'Skeleton', 'Stray', 'Spider', 'CaveSpider', 'Witch', 'WitherSkeleton', 'VindicationIllager', 'mod_lavacow.parasite']) assert.ok(enabled.includes(n), n);
+    for (const n of ['Creeper', 'Enderman', 'Blaze']) assert.ok(!enabled.includes(n), n);
+    inOrder(section('ZombieAwareness.canProcessEntity'), 'getEntityRegisteredName(java.lang.Class);', 'getClassToOldName', 'areturn', 'getClassToOldName(java.lang.Class);', 'lookupClassToOldName');
     const t = ZA.targeting;
-    assert.deepEqual([t.intervalTicks, t.boxHorizontal, t.boxVertical, t.lineOfSight, t.ignoresNoAI, t.researchChanceWithTarget], [40, 16, 8, true, true, 0.01]);
-    assert.deepEqual(ZA.tickable, ['minecraft:zombie', 'minecraft:husk', 'minecraft:zombie_villager', 'mod_lavacow:parasite']);
-    for (const n of ZA.tickable) assert.ok(pack.dump.entities.entities[n], n);
+    // The box: the mob's bounding box grown by (sightRange, sightRange / 2, sightRange) = (16, 8, 16): 16 each side horizontally.
+    inOrder(find, 'sightRange', 'func_174813_aQ', 'lload_2', 'l2d', 'lload_2', 'long 2l', 'ldiv', 'l2d', 'lload_2', 'l2d', 'func_72314_b');
+    assert.deepEqual([t.intervalTicks, t.horizontalRange, t.verticalRange, t.lineOfSight, t.ignoresNoAI, t.researchChanceWithTarget], [40, 16, 8, true, true, 0.01]);
+    assert.equal(t.boxHorizontal, undefined);
+    assert.match(t.rule, /16 blocks away on each side horizontally \(about 33 wide\) and 8 up or down/);
+    assert.match(ZA.forTheBot, /skeletons, spiders, witches/);
     assert.equal(ZA.confidence, 'verified');
 });
 

@@ -376,7 +376,7 @@
      815: invokestatic  #476                // Method dbg:(Ljava/lang/Object;)V
      818: return
 
-## ZombieAwareness.canProcessEntity, canEntityBeProcessedOverride, canConfigEntity, getDefaultForEntity
+## ZombieAwareness.canProcessEntity, canEntityBeProcessedOverride, canConfigEntity, getDefaultForEntity, getEntityRegisteredName, getClassToOldName
   public static boolean canProcessEntity(net.minecraft.entity.Entity);
     Code:
        0: aload_0
@@ -504,6 +504,30 @@
       67: istore_1
       68: iload_1
       69: ireturn
+  public static java.lang.String getEntityRegisteredName(java.lang.Class);
+    Code:
+       0: aload_0
+       1: invokestatic  #775                // Method getClassToOldName:(Ljava/lang/Class;)Ljava/lang/String;
+       4: areturn
+       5: astore_1
+       6: getstatic     #768                // Field ZombieAwareness/config/ZAConfig.debugConsole:Z
+       9: ifeq          16
+      12: aload_1
+      13: invokevirtual #183                // Method java/lang/Exception.printStackTrace:()V
+      16: aload_0
+      17: invokevirtual #640                // Method java/lang/Object.getClass:()Ljava/lang/Class;
+      20: invokevirtual #778                // Method java/lang/Class.getSimpleName:()Ljava/lang/String;
+      23: areturn
+    Exception table:
+       from    to  target type
+           0     4     5   Class java/lang/Exception
+  public static java.lang.String getClassToOldName(java.lang.Class);
+    Code:
+       0: getstatic     #744                // Field lookupClassToOldName:Ljava/util/HashMap;
+       3: aload_0
+       4: invokevirtual #658                // Method java/util/HashMap.get:(Ljava/lang/Object;)Ljava/lang/Object;
+       7: checkcast     #500                // class java/lang/String
+      10: areturn
 
 ## ZAUtil.tickAI
   public static void tickAI(net.minecraft.entity.EntityLiving);
