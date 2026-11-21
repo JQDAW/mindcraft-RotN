@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import {
     encodeMainhandAttack, decodeMainhandAttack, bcCooldownTicks, bcReach, bcAttackSetting, attributeValue,
-    isBcWeaponName, ticksForSpeed, reachDistance, installBetterCombatAttack, BC_CHANNEL,
+    isBcWeaponName, ticksForSpeed, reachDistance, installBetterCombatAttack, BC_CHANNEL, UNKNOWN_SPEED_TICKS,
 } from '../index.js';
 import { decodeRegister } from '../src/channels.js';
 
@@ -69,6 +69,10 @@ test('cooldown: Better Combat client pacing from bettercombat.cfg', () => {
     assert.equal(bcReach('pyrotech:crude_axe'), 4.0, 'the crude axe is a Better Combat weapon');
     assert.ok(['crude_pickaxe', 'crude_shovel', 'crude_hoe'].every((n) => isBcWeaponName(`pyrotech:${n}`)));
     assert.equal(bcCooldownTicks({ itemName: 'pyrotech:crude_axe', attackSpeed: 0.9 }), 22);
+    // rotn-data weapons.json: Earthworks' hand axe is a plain Item, a Better Combat non-weapon.
+    assert.ok(!isBcWeaponName('earthworks:tool_hand_axe'));
+    assert.equal(bcReach('earthworks:tool_hand_axe'), 3.5);
+    assert.equal(UNKNOWN_SPEED_TICKS, 50, 'the pack\'s slowest speed, 0.4');
 });
 
 test('setting: off by default; FORGE_BC_ATTACK wins over bc_attack', () => {
@@ -167,7 +171,7 @@ test('wrapper: paced at the cooldown; a newer call replaces a waiting one', asyn
     assert.deepEqual(res, { sent: true, path: 'bettercombat', waitedMs: 550 });
     const payloads = r.bot.writes.filter((w) => w.name === 'custom_payload').map((w) => decodeMainhandAttack(w.params.data).entityId);
     assert.deepEqual(payloads, [1234, 2]);
-    assert.deepEqual(r.bc.stats, { bettercombat: 2, vanilla: 0, waits: 2, replaced: 1, gone: 0, cancelled: 0, misses: 1 }, 'the first hit got no hurt within 500 ms');
+    assert.deepEqual(r.bc.stats, { bettercombat: 2, vanilla: 0, waits: 2, replaced: 1, gone: 0, cancelled: 0, reach: 0, sight: 0, misses: 1 }, 'the first hit got no hurt within 500 ms');
     assert.equal(r.bc.cooldownTicks(), 13);
 });
 
@@ -244,6 +248,22 @@ test('wrapper: cancel() ends a waiting call at once and sends nothing; a no-op w
     r.bc.cancel();
     assert.equal((await w).reason, 'cancelled');
 
+    // Pinned (#536 review): a cancel does not restart the cooldown. Swing at t0, cancel at t0+200,
+    // call at t0+650: it goes out at once.
+    const c = rig();
+    await c.bot.attack(c.target());
+    c.bot.emit('entityHurt', { id: 1234 });
+    const w2 = c.bot.attack(c.target());
+    await c.advance(200);
+    c.bc.cancel('interrupt');
+    await w2;
+    await c.advance(450);
+    const now650 = c.bot.attack(c.target());
+    const payloadsNow = c.names().filter((n) => n === 'custom_payload').length;
+    c.bc.cancel('cleanup'); // a no-op if it went out; keeps a broken build from hanging
+    assert.equal(payloadsNow, 2, 'the payload went out at t0+650');
+    assert.deepEqual(await now650, { sent: true, path: 'bettercombat', waitedMs: 0 });
+
     // Off: vanilla calls never wait, so there is nothing to cancel.
     const off = rig({ enabled: false });
     await off.bot.attack(off.target());
@@ -270,13 +290,11 @@ test('wrapper: a different held item restarts the cooldown; a durability change 
     assert.deepEqual(res, { sent: true, path: 'bettercombat', waitedMs: 2500 }, '50 ticks after the switch');
 });
 
-test('wrapper falls back to vanilla: setting off, no mod, no channel, out of reach, out of sight, unknown speed', async () => {
+test('wrapper: vanilla only when off, or the server lacks the mod or the channel', async () => {
     const cases = [
         ['setting off', rig({ enabled: false })],
         ['no mod', rig({ mods: [{ modid: 'jei', version: '1' }] })],
         ['no channel', rig({ channels: ['FML|HS'] })],
-        ['out of sight', rig({ lineOfSight: () => false })],
-        ['unknown speed', rig({ attackSpeed: null })],
     ];
     for (const [why, r] of cases) {
         const res = await r.bot.attack(r.target());
@@ -285,15 +303,78 @@ test('wrapper falls back to vanilla: setting off, no mod, no channel, out of rea
     }
     assert.equal(cases[0][1].bc.status(), 'bettercombat attack: off (bc_attack), vanilla attack');
     assert.match(cases[2][1].bc.status(), /lacks the bettercombat channel/);
+});
+
+test('wrapper: with Better Combat active, nothing for a target out of its reach or sight', async () => {
+    const unsent = (reason) => ({ sent: false, path: null, waitedMs: 0, reason });
+    const sight = rig({ lineOfSight: () => false });
+    assert.deepEqual(await sight.bot.attack(sight.target()), unsent('sight'));
+    assert.deepEqual(sight.names(), [], 'no use_entity, no swing');
+    assert.equal(sight.bc.stats.sight, 1);
 
     const sword = rig();
     assert.equal((await sword.bot.attack(sword.target(1, 4.2))).path, 'bettercombat', '3.9 from the eye: within 4.0');
-    const sword2 = rig();
-    assert.equal((await sword2.bot.attack(sword2.target(1, 4.5))).path, 'vanilla', '4.2: beyond 4.0');
+    const far = rig();
+    assert.deepEqual(await far.bot.attack(far.target(1, 4.5)), unsent('reach'), '4.2: beyond 4.0');
+    assert.deepEqual(far.names(), []);
+    assert.equal(far.bc.stats.reach, 1);
     const hand = rig({ held: null });
-    assert.equal((await hand.bot.attack(hand.target(1, 3.9))).path, 'vanilla', 'empty hand: 3.6 beyond 3.5');
+    assert.deepEqual(await hand.bot.attack(hand.target(1, 3.9)), unsent('reach'), 'empty hand: 3.6 beyond 3.5');
     const hand2 = rig({ held: null });
     assert.equal((await hand2.bot.attack(hand2.target(1, 3.6))).path, 'bettercombat', 'empty hand: 3.3');
+    const handAxe = rig({ held: 'earthworks:tool_hand_axe' });
+    assert.deepEqual(await handAxe.bot.attack(handAxe.target(1, 3.9)), unsent('reach'), 'a non-weapon by class: 3.5');
+    const noPos = rig();
+    assert.deepEqual(await noPos.bot.attack({ id: 5 }), unsent('reach'), 'no position: not shown to be in reach');
+    assert.deepEqual(noPos.names(), []);
+
+    // Checked again when a wait ends: the target walked out of reach meanwhile.
+    const r = rig();
+    await r.bot.attack(r.target());
+    const mob = r.target(7);
+    const p = r.bot.attack(mob);
+    await r.advance(300);
+    mob.position = mob.position.offset(0, 0, 3);
+    await r.advance(350);
+    assert.deepEqual(await p, { sent: false, path: null, waitedMs: 650, reason: 'reach' });
+    assert.equal(r.names().filter((n) => n === 'custom_payload').length, 1);
+    assert.equal(r.bc.stats.misses, 1, 'only the first hit had a check; reach is not a miss');
+});
+
+test('wrapper: an unknown attack speed sends Better Combat\'s packet at the slowest pacing (50 ticks)', async () => {
+    const r = rig({ attackSpeed: null });
+    assert.equal(r.bc.cooldownTicks(), 50);
+    assert.equal((await r.bot.attack(r.target())).path, 'bettercombat');
+    const p = r.bot.attack(r.target());
+    await r.advance(2499);
+    assert.equal(r.names().filter((n) => n === 'custom_payload').length, 1);
+    await r.advance(1);
+    assert.deepEqual(await p, { sent: true, path: 'bettercombat', waitedMs: 2500 });
+});
+
+test('wrapper: the vanilla fallback is paced, replaced and cancelled like Better Combat\'s path; off is not', async () => {
+    const r = rig({ channels: ['FML|HS'] }); // stone sword: 13 ticks
+    assert.equal((await r.bot.attack(r.target())).path, 'vanilla');
+    const p1 = r.bot.attack(r.target(1));
+    const p2 = r.bot.attack(r.target(2));
+    assert.equal((await p1).reason, 'replaced');
+    await r.advance(649);
+    assert.equal(r.names().filter((n) => n === 'use_entity').length, 1, 'not before 650 ms');
+    await r.advance(1);
+    assert.deepEqual(await p2, { sent: true, path: 'vanilla', waitedMs: 650 });
+    assert.deepEqual(r.bot.writes.filter((w) => w.name === 'use_entity').map((w) => w.params.target), [1234, 2]);
+    const p3 = r.bot.attack(r.target());
+    await r.advance(100);
+    assert.equal(r.bc.cancel('interrupt'), true);
+    assert.equal((await p3).reason, 'interrupt');
+    await r.advance(2000);
+    assert.equal(r.names().filter((n) => n === 'use_entity').length, 2, 'nothing after the cancel');
+    // Out of Better Combat's reach on the fallback: vanilla as before (the server judges it), paced.
+    assert.equal((await r.bot.attack(r.target(3, 5))).path, 'vanilla');
+
+    const off = rig({ enabled: false });
+    for (let i = 0; i < 3; i++) assert.deepEqual(await off.bot.attack(off.target()), { sent: true, path: 'vanilla', waitedMs: 0 });
+    assert.equal(off.names().filter((n) => n === 'use_entity').length, 3, 'off: unpaced, as mineflayer sends it');
 });
 
 test('wrapper: the default line of sight uses the world raycast', async () => {
@@ -302,9 +383,10 @@ test('wrapper: the default line of sight uses the world raycast', async () => {
     assert.equal((await r.bot.attack(r.target())).path, 'bettercombat');
     const blocked = rig({ defaultSight: true });
     blocked.bot.world = { raycast: () => ({ name: 'stone' }) };
-    assert.equal((await blocked.bot.attack(blocked.target())).path, 'vanilla');
+    assert.equal((await blocked.bot.attack(blocked.target())).reason, 'sight');
+    assert.deepEqual(blocked.names(), []);
     const noWorld = rig({ defaultSight: true });
-    assert.equal((await noWorld.bot.attack(noWorld.target())).path, 'vanilla', 'no world: no claim of sight');
+    assert.equal((await noWorld.bot.attack(noWorld.target())).reason, 'sight', 'no world: no claim of sight');
 });
 
 test('self-check: five hits in a row without a hurt go back to vanilla; a hurt resets the count', async () => {
@@ -329,6 +411,58 @@ test('self-check: five hits in a row without a hurt go back to vanilla; a hurt r
     t.bot.writes.length = 0;
     assert.equal((await t.bot.attack(t.target())).path, 'vanilla');
     assert.deepEqual(t.names(), ['use_entity', 'arm_animation']);
+    // Tripped: the vanilla fallback, paced from its own swing.
+    const next = t.bot.attack(t.target());
+    assert.equal(t.names().length, 2, 'the next one waits');
+    await t.advance(650);
+    assert.deepEqual(await next, { sent: true, path: 'vanilla', waitedMs: 650 });
+});
+
+test('self-check: a drop in the target\'s health metadata within 500 ms is a hurt (#540: no entity_status 2)', async () => {
+    // 1.12 EntityLivingBase health is metadata 7; mineflayer merges entity_metadata, then emits entityUpdate.
+    const r = rig();
+    const mob = { ...r.target(), metadata: { 7: 20 } };
+    for (let i = 0; i < 5; i++) {
+        await r.bot.attack(mob);
+        await r.advance(100);
+        mob.metadata[7] -= 2.733; // the hit lowered the health; no status packet came
+        r.bot.emit('entityUpdate', mob);
+        await r.advance(600);
+    }
+    assert.equal(r.bc.stats.misses, 0);
+    assert.equal(r.bc.tripped, false, 'five real hits with no status packet do not trip it');
+
+    // Not a hurt: an update with the same health, a rise, another entity's drop, or no health known at the hit.
+    const n = rig();
+    const same = { ...n.target(), metadata: { 7: 20 } };
+    await n.bot.attack(same);
+    n.bot.emit('entityUpdate', same);
+    same.metadata[7] = 20.5;
+    n.bot.emit('entityUpdate', same);
+    n.bot.emit('entityUpdate', { id: 99, metadata: { 7: 1 } });
+    await n.advance(700);
+    assert.equal(n.bc.stats.misses, 1);
+    const unknown = { ...n.target(), metadata: {} };
+    await n.bot.attack(unknown);
+    unknown.metadata[7] = 5;
+    n.bot.emit('entityUpdate', unknown);
+    await n.advance(700);
+    assert.equal(n.bc.stats.misses, 2, 'no health at the hit: nothing to compare');
+    // A drop after the 500 ms window is too late.
+    const late = { ...n.target(), metadata: { 7: 20 } };
+    await n.bot.attack(late);
+    await n.advance(600);
+    late.metadata[7] = 10;
+    n.bot.emit('entityUpdate', late);
+    assert.equal(n.bc.stats.misses, 3);
+    // mineflayer's entity.health wins over the metadata when it is set.
+    const h = rig();
+    const player = { ...h.target(), health: 18, metadata: { 7: 18 } };
+    await h.bot.attack(player);
+    player.health = 15;
+    h.bot.emit('entityUpdate', player);
+    await h.advance(700);
+    assert.equal(h.bc.stats.misses, 0);
 });
 
 test('wrapper: installs after mineflayer injects bot.attack; the end resolves a waiting call', async () => {
