@@ -1,0 +1,332 @@
+# Config lines from the pinned pack zip (default configs, ADR 0005), path:line: text.
+
+
+## materialchanger.cfg
+config/materialchanger.cfg:82:     S:changer <
+config/materialchanger.cfg:128:         ATTACK_DAMAGE;nyx:meteor_hammer;13
+config/materialchanger.cfg:222:         ATTACK_DAMAGE;atop:amber_pickaxe;3
+config/materialchanger.cfg:259:         ATTACK_DAMAGE;minecraft:diamond_sword;8
+config/materialchanger.cfg:260:         ATTACK_DAMAGE;atop:ruby_sword;8
+config/materialchanger.cfg:261:         ATTACK_DAMAGE;atop:peridot_sword;8
+config/materialchanger.cfg:262:         ATTACK_DAMAGE;atop:sapphire_sword;8
+config/materialchanger.cfg:264:         ATTACK_DAMAGE;atop:amethyst_sword;12
+config/materialchanger.cfg:266:         ATTACK_DAMAGE;pyrotech:redstone_sword;7
+config/materialchanger.cfg:469:         ATTACK_DAMAGE;spartanweaponry:halberd_invar;13
+config/materialchanger.cfg:476:         ATTACK_DAMAGE;iceandfire:stymphalian_bird_dagger;4
+config/materialchanger.cfg:477:         ATTACK_DAMAGE;rats:feral_bagh_nakhs;3
+config/materialchanger.cfg:478:         ATTACK_DAMAGE;nyx:meteor_sword;10
+config/materialchanger.cfg:479:         ATTACK_SPEED;nyx:meteor_axe;0.4
+config/materialchanger.cfg:480:         ATTACK_SPEED;minecraft:wooden_axe;0.6
+config/materialchanger.cfg:481:         ATTACK_SPEED;minecraft:stone_axe;0.4
+config/materialchanger.cfg:482:         ATTACK_DAMAGE;minecraft:stone_axe;3
+config/materialchanger.cfg:483:         ATTACK_SPEED;atop:mud_axe;0.4
+config/materialchanger.cfg:484:         ATTACK_SPEED;minecraft:iron_axe;0.4
+config/materialchanger.cfg:485:         ATTACK_SPEED;minecraft:golden_axe;0.4
+config/materialchanger.cfg:486:         ATTACK_SPEED;iceandfire:silver_axe;0.4
+config/materialchanger.cfg:487:         ATTACK_DAMAGE;iceandfire:silver_axe;7
+config/materialchanger.cfg:488:         ATTACK_SPEED;minecraft:diamond_axe;0.4
+config/materialchanger.cfg:489:         ATTACK_SPEED;atop:ruby_axe;0.4
+config/materialchanger.cfg:490:         ATTACK_SPEED;atop:peridot_axe;0.4
+config/materialchanger.cfg:491:         ATTACK_SPEED;atop:sapphire_axe;0.4
+config/materialchanger.cfg:492:         ATTACK_SPEED;atop:amethyst_axe;0.4
+config/materialchanger.cfg:493:         ATTACK_SPEED;atop:amber_axe;0.4
+config/materialchanger.cfg:494:         ATTACK_DAMAGE;atop:amber_axe;6
+config/materialchanger.cfg:495:         ATTACK_DAMAGE;minecraft:diamond_axe;7
+config/materialchanger.cfg:496:         ATTACK_SPEED;simpleores:adamantium_axe;1.3
+config/materialchanger.cfg:497:         ATTACK_SPEED;simpleores:mythril_axe;0.4
+config/materialchanger.cfg:498:         ATTACK_DAMAGE;simpleores:mythril_axe;9
+config/materialchanger.cfg:499:         ATTACK_SPEED;simpleores:onyx_axe;0.4
+config/materialchanger.cfg:501:         ATTACK_SPEED;aether_legacy:valkyrie_axe;0.4
+config/materialchanger.cfg:502:         ATTACK_SPEED;betterwithmods:steel_axe;0.4
+config/materialchanger.cfg:503:         ATTACK_SPEED;dungeontactics:steel_axe;0.4
+config/materialchanger.cfg:504:         ATTACK_SPEED;aether_legacy:skyroot_axe;0.4
+config/materialchanger.cfg:505:         ATTACK_SPEED;aether_legacy:holystone_axe;0.4
+config/materialchanger.cfg:506:         ATTACK_SPEED;aether_legacy:zanite_axe;0.4
+config/materialchanger.cfg:507:         ATTACK_SPEED;aether_legacy:gravitite_axe;0.4
+config/materialchanger.cfg:508:         ATTACK_SPEED;iceandfire:dragonbone_axe;0.4
+config/materialchanger.cfg:509:         ATTACK_SPEED;simpleores:copper_axe;0.4
+config/materialchanger.cfg:510:         ATTACK_SPEED;netherex:frosted_amedian_axe;0.4
+config/materialchanger.cfg:511:         ATTACK_SPEED;iceandfire:dragonsteel_fire_axe;0.4
+config/materialchanger.cfg:512:         ATTACK_SPEED;iceandfire:dragonsteel_ice_axe;0.4
+config/materialchanger.cfg:513:         ATTACK_SPEED;iceandfire:myrmex_desert_axe;0.4
+config/materialchanger.cfg:514:         ATTACK_SPEED;iceandfire:myrmex_jungle_axe;0.4
+config/materialchanger.cfg:515:         ATTACK_SPEED;defiledlands:ravaging_axe;0.4
+config/materialchanger.cfg:517:         ATTACK_SPEED;pyrotech:stone_hammer;0.6
+config/materialchanger.cfg:518:         ATTACK_DAMAGE;pyrotech:stone_hammer;4
+config/materialchanger.cfg:519:         ATTACK_SPEED;pyrotech:iron_hammer;0.6
+config/materialchanger.cfg:520:         ATTACK_DAMAGE;pyrotech:iron_hammer;6
+config/materialchanger.cfg:521:         ATTACK_SPEED;pyrotech:flint_hammer;0.6
+config/materialchanger.cfg:522:         ATTACK_DAMAGE;pyrotech:flint_hammer;7
+config/materialchanger.cfg:524:         ATTACK_SPEED;pyrotech:diamond_hammer;0.6
+config/materialchanger.cfg:525:         ATTACK_DAMAGE;pyrotech:diamond_hammer;8
+config/materialchanger.cfg:526:         ATTACK_SPEED;pyrotech:bone_hammer;0.6
+config/materialchanger.cfg:527:         ATTACK_DAMAGE;pyrotech:bone_hammer;9
+config/materialchanger.cfg:528:         ATTACK_SPEED;pyrotech:obsidian_hammer;0.6
+config/materialchanger.cfg:529:         ATTACK_DAMAGE;pyrotech:obsidian_hammer;10
+config/materialchanger.cfg:531:         ATTACK_DAMAGE;msmlegacy:gladiolus;5
+config/materialchanger.cfg:533:         ATTACK_DAMAGE;msmlegacy:aethers_guard;12
+config/materialchanger.cfg:534:         ATTACK_DAMAGE;harvestersnight:harvester_scythe;8
+config/materialchanger.cfg:535:         ATTACK_DAMAGE;dungeontactics:steel_sword;9
+config/materialchanger.cfg:537:         ATTACK_DAMAGE;dungeontactics:golden_club;8
+config/materialchanger.cfg:539:         ATTACK_DAMAGE;dungeontactics:golden_battleaxe;8.5
+config/materialchanger.cfg:541:         ATTACK_DAMAGE;endreborn:ender_sword;15
+config/materialchanger.cfg:543:         ATTACK_SPEED;minecraft:wooden_pickaxe;4
+config/materialchanger.cfg:544:         ATTACK_DAMAGE;minecraft:wooden_pickaxe;2
+config/materialchanger.cfg:547:         ATTACK_DAMAGE;dungeontactics:silver_sword;32
+config/materialchanger.cfg:550:         ATTACK_DAMAGE;msmlegacy:dawn_star;32
+config/materialchanger.cfg:553:         ATTACK_DAMAGE;dungeontactics:silver_axe;9.5
+config/materialchanger.cfg:554:         ATTACK_SPEED;dungeontactics:silver_axe;0.4
+config/materialchanger.cfg:556:         ATTACK_DAMAGE;dungeontactics:mithril_sword;7
+config/materialchanger.cfg:590:         ATTACK_DAMAGE;mod_lavacow:bonesword;4
+config/materialchanger.cfg:724:         ATTACK_DAMAGE;atop:amber_shovel;3.5
+config/materialchanger.cfg:1012:         ATTACK_DAMAGE;aether_legacy:zanite_sword;8
+config/materialchanger.cfg:1014:         ATTACK_DAMAGE;aether_legacy:zanite_pickaxe;5
+config/materialchanger.cfg:1016:         ATTACK_DAMAGE;aether_legacy:zanite_axe;7
+config/materialchanger.cfg:1018:         ATTACK_DAMAGE;aether_legacy:zanite_shovel;5.5
+config/materialchanger.cfg:1401:         ATTACK_DAMAGE;spartancompat:dagger_zanite;4
+config/materialchanger.cfg:1403:         ATTACK_DAMAGE;spartancompat:longsword_zanite;9
+config/materialchanger.cfg:1405:         ATTACK_DAMAGE;spartancompat:katana_zanite;5
+config/materialchanger.cfg:1407:         ATTACK_DAMAGE;spartancompat:saber_zanite;4.2
+config/materialchanger.cfg:1409:         ATTACK_DAMAGE;spartancompat:rapier_zanite;3.1
+config/materialchanger.cfg:1411:         ATTACK_DAMAGE;spartancompat:greatsword_zanite;11
+config/materialchanger.cfg:1413:         ATTACK_DAMAGE;spartancompat:hammer_zanite;9
+config/materialchanger.cfg:1415:         ATTACK_DAMAGE;spartancompat:warhammer_zanite;7.75
+config/materialchanger.cfg:1417:         ATTACK_DAMAGE;spartancompat:spear_zanite;6.75
+config/materialchanger.cfg:1419:         ATTACK_DAMAGE;spartancompat:halberd_zanite;11.5
+config/materialchanger.cfg:1421:         ATTACK_DAMAGE;spartancompat:pike_zanite;6.7
+config/materialchanger.cfg:1423:         ATTACK_DAMAGE;spartancompat:lance_zanite;7.5
+config/materialchanger.cfg:1427:         ATTACK_DAMAGE;spartancompat:battleaxe_zanite;14
+config/materialchanger.cfg:1429:         ATTACK_DAMAGE;spartancompat:mace_zanite;7
+config/materialchanger.cfg:1431:         ATTACK_DAMAGE;spartancompat:glaive_zanite;7
+config/materialchanger.cfg:1433:         ATTACK_DAMAGE;spartancompat:staff_zanite;4.5
+config/materialchanger.cfg:1441:         ATTACK_DAMAGE;aether_legacy:gravitite_pickaxe;3
+config/materialchanger.cfg:1443:         ATTACK_DAMAGE;aether_legacy:gravitite_axe;7
+config/materialchanger.cfg:1445:         ATTACK_DAMAGE;aether_legacy:gravitite_shovel;3.5
+config/materialchanger.cfg:1447:         ATTACK_DAMAGE;spartancompat:dagger_gravitite;3.25
+config/materialchanger.cfg:1449:         ATTACK_DAMAGE;spartancompat:longsword_gravitite;6.75
+config/materialchanger.cfg:1451:         ATTACK_DAMAGE;spartancompat:katana_gravitite;4.25
+config/materialchanger.cfg:1453:         ATTACK_DAMAGE;spartancompat:saber_gravitite;3.6
+config/materialchanger.cfg:1455:         ATTACK_DAMAGE;spartancompat:rapier_gravitite;2.8
+config/materialchanger.cfg:1457:         ATTACK_DAMAGE;spartancompat:greatsword_gravitite;8
+config/materialchanger.cfg:1459:         ATTACK_DAMAGE;spartancompat:hammer_gravitite;7.5
+config/materialchanger.cfg:1461:         ATTACK_DAMAGE;spartancompat:warhammer_gravitite;5.88
+config/materialchanger.cfg:1463:         ATTACK_DAMAGE;spartancompat:spear_gravitite;5.62
+config/materialchanger.cfg:1465:         ATTACK_DAMAGE;spartancompat:halberd_gravitite;8.5
+config/materialchanger.cfg:1467:         ATTACK_DAMAGE;spartancompat:pike_gravitite;5.35
+config/materialchanger.cfg:1469:         ATTACK_DAMAGE;spartancompat:lance_gravitite;6
+config/materialchanger.cfg:1473:         ATTACK_DAMAGE;spartancompat:battleaxe_gravitite;9.5
+config/materialchanger.cfg:1475:         ATTACK_DAMAGE;spartancompat:mace_gravitite;5.5
+config/materialchanger.cfg:1477:         ATTACK_DAMAGE;spartancompat:glaive_gravitite;5.5
+config/materialchanger.cfg:1479:         ATTACK_DAMAGE;spartancompat:staff_gravitite;3
+config/materialchanger.cfg:1706:         ATTACK_DAMAGE;atop:mud_sword;6
+config/materialchanger.cfg:1713:         ATTACK_DAMAGE;dungeontactics:sharp_stick;2
+config/materialchanger.cfg:1715:         ATTACK_DAMAGE;mowziesmobs:wrought_axe;16
+config/materialchanger.cfg:1717:         ATTACK_DAMAGE;minecraft:stone_sword;3.5
+config/materialchanger.cfg:1726:         ATTACK_DAMAGE;pyrotech:obsidian_hammer;4
+config/materialchanger.cfg:1728:         ATTACK_DAMAGE;pyrotech:crude_axe;3
+config/materialchanger.cfg:1729:         ATTACK_SPEED;pyrotech:crude_axe;0.9
+config/materialchanger.cfg:1731:         ATTACK_DAMAGE;msmlegacy:relic_candy;20
+config/materialchanger.cfg:1735:         ATTACK_DAMAGE;twilightforest:ironwood_sword;11
+config/materialchanger.cfg:1736:         ATTACK_DAMAGE;twilightforest:fiery_sword;13
+config/materialchanger.cfg:1737:         ATTACK_DAMAGE;twilightforest:steeleaf_sword;12
+config/materialchanger.cfg:1738:         ATTACK_DAMAGE;twilightforest:knightmetal_sword;11
+config/materialchanger.cfg:1739:         ATTACK_DAMAGE;twilightforest:ironwood_sword;11
+config/materialchanger.cfg:1740:         ATTACK_DAMAGE;twilightforest:ice_sword;12.5
+config/materialchanger.cfg:1741:         ATTACK_DAMAGE;twilightforest:glass_sword;80
+config/materialchanger.cfg:1742:         ATTACK_DAMAGE;twilightforest:giant_sword;20
+config/materialchanger.cfg:1750:         ATTACK_DAMAGE;twilightforest:ironwood_axe;14
+config/materialchanger.cfg:1751:         ATTACK_DAMAGE;twilightforest:minotaur_axe_gold;12
+config/materialchanger.cfg:1752:         ATTACK_DAMAGE;twilightforest:steeleaf_axe;15
+config/materialchanger.cfg:1753:         ATTACK_DAMAGE;twilightforest:knightmetal_axe;15
+config/materialchanger.cfg:1754:         ATTACK_DAMAGE;twilightforest:minotaur_axe;15
+config/materialchanger.cfg:1755:         ATTACK_SPEED;twilightforest:ironwood_axe;0.4
+config/materialchanger.cfg:1756:         ATTACK_SPEED;twilightforest:minotaur_axe_gold;0.4
+config/materialchanger.cfg:1757:         ATTACK_SPEED;twilightforest:steeleaf_axe;0.4
+config/materialchanger.cfg:1758:         ATTACK_SPEED;twilightforest:knightmetal_axe;0.4
+config/materialchanger.cfg:1759:         ATTACK_SPEED;twilightforest:minotaur_axe;0.4
+config/materialchanger.cfg:1884:         ATTACK_DAMAGE;iceandfire:silver_axe;9
+config/materialchanger.cfg:1888:         ATTACK_DAMAGE;iceandfire:silver_sword;6
+config/materialchanger.cfg:1943:         ATTACK_DAMAGE;aether_legacy:skyroot_sword;5
+config/materialchanger.cfg:1944:         ATTACK_DAMAGE;aether_legacy:holystone_sword;6
+config/materialchanger.cfg:1945:         ATTACK_DAMAGE;aether_legacy:zanite_sword;8
+config/materialchanger.cfg:1946:         ATTACK_DAMAGE;aether_legacy:gravitite_sword;9
+config/materialchanger.cfg:1947:         ATTACK_DAMAGE;aether_legacy:flaming_sword;9
+config/materialchanger.cfg:1948:         ATTACK_DAMAGE;aether_legacy:lightning_sword;2
+config/materialchanger.cfg:1949:         ATTACK_DAMAGE;aether_legacy:holy_sword;8
+config/materialchanger.cfg:1950:         ATTACK_DAMAGE;aether_legacy:vampire_blade;8
+config/materialchanger.cfg:1951:         ATTACK_DAMAGE;aether_legacy:pig_slayer;8
+config/materialchanger.cfg:1952:         ATTACK_DAMAGE;aether_legacy:notch_hammer;12
+config/materialchanger.cfg:1953:         ATTACK_DAMAGE;iceandfire:troll_weapon.axe;20
+config/materialchanger.cfg:1954:         ATTACK_DAMAGE;iceandfire:troll_weapon.column;20
+config/materialchanger.cfg:1955:         ATTACK_DAMAGE;iceandfire:troll_weapon.column_forest;20
+config/materialchanger.cfg:1956:         ATTACK_DAMAGE;iceandfire:troll_weapon.column_frost;20
+config/materialchanger.cfg:1957:         ATTACK_DAMAGE;iceandfire:troll_weapon.hammer;20
+config/materialchanger.cfg:1958:         ATTACK_DAMAGE;iceandfire:troll_weapon.trunk;20
+config/materialchanger.cfg:1959:         ATTACK_DAMAGE;iceandfire:troll_weapon.trunk_frost;20
+config/materialchanger.cfg:1961:         ATTACK_DAMAGE;demonic_scythe:demonic_scythe;10
+config/materialchanger.cfg:1962:         ATTACK_DAMAGE;demonic_scythe:awakened_demonic_scythe;16
+config/materialchanger.cfg:1980:         ATTACK_DAMAGE;msmlegacy:relic_keyblade;9
+config/materialchanger.cfg:1981:         ATTACK_DAMAGE;msmlegacy:relic_infinity;9
+config/materialchanger.cfg:2145:      >
+
+## spartanweaponry.cfg
+config/spartanweaponry.cfg:5: arrows {
+config/spartanweaponry.cfg:48: battleaxe {
+config/spartanweaponry.cfg:50:     S:damageBase=5.0
+config/spartanweaponry.cfg:53:     S:damageMultiplier=3.0
+config/spartanweaponry.cfg:59:     S:speed=1.2
+config/spartanweaponry.cfg:63: boomerang {
+config/spartanweaponry.cfg:68:     S:damageBase=5.0
+config/spartanweaponry.cfg:71:     S:damageMultiplier=1.1
+config/spartanweaponry.cfg:77:     S:meleeSpeed=1.4
+config/spartanweaponry.cfg:84: caestus {
+config/spartanweaponry.cfg:86:     S:damageBase=2.0
+config/spartanweaponry.cfg:89:     S:damageMultiplier=0.5
+config/spartanweaponry.cfg:95:     S:speed=3.5
+config/spartanweaponry.cfg:99: client {
+config/spartanweaponry.cfg:126: club {
+config/spartanweaponry.cfg:128:     S:damageBase=4.0
+config/spartanweaponry.cfg:131:     S:damageMultiplier=1.0
+config/spartanweaponry.cfg:137:     S:speed=1.3
+config/spartanweaponry.cfg:141: crossbow {
+config/spartanweaponry.cfg:176: dagger {
+config/spartanweaponry.cfg:178:     S:damageBase=2.5
+config/spartanweaponry.cfg:181:     S:damageMultiplier=0.50
+config/spartanweaponry.cfg:187:     S:speed=2.8
+config/spartanweaponry.cfg:191: explosives {
+config/spartanweaponry.cfg:206: general {
+config/spartanweaponry.cfg:218: glaive {
+config/spartanweaponry.cfg:220:     S:damageBase=4.0
+config/spartanweaponry.cfg:223:     S:damageMultiplier=1.0
+config/spartanweaponry.cfg:229:     S:speed=1.9
+config/spartanweaponry.cfg:233: greatsword {
+config/spartanweaponry.cfg:235:     S:damageBase=5.0
+config/spartanweaponry.cfg:238:     S:damageMultiplier=2.0
+config/spartanweaponry.cfg:244:     S:speed=1.1
+config/spartanweaponry.cfg:248: halberd {
+config/spartanweaponry.cfg:250:     S:damageBase=5.5
+config/spartanweaponry.cfg:253:     S:damageMultiplier=2.0
+config/spartanweaponry.cfg:259:     S:speed=1.2
+config/spartanweaponry.cfg:263: hammer {
+config/spartanweaponry.cfg:265:     S:damageBase=6.0
+config/spartanweaponry.cfg:268:     S:damageMultiplier=1.0
+config/spartanweaponry.cfg:274:     S:speed=1.4
+config/spartanweaponry.cfg:278: javelin {
+config/spartanweaponry.cfg:283:     S:damageBase=1.5
+config/spartanweaponry.cfg:286:     S:damageMultiplier=0.6875
+config/spartanweaponry.cfg:292:     S:meleeSpeed=1.2
+config/spartanweaponry.cfg:296: katana {
+config/spartanweaponry.cfg:298:     S:damageBase=3.5
+config/spartanweaponry.cfg:301:     S:damageMultiplier=0.5
+config/spartanweaponry.cfg:307:     S:speed=2.6
+config/spartanweaponry.cfg:311: lance {
+config/spartanweaponry.cfg:313:     S:damageBase=4.5
+config/spartanweaponry.cfg:316:     S:damageMultiplier=1.0
+config/spartanweaponry.cfg:322:     S:speed=1.1
+config/spartanweaponry.cfg:326: longbow {
+config/spartanweaponry.cfg:335: longsword {
+config/spartanweaponry.cfg:337:     S:damageBase=4.5
+config/spartanweaponry.cfg:340:     S:damageMultiplier=1.5
+config/spartanweaponry.cfg:346:     S:speed=1.8
+config/spartanweaponry.cfg:350: mace {
+config/spartanweaponry.cfg:352:     S:damageBase=4.0
+config/spartanweaponry.cfg:355:     S:damageMultiplier=1.0
+config/spartanweaponry.cfg:361:     S:speed=1.2
+config/spartanweaponry.cfg:365: materials {
+config/spartanweaponry.cfg:367:     S:damageBaseBronze=2.0
+config/spartanweaponry.cfg:370:     S:damageBaseCopper=1.5
+config/spartanweaponry.cfg:373:     S:damageBaseElectrum=25.5
+config/spartanweaponry.cfg:376:     S:damageBaseInvar=2.2
+config/spartanweaponry.cfg:379:     S:damageBaseLead=5.0
+config/spartanweaponry.cfg:382:     S:damageBaseNickel=2.0
+config/spartanweaponry.cfg:385:     S:damageBasePlatinum=3.5
+config/spartanweaponry.cfg:388:     S:damageBaseSilver=1.5
+config/spartanweaponry.cfg:391:     S:damageBaseSteel=2.5
+config/spartanweaponry.cfg:394:     S:damageBaseTin=1.75
+config/spartanweaponry.cfg:538: parrying_dagger {
+config/spartanweaponry.cfg:540:     S:damageBase=2.0
+config/spartanweaponry.cfg:543:     S:damageMultiplier=0.5
+config/spartanweaponry.cfg:546:     B:disableWeapon=true
+config/spartanweaponry.cfg:549:     S:speed=2.5
+config/spartanweaponry.cfg:553: pike {
+config/spartanweaponry.cfg:555:     S:damageBase=4.0
+config/spartanweaponry.cfg:558:     S:damageMultiplier=0.9
+config/spartanweaponry.cfg:564:     S:speed=1.4
+config/spartanweaponry.cfg:568: quarterstaff {
+config/spartanweaponry.cfg:570:     S:damageBase=1.5
+config/spartanweaponry.cfg:573:     S:damageMultiplier=1.0
+config/spartanweaponry.cfg:579:     S:speed=2.7
+config/spartanweaponry.cfg:583: rapier {
+config/spartanweaponry.cfg:585:     S:damageBase=2.5
+config/spartanweaponry.cfg:588:     S:damageMultiplier=0.20
+config/spartanweaponry.cfg:594:     S:speed=2.4
+config/spartanweaponry.cfg:598: saber {
+config/spartanweaponry.cfg:600:     S:damageBase=3.0
+config/spartanweaponry.cfg:603:     S:damageMultiplier=0.4
+config/spartanweaponry.cfg:609:     S:speed=1.7
+config/spartanweaponry.cfg:613: spear {
+config/spartanweaponry.cfg:615:     S:damageBase=4.5
+config/spartanweaponry.cfg:618:     S:damageMultiplier=0.75
+config/spartanweaponry.cfg:624:     S:speed=1.4
+config/spartanweaponry.cfg:628: throwing_axe {
+config/spartanweaponry.cfg:633:     S:damageBase=2.0
+config/spartanweaponry.cfg:636:     S:damageMultiplier=0.887
+config/spartanweaponry.cfg:642:     S:meleeSpeed=0.9
+config/spartanweaponry.cfg:646: throwing_knife {
+config/spartanweaponry.cfg:651:     S:damageBase=1.5
+config/spartanweaponry.cfg:654:     S:damageMultiplier=0.553
+config/spartanweaponry.cfg:660:     S:meleeSpeed=2.5
+config/spartanweaponry.cfg:664: warhammer {
+config/spartanweaponry.cfg:666:     S:damageBase=4.0
+config/spartanweaponry.cfg:669:     S:damageMultiplier=1.25
+config/spartanweaponry.cfg:675:     S:speed=1.6
+config/spartanweaponry.cfg:679: weapon_properties {
+
+## bettercombat.cfg
+config/bettercombat.cfg:315:     S:"Custom Weapon Tweaker" <
+config/bettercombat.cfg:316:         [Weapon Substring=troll_weapon]		[Sound Type=BLUNT]		[Animation=CHOP]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=1.0]	[Knockback=2]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:317:         [Weapon Substring=celeste]			[Sound Type=AXE]		[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:318:         [Weapon Substring=amber_sword]		[Sound Type=BLUNT]		[Animation=STAB]	[Property=VERSATILE]	[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.5] 	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:319:         [Weapon Substring=gladiolus]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:320:         [Weapon Substring=dawn_star]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:321:         [Weapon Substring=wither_bane]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:322:         [Weapon Substring=blade]			[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:323:         [Weapon Substring=aethers_guard]	[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:324:         [Weapon Substring=_infinity]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:325:         [Weapon Substring=pike_]			[Sound Type=POLEARM]	[Animation=STAB]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=2.0]	[Knockback=0.25]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=true]
+config/bettercombat.cfg:326:         [Weapon Substring=glaive_]			[Sound Type=POLEARM]	[Animation=STAB]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=1.0]	[Knockback=0.75]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=true]
+config/bettercombat.cfg:327:         [Weapon Substring=spear_]			[Sound Type=POLEARM]	[Animation=STAB]	[Property=MAINHAND]		[Sweep=0]	[Additional Reach=1.0]	[Knockback=0.25]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=true]
+config/bettercombat.cfg:328:         [Weapon Substring=lance_]			[Sound Type=POLEARM]	[Animation=STAB]	[Property=MAINHAND]		[Sweep=0]	[Additional Reach=1.0]	[Knockback=2.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:329:         [Weapon Substring=halberd_]			[Sound Type=POLEARM]	[Animation=CHOP]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=1.0]	[Knockback=1.0]		[Crit Chance=0.25]	[Additional Crit Damage=0.0]	[Parry=true]
+config/bettercombat.cfg:330:         [Weapon Substring=staff]			[Sound Type=POLEARM]	[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=1.0]	[Knockback=2.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.5]	[Parry=true]
+config/bettercombat.cfg:331:         [Weapon Substring=golden_club]		[Sound Type=POLEARM]	[Animation=STAB]	[Property=MAINHAND]		[Sweep=0]	[Additional Reach=0.5]	[Knockback=1.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:332:         [Weapon Substring=warhammer_]		[Sound Type=BLUNT]		[Animation=CHOP]	[Property=MAINHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.75]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:333:         [Weapon Substring=hammer_]			[Sound Type=BLUNT]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=3.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:334:         [Weapon Substring=mace_]			[Sound Type=BLUNT]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:335:         [Weapon Substring=club_]			[Sound Type=BLUNT]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:336:         [Weapon Substring=caestus]			[Sound Type=BLUNT]		[Animation=STAB]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]	[Potion Effect=minecraft:slowness,1,10,1.0]
+config/bettercombat.cfg:337:         [Weapon Substring=tough_glove]		[Sound Type=BLUNT]		[Animation=STAB]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:338:         [Weapon Substring=greatsword_]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=3]	[Additional Reach=1.0]	[Knockback=0.75]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=true]
+config/bettercombat.cfg:339:         [Weapon Substring=katana_]			[Sound Type=BLADE]		[Animation=CHOP]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.75]	[Crit Chance=0.1]	[Additional Crit Damage=0.5]	[Parry=false]
+config/bettercombat.cfg:340:         [Weapon Substring=longsword_]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=MAINHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.75]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=true]
+config/bettercombat.cfg:341:         [Weapon Substring=saber_]			[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:342:         [Weapon Substring=rapier_]			[Sound Type=BLADE]		[Animation=STAB]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:343:         [Weapon Substring=_sword]			[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:344:         [Weapon Substring=_cutlass]			[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:345:         [Weapon Substring=battleaxe_]		[Sound Type=AXE]		[Animation=CHOP]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.0]		[Crit Chance=0.25]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:346:         [Weapon Substring=_shovel]			[Sound Type=AXE]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:347:         [Weapon Substring=_scythe]			[Sound Type=AXE]		[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:348:         [Weapon Substring=nyx:scythe]		[Sound Type=AXE]		[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:349:         [Weapon Substring=_pickaxe]			[Sound Type=AXE]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:350:         [Weapon Substring=_axe]				[Sound Type=AXE]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.5]		[Crit Chance=0.25]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:351:         [Weapon Substring=_hoe]				[Sound Type=AXE]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:352: 		[Weapon Substring=spartanweaponry:pike_invar] [Sound Type=POLEARM]	[Animation=STAB]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=2.0]	[Knockback=0.25]	[Crit Chance=0.1]	[Additional Crit Damage=0.5]	[Parry=true]	[Potion Effect=CRIT,AFFLICT,betterwithaddons:electrified,3,0,true,true]
+config/bettercombat.cfg:353:      >
+config/bettercombat.cfg:686:     S:"Sword Tweaker" <
+config/bettercombat.cfg:687:         [Sword Substring=golden_sword]		[Additional Attack Speed=0.2]
+config/bettercombat.cfg:688:         [Sword Substring=stone_sword]		[Additional Attack Speed=-0.1]
+config/bettercombat.cfg:689:         [Sword Substring=wooden_sword]		[Additional Attack Speed=0.2]
+config/bettercombat.cfg:690:      >
+
+## qualitytools/Quailities (every file)
+config/qualitytools/Quailities/baubles.json

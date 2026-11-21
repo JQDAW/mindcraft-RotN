@@ -63,10 +63,11 @@ The lane must not depend on the terrain. Options, for a small harness-ops PR:
 Either needs a new run under a new GO.
 
 ## Files
-Each file was made with `test/tools/redact-evidence.mjs … --bot FRCFLD`; the leak check `--check` is clean.
+Each file was made with `test/tools/redact-evidence.mjs … --bot FRCFLD`; the leak check `--check` is clean. After #535, the redactor also maps a relative path to a checkout (`../../mindcraft-RotN-worktrees/<agent>/…`) to `<local>`, so `driver.log` and `notes.bcStatus.capture` read `<local>/captures/raw/…`.
 - `result.json`: the runner's result: the checks, `notes.bcStatus`, `notes.landing`.
 - `run.log`: the runner's stdout (`run-stdout.log` in the raw folder).
 - `server.log`: the test server's log for the run, as the runner fetched it.
 - `driver.log`: the driver's stdout and stderr.
+- `server-lifecycle.txt` (added after the #535 review): the `test-server.sh up` log, `starts`, and the `test-server.sh down` log, which ends `verified gone: server, Primary IPv4 and SSH key`. The hcloud counts after the delete (`servers=0 ips=0 keys=0` at 13:48:36, servers and IPs with `grep -c .`, keys from the JSON `labels`) were read in the terminal and not saved then. Later probe evidence saves them in this file.
 
 The raw forge-bridge capture (`capture.jsonl`, 5 MB) and the `since-start` log are kept in the raw folder and not committed.

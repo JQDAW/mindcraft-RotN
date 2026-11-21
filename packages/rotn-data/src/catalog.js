@@ -108,6 +108,9 @@ export class RotnData {
         // A melee fight in numbers (soak 7): mob health and armour, the bot's weapons, the two attack packets
         // (combat.json; hand-written with evidence).
         this.combatData = readJson(dir, 'combat') ?? null;
+        // Every melee tool or weapon on the pack: numbers where the code settles them, Better Combat's treatment
+        // (weapons.json; generated from the jars' class chains, configs and three families read from bytecode).
+        this.weaponsData = readJson(dir, 'weapons') ?? null;
         // Wild food blocks and plant hazards (forage-food.json, hand-written with citations).
         this.forageData = readJson(dir, 'forage-food') ?? null;
         // Which blocks fall (gravity), from the pack's bytecode and configs (falling-blocks.json,
@@ -550,7 +553,7 @@ export class RotnData {
         return combatOf(this, entityName);
     }
 
-    /** A weapon's numbers on this pack ('hand' when empty): vanilla's attackDamage, attackSpeed, cooldownTicks and Better Combat's bc* ones, or null (src/combat.js). */
+    /** A weapon's numbers on this pack ('hand' when empty): vanilla's attackDamage, attackSpeed, cooldownTicks and Better Combat's bc* ones (null where not read), or null when not a listed weapon (src/combat.js). */
     weaponStats(item) {
         return weaponStats(this, item);
     }

@@ -28,17 +28,28 @@ export function combatOf(catalog, entityName) {
 }
 
 /**
- * A weapon's numbers on this pack ('hand' for an empty hand), or null when combat.json does not list it.
- * @returns {{item: string, attackDamage: number, attackSpeed: number, cooldownTicks: number, bcWeapon: boolean,
- *   bcAttackDamage: number, bcAttackSpeed: number, bcCooldownTicks: number, bcCritChance: number, vanilla?: object,
- *   durability?: number, durabilityPerHit?: number, note?: string}|null}  attackSpeed/cooldownTicks: vanilla's;
- *   bc*: Better Combat's packet (bcAttackDamage before Damage Control, bcCooldownTicks its client's pacing).
+ * A weapon's numbers on this pack ('hand' for an empty hand), or null when it is not a listed melee item.
+ * combat.json's hand-written entries (with evidence) first, then weapons.json (every sword, axe, pickaxe, shovel,
+ * hoe and other melee tool or weapon on the pack). A number the pack's code was not read for is null: attackDamage
+ * null means unknown, not 0 (skills falls back to its own table then).
+ * @returns {{item: string, attackDamage: number|null, attackSpeed: number|null, cooldownTicks: number|null,
+ *   bcWeapon: boolean, bcAttackDamage: number|null, bcAttackSpeed: number|null, bcCooldownTicks: number|null,
+ *   bcCritChance: number, bcCritMultiplier?: number, source?: string|null, vanilla?: object, durability?: number,
+ *   durabilityPerHit?: number, note?: string}|null}  attackSpeed/cooldownTicks: vanilla's; bc*: Better Combat's
+ *   packet (bcAttackDamage before Damage Control, bcCooldownTicks its client's pacing; bcWeapon false: Better
+ *   Combat treats it as an empty hand, 0.5 off and speed 1.5 plus its modifiers).
  */
 export function weaponStats(catalog, item = 'hand') {
-    const w = catalog.combatData?.weapons?.[item || 'hand'];
-    if (!w) return null;
-    const { evidence, ...facts } = w;
-    return { item: item || 'hand', ...structuredClone(facts) };
+    const key = item || 'hand';
+    const w = catalog.combatData?.weapons?.[key];
+    if (w) {
+        const { evidence, ...facts } = w;
+        return { item: key, ...structuredClone(facts) };
+    }
+    const g = catalog.weaponsData?.items?.[key];
+    if (!g) return null;
+    const { class: cls, base, materialChanger, bcTweakerLine, bcSwordTweakerLine, overrides, spartanType, spartanMaterial, ...facts } = g;
+    return { item: key, ...structuredClone(facts) };
 }
 
 /** The armour points of worn items (unknown items count 0), from combat.json's armor.items. */
@@ -61,7 +72,7 @@ export function afterArmor(damage, armor = 0, toughness = 0) {
  *   weapon: an item id or 'hand'; path: which attack packet; cooled: the vanilla cooldown fraction c (0..1, vanilla
  *   only); armor/toughness: the target's; protection: its Protection EPF; lastDamage: the raw amount of the hit the
  *   target last took (vanilla only: 0 for a mob nothing has hurt yet); crit: a Better Combat crit (x1.5; bettercombat only).
- * @returns {number|null} null for an unknown weapon.
+ * @returns {number|null} null for an unknown weapon or one whose damage was not read.
  */
 export function meleeHitDamage(catalog, { weapon = 'hand', path = 'bettercombat', cooled = 1, armor = 0, toughness = 0, protection = 0, lastDamage = 0, crit = false } = {}) {
     const w = weaponStats(catalog, weapon);
@@ -70,9 +81,11 @@ export function meleeHitDamage(catalog, { weapon = 'hand', path = 'bettercombat'
     let amount;
     if (path === 'bettercombat') {
         amount = w.bcAttackDamage;
-        if (crit) amount *= catalog.combatData.playerAttack.betterCombatPacket.crit.multiplier;
+        if (!Number.isFinite(amount)) return null;
+        if (crit) amount *= w.bcCritMultiplier ?? catalog.combatData.playerAttack.betterCombatPacket.crit.multiplier;
     } else {
         amount = w.attackDamage;
+        if (!Number.isFinite(amount)) return null;
         const c = clamp(cooled, 0, 1);
         amount *= 0.2 + 0.8 * c * c;
         amount = amount > lastDamage ? amount - lastDamage : 0;
@@ -93,9 +106,9 @@ const hitsFor = (hp, first, rest) => (first >= hp ? 1 : rest > 0 ? 1 + Math.ceil
  * @returns {{hits: number, minHits: number, perHit: number, critHit: number, ticks: number, cooldownTicks: number,
  *   health: number, armor: number}|null} hits: with no random crit (the most it takes); minHits: every hit a crit (the
  *   fewest; = hits on the vanilla path); critHit: one crit's damage (= perHit on the vanilla path). ticks: from the first
- *   hit to the last at cooldownTicks (bcCooldownTicks on Better Combat's packet, its client's pacing, which the server does
+ *   hit to the last at cooldownTicks (null when the weapon's speed was not read; bcCooldownTicks on Better Combat's packet, its client's pacing, which the server does
  *   not check; vanilla's on the vanilla path). hits is Infinity when the bot cannot kill it (the vanilla path: after the
- *   first hit, same-weapon hits deal nothing). null for an unknown mob or weapon.
+ *   first hit, same-weapon hits deal nothing). null for an unknown mob or weapon, or a weapon whose damage was not read.
  */
 export function hitsToKill(catalog, { mob, weapon = 'hand', path = 'bettercombat', armorItems = [], health, protection = 0, sneakAttack = false } = {}) {
     const m = combatOf(catalog, mob);
@@ -105,6 +118,7 @@ export function hitsToKill(catalog, { mob, weapon = 'hand', path = 'bettercombat
     const armor = m.armor + armorPoints(catalog, armorItems);
     const opts = { weapon, armor, toughness: m.armorToughness ?? 0, protection };
     const perHit = meleeHitDamage(catalog, { ...opts, path });
+    if (perHit === null) return null;
     let hits, minHits, critHit, cooldownTicks;
     if (path === 'vanilla') {
         // A fresh mob takes the first hit in full; every later one at the same amount deals nothing.
@@ -117,6 +131,6 @@ export function hitsToKill(catalog, { mob, weapon = 'hand', path = 'bettercombat
         minHits = hitsFor(hp, critHit, critHit);
         cooldownTicks = w.bcCooldownTicks;
     }
-    const ticks = Number.isFinite(hits) ? Math.round((hits - 1) * cooldownTicks * 10) / 10 : Infinity;
+    const ticks = !Number.isFinite(hits) ? Infinity : Number.isFinite(cooldownTicks) ? Math.round((hits - 1) * cooldownTicks * 10) / 10 : null;
     return { hits, minHits, perHit, critHit, ticks, cooldownTicks, health: hp, armor };
 }
