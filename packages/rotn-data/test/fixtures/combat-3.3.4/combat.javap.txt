@@ -1,6 +1,6 @@
 # javap -c -p -constants excerpts (reads class files; runs no mod code) from the pinned RotN 3.3.4 server pack zip
 # (SHA-256 90642fd5...f5205), for test/combat-numbers.test.js. Vanilla classes are the zip root's obfuscated
-# minecraft_server.1.12.2.jar (fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e); aed, vp and pa are shown after
+# minecraft_server.1.12.2.jar (fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e); aed, vp, pa, aip and ain are shown after
 # Forge's server binpatches (forge-1.12.2-14.23.5.2860.jar in the zip root, cd3fbf85d7ca744507fd6a37a41b90122d43e616a4f8962332b1b658655e8a64:
 # binpatches.pack.lzma, LZMA -> pack200 -> one GDiff patch per class; each input class's Adler-32 checksum matched).
 # Mod jars (mods/):
@@ -4457,4 +4457,342 @@ public class net.smileycorp.hordes.common.entities.EntityZombiePlayer extends ne
      129: iadd
      130: putfield      #128                // Field net/minecraft/entity/EntityLivingBase.field_70172_ad:I
      133: return
+
+## SRG names for the durability excerpts (notch -> SRG)
+MD: ahq/a (Laip;Lvp;Lvp;)Z net/minecraft/item/ItemTool/func_77644_a (Lnet/minecraft/item/ItemStack;Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/entity/EntityLivingBase;)Z
+CL: ain net/minecraft/item/Item
+CL: aip net/minecraft/item/ItemStack
+MD: aip/a (ILjava/util/Random;Loq;)Z net/minecraft/item/ItemStack/func_96631_a (ILjava/util/Random;Lnet/minecraft/entity/player/EntityPlayerMP;)Z
+MD: aip/a (ILvp;)V net/minecraft/item/ItemStack/func_77972_a (ILnet/minecraft/entity/EntityLivingBase;)V
+MD: aip/a (Lvp;Laed;)V net/minecraft/item/ItemStack/func_77961_a (Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/entity/player/EntityPlayer;)V
+MD: aip/b (I)V net/minecraft/item/ItemStack/func_77964_b (I)V
+MD: aip/i ()I net/minecraft/item/ItemStack/func_77952_i ()I
+MD: aip/k ()I net/minecraft/item/ItemStack/func_77958_k ()I
+
+## aip (ItemStack, Forge-patched) attemptDamageItem a(int, Random, oq): breaks only when damage > max damage
+  public boolean a(int, java.util.Random, oq);
+    Code:
+       0: aload_0
+       1: invokevirtual #312                // Method f:()Z
+       4: ifne          9
+       7: iconst_0
+       8: ireturn
+       9: iload_1
+      10: ifle          69
+      13: getstatic     #350                // Field alo.u:Lalk;
+      16: aload_0
+      17: invokestatic  #355                // Method alm.a:(Lalk;Laip;)I
+      20: istore        4
+      22: iconst_0
+      23: istore        5
+      25: iconst_0
+      26: istore        6
+      28: iload         4
+      30: ifle          58
+      33: iload         6
+      35: iload_1
+      36: if_icmpge     58
+      39: aload_0
+      40: iload         4
+      42: aload_2
+      43: invokestatic  #360                // Method ali.a:(Laip;ILjava/util/Random;)Z
+      46: ifeq          52
+      49: iinc          5, 1
+      52: iinc          6, 1
+      55: goto          28
+      58: iload_1
+      59: iload         5
+      61: isub
+      62: istore_1
+      63: iload_1
+      64: ifgt          69
+      67: iconst_0
+      68: ireturn
+      69: aload_3
+      70: ifnull        91
+      73: iload_1
+      74: ifeq          91
+      77: getstatic     #365                // Field m.s:Lam;
+      80: aload_3
+      81: aload_0
+      82: aload_0
+      83: getfield      #82                 // Field h:I
+      86: iload_1
+      87: iadd
+      88: invokevirtual #370                // Method am.a:(Loq;Laip;I)V
+      91: aload_0
+      92: aload_0
+      93: invokevirtual #372                // Method i:()I
+      96: iload_1
+      97: iadd
+      98: invokevirtual #374                // Method b:(I)V
+     101: aload_0
+     102: invokevirtual #372                // Method i:()I
+     105: aload_0
+     106: invokevirtual #376                // Method k:()I
+     109: if_icmple     116
+     112: iconst_1
+     113: goto          117
+     116: iconst_0
+     117: ireturn
+
+## aip (ItemStack, Forge-patched) damageItem a(int, vp): shrinks the stack when attemptDamageItem returns true
+  public void a(int, vp);
+    Code:
+       0: aload_2
+       1: instanceof    #221                // class aed
+       4: ifeq          20
+       7: aload_2
+       8: checkcast     #221                // class aed
+      11: getfield      #385                // Field aed.bO:Laeb;
+      14: getfield      #389                // Field aeb.d:Z
+      17: ifne          92
+      20: aload_0
+      21: invokevirtual #312                // Method f:()Z
+      24: ifeq          92
+      27: aload_0
+      28: iload_1
+      29: aload_2
+      30: invokevirtual #395                // Method vp.bR:()Ljava/util/Random;
+      33: aload_2
+      34: instanceof    #397                // class oq
+      37: ifeq          47
+      40: aload_2
+      41: checkcast     #397                // class oq
+      44: goto          48
+      47: aconst_null
+      48: invokevirtual #401                // Method a:(ILjava/util/Random;Loq;)Z
+      51: ifeq          92
+      54: aload_2
+      55: aload_0
+      56: invokevirtual #404                // Method vp.b:(Laip;)V
+      59: aload_0
+      60: iconst_1
+      61: invokevirtual #184                // Method g:(I)V
+      64: aload_2
+      65: instanceof    #221                // class aed
+      68: ifeq          87
+      71: aload_2
+      72: checkcast     #221                // class aed
+      75: astore_3
+      76: aload_3
+      77: aload_0
+      78: getfield      #80                 // Field e:Lain;
+      81: invokestatic  #406                // Method qs.c:(Lain;)Lqo;
+      84: invokevirtual #224                // Method aed.b:(Lqo;)V
+      87: aload_0
+      88: iconst_0
+      89: putfield      #82                 // Field h:I
+      92: return
+
+## aip (ItemStack, Forge-patched) hitEntity a(vp, aed), getItemDamage i(), getMaxDamage k(), setItemDamage b(int)
+  public void a(vp, aed);
+    Code:
+       0: aload_0
+       1: getfield      #80                 // Field e:Lain;
+       4: aload_0
+       5: aload_1
+       6: aload_2
+       7: invokevirtual #412                // Method ain.a:(Laip;Lvp;Lvp;)Z
+      10: istore_3
+      11: iload_3
+      12: ifeq          26
+      15: aload_2
+      16: aload_0
+      17: getfield      #80                 // Field e:Lain;
+      20: invokestatic  #219                // Method qs.b:(Lain;)Lqo;
+      23: invokevirtual #224                // Method aed.b:(Lqo;)V
+      26: return
+  public int i();
+    Code:
+       0: aload_0
+       1: invokevirtual #207                // Method c:()Lain;
+       4: aload_0
+       5: invokevirtual #336                // Method ain.getDamage:(Laip;)I
+       8: ireturn
+  public int k();
+    Code:
+       0: aload_0
+       1: invokevirtual #207                // Method c:()Lain;
+       4: aload_0
+       5: invokevirtual #317                // Method ain.getMaxDamage:(Laip;)I
+       8: ireturn
+  public void b(int);
+    Code:
+       0: aload_0
+       1: invokevirtual #207                // Method c:()Lain;
+       4: aload_0
+       5: iload_1
+       6: invokevirtual #343                // Method ain.setDamage:(Laip;I)V
+       9: return
+
+## ain (Item, Forge-patched) getMaxDamage(aip), setDamage(aip, int)
+  public int getMaxDamage(aip);
+    Code:
+       0: aload_0
+       1: invokevirtual #613                // Method l:()I
+       4: ireturn
+  public void setDamage(aip, int);
+    Code:
+       0: aload_1
+       1: iload_2
+       2: putfield      #587                // Field aip.h:I
+       5: aload_1
+       6: getfield      #587                // Field aip.h:I
+       9: ifge          17
+      12: aload_1
+      13: iconst_0
+      14: putfield      #587                // Field aip.h:I
+      17: return
+
+## ahq (ItemTool) hitEntity a(aip, vp, vp): damageItem(2)
+  public boolean a(aip, vp, vp);
+    Code:
+       0: aload_1
+       1: iconst_2
+       2: aload_3
+       3: invokevirtual #83                 // Method aip.a:(ILvp;)V
+       6: iconst_1
+       7: ireturn
+
+## agy (ItemAxe), ItemAxeBase, ItemCrudeAxe: no hitEntity, getMaxDamage or setDamage of their own
+agy: 0
+com.codetaylor.mc.pyrotech.modules.tool.item.spi.ItemAxeBase: 0
+com.codetaylor.mc.pyrotech.modules.tool.item.ItemCrudeAxe: 0
+
+## Better Combat Helpers.playerAttackVictim: hitEntity on the held stack after playerAttackVictimWithWeapon, whatever it returned (istore 5 is not read first)
+  public static boolean playerAttackVictim(net.minecraft.entity.player.EntityPlayer, net.minecraft.entity.Entity, boolean);
+    Code:
+       0: aload_0
+       1: invokevirtual #59                 // Method net/minecraft/entity/player/EntityPlayer.func_184614_ca:()Lnet/minecraft/item/ItemStack;
+       4: astore_3
+       5: aload_0
+       6: invokevirtual #62                 // Method net/minecraft/entity/player/EntityPlayer.func_184592_cb:()Lnet/minecraft/item/ItemStack;
+       9: astore        4
+      11: iconst_0
+      12: istore        5
+      14: iload_2
+      15: ifeq          142
+      18: aload_0
+      19: getstatic     #68                 // Field net/minecraft/util/EnumHand.OFF_HAND:Lnet/minecraft/util/EnumHand;
+      22: getstatic     #74                 // Field net/minecraft/item/ItemStack.field_190927_a:Lnet/minecraft/item/ItemStack;
+      25: invokevirtual #78                 // Method net/minecraft/entity/player/EntityPlayer.func_184611_a:(Lnet/minecraft/util/EnumHand;Lnet/minecraft/item/ItemStack;)V
+      28: aload_0
+      29: aload_1
+      30: aload_3
+      31: aload         4
+      33: iconst_1
+      34: invokestatic  #82                 // Method playerAttackVictimWithWeapon:(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/entity/Entity;Lnet/minecraft/item/ItemStack;Lnet/minecraft/item/ItemStack;Z)Z
+      37: istore        5
+      39: aload_0
+      40: getstatic     #68                 // Field net/minecraft/util/EnumHand.OFF_HAND:Lnet/minecraft/util/EnumHand;
+      43: aload         4
+      45: invokevirtual #78                 // Method net/minecraft/entity/player/EntityPlayer.func_184611_a:(Lnet/minecraft/util/EnumHand;Lnet/minecraft/item/ItemStack;)V
+      48: aload_0
+      49: getfield      #86                 // Field net/minecraft/entity/player/EntityPlayer.field_70170_p:Lnet/minecraft/world/World;
+      52: getfield      #92                 // Field net/minecraft/world/World.field_72995_K:Z
+      55: ifeq          66
+      58: getstatic     #98                 // Field bettercombat/mod/client/ClientProxy.EHC_INSTANCE:Lbettercombat/mod/client/EventHandlersClient;
+      61: iconst_1
+      62: invokevirtual #104                // Method bettercombat/mod/client/EventHandlersClient.checkItemstacksChanged:(Z)Z
+      65: pop
+      66: aload_3
+      67: invokevirtual #108                // Method net/minecraft/item/ItemStack.func_190926_b:()Z
+      70: ifne          284
+      73: aload_1
+      74: instanceof    #110                // class net/minecraft/entity/EntityLivingBase
+      77: ifeq          284
+      80: aload_3
+      81: invokevirtual #113                // Method net/minecraft/item/ItemStack.func_77946_l:()Lnet/minecraft/item/ItemStack;
+      84: astore        6
+      86: aload_3
+      87: aload_1
+      88: checkcast     #110                // class net/minecraft/entity/EntityLivingBase
+      91: aload_0
+      92: invokevirtual #117                // Method net/minecraft/item/ItemStack.func_77961_a:(Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/entity/player/EntityPlayer;)V
+      95: aload_3
+      96: invokevirtual #108                // Method net/minecraft/item/ItemStack.func_190926_b:()Z
+      99: ifeq          139
+     102: aload_0
+     103: getstatic     #120                // Field net/minecraft/util/EnumHand.MAIN_HAND:Lnet/minecraft/util/EnumHand;
+     106: getstatic     #74                 // Field net/minecraft/item/ItemStack.field_190927_a:Lnet/minecraft/item/ItemStack;
+     109: invokevirtual #78                 // Method net/minecraft/entity/player/EntityPlayer.func_184611_a:(Lnet/minecraft/util/EnumHand;Lnet/minecraft/item/ItemStack;)V
+     112: aload_0
+     113: aload         6
+     115: getstatic     #120                // Field net/minecraft/util/EnumHand.MAIN_HAND:Lnet/minecraft/util/EnumHand;
+     118: invokestatic  #126                // Method net/minecraftforge/event/ForgeEventFactory.onPlayerDestroyItem:(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/item/ItemStack;Lnet/minecraft/util/EnumHand;)V
+     121: aload_0
+     122: getfield      #86                 // Field net/minecraft/entity/player/EntityPlayer.field_70170_p:Lnet/minecraft/world/World;
+     125: getfield      #92                 // Field net/minecraft/world/World.field_72995_K:Z
+
+## aed (EntityPlayer, Forge-patched) attackTargetEntityWithCurrentItem f(vg): hitEntity only when attackEntityFrom returned true (ifeq 1256 skips it)
+  public void f(vg);
+    Code:
+     479: invokevirtual #1578               // Method vg.a:(Lur;F)Z
+     482: istore        22
+     484: iload         22
+     486: ifeq          1256
+    1062: invokevirtual #472                // Method aip.b:()Z
+    1065: ifne          1121
+    1068: aload         24
+    1070: instanceof    #4                  // class vp
+    1073: ifeq          1121
+    1076: aload         23
+    1078: invokevirtual #474                // Method aip.l:()Laip;
+    1081: astore        25
+    1083: aload         23
+    1085: aload         24
+    1087: checkcast     #4                  // class vp
+    1090: aload_0
+    1091: invokevirtual #1651               // Method aip.a:(Lvp;Laed;)V
+    1094: aload         23
+    1096: invokevirtual #472                // Method aip.b:()Z
+    1099: ifeq          1121
+
+## Better Combat Helpers.playerAttackVictimWithWeapon: its one setItemDamage, under wards:effect_unbreaking (switch case 8 -> 1444, a random repair of 1)
+  public static boolean playerAttackVictimWithWeapon(net.minecraft.entity.player.EntityPlayer, net.minecraft.entity.Entity, net.minecraft.item.ItemStack, net.minecraft.item.ItemStack, boolean);
+    1208: ldc_w         #481                // String wards:effect_unbreaking
+    1211: invokevirtual #465                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+    1214: ifeq          1221
+    1217: bipush        8
+    1219: istore        39
+    1221: iload         39
+    1223: tableswitch   { // 0 to 8
+                     0: 1272
+                     1: 1292
+                     2: 1312
+                     3: 1328
+                     4: 1352
+                     5: 1383
+                     6: 1414
+                     7: 1429
+                     8: 1444
+               default: 1492
+          }
+    1444: aload         26
+    1446: invokevirtual #108                // Method net/minecraft/item/ItemStack.func_190926_b:()Z
+    1449: ifne          1492
+    1452: aload         26
+    1454: invokevirtual #507                // Method net/minecraft/item/ItemStack.func_77951_h:()Z
+    1457: ifeq          1492
+    1460: aload_0
+    1461: invokevirtual #511                // Method net/minecraft/entity/player/EntityPlayer.func_70681_au:()Ljava/util/Random;
+    1464: iconst_2
+    1465: aload         37
+    1467: invokevirtual #195                // Method net/minecraft/potion/PotionEffect.func_76458_c:()I
+    1470: iadd
+    1471: invokevirtual #517                // Method java/util/Random.nextInt:(I)I
+    1474: ifle          1492
+    1477: aload         26
+    1479: aload         26
+    1481: invokevirtual #520                // Method net/minecraft/item/ItemStack.func_77952_i:()I
+    1484: iconst_1
+    1485: isub
+    1486: invokevirtual #524                // Method net/minecraft/item/ItemStack.func_77964_b:(I)V
+    1489: goto          1492
+    1492: goto          944
+
+## Every Better Combat class that calls setItemDamage, damageItem, attemptDamageItem or hitEntity (the rest call none; EventHandlers' damageItem is in parryAttack, on a parrying player's item)
+bettercombat.mod.server.EventHandlers: setItemDamage 0, damageItem 1, attemptDamageItem 0, hitEntity 0
+bettercombat.mod.util.Helpers: setItemDamage 1, damageItem 0, attemptDamageItem 0, hitEntity 2
 
