@@ -45,7 +45,7 @@ Every address is redacted (`<ip>`, `<local>`).
 | `vanilla_stone_axe` | stone axe | 24 | maxMs | 2.323 on hit 1, then 0 ×23 | – | – | 2500–2503 | 2500 | – | INCONCLUSIVE (scent marker) |
 | `bc_stone_axe` | stone axe | 8 | dead | 2.323 ×5, 3.542 ×2, 1.299 (killing) | #4, #7 | no | 2499–2502 | 2500 | 6–9 | INCONCLUSIVE (scent marker) |
 | `vanilla_crude_axe` | crude axe | 40 | maxHits | 2.323 on hit 1, then 0 ×39 | – | – | 1100–1103 | 1100 | – | PASS |
-| `bc_crude_axe` | crude axe | 9 | dead | 2.323 ×7, **0.371 (#5, bare-handed)**, 3.366 (killing) | #9 (killing, ambiguous) | no | 952–1104 | 1100 | 6–9 | INCONCLUSIVE (parasite after the death) |
+| `bc_crude_axe` | crude axe | 9 | dead | 2.323 ×7, **0.371 (#5, bare-handed)**, 3.366 (killing) | #9 (the killing hit: see below) | no | 952–1104 | 1100 | 6–9 | INCONCLUSIVE (parasite after the death) |
 | `vanilla_hand` | hand | 40 | maxHits | 0.749 on hit 1, then 0 ×39 | – | – | 650–653 | 650 | – | PASS |
 | `bc_hand` | hand | 40 | maxHits | 0.371 ×40 | none | no | 649–653 | 650 | 36–54 (projected 54) | PASS |
 | `bc_ai_zombie` | stone sword | 40 | maxHits | (not a zombie: see below) | – | – | 649–655 | 650 | – | INCONCLUSIVE (target health 538) |
@@ -67,16 +67,27 @@ Every address is redacted (`<ip>`, `<local>`).
    - **The fix:** match only the name `zombie` (`minecraft:zombie`).
 
 ## The crude-axe gap (952 ms): a driver bug
-- **When the axe broke:** the crude axe broke on hit 4. Each landed hit costs it 2 of its 8 durability, and the vanilla series on A had already landed 1 hit.
+- **When the axe broke:** the crude axe broke on hit 4. Its durability is 8 and a hit on a mob costs it 2 (rotn-data `packages/rotn-data/3.3.4/combat.json`, `weapons["pyrotech:crude_axe"]`: `durability` 8, `durabilityPerHit` 2, with its evidence there). The vanilla series on A had already landed 1 hit with the same axe.
 - **Why hit 5 went out bare-handed:** the driver checks the held item at the top of each loop, then pre-waits about 950 ms. The break arrived during that wait, so hit 5 went out with an empty hand.
   - The wrapper paced it at the bare hand's cooldown, 13 ticks (650 ms): the gap was 952 ms.
   - Its drop was the bare hand's (0.371).
 - **Then:** the driver took the next axe (`reequips` after hit 5).
 - **The fix:** check the held item again right before each attack, after the pre-wait.
-- **For net-forge, noted only:** hit 6, the first after the re-equip, reported `cooldownTicks` 8, Better Combat's minimum. The attack-speed attribute had not yet been updated for the new item, so for a moment the wrapper's cooldown came from a stale attribute. The gap to hit 6 was still 1,104 ms. That window could let a hit right after an item change go out early; worth a look.
+- **The per-hit `cooldownTicks` of hits 5 and 6 (22 and 8) are the driver's stale reads, not the wrapper's pacing** (corrected after the #549 review; an earlier version of this README blamed the wrapper).
+  - The driver reads `bot.forge.attackCooldownTicks()` once, at the top of each round, before its waits.
+  - Hit 5's 22 was read while the axe was still in hand, before the break.
+  - Hit 6's 8 was read right after the re-equip, before the server had sent the new item's attack speed.
+  - **The wrapper handled the item change correctly.** Hit 5 went out on the bare hand's cooldown. Hit 6 went out 1,103 ms (22 ticks) after the re-equip (t 5,209 to 6,312 ms), at the crude axe's cooldown.
 
 ## Hit 1 of each NoAI Better Combat series (#533 review)
-**Hit 1 was a crit in 0 of 4 series** (sword, stone axe, crude axe, hand). Attempt 2 had 1 of 3. So the sneak crit that rotn-data #528 expects on a NoAI zombie's first Better Combat hit did not appear reliably on this server. Random crits did appear: sword #2 and #3, stone axe #4 and #7, and possibly the crude axe's killing hit #9.
+**Hit 1 was a crit in 0 of 4 series** (sword, stone axe, crude axe, hand). Attempt 2 had 1 of 3. So the sneak crit that rotn-data #528 expects on a NoAI zombie's first Better Combat hit did not appear reliably on this server.
+
+This count comes from the hit-1 drops: each series' hit 1 took the plain drop (2.733, 2.323, 2.323, 0.371). In `result.json`, `verdict.firstHitCrit` is `false` for the sword and the hand but `null` for the stone axe and the crude axe. An INCONCLUSIVE verdict applies no rule and marks no crit, so those two were read from the drops in `notes.series[].reply.hits`.
+
+Random crits did appear:
+- the sword's #2 and #3;
+- the stone axe's #4 and #7;
+- **the crude axe's killing hit #9.** The zombie had 3.366 health before it; a plain hit (2.323) cannot kill from there, and a crit (3.542) can. The README's earlier "ambiguous" was wrong (#549 review).
 
 This is a question for rotn-data. It is not a pass rule, and every count is in the range either way.
 

@@ -12,7 +12,7 @@
 //   ROTN_SCENARIO_HELLO                  said once after spawn
 //   MINDCRAFT_PROFILES_FOLDER            the bot's token cache; required with Microsoft auth, never printed.
 //                                        A missing or stale cache exits 3; no device-code login here.
-//   ROTN_DRIVER_BC_ATTACK                on | off -> FORGE_BC_ATTACK (the scenario sets on; unset = initBot's default, off)
+//   ROTN_DRIVER_BC_ATTACK                on | off -> FORGE_BC_ATTACK (the scenario sets on; unset = initBot's default, on since #545)
 //   ROTN_DRIVER_AUTH                     microsoft (default) | offline (loopback tests only)
 //   ROTN_DRIVER_CAPTURE                  1 (default) | a path | 0 -> FORGE_CAPTURE, as g1-driver
 //   ROTN_DRIVER_MODLIST_FILE             the ping JSON fallback (default: the pinned RotN 3.3.4 fixture)

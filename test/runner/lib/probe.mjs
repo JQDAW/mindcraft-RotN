@@ -361,11 +361,21 @@ export function notMeasured(r, catalogue = zombieCatalogueHealth()) {
 }
 
 /**
+ * The entity types that are not alive (#549 review): 'other' (the Zombie Awareness scent marker), 'object' (items),
+ * 'orb' (experience) and 'projectile'. Every other type is alive: 'mob', 'hostile' (mod_lavacow:parasite), 'passive', ...
+ * The same set as the driver's NON_LIVING (test/runner/drivers/bc-attack.mjs).
+ */
+export const NON_LIVING_TYPES = new Set(['other', 'object', 'orb', 'projectile']);
+
+/**
  * A NoAI series is clean only if nothing else was there (the lead, after #543): returns why it is not, or null.
- * - the census saw a living entity that is not a player (health above 0) inside the lane's box (bcLaneFills' first
+ * - the census saw a living entity (any type but NON_LIVING_TYPES, with health above 0 or not read; after #549: the
+ *   Zombie Awareness scent marker is type other, and its metadata 7 is not health) inside the lane's box (bcLaneFills' first
  *   fill: x xFrom-1..xTo+1, y y-1..y+2, z z-1..z+1, block coordinates) other than the zombies standing in the
  *   step's own cells (cells: the target's and its partner's, within 0.75 of either cell's centre: a NoAI zombie
  *   does not move);
+ *   An entity first seen at or after the target's death (target.diedAt) does not count: a parasite that a dying
+ *   zombie spawns comes after the measurement (attempt 3, #549).
  * - or the bot was hurt during the series (botHurts).
  */
 export function noAiIntrusion(r, { cells, lane = BC_PLAN.lane } = {}) {
@@ -374,7 +384,11 @@ export function noAiIntrusion(r, { cells, lane = BC_PLAN.lane } = {}) {
     const seen = new Map();
     for (const c of r?.census ?? []) {
         for (const e of c.entities ?? []) {
-            if (!(typeof e.health === 'number' && e.health > 0) || !Array.isArray(e.pos) || !inBox(e.pos)) continue;
+            if (e.type === undefined) { if (!(typeof e.health === 'number' && e.health > 0)) continue; }   // a census from before #546
+            else if (NON_LIVING_TYPES.has(e.type)) continue;                      // not alive: the scent marker, an item, an orb
+            else if (typeof e.health === 'number' && e.health <= 0) continue;    // dead; a living one whose health was not read counts
+            if (!Array.isArray(e.pos) || !inBox(e.pos)) continue;
+            if (typeof r?.target?.diedAt === 'number' && !seen.has(e.id) && c.t >= r.target.diedAt) continue;
             if (atCell(e.pos) && /zombie/i.test(String(e.name ?? ''))) continue;
             if (!seen.has(e.id)) seen.set(e.id, `${e.name ?? '?'} #${e.id} at ${e.pos.join(' ')} (t ${c.t} ms)`);
         }
