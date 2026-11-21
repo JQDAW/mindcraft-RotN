@@ -1231,3 +1231,33 @@ test('PR 5: burrowAway tunnels until the troll is ~8 blocks off, sealing behind 
     const c = withTroll(holeShelter({ dirt: 0 }), troll(3.5, 61, 0.5));
     assert.deepEqual(await burrowAway(c.bot, c.bot.entities[9]), { steps: 0, site: null, stopped: 'cornered', why: 'no blocks to seal with' });
 });
+
+// Soak 7 (rotn-v0.1.13, death 1, C): a zombie walked into the bot's cell through the opened wall;
+// the morning burrows away from a mob in reach (a step down first), never sealing a cell a body holds.
+test('soak 7 (C): burrowStep with prefer down takes the step down when it is allowed; no step seals a cell a body is in', () => {
+    const zombieAt = (x) => { const f = holeShelter(); const z = f.bot.entities[7]; z.position = new Vec3(x, 61, 0.5); z.width = 0.6; return { bot: f.bot, z }; };
+    // A zombie 2 blocks east: the west column (3.0 from it) is farther than two down (2.8).
+    const far = zombieAt(2.5);
+    assert.deepEqual([burrowStep(far.bot, far.z).kind, key(burrowStep(far.bot, far.z).to)], ['side', '-1,61,0'], 'the farthest wins without prefer');
+    const down = burrowStep(far.bot, far.z, { prefer: 'down' });
+    assert.deepEqual([down.kind, key(down.to), down.seal.map(key)], ['down', '0,59,0', ['0,61,0']]);
+    // A zombie 0.3 m from the bot, in its cell: every step would seal that cell.
+    const inCell = zombieAt(0.8);
+    const none = burrowStep(inCell.bot, inCell.z, { prefer: 'down' });
+    assert.equal(none.to, undefined);
+    assert.match(none.why, /down: a body in 0, 61, 0, which the step seals/);
+    assert.match(none.why, /-1,0: a body in 0, 61, 0, which the step seals/);
+    // Beside the cell (its box ends at the wall plane): the step down is allowed.
+    const beside = zombieAt(1.3);
+    assert.equal(burrowStep(beside.bot, beside.z, { prefer: 'down' }).kind, 'down');
+});
+
+test('soak 7 (C): burrowAway stops at stopAt (the mob\'s reach + margin) instead of the troll range', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const f = withGravity(holeShelter({ dirt: 12 }));
+    const zombie = Object.assign(f.bot.entities[7], { position: new Vec3(1.3, 61, 0.5), width: 0.6 });
+    const r = await burrowAway(f.bot, zombie, { maxSteps: 3, stopAt: 1.93, prefer: 'down' });
+    assert.deepEqual([r.steps, r.stopped], [1, 'far'], f.bot.output);
+    assert.ok(f.bot.entity.position.floored().equals(new Vec3(0, 59, 0)), 'two down, out of its reach');
+    assert.deepEqual(f.placed, ['0,61,0'], 'sealed above');
+});

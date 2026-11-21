@@ -5,7 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
-import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES, shelterTarget, shelterEnemy, fightRefusal, maxHitOf } from './threats.js';
+import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES, shelterTarget, shelterEnemy, fightRefusal, maxHitOf,
+    meleeReach, inMeleeReach, hurtingInReach, weaponCooldownMs, WEAPON_COOLDOWN_MS, fightNumbers, fightOdds, shelterEatBlock, EAT_SAFE } from './threats.js';
 import { __modeForTest, __resetThreatLease } from '../modes.js';
 
 let nextId = 1;
@@ -700,4 +701,66 @@ test('soak 6 (a): self_defense starts no fight with an eel under water', async (
     a.bot.blockAt = (p) => ({ name: p.floored().y <= 62 && p.floored().y >= 60 && p.x >= 1 ? 'water' : 'air' });
     await tick(a);
     assert.deepEqual(a.ran, []);
+});
+
+// ---- Soak 7 (rotn-v0.1.13, death 1, 23:24:19-33) ----
+// Armed at health 20, the morning rule opened the wall toward a zombie; it walked into the bot's
+// cell, the shelter fight was capped ("4 hits did not hurt the zombie") while it hit the bot, the
+// bot ate okra while being hit, then "left by the side away" from a zombie in its own cell and died.
+
+test('soak 7: meleeReach is rotn-data\'s reach, else the vanilla rule from the width (a zombie 1.43); inMeleeReach with REACH_SLACK', () => {
+    const zombie = mob('zombie', 0.8);
+    assert.ok(Math.abs(meleeReach(zombie) - Math.sqrt(1.2 ** 2 + 0.6)) < 1e-9, 'no reach in rotn-data: the vanilla rule');
+    assert.equal(meleeReach(mob('spider', 1)), 2.14);
+    assert.equal(meleeReach(mob('iceandfire:if_troll', 1)), 2);
+    assert.equal(inMeleeReach(fakeBot([zombie]), zombie), true, '0.8 m: soak 7');
+    const wall = mob('zombie', 1.8);
+    assert.equal(inMeleeReach(fakeBot([wall]), wall), false, 'against the far side of a 1-block wall, the bot in the middle of its cell (0.3 + 1 + 0.5)');
+});
+
+test('soak 7 (B): hurtingInReach: a hit within 3 s that the world did not do, with the mob in its reach', () => {
+    const now = 100_000;
+    const zombie = mob('zombie', 0.8);
+    const hit = (extra) => fakeBot([zombie], { lastDamageTime: now - 1000, lastDamageTaken: 3, food: 13, ...extra });
+    assert.equal(hurtingInReach(hit(), zombie, now), true);
+    assert.equal(hurtingInReach(hit({ lastDamageTime: now - 4000 }), zombie, now), false, '4 s ago');
+    assert.equal(hurtingInReach(hit({ lastDamageCause: 'fall' }), zombie, now), false, 'a fall');
+    const far = mob('zombie', 2.5);
+    assert.equal(hurtingInReach(fakeBot([far], { lastDamageTime: now - 1000, lastDamageTaken: 3, food: 13 }), far, now), false, 'out of its reach');
+});
+
+test('soak 7 (B): weaponCooldownMs: the vanilla attack speeds (an axe 1.25 s, a sword 0.625 s), at least Better Combat\'s 8 ticks', () => {
+    assert.equal(weaponCooldownMs({ name: 'stone_axe' }), 1250);
+    assert.equal(weaponCooldownMs({ name: 'pyrotech:crude_axe' }), 1250);
+    assert.equal(weaponCooldownMs({ name: 'stone_pickaxe' }), WEAPON_COOLDOWN_MS.pickaxe, 'a pickaxe is no axe');
+    assert.equal(weaponCooldownMs({ name: 'stone_sword' }), 625);
+    assert.equal(weaponCooldownMs({ name: 'stone_shovel' }), 1000);
+    assert.equal(weaponCooldownMs(null), 400, 'the hand');
+});
+
+test('soak 7 (A): fightOdds: unknown numbers are no fight; with numbers, the fight must end above what the mob may hit for', () => {
+    const zombie = mob('zombie', 1);
+    const armed = fakeBot([zombie], { inventory: { items: () => [{ name: 'pyrotech:crude_axe', count: 1 }, { name: 'stone_axe', count: 1 }], slots: [] } });
+    const n = fightNumbers(armed, zombie);
+    assert.deepEqual(n, { health: 20, mobHealth: null, mobHit: 3, mobIntervalMs: null, hitDamage: null, cooldownMs: 1250 }, 'rotn-data: no mob health, no zombie interval, no weapon damage yet');
+    assert.equal(fightNumbers(armed, { ...zombie, heldItem: { name: 'stone_axe' } }).mobHit, 12.5, 'holding a weapon: its maxDamage');
+    assert.equal(fightNumbers(armed, mob('iceandfire:if_troll', 1)).mobIntervalMs, 1000);
+    assert.deepEqual(fightOdds(n, maxHitOf(zombie)), { winnable: false, why: 'the fight cannot be judged yet (unknown: its health, its attack interval, our weapon damage)' });
+    // Soak 7's zombie as estimated: 30 health (Rough Mobs x1.5), 7 a hit at best with a stone axe, 3 a second from it.
+    const soak7 = { health: 20, mobHealth: 30, mobHit: 3, mobIntervalMs: 1000, hitDamage: 7, cooldownMs: 1250 };
+    assert.deepEqual(fightOdds(soak7, 12.5), { winnable: false, why: '5 hits in about 5 s, taking about 18: health 2 left, not above the 12.5 it may hit for' });
+    assert.deepEqual(fightOdds({ ...soak7, mobHealth: 14 }, 12.5), { winnable: true, why: '2 hits in about 1.3 s, taking about 6: health 14 left' });
+});
+
+test('soak 7 (D): shelterEatBlock: a hostile mob within EAT_SAFE.distance, or a hurt within EAT_SAFE.hurtMs that the world did not do', () => {
+    const now = 100_000;
+    const near = mob('zombie', 0.8);
+    assert.equal(shelterEatBlock(fakeBot([near]), { now }), 'zombie 0.8 blocks away');
+    const far = mob('zombie', 6);
+    assert.equal(shelterEatBlock(fakeBot([far]), { now }), null);
+    assert.equal(shelterEatBlock(fakeBot([far], { lastDamageTime: now - 5000, lastDamageTaken: 3, food: 13 }), { now }), 'hurt 5 s ago');
+    assert.equal(shelterEatBlock(fakeBot([far], { lastDamageTime: now - EAT_SAFE.hurtMs - 1, food: 13 }), { now }), null);
+    assert.equal(shelterEatBlock(fakeBot([far], { lastDamageTime: now - 5000, lastDamageTaken: 1, food: 0 }), { now }), null, 'starving');
+    assert.equal(shelterEatBlock(fakeBot([far], { lastDamageTime: now - 5000, lastDamageTaken: 3, food: 13 }), { now, withHurt: false }), null);
+    assert.equal(shelterEatBlock(fakeBot([mob('cow', 1)]), { now }), null, 'not a hostile mob');
 });

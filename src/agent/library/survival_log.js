@@ -9,6 +9,7 @@
 //   [survival] hurt <amount> health <before>-><after> (by <source>)   soak 2: health fell by HURT.minDrop or more within HURT.windowMs
 //   [survival] hurt-detail drops <amount>@+<s>s,... at <x>,<y>,<z> vy <v> ground|air cause <fall|starving|none> near <mob>@<d>m[/swung-<s>s],...
 //                                                                     soak 5: right after each hurt line
+//   [survival] swing <mob> with <item> +<ms> ms|first: health <before> -> <after>|gone   soak 7: each swing of the shelter fight
 //
 // Soak 2 (rotn-v0.1.4): the server sends no death messages, and two deaths had no cause in the
 // journal. The hurt line names the likely source: 'starving' (food 0: Hunger Overhaul's
@@ -47,6 +48,8 @@ export const fightEndLine = (mob, outcome, ms) => {
     return `${SURVIVAL_TAG} fight end ${token(mob)} ${outcome} after ${Math.max(0, Math.round(ms / 1000))} s`;
 };
 export const fleeLine = (mob, why) => `${SURVIVAL_TAG} flee ${token(mob)} (${String(why ?? 'unknown').replace(/[()\n\r]/g, ' ').trim() || 'unknown'})`;
+/** Soak 7: one shelter-fight swing: the held item, ms since the swing before it (null: the first), the mob's health before it and at the next look ('gone': no longer in the world; null: unknown). */
+export const swingLine = (mob, item, sinceMs, before, after) => `${SURVIVAL_TAG} swing ${token(mob)} with ${token(item ?? 'hand')} ${Number.isFinite(sinceMs) ? `+${Math.round(sinceMs)} ms` : 'first'}: health ${num(before)} -> ${after === 'gone' ? 'gone' : num(after)}`;
 export const hurtLine = (amount, before, after, source) => `${SURVIVAL_TAG} hurt ${num(amount)} health ${num(before)}->${num(after)} (by ${token(source)})`;
 export const HURT = { minDrop: 4, windowMs: 2000, mobRange: 5, swingMs: 1000, fallingRange: 4, detailRange: 16, detailMobs: 3 };
 /** A falling block or a falling Dynamic Trees tree (entity names). */
