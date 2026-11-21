@@ -1,0 +1,360 @@
+{
+  "format": "rotn-combat/1",
+  "pack": "3.3.4",
+  "description": "Soak 7 (a zombie with a chainmail helmet won a shelter fight): the numbers for a melee fight on this pack, for combatOf, weaponStats, meleeHitDamage and hitsToKill (src/combat.js). Hand-written from javap -c -p -constants of the pinned pack zip's jars (vanilla classes from its obfuscated minecraft_server.1.12.2.jar, with Forge's binpatches applied where Forge changes them) and its configs; excerpts in packages/rotn-data/test/fixtures/combat-3.3.4/. confidence 'verified' = read from that bytecode and config. Damage a player deals = attackDamage (the attribute: 1 + the held item's modifier), then on the vanilla packet x (0.2 + 0.8 c^2), then Damage Control x0.8 (LivingHurtEvent), then armour, then Protection.",
+  "playerAttack": {
+    "vanillaPacket": {
+      "what": "CPacketUseEntity ATTACK (mineflayer bot.attack, mineflayer-pvp) -> EntityPlayer.attackTargetEntityWithCurrentItem",
+      "damage": "attackDamage x (0.2 + 0.8 x c^2), c = getCooledAttackStrength(0.5) = clamp((ticksSinceLastSwing + 0.5) / cooldownTicks, 0, 1); the enchantment bonus x c; a crit (falling, not on a ladder, in water or riding, no Blindness) only when c > 0.9, x1.5",
+      "beforeCooldown": "reduced, not cancelled (down to 0.2 x attackDamage at c = 0)",
+      "cooldownTicks": "20 / attackSpeed",
+      "cooldownResets": [
+        "every attack (attackTargetEntityWithCurrentItem calls resetCooldown)",
+        "the main-hand item changing to a different item (EntityPlayer.onUpdate)"
+      ],
+      "cooldownNotReset": [
+        "the swing (arm animation) packet"
+      ],
+      "forcedInvulnerability": true,
+      "targetTakes": "amount - target.lastDamage when the amount is larger, else nothing (the hit returns false: no damage, no knockback)",
+      "summary": "Better Combat's AttackEntityEvent handler sets the target's hurtResistantTime to its maximum (20) before every vanilla-packet player attack, so the target is always inside its invulnerability window: the first hit on a fresh mob (lastDamage 0) lands in full, every later hit with the same or a weaker amount does nothing, a larger one only the difference. Nothing else on the pack resets the window for these hits.",
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar after Forge 14.23.5.2860's server binpatches (forge-1.12.2-14.23.5.2860.jar in the zip root: binpatches.pack.lzma, LZMA -> pack200 -> a GDiff patch per class, each input class's Adler-32 checksum matched): aed (EntityPlayer) f(vg) attackTargetEntityWithCurrentItem calls ForgeHooks.onPlayerAttackTarget (AttackEntityEvent) first, then multiplies attackDamage by 0.2 + 0.8 c^2 with c = n(0.5), the enchantment bonus by c, calls ds() resetCooldown, and allows a crit only when c > 0.9; dr() getCooldownPeriod = 1 / attackSpeed x 20; n(F) = clamp((aE + F) / dr(), 0, 1); B_() onUpdate adds 1 to aE (ticksSinceLastSwing) each tick and calls ds() when the main-hand item changes; pa (NetHandlerPlayServer) handleAnimation does not (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+        "minecraft_server.1.12.2.jar after Forge 14.23.5.2860's server binpatches (forge-1.12.2-14.23.5.2860.jar in the zip root: binpatches.pack.lzma, LZMA -> pack200 -> a GDiff patch per class, each input class's Adler-32 checksum matched): vp (EntityLivingBase) a(ur, F) attackEntityFrom: when hurtResistantTime (V) > maxHurtResistantTime (aI) / 2, an amount <= lastDamage (bc) returns false and a larger one deals amount - lastDamage and sets lastDamage; otherwise the full amount, lastDamage = amount, hurtResistantTime = max (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+        "ImmersiveCombat-12-13-25.jar (Better Combat, modid bettercombat, version 1.5.6): EventHandlers.cancelAttackEntityEvent (AttackEntityEvent) sets target.hurtResistantTime = target.maxHurtResistantTime when both hands are empty or the main-hand item is not blacklisted; ConfigurationHandler.isBlacklisted reads \"(Class) Item Left/Right Click Blacklist\" and \"(Resource Location) Item Left/Right Click Blacklist\" in category \"white/black lists\", both empty on this pack (config/bettercombat.cfg:803, :834-835, :857-858; the \"(Resource Location) Item Blacklist\" at :851 is an older key the code does not read); its coremod class com.bettercombat.util.asm.CustomASMTransformer is not in the jar and the manifest names no MixinConfigs (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+        "WorseHurtTimer-1.12.2-1.5.0.3.jar (Better Hurt Timer): its HurtTimeMixin redirect of that hurtResistantTime read returns the maximum only for a melee source whose attacker capability has override set, which Events never sets for a player attacker (attackThresholdPlayer=0.0 makes getHurtTime 0); its inject sets hurtResistantTime to 0 (config hurtResistantTime=0) only after a full hit (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt betterhurttimer.cfg)",
+        "Checked and ruled out: Combat Refined acts only on a shield block (Handler.shieldFix); Universal Tweaks' no-cooldown toggle is off; PotionCore, Ice and Fire and Scaling Health do not touch these hits (packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+      ]
+    },
+    "betterCombatPacket": {
+      "what": "Better Combat's own main-hand attack, the one a real client with the mod sends",
+      "channel": "bettercombat",
+      "discriminator": 5,
+      "message": "PacketMainhandAttack",
+      "payload": "a boolean (true: an entity id follows), then the target's entity id as a VarInt (ByteBufUtils.writeVarInt, up to 4 bytes)",
+      "cooldownScaling": false,
+      "resetsTargetInvulnerability": true,
+      "serverReachCheck": false,
+      "clientPacing": {
+        "minimumTicks": 8,
+        "addedTicks": 0.5,
+        "note": "Better Combat's client waits for the weapon's cooldown; the server neither checks nor scales it (config/bettercombat.cfg:6, :12; the client code was not read)"
+      },
+      "damage": "the attackDamage attribute (base + op-0 modifiers, x (1 + op-1 sum), x each (1 + op-2)); Better Combat's own crit chance is not modelled",
+      "summary": "The server sets the target's hurtResistantTime to 0 before and after attackEntityFrom, so every hit lands in full, and it never calls getCooledAttackStrength. Whether the server accepts the message from a client that did not register the bettercombat channel in its handshake is not settled (net-forge).",
+      "confidence": "verified",
+      "evidence": [
+        "ImmersiveCombat-12-13-25.jar (Better Combat, modid bettercombat, version 1.5.6): CommonProxy registers the SimpleNetworkWrapper channel \"bettercombat\"; PacketHandler.registerServerMessages registers PacketMainhandAttack as discriminator 5 for the server; PacketMainhandAttack.toBytes writes a boolean then the entity id with ByteBufUtils.writeVarInt(id, 4); its Handler calls Helpers.playerAttackVictim(player, world.getEntityByID(id), true) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+        "ImmersiveCombat-12-13-25.jar (Better Combat, modid bettercombat, version 1.5.6): Helpers.playerAttackVictimWithWeapon reads getMainhandAttackDamage (the attribute with its modifiers) and never calls getCooledAttackStrength (func_184825_o); playerAttackedVictim sets the target's hurtResistantTime (field_70172_ad) to 0, calls attackEntityFrom(causePlayerDamage, amount), and sets it to 0 again after a hit (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+      ]
+    },
+    "damageModifier": 0.8,
+    "damageModifierEvidence": [
+      "DamageControl-1.12.2-1.3.17.jar: DamageHandler.onEntityHurt (LivingHurtEvent) multiplies the amount by ConfigurationHandler.getDamageModifier(source); config/dmgcontrol.cfg:70 DamageModifier_player=0.8 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)",
+      "minecraft_server.1.12.2.jar after Forge 14.23.5.2860's server binpatches (forge-1.12.2-14.23.5.2860.jar in the zip root: binpatches.pack.lzma, LZMA -> pack200 -> a GDiff patch per class, each input class's Adler-32 checksum matched): vp d(ur, F) damageEntity: ForgeHooks.onLivingHurt, then applyArmorCalculations, then applyPotionDamageCalculations (Protection), then absorption, then onLivingDamage (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+    ]
+  },
+  "weapons": {
+    "hand": {
+      "attackDamage": 1,
+      "attackSpeed": 4,
+      "cooldownTicks": 5,
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): adh (SharedMonsterAttributes) attackSpeed default 4.0; ImmersiveCombat-12-13-25.jar (Better Combat, modid bettercombat, version 1.5.6): EventHandlers.entityJoinWorldEvent sets a player's base attackDamage to 1.0 and attackSpeed to 4.0 (config/bettercombat.cfg:7-8, the vanilla values) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+      ]
+    },
+    "minecraft:stone_axe": {
+      "attackDamage": 3,
+      "attackSpeed": 0.4,
+      "cooldownTicks": 50,
+      "vanilla": {
+        "attackDamage": 9,
+        "attackSpeed": 0.8
+      },
+      "durabilityPerHit": 2,
+      "evidence": [
+        "materialchanger1.0.3-1.12.2.jar: at postInit an ItemTool's declared field 2 (ahq.b, attackDamage) is set to value - 1 and field 3 (ahq.c, attackSpeed) to value - 4, which ItemTool.getItemAttributeModifiers adds to the player's 1 and 4 (\"Tool modifier\"); config/materialchanger.cfg:481 ATTACK_SPEED;minecraft:stone_axe;0.4 and :482 ATTACK_DAMAGE;minecraft:stone_axe;3 inside the changer list (:82-:2145) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)",
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): agy (ItemAxe) static arrays: STONE would be +8 and -3.2 without Material Changer (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+      ]
+    },
+    "pyrotech:crude_axe": {
+      "attackDamage": 3,
+      "attackSpeed": 0.9,
+      "cooldownTicks": 22.2,
+      "vanilla": {
+        "attackDamage": 9,
+        "attackSpeed": 0.8
+      },
+      "durability": 8,
+      "durabilityPerHit": 2,
+      "note": "Durability 8 and an axe loses 2 a hit on a mob: it breaks after 4 hits.",
+      "evidence": [
+        "pyrotech-1.12.2-1.5.25.jar: ItemCrudeAxe extends ItemAxeBase extends ItemAxe with ToolMaterial STONE and no attribute override (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)",
+        "config/materialchanger.cfg:1727 DURABILITY;pyrotech:crude_axe;8, :1728 ATTACK_DAMAGE;pyrotech:crude_axe;3, :1729 ATTACK_SPEED;pyrotech:crude_axe;0.9 (packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+      ]
+    },
+    "minecraft:stone_sword": {
+      "attackDamage": 3.5,
+      "attackSpeed": 1.6,
+      "cooldownTicks": 12.5,
+      "vanilla": {
+        "attackDamage": 5,
+        "attackSpeed": 1.6
+      },
+      "durability": 99,
+      "durabilityPerHit": 1,
+      "evidence": [
+        "materialchanger1.0.3-1.12.2.jar: an ItemSword's declared field 0 (ajy.a, attackDamage) is set to value - 1; it cannot change a sword's speed; config/materialchanger.cfg:1717 ATTACK_DAMAGE;minecraft:stone_sword;3.5, :1718 durability 99 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)",
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): ajy (ItemSword) getItemAttributeModifiers: \"Weapon modifier\" attackDamage = field a, attackSpeed -2.4 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+      ]
+    },
+    "minecraft:wooden_sword": {
+      "attackDamage": 4,
+      "attackSpeed": 1.6,
+      "cooldownTicks": 12.5,
+      "durabilityPerHit": 1,
+      "note": "Not obtainable by crafting on this pack: scripts remove and hide it (JEI.removeAndHide, Anvil.remove).",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): ajy (ItemSword): 3 + WOOD's 0, attackSpeed -2.4; no Material Changer entry; scripts/minecraft_(max-file-size).zs:916, :1079 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+      ]
+    }
+  },
+  "mobs": {
+    "minecraft:zombie": {
+      "maxHealth": 20,
+      "armor": 2,
+      "armorToughness": 0,
+      "attackIntervalTicks": 20,
+      "reach": 1.43,
+      "spawnArmor": "incontrol",
+      "leaderBonus": {
+        "chance": "0.05 x clampedAdditionalDifficulty",
+        "maxHealthMultiplier": [
+          2,
+          5
+        ],
+        "note": "A leader has 40 to 100 health and is at most 1 zombie in 20. clampedAdditionalDifficulty is the regional difficulty (DifficultyInstance, vanilla, not read): on normal it starts at 0 and rises only with world age past 3 days and long chunk inhabitation"
+      },
+      "weapon": {
+        "chance": "Rough Mobs: 1 in 5 (vanilla adds 1 in 100: an iron sword or shovel)"
+      },
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): adh maxHealth default 20.0; adt (EntityZombie) bM: followRange 35, speed 0.23, attackDamage 3, armor 2; initEntityAI adds yq (EntityAIZombieAttack, extends EntityAIAttackMelee: a hit every 20 ticks within (2 x 0.6)^2 + 0.6); onInitialSpawn: with nextFloat() < clampedAdditionalDifficulty x 0.05 a \"Leader zombie bonus\" maxHealth modifier of nextDouble() x 3 + 1, operation 2 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/melee-gaps-3.3.4/gaps.javap.txt \"## xo\")",
+        "Nothing on the pack changes its max health: Rough Mobs lists only knockbackResistance +0.5 (config/roughmobsrevamped.cfg:19); ESM's Health modifier (ESM_TWEAK_1, operation 1) uses the entry's number, and minecraft:zombie's entity_ai.json entry has no Health key, so it reads 0 (no change; only the default block has \"Health\": 1.0, at :79, which ESM skips); Scaling Health \"Allow Hostile Extra Health\"=false and \"Base Health Modifier\"=0.0; Thicc Entities health 1.0; Damage Control's MaxHealth entries are inert (AllowHealthModification=false, DamageHandler.onEntityJoinWorld checks healthAllowed) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+      ]
+    },
+    "minecraft:husk": {
+      "maxHealth": 20,
+      "armor": 2,
+      "armorToughness": 0,
+      "attackIntervalTicks": 20,
+      "reach": 1.43,
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): adb (EntityHusk) extends adt and has no bM of its own; Rough Mobs knockbackResistance only (:33); not in In Control's armour rules (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+      ]
+    },
+    "minecraft:zombie_villager": {
+      "maxHealth": 20,
+      "armor": 2,
+      "armorToughness": 0,
+      "attackIntervalTicks": 20,
+      "reach": 1.43,
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): adu (EntityZombieVillager) extends adt and has no bM of its own; Rough Mobs knockbackResistance only (:31) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+      ]
+    },
+    "zombie_players:zombie_player": {
+      "maxHealth": 20,
+      "armor": 2,
+      "armorToughness": 0,
+      "attackIntervalTicks": 20,
+      "reach": 2.24,
+      "reachEmptyHand": 1.43,
+      "confidence": "verified",
+      "evidence": [
+        "zombie_players-1.12.1-1.2.7.jar: EntityZombiePlayer extends EntityZombie without applyEntityAttributes of its own; onInitialSpawn sets the base max health to 20.0; its attack task EntityAIZombieAttackWeaponReach adds 3 to the reach squared while it holds anything (mob-melee.json) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+      ]
+    },
+    "hordes:zombie_player": {
+      "maxHealth": 20,
+      "armor": 2,
+      "armorToughness": 0,
+      "attackIntervalTicks": 20,
+      "reach": 1.43,
+      "confidence": "verified",
+      "evidence": [
+        "The-Hordes-1.12.2-1.1.7.jar: EntityZombiePlayer extends EntityZombie without applyEntityAttributes of its own (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+      ]
+    },
+    "minecraft:spider": {
+      "maxHealth": 16,
+      "armor": 0,
+      "armorToughness": 0,
+      "attackIntervalTicks": 20,
+      "reach": 2.14,
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): adn (EntitySpider) bM: maxHealth 16, speed 0.3; its attack task adn$a: 20 ticks within 4 + target width (mob-melee.json) (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+      ]
+    },
+    "minecraft:cave_spider": {
+      "maxHealth": 12,
+      "armor": 0,
+      "armorToughness": 0,
+      "attackIntervalTicks": 20,
+      "reach": 2.14,
+      "confidence": "verified",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): acr (EntityCaveSpider) bM: maxHealth 12 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+      ]
+    },
+    "minecraft:skeleton": {
+      "maxHealth": 20,
+      "armor": 0,
+      "armorToughness": 0,
+      "attackIntervalTicks": 20,
+      "reach": 1.43,
+      "bowIntervalTicks": 40,
+      "spawnArmor": "incontrol",
+      "confidence": "verified",
+      "note": "Melee only without a bow; with one it shoots every 40 ticks on normal (20 on hard).",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): acp (AbstractSkeleton) bM: speed 0.25; dm() setCombatTask: with a bow, ye (EntityAIAttackRangedBow) cooldown 20 on HARD, else 40; otherwise its melee task xo; adk (EntitySkeleton) has no bM (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+      ]
+    },
+    "minecraft:creeper": {
+      "maxHealth": 20,
+      "armor": 0,
+      "armorToughness": 0,
+      "fuseTicks": 30,
+      "explosionRadius": 3,
+      "confidence": "verified",
+      "note": "No melee; it explodes once (twice the radius when charged). On ESM's AI Blacklist.",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): acs (EntityCreeper) bM: speed 0.25; <init>: fuseTime 30, explosionRadius 3; config/esm/epicsiegemod.cfg:47 (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+      ]
+    },
+    "iceandfire:if_troll": {
+      "maxHealth": 200,
+      "armor": 9,
+      "armorToughness": 0,
+      "attackIntervalTicks": 20,
+      "reach": 2,
+      "confidence": "verified",
+      "evidence": [
+        "IceAndFireRotN-1.9.1-1.2.1.jar: EntityTroll applyEntityAttributes; config/ice_and_fire.cfg:495 \"Troll Max Health\"=200.0 (threat-reactions.json, mob-melee.json; packages/rotn-data/test/fixtures/troll-trees-melee-3.3.4/troll.javap.txt)"
+      ]
+    }
+  },
+  "spawnArmor": {
+    "incontrol": {
+      "mobs": [
+        "minecraft:zombie",
+        "minecraft:skeleton",
+        "primitivemobs:skeleton_warrior"
+      ],
+      "rules": [
+        {
+          "slot": "head",
+          "chance": 0.1,
+          "items": [
+            "minecraft:leather_helmet",
+            "minecraft:chainmail_helmet"
+          ]
+        },
+        {
+          "slot": "chest",
+          "chance": 0.1,
+          "items": [
+            "minecraft:leather_chestplate",
+            "minecraft:chainmail_chestplate"
+          ]
+        },
+        {
+          "slot": "legs",
+          "chance": 0.1,
+          "items": [
+            "minecraft:leather_leggings",
+            "minecraft:chainmail_leggings"
+          ]
+        },
+        {
+          "slot": "feet",
+          "chance": 0.1,
+          "items": [
+            "minecraft:leather_boots",
+            "minecraft:chainmail_boots"
+          ]
+        }
+      ],
+      "firstMatchWins": true,
+      "perSpawn": {
+        "head": 0.1,
+        "chest": 0.09,
+        "legs": 0.081,
+        "feet": 0.0729,
+        "none": 0.6561
+      },
+      "note": "Natural spawns only (no \"onjoin\"). In Control stops at the first matching rule, so a zombie gets at most one piece: a helmet 1 in 10, else a chestplate, legs or boots. Which of the two items a rule picks was not read.",
+      "evidence": [
+        "config/incontrol/spawn.json:36-56; incontrol-1.12-3.9.18.jar ForgeEventHandlers.onEntitySpawnEvent (CheckSpawn) runs the action of the first matching rule and returns (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+      ]
+    },
+    "vanilla": {
+      "chance": "0.15 x clampedAdditionalDifficulty (0 on normal early on)",
+      "tiers": "nextInt(2) plus three 9.5% steps: leather, gold, chain, iron, diamond",
+      "order": "boots first, then legs, chest, helmet; each further piece stops with 25% on normal",
+      "evidence": [
+        "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): vq (EntityLiving) a(ua) setEquipmentBasedOnDifficulty (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt)"
+      ]
+    },
+    "roughMobs": {
+      "zombieArmorChance": 0,
+      "evidence": [
+        "config/roughmobsrevamped.cfg:3137 _zombieEquipmentArmorChance=0 (packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+      ]
+    }
+  },
+  "armor": {
+    "formula": "damage x (1 - clamp(armor - damage / (2 + toughness / 4), armor x 0.2, 20) / 25), then x (1 - min(protection EPF, 20) / 25)",
+    "items": {
+      "minecraft:leather_helmet": 1,
+      "minecraft:leather_chestplate": 3,
+      "minecraft:leather_leggings": 2,
+      "minecraft:leather_boots": 1,
+      "minecraft:chainmail_helmet": 2,
+      "minecraft:chainmail_chestplate": 5,
+      "minecraft:chainmail_leggings": 4,
+      "minecraft:chainmail_boots": 1,
+      "minecraft:golden_helmet": 2,
+      "minecraft:golden_chestplate": 5,
+      "minecraft:golden_leggings": 3,
+      "minecraft:golden_boots": 1,
+      "minecraft:iron_helmet": 2,
+      "minecraft:iron_chestplate": 6,
+      "minecraft:iron_leggings": 5,
+      "minecraft:iron_boots": 2
+    },
+    "toughness": 0,
+    "evidence": [
+      "minecraft_server.1.12.2.jar (the pack zip's root, obfuscated; names from Forge's notch-to-SRG table): up (CombatRules) a(F, F, F) and a(F, F); agv$a (ItemArmor$ArmorMaterial) LEATHER {1, 2, 3, 1}, CHAIN {1, 4, 5, 2}, IRON {2, 5, 6, 2}, GOLD {1, 3, 5, 2} (boots, legs, chest, helmet), toughness 0; Material Changer changes none of these (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt)"
+    ]
+  },
+  "mobsHittingPlayer": {
+    "summary": "Better Hurt Timer (WorseHurtTimer) sets a hurt entity's hurtResistantTime to 0 after each full hit, so several mobs each land a full hit with no shared invulnerability. It tracks each attacker per target and cancels a mob's hit that comes sooner than int(20 x (1.2 - 0.06 x attackSpeed)) = 19 ticks after its last one (an unarmed mob, attack speed 4.0): every listed mob's 20-tick melee interval passes.",
+    "minGapTicksUnarmedMob": 19,
+    "evidence": [
+      "WorseHurtTimer-1.12.2-1.5.0.3.jar (Better Hurt Timer): HurtTimeMixin injects hurtResistantTime = config (0) after a full hit; Events.onEntityAttack (LivingAttackEvent, LOWEST) cancels a melee hit when the attacker's ticks since its last melee on that target are below getHurtTime: for a mob without an attack-speed item, int(target.maxHurtResistantTime x getAttackSpeed x threshold), getAttackSpeed = 1.2 - 1.2 / (20 / attackSpeed) with attackSpeed the attribute default 4.0, threshold attackThresholdDefault 1.0; HurtCapability is attached to every EntityLivingBase (packages/rotn-data/test/fixtures/combat-3.3.4/combat.javap.txt; packages/rotn-data/test/fixtures/combat-3.3.4/configs.txt betterhurttimer.cfg:72, :123, :128)"
+    ]
+  },
+  "notSettled": [
+    "Whether the server accepts Better Combat's PacketMainhandAttack from a client that did not register the bettercombat channel (net-forge).",
+    "An armed mob (Rough Mobs gives 1 zombie in 5 a weapon) hitting a player: Better Hurt Timer's getHurtTime then calls getCoolPeriod, which reads the mob's ATTACK_SPEED attribute; vanilla mobs do not register it and no jar in the pack adds it to them, so this looks like a NullPointerException in a LivingAttackEvent handler. Not seen live: worth a grep of a soak's server log for \"betterhurttimer\".",
+    "Which item In Control picks from a two-item armour list.",
+    "Better Combat's client-side pacing (Minimum Attack Speed Tick Cooldown 8, Added 0.5) was read from the config only."
+  ]
+}

@@ -46,6 +46,13 @@ export const fallingTree = () => pack().fallingTree();
 export const fallingTreeDamage = (tree) => pack().fallingTreeDamage(tree);
 // null melee means unknown, never zero: assume UNKNOWN_MELEE (the worst listed hit, the troll's 18).
 export { UNKNOWN_MELEE } from './src/melee.js';
+// A melee fight in numbers (soak 7): 3.3.4/combat.json. The bot's vanilla attack packet deals only the first hit on a
+// mob in full (Better Combat keeps the target invulnerable); Better Combat's own packet hits in full every time.
+export const combatOf = (entityName) => pack().combatOf(entityName);
+export const weaponStats = (item) => pack().weaponStats(item);
+export const meleeHitDamage = (hit) => pack().meleeHitDamage(hit);
+export const hitsToKill = (fight) => pack().hitsToKill(fight);
+export { ATTACK_PATHS, afterArmor } from './src/combat.js';
 // Wild food (G4 #5): berry bushes, herbs, gardens, mushrooms and plant hazards (3.3.4/forage-food.json).
 export const forageFood = (block, meta) => pack().forageFood(block, meta);
 export const forageSources = (opts) => pack().forageSources(opts);
