@@ -142,36 +142,6 @@ export function attachFmlEntities(bot, bridge, opts = {}) {
 }
 
 /**
- * What it means for the bot when rotn-data's mod entity table is missing (#553 review), said
- * plainly so an operator reading the journal sees the consequence, not only the cause.
- */
-export function noFmlEntityTableWarning(why) {
-    return `[forge-bridge] rotn-data mod entity table unavailable (${why}). Every FML-spawned entity gets a placeholder name, `
-        + 'and every living one is typed "mob", so the bot treats EVERY living modded entity as hostile and may attack it: '
-        + 'NPCs such as ToroQuest guards and villagers, and modded animals, as well as real hostiles. '
-        + 'If rotn-data itself failed to load, skills-rotn\'s threat fallback treats vanilla villagers and animals as hostile too. '
-        + 'Fix rotn-data (packages/rotn-data) before letting this bot near other players\' NPCs or animals.';
-}
-
-/**
- * fmlEntityTable, or null with noFmlEntityTableWarning when it throws or comes back empty
- * (a dump without entities throws nothing but names nothing). initBot's call.
- */
-export function fmlEntityTableOrWarn(api, { warn = console.warn } = {}) {
-    let table = null;
-    let why = null;
-    try {
-        table = fmlEntityTable(api);
-        if (Object.keys(table).length === 0) why = 'the table is empty';
-    } catch (e) {
-        why = e?.message ?? String(e);
-    }
-    if (why === null) return table;
-    warn(noFmlEntityTableWarning(why));
-    return null;
-}
-
-/**
  * The mod-local entity table for attachFmlEntities, built through rotn-data's
  * catalog API (its modEntityTable() and entityByModId(); never its files):
  * { [modId]: { [modEntityTypeId]: { name, displayName, type?, category? } } }.
