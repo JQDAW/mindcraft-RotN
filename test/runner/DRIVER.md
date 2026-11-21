@@ -762,3 +762,60 @@ P1 is net-forge's "Probe plan P1" (`coord/STATUS-net-forge.md`), which the lead 
   - Each late reply is recorded in `notes.lateReplies`, with how long after the call it was found.
 - **Recorded as notes:** `notes.placeLatencyMs` holds each `updateMs`. `notes.capture` holds the capture file from the driver's `forge` event.
 - **Not in the replies:** window-click transactions (REID: none rejected) and the FastWorkbench window (`mod_window` with `fastbench`). The evidence step reads them from that capture, as net-forge's plan says.
+
+## Probe BC: Better Combat's attack packet (`test/scenarios/probe/probe-bc-attack.mjs`)
+
+Step 3 of the lead's Better Combat plan (2026-11-21). On RotN 3.3.4 a vanilla `use_entity` attack lands in full only on the first hit per mob, because Better Combat's `AttackEntityEvent` handler sets the target's `hurtResistantTime` to 20 every time (rotn-data #518). net-forge #521 makes `bot.attack` send Better Combat's own `PacketMainhandAttack` (off by default; `FORGE_BC_ATTACK=on` turns it on) and keeps the old path as `bot.attackVanilla`. This probe runs the plan's step-4 scenario on the real server.
+
+**It is never a gate:** `run()` first records `BC_NOT_GATE`, so its verdict is at best `SMOKE-PASS (not a gate pass)`. It runs only after the lead's GO for the test-server run.
+
+    deploy/test-server.sh run --yes -- node test/runner/run.mjs --scenario probe-bc-attack -- \
+      node test/runner/drivers/bc-attack-driver.mjs
+
+- **The driver** is harness-ops' `test/runner/drivers/bc-attack-driver.mjs`: Mindcraft's real `initBot` (with forge-bridge and #521's wrapper), the scenario protocol's hello, and the `bc-hit` command of `test/runner/drivers/bc-attack.mjs`. It turns `ROTN_DRIVER_BC_ATTACK=on`, which the scenario passes (`BC_DRIVER_ENV`), into `FORGE_BC_ATTACK=on`. There is no LLM and no key. It refuses the CX23 service as the bot.
+- **The console** (`guardBcConsole`, `BC_CONSOLE_ALLOW` in `test/runner/lib/probe.mjs`):
+  - It refuses **every** command unless `TEST_SERVER_NAME` is a disposable test server's name (`mcr-test-YYYYMMDD-HHMMSS`). The lead allowed `summon` and `kill` on the disposable CPX42 only, and the scenario sends nothing at all, not even the begin marker, on any other name.
+  - `summon` is exactly `summon minecraft:zombie X Y Z`, with whole-block coordinates and either no NBT or exactly `{NoAI:1}`. `kill` is exactly `kill @e[type=zombie]`. No other mob, NBT, selector or target gets through, and P1's list does not get them.
+  - The rest: the begin marker, `seed`, `gamerule doDaylightCycle false`, `time set day`, `tp`, `clear <bot>`, `give`, `setblock` and `testforblock` of air or stone, and `tell <bot> bc-hit ...`. The bot never gets op.
+- **The steps** (`BC_PLAN`):
+  1. Log in.
+  2. **Setup.** The driver's `bc_status` must say Better Combat's path is active. Then `gamerule doDaylightCycle false`, `time set day` and `kill @e[type=zombie]`. Then the lane at z -66, x -48 to -41: a stone floor at y 65, air at 66 and 67, and a stone roof at 68, so no zombie burns in daylight. It is checked with `testforblock`, and the bot is teleported to -45 66 -66.
+  3. **The weapons:** stone sword, stone axe, Pyrotech crude axe (6 given, since one breaks after 4 hits) and an empty hand. For each:
+     - `clear`, the give, and two zombies with `{NoAI:1}`, A at -47 (2 blocks west) and B at -43 (2 blocks east);
+     - `bc-hit vanilla` on A: `bot.attackVanilla`, paced at Better Combat's cooldown;
+     - `bc-hit bc` on B: `bot.attack`;
+     - each series runs until the zombie dies, 40 hits or 60 s; then `kill @e[type=zombie]`.
+  4. **The AI zombie:** one zombie with its AI at -42 (3 blocks east), Better Combat's path, stone sword. Then `kill @e[type=zombie]` and `clear`.
+  5. **`server_log`** reads from the begin marker. It fails on an `FMLIndexedMessageCodec` exception (how a bad `bettercombat` payload shows), a WARN or ERROR line or exception naming `bettercombat`, or any kick or lost connection.
+  6. **`self_check`:** the wrapper's "5 hits without a hurt, back to vanilla" never appeared in the driver's output, and no reply says `tripped`.
+- **The pass rules** (`judgeSeries`):
+
+  | Series | Passes when |
+  | --- | --- |
+  | Vanilla | At least 2 hits, all on the vanilla path. The first lowers the zombie's health and no later one does. |
+  | Better Combat | Every hit is on Better Combat's path and lowers the health. The zombie dies, and the hits to kill are near #518's `hitsToKill` (within the larger of 1 and 15%): stone sword 8, stone axe 9, crude axe 9 (the stone axe's damage; #518 has no row for it), bare hand 27, or about 54 if the 0.5 unarmed reduction applies. Only the bare hand may stop at 40 hits; it is then judged by `ceil(start health / mean drop)`. No gap between Better Combat packets is under the cooldown: 13, 50, 22 and 13 ticks, with 2 ms of timer slack. The self-check did not trip. |
+  | AI zombie | Every hit lands, it dies, and no gap is under 13 ticks. No count is judged. |
+  | Both | The zombie was found and did not burn. |
+
+- **The bc-hit command and its reply:**
+
+  | The scenario sends (`tell <bot> ...`) | The driver prints one line on stdout |
+  | --- | --- |
+  | `bc-hit TOKEN vanilla\|bc X,Y,Z\|ai ITEM\|hand` | `DRIVER {"type":"bc_hit","v":1,"token":T,"ok","path","item","target":{"id","name","startHealth"},"end","hits":[...],"hitCount","healthEnd","gaps":{"bettercombat":[ms],"vanilla":[ms]},"packets":{"arm_animation","bettercombat","use_entity"},"burned","reequips","tripped","active","statsBefore","statsAfter","botHealth","ms"}`. On a failure it has `"ok":false,"error"`. |
+
+  - **The target:** `X,Y,Z` is the NoAI zombie standing in that block; `ai` is the nearest zombie within 16 blocks. With `ai`, the bot swings only while the zombie is within 3 blocks, inside the 4-block weapon reach.
+  - **`end`:** `dead`, `maxHits`, `maxMs`, `lost` or `item_gone` (no more of the item).
+  - **The sender:** only the console (`Server`) is accepted, read from the raw 1.12 component as P1's driver does. Each token runs once, one series at a time.
+  - **Per hit:** `t` (ms from the command), `path` (the wrapper's answer), `sent`, `waitedMs`, `cooldownTicks`, `healthBefore`, `healthAfter`, `drop`, `hurt` (entity_status 2), `died` and `afterDeath`.
+  - **How health is read:** from the raw packets, `entity_metadata` index 7 (EntityLivingBase HEALTH). The updates are given to the latest hit before them. A swing sent after the zombie's death status (`afterDeath`) cannot land, and the judgments leave it out.
+  - **The packets:** every attack packet the client writes is timed (`arm_animation`, `custom_payload` on `bettercombat`, `use_entity` ATTACK). The gaps are between consecutive ones of each path.
+  - **Pacing:**
+    - Vanilla: the driver waits Better Combat's cooldown (`bot.forge.attackCooldownTicks()`) from the last hit or the last item change.
+    - Better Combat: it waits until 150 ms before the cooldown is over and checks the zombie still lives. Then it calls `bot.attack`, which waits the rest itself, so the wrapper's own pacing still decides when the packet goes out.
+  - **A broken crude axe:** the driver takes the next one (`reequips`), and the cooldown restarts.
+- **Aborts:** as in P1 (`notes.aborted`): on a kick or lost connection, a driver exit, or 120 s with no driver output after a command.
+- **Offline tests** (`test/unit/probe-bc.test.js`):
+  - the allowlist, and that nothing else gets through;
+  - the judgments;
+  - the driver core against `test/unit/fixtures/bc-world.mjs`, a fake of #521's wrapper and a server with #518's rules, on a virtual clock;
+  - the scenario on a simulated server and log whose driver is that same core.
