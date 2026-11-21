@@ -22,7 +22,7 @@
 // rotn-data's sources (documented, vanilla, verified, inferred class rules) are treated the
 // same: the inferred rules lean cautious (every creeper variant keeps its distance, skeleton
 // variants take cover), so acting on them never makes the bot bolder (#186 review nit).
-import { threatOf, nightThreats, UNKNOWN_MELEE } from '../../../packages/rotn-data/index.js';
+import { threatOf, nightThreats, UNKNOWN_MELEE, weaponStats } from '../../../packages/rotn-data/index.js';
 import * as mc from '../../utils/mcdata.js';
 import { mayBelongToPlayer } from './ownership.js';
 
@@ -291,10 +291,70 @@ export function weaponCooldownMs(item) {
     return WEAPON_COOLDOWN_MS.other;
 }
 
-/** The bot's best weapon by WEAPON_ATTACK (any sword or axe when none is listed), or null. */
+/**
+ * A weapon's rank by its material, a sword above an axe of the same material: the fallback order
+ * (weaponOrder) for weapons with no numbers, and the tie-break. A heuristic: RotN's durabilities do
+ * not follow damage. (Moved here from skills.js, which re-exports it.)
+ */
+export function weaponRank(item) {
+    const name = String(item?.name ?? '');
+    const tier = /diamond/.test(name) ? 4 : /iron/.test(name) ? 3 : /stone|flint|bone|obsidian/.test(name) ? 2 : 1;
+    return tier * 2 + (/sword/.test(name) ? 1 : 0);
+}
+
+/**
+ * Soak 7 (e): the attack path bot.attack takes now: 'bettercombat' when net-forge's wrapper (#521,
+ * bot.forge.bcAttack) is on and the server has the channel, else 'vanilla'.
+ */
+export function attackPath(bot) {
+    return bot?.forge?.bcAttack?.active === true ? 'bettercombat' : 'vanilla';
+}
+
+/**
+ * Soak 7 (e): a weapon's numbers on this pack: {damage, cooldownTicks, from}. From rotn-data's
+ * weaponStats (combat.json, #518); for a weapon it does not list, WEAPON_ATTACK's damage with the
+ * vanilla cooldown of its class (weaponCooldownMs); null when neither knows it.
+ */
+export function weaponNumbers(item) {
+    if (typeof item?.name !== 'string') return null;
+    const name = fullItemName(item.name.replace(/:\d+$/, ''));
+    let w = null;
+    try { w = weaponStats(name); } catch { w = null; }
+    if (Number.isFinite(w?.attackDamage) && w.cooldownTicks > 0) return { damage: w.attackDamage, cooldownTicks: w.cooldownTicks, from: 'rotn-data' };
+    const damage = WEAPON_ATTACK[name];
+    if (Number.isFinite(damage)) return { damage, cooldownTicks: weaponCooldownMs(item) / 50, from: 'WEAPON_ATTACK' };
+    return null;
+}
+
+/**
+ * Soak 7 (e), the lead's rule: weapons ranked by damage per tick of cooldown on the path the bot
+ * will use (attackPath). On the Better Combat path every hit lands in full, so that is the rate. On
+ * the vanilla path only the first hit on a mob lands (#518: Better Combat's hurtResistantTime=20
+ * leaves later vanilla hits of the same amount at nothing), so the damage of that one hit ranks
+ * first and the rate breaks a tie. Stone sword 3.5/12.5 ticks, crude axe 3/22.2, stone axe 3/50: the
+ * sword, then the crude axe, then the stone axe, on either path. Weapons with no numbers come after
+ * those with numbers, by weaponRank, which also breaks any tie left. Negative when a is better.
+ */
+export function weaponOrder(path = 'vanilla') {
+    const key = (item) => {
+        const n = weaponNumbers(item);
+        if (!n) return null;
+        const perTick = n.damage / n.cooldownTicks;
+        return path === 'bettercombat' ? [perTick] : [n.damage, perTick];
+    };
+    return (a, b) => {
+        const ka = key(a), kb = key(b);
+        if (ka && !kb) return -1;
+        if (kb && !ka) return 1;
+        if (ka && kb) for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return kb[i] - ka[i];
+        return weaponRank(b) - weaponRank(a);
+    };
+}
+
+/** The bot's best weapon (a sword or an axe, in the inventory or the off hand) by weaponOrder on its attack path, or null. */
 function bestWeapon(bot) {
     const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]].filter(i => typeof i?.name === 'string' && /sword|(^|[:_])axe$/.test(i.name));
-    return items.sort((a, b) => (WEAPON_ATTACK[fullItemName(b.name)] ?? 0) - (WEAPON_ATTACK[fullItemName(a.name)] ?? 0))[0] ?? null;
+    return items.sort(weaponOrder(attackPath(bot)))[0] ?? null;
 }
 
 /**

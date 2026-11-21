@@ -11,7 +11,8 @@
 //                                                                     soak 5: right after each hurt line
 //   [survival] swing <mob> with <item> +<ms> ms|first: health <before> -> <after>|gone   soak 7: each swing of the shelter fight
 //   [survival] weapon <item>|hand (<where>)              soak 7 (c): what the bot holds at a fight's first hit, after it took its best
-//                                                         weapon in hand; where: shelter | open | attack | cell | hunt
+//                                                         weapon in hand; where: shelter | open | attack | cell | hunt;
+//                                                         soak 7 (e): only when the held item differs from the last weapon line's
 //
 // Soak 2 (rotn-v0.1.4): the server sends no death messages, and two deaths had no cause in the
 // journal. The hurt line names the likely source: 'starving' (food 0: Hunger Overhaul's
@@ -54,8 +55,20 @@ export const fleeLine = (mob, why) => `${SURVIVAL_TAG} flee ${token(mob)} (${Str
 export const swingLine = (mob, item, sinceMs, before, after) => `${SURVIVAL_TAG} swing ${token(mob)} with ${token(item ?? 'hand')} ${Number.isFinite(sinceMs) ? `+${Math.round(sinceMs)} ms` : 'first'}: health ${num(before)} -> ${after === 'gone' ? 'gone' : num(after)}`;
 /** Soak 7 (c): what the bot holds at the first hit of a fight (after equipHighestAttack); 'hand' when nothing. */
 export const weaponLine = (item, where) => `${SURVIVAL_TAG} weapon ${token(item ?? 'hand')} (${where})`;
-/** weaponLine for the bot now. */
-export const logWeapon = (bot, where) => console.log(weaponLine(bot?.heldItem?.name ?? null, where));
+const weaponSaidFor = new WeakMap(); // bot -> the held item its last weapon line named
+/**
+ * weaponLine for the bot now, only when the held item differs from the one its last weapon line
+ * named (soak 7 (e): avoidEnemies' cornered hit called this every 500 ms). Whether it logged.
+ */
+export function logWeapon(bot, where) {
+    const item = bot?.heldItem?.name ?? null;
+    if (bot && typeof bot === 'object') {
+        if (weaponSaidFor.has(bot) && weaponSaidFor.get(bot) === item) return false;
+        weaponSaidFor.set(bot, item);
+    }
+    console.log(weaponLine(item, where));
+    return true;
+}
 export const hurtLine = (amount, before, after, source) => `${SURVIVAL_TAG} hurt ${num(amount)} health ${num(before)}->${num(after)} (by ${token(source)})`;
 export const HURT = { minDrop: 4, windowMs: 2000, mobRange: 5, swingMs: 1000, fallingRange: 4, detailRange: 16, detailMobs: 3 };
 /** A falling block or a falling Dynamic Trees tree (entity names). */

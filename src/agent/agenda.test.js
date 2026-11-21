@@ -18,6 +18,7 @@ import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS }
 import { Agent } from './agent.js';
 import { parseCommandMessage } from './commands/index.js';
 import { TaskQueue } from './task_queue.js';
+import { DeathReporter } from './library/death_report.js';
 
 __setRegistryForTest(minecraftData('1.12.2'));
 
@@ -1027,16 +1028,27 @@ test('#502 nit 4: after a restart, a weapon spent by day still gets a fresh budg
 // empty inventory; the agenda put the shelter blocks (night ~12 min off) and the weapon first, food at
 // 23:27:21, and the bot first ate 5 min 48 s after its "low" food line (the check allows 5 min). The
 // lead's rule (d): after a respawn, hungry with nothing to eat, getting food comes first.
-test('soak 7 (d): within FOOD_AFTER_DEATH.windowMs of a death, at food 12 or lower with no food held, food comes before the shelter blocks and the weapon', (t) => {
+test('soak 7 (d): within FOOD_AFTER_DEATH.windowMs of a death (its time, with or without a spot: #523 nit 1), at food 12 or lower with no food held, food comes before the shelter blocks and the weapon', (t) => {
     assert.deepEqual(FOOD_AFTER_DEATH, { windowMs: 4 * 60_000 });
     const cow = { id: 1, type: 'mob', name: 'animania:cow_holstein', metadata: { 7: 10 }, position: new Vec3(6.5, 64, 0.5) };
-    const died = (agent, agoMs) => { agent.bot.rotnDeathSpots = () => [{ at: Date.now() - agoMs, pos: { x: 0, y: 64, z: 0 } }]; return agent; };
+    // death_report's own reporter: the death time comes from DeathReporter.deaths (#523 nit 1).
+    const died = (agent, agoMs, pos = { x: 0, y: 64, z: 0 }) => {
+        const d = new DeathReporter();
+        d.died({ pos, dimension: 'overworld', now: Date.now() - agoMs });
+        agent.bot.rotnDeathSpots = (now) => d.recentSpots(now);
+        agent.bot.rotnLastDeathAt = () => d.lastDeathAt();
+        return agent;
+    };
     const soak7 = (items = [], opts = {}) => hFixAgent(t, items, { food: 12, timeOfDay: dayAt(7), entities: { 1: cow }, ...opts });
     // No death: the shelter blocks first, as before (night is near).
     assert.equal(agendaTick(soak7(), { now: 0 }), 'shelter_blocks');
     // 20 s after the death (the respawn walk): food first; unarmed, it forages and names no animal (Fix H).
     const after = died(soak7(), 20_000);
     assert.equal(agendaTick(after, { now: 0 }), 'food');
+    // #523 nit 1: a death at an unknown position (no death spot) opens the window too.
+    const nowhere = died(soak7(), 20_000, null);
+    assert.deepEqual(nowhere.bot.rotnDeathSpots(), [], 'no spot for a death at an unknown position');
+    assert.equal(agendaTick(nowhere, { now: 0 }), 'food');
     assert.match(after.self_prompter.prompt, /You hold no weapon: gather ripe wild food with !forage/);
     assert.doesNotMatch(after.self_prompter.prompt, /!attack\(/);
     // By day too (Fix H would put the weapon first at food 12).

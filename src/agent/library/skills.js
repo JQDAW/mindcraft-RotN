@@ -12,7 +12,7 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
-import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, weaponCooldownMs } from "./threats.js";
+import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, weaponCooldownMs, weaponRank, weaponOrder, attackPath } from "./threats.js";
 import { logAte, fightJournal, swingLine, logWeapon } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -37,16 +37,8 @@ async function autoLight(bot) {
     return false;
 }
 
-/**
- * A weapon's rank by its material, a sword above an axe of the same material. A heuristic:
- * neither mineflayer's items nor rotn-data carry attack damage (upstream sorted by an
- * item.attackDamage that does not exist), and RotN's durabilities do not follow damage.
- */
-export function weaponRank(item) {
-    const name = String(item?.name ?? '');
-    const tier = /diamond/.test(name) ? 4 : /iron/.test(name) ? 3 : /stone|flint|bone|obsidian/.test(name) ? 2 : 1;
-    return tier * 2 + (/sword/.test(name) ? 1 : 0);
-}
+// weaponRank moved to threats.js (soak 7 (e): the fallback of weaponOrder); re-exported for its callers.
+export { weaponRank };
 
 /**
  * Hold the best weapon (else a pickaxe or shovel). Never throws (G3 round 7 B: a rejected click
@@ -57,12 +49,14 @@ export function weaponRank(item) {
  */
 export async function equipHighestAttack(bot, fight = {}) {
     const isWeapon = (item) => !!item && (item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe')));
-    const best = (items) => items.filter(isWeapon).sort((a, b) => weaponRank(b) - weaponRank(a))[0] ?? null;
+    // Soak 7 (e): the best by damage per tick of cooldown on the path bot.attack takes (threats.weaponOrder).
+    const order = weaponOrder(attackPath(bot));
+    const best = (items) => items.filter(isWeapon).sort(order)[0] ?? null;
     // A weapon in the off hand (which threats.hasWeapon counts) is moved into the inventory when
     // it is better than any there, so it can be held in the main hand (#238 review 1 and nit 3).
     const off = bot.inventory.slots?.[45];
     const inInventory = best(bot.inventory.items());
-    if (isWeapon(off) && (!inInventory || weaponRank(off) > weaponRank(inInventory))) {
+    if (isWeapon(off) && (!inInventory || order(off, inInventory) < 0)) {
         const full = (bot.inventory.firstEmptyInventorySlot?.() ?? null) === null;
         const moved = await stowCarried(bot, isWeapon, { resyncMs: 0 });
         if (!moved.length) log(bot, `Could not take the ${off.name} from the off hand${full ? ': the inventory is full' : ''}.`); // #238 nit 2
