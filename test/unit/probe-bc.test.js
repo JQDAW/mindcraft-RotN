@@ -202,6 +202,21 @@ describe('the judgments (the plan\'s pass rules)', () => {
         assert.equal(noAiIntrusion(r([z(7, [-44.5, 120, -65.5], 8, 'parasite')]), { cells }), 'not clean: the census saw parasite #7 at -44.5 120 -65.5 (t 0 ms) in the lane', 'once, at its first sighting');
         assert.equal(noAiIntrusion(r([z(8, [-45.5, 120, -65.5], 20, 'zombie')]), { cells }), 'not clean: the census saw zombie #8 at -45.5 120 -65.5 (t 0 ms) in the lane', 'a third zombie, not at A or B');
         assert.equal(noAiIntrusion(r([], [{ t: 500, amount: 3.333, cause: 'melee by parasite #7' }]), { cells }), 'not clean: the bot was hurt 1x (3.333 at t 500 ms, melee by parasite #7)');
+        // After #549: only mobs are alive. The scent marker (type other) is not, whatever its metadata 7 says; a mob whose
+        // health was not read is; a parasite first seen at or after the target's death does not intrude.
+        const typed = (id, name, type, health, pos) => ({ id, name, type, health, pos, d: 1 });
+        assert.equal(noAiIntrusion(r([typed(9, 'zombieawareness:entityscent', 'other', 104, [-42.5, 121.74, -65.5])]), { cells }), null, 'the scent marker');
+        assert.equal(noAiIntrusion(r([typed(10, 'item', 'object', null, [-45, 120, -66])]), { cells }), null, 'an item');
+        assert.equal(noAiIntrusion(r([typed(13, 'xp_orb', 'orb', null, [-45, 120, -66]), typed(14, 'arrow', 'projectile', null, [-45, 120, -66])]), { cells }), null, 'an orb, an arrow');
+        // #549 review: the real parasite is type hostile; any living type counts, not only mob.
+        assert.equal(noAiIntrusion(r([typed(15, 'mod_lavacow:parasite', 'hostile', 3, [-44.5, 120, -65.5])]), { cells }),
+            'not clean: the census saw mod_lavacow:parasite #15 at -44.5 120 -65.5 (t 0 ms) in the lane', 'a hostile parasite');
+        assert.equal(noAiIntrusion(r([typed(11, 'mod_lavacow:parasite', 'mob', null, [-44.5, 120, -65.5])]), { cells }),
+            'not clean: the census saw mod_lavacow:parasite #11 at -44.5 120 -65.5 (t 0 ms) in the lane', 'a mob with unread health');
+        const afterDeath = { census: [{ t: 9000, entities: [] }, { t: 10614, entities: [typed(12, 'mod_lavacow:parasite', 'mob', 3, [-43.37, 121, -66.37])] }], botHurts: [], target: { diedAt: 9700 } };
+        assert.equal(noAiIntrusion(afterDeath, { cells }), null, 'spawned by the target\'s own death (attempt 3)');
+        const before = { ...afterDeath, census: [{ t: 9000, entities: [typed(12, 'mod_lavacow:parasite', 'mob', 3, [-43.37, 121, -66.37])] }, ...afterDeath.census.slice(1)] };
+        assert.match(noAiIntrusion(before, { cells }), /mod_lavacow:parasite #12 at .* \(t 9000 ms\)/, 'there before the death: it counts');
         // judgeSeries applies it only with noAiCells (the AI step has none).
         const s = { ok: true, target: { id: 1, startHealth: 20 }, end: 'dead', hits: [], gaps: {}, census: [{ t: 0, entities: [z(7, [-44.5, 120, -65.5], 8, 'parasite')] }] };
         assert.equal(judgeSeries(s, { path: 'bc', noAiCells: cells }).inconclusive, true);
@@ -479,9 +494,9 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
         const { reply } = attach(w);
         w.give('minecraft:stone_axe');
         const a = w.summon(-47, 66, -66);
-        const p = w.spawnOther('parasite', 300, -45.5, 66, -65.5);   // 1 block from the bot; zombie A is 2
-        w.spawnOther('cow', 92, 0, 66, -66);   // 44 blocks away: not counted
-        const pid = w.spawnOther('player', 'player', -44, 66, -65.5);   // a player beside the bot: never in the census (after #543)
+        const p = w.spawnOther('parasite', -45.5, 66, -65.5);   // 1 block from the bot; zombie A is 2
+        w.spawnOther('cow', 0, 66, -66);   // 44 blocks away: not counted
+        const pid = w.spawnOther('player', -44, 66, -65.5);   // a player beside the bot: never in the census (after #543)
         w.bot.entities[pid].type = 'player';
         w.whisper('bc-hit aaa111 vanilla -47,66,-66 minecraft:stone_axe');
         const r = await reply('aaa111');
@@ -497,15 +512,69 @@ describe('the bc-hit driver core against a fake world (#521\'s wrapper, #518\'s 
         const { reply } = attach(w);
         w.give('minecraft:stone_sword');
         w.summon(-43, 66, -66);
-        const near = w.spawnOther('item', 2, -40, 66, -66);
-        w.spawnOther('cow', 92, 20, 66, -66);   // 64 blocks away
-        w.clock.at(w.clock.now() + 1200, () => w.spawnOther('lightning_bolt', 200, -44, 67, -64));
+        const near = w.spawnOther('item', -40, 66, -66);
+        w.spawnOther('cow', 20, 66, -66);   // 64 blocks away
+        w.clock.at(w.clock.now() + 1200, () => w.spawnOther('lightning_bolt', -44, 67, -64));
         w.whisper('bc-hit aaa111 bc -43,66,-66 minecraft:stone_sword');
         const r = await reply('aaa111');
-        assert.deepEqual(r.spawns.map((x) => [x.name, x.type, x.pos, x.t <= 0]), [['zombie', 54, [-42.5, 66, -65.5], true], ['item', 2, [-40, 66, -66], true], ['lightning_bolt', 200, [-44, 67, -64], false]]);
+        assert.deepEqual(r.spawns.map((x) => [x.name, x.type, x.via, x.pos, x.t <= 0]), [['zombie', 'mob', 'vanilla', [-42.5, 66, -65.5], true], ['item', 'object', 'vanilla', [-40, 66, -66], true], ['lightning_bolt', 'object', 'vanilla', [-44, 67, -64], false]]);
         assert.ok(r.spawns.find((x) => x.id === near).d < 12.5);
         w.whisper('bc-hit bbb222 bc 0,0,0 minecraft:stone_sword');
         assert.deepEqual((await reply('bbb222')).spawns, [], 'each spawn is reported once');
+    });
+
+    test('after #549: the AI target is exactly a zombie: the scent marker, nearer, is not taken', async () => {
+        const w = bcWorld();
+        const { reply } = attach(w);
+        w.give('minecraft:stone_sword');
+        const z = w.summon(-43, 66, -66, { ai: true });
+        w.spawnOther('zombieawareness:entityscent', -44.9, 66.2, -65.5, 538, { entityType: 'other' });
+        w.whisper('bc-hit aaa111 bc ai minecraft:stone_sword');
+        const r = await reply('aaa111');
+        assert.equal(r.target.id, z.id);
+        assert.equal(r.end, 'dead');
+        assert.ok(typeof r.target.diedAt === 'number' && r.target.diedAt <= r.ms, 'the death time is in the reply');
+        const scent = r.census[0].entities.find((e) => e.name === 'zombieawareness:entityscent');
+        assert.deepEqual([scent.type, scent.health], ['other', null], 'no health is read for a non-mob');
+    });
+
+    test('after #549: a tool that breaks during the pre-wait is replaced before the next attack, never a bare-handed hit', async () => {
+        const w = bcWorld({ breakDelayMs: 100 });
+        const { reply } = attach(w);
+        w.give('pyrotech:crude_axe', 6);
+        w.summon(-43, 66, -66);
+        w.whisper('bc-hit aaa111 bc -43,66,-66 pyrotech:crude_axe');
+        const r = await reply('aaa111');
+        assert.equal(r.end, 'dead');
+        assert.deepEqual(r.reequips.map((x) => x.afterHit), [4, 8]);
+        assert.ok(r.hits.every((h) => h.drop >= 2.3 || h.died), JSON.stringify(r.hits.map((h) => h.drop)));
+        assert.ok(r.gaps.bettercombat.every((g) => g >= 1100), r.gaps.bettercombat.join(','));
+        assert.equal(r.target.diedAt > 0, true);
+        // The bare hand stays empty: an item in the slot is put away first.
+        const w2 = bcWorld();
+        const t2 = attach(w2);
+        w2.summon(-43, 66, -66);
+        w2.whisper('bc-hit bbb222 bc -43,66,-66 hand');
+        w2.clock.at(w2.clock.now() + 3000, () => w2.putInHand('minecraft:rotten_flesh'));   // picked up into the empty slot
+        const r2 = await t2.reply('bbb222');
+        assert.ok(r2.hits.every((h) => h.drop < 0.6), 'every hit bare-handed');
+        assert.equal(r2.reequips.length, 1, 'the hand was emptied again (another empty slot) after the pickup');
+        assert.equal(r2.target.diedAt, null, 'not dead within 40 hits');
+    });
+
+    test('#549 review: FML (modded) spawns are recorded too, and a hostile parasite is alive: the census reads its health', async () => {
+        const w = bcWorld();
+        const { reply } = attach(w);
+        w.give('minecraft:stone_sword');
+        w.summon(-43, 66, -66);
+        w.spawnOther('mod_lavacow:parasite', -44, 66, -65, 3, { entityType: 'hostile', kind: 'Modded' });
+        w.spawnOther('zombieawareness:entityscent', -44, 67.7, -65.5, 104, { entityType: 'other', kind: 'Modded' });
+        w.whisper('bc-hit aaa111 bc -43,66,-66 minecraft:stone_sword');
+        const r = await reply('aaa111');
+        assert.deepEqual(r.spawns.map((x) => [x.name, x.type, x.via]), [['zombie', 'mob', 'vanilla'], ['mod_lavacow:parasite', 'hostile', 'fml'], ['zombieawareness:entityscent', 'other', 'fml']]);
+        const seen = Object.fromEntries(r.census[0].entities.map((e) => [e.name, [e.type, e.health]]));
+        assert.deepEqual(seen['mod_lavacow:parasite'], ['hostile', 3], 'alive: its health is read');
+        assert.deepEqual(seen['zombieawareness:entityscent'], ['other', null], 'not alive: no health read');
     });
 
     test('refusals: only the console, each token once, one series at a time, no wrapper, path off, no zombie, no item', async () => {
@@ -601,7 +670,7 @@ function sim(opt = {}) {
             else if ((m = /^tell (\S+) (.*)$/.exec(cmd)) && online) {
                 // opt.parasite: before the given bc-hit command, a mob that is not minecraft:zombie stands in the lane
                 // (a Fish's Undead Rising parasite from a dead zombie): kill @e[type=zombie] does not reach it.
-                if (opt.parasite && m[2].includes(opt.parasite.before) && !parasiteDone) { parasiteDone = true; w?.spawnOther('parasite', 300, -46.5, 120, -65.5, 8); }
+                if (opt.parasite && m[2].includes(opt.parasite.before) && !parasiteDone) { parasiteDone = true; w?.spawnOther('parasite', -46.5, 120, -65.5, 8); }
                 // opt.hurtDuring: the bot is hurt 1 s into the given bc-hit command's series.
                 if (opt.hurtDuring && m[2].includes(opt.hurtDuring) && w) { const ww = w; ww.clock.at(ww.clock.now() + 1000, () => ww.hurtBot(4)); }
                 if (opt.kick && m[2].startsWith(opt.kick)) { online = false; add(`${NAME} lost connection: Kicked by an operator`); }
@@ -670,7 +739,7 @@ describe('probe-bc-attack on a simulated server and log', () => {
             ['crude_axe: before', 0, 6], ['crude_axe: after', 1, 6], ['hand: before', 0, 6], ['hand: after', 2, 6], ['ai: before', 0, 6], ['ai: after', 0, 6]]);
         // Each reply carries the spawns near the lane since the previous one: the vanilla series' reply has both summons.
         const sw = r.notes.series.find((x) => x.key === 'vanilla_stone_sword').reply;
-        assert.deepEqual(sw.spawns.map((x) => [x.packet, x.name, x.pos]), [['spawn_entity_living', 'zombie', [-46.5, 120, -65.5]], ['spawn_entity_living', 'zombie', [-42.5, 120, -65.5]]]);
+        assert.deepEqual(sw.spawns.map((x) => [x.via, x.name, x.pos]), [['vanilla', 'zombie', [-46.5, 120, -65.5]], ['vanilla', 'zombie', [-42.5, 120, -65.5]]]);
         assert.ok(sw.spawns.every((x) => x.t <= 0), 'before the command');
         assert.deepEqual(r.notes.series.find((x) => x.key === 'bc_stone_sword').reply.spawns, [], 'nothing new before the second series');
         assert.deepEqual(r.notes.landing.botPosition, [-44.5, 120, -65.5]);

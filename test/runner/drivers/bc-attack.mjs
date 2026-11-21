@@ -29,11 +29,11 @@
 //     and who may have done it: the entities that swung (animation 0) within 1 s before, and those within 6 blocks.
 //     1.12 sends no damage source, so cause is "melee by NAME #ID" only when exactly one entity swung, else unknown;
 //   - every entity spawned near the lane (#540 review: three entities were created in the second between A's and
-//     B's summons in the stone-axe step): spawn_entity_living and spawn_entity within spawnRange of the bot, with
-//     time, id, name, type and position. Each reply carries those recorded since the previous reply (so the
+//     B's summons in the stone-axe step), vanilla or FML (modded) alike (mineflayer's entitySpawn, #549 review),
+//     within spawnRange of the bot, with time, id, name, type, via (vanilla or fml) and position. Each reply carries those recorded since the previous reply (so the
 //     summons and whatever came with them before the series, and anything during it);
 //   - a census of every entity but players within censusRange (8) of the bot, with id, name, type, health (metadata 7,
-//     when it has one), distance and position: at the series' start and about once a second after (rotn-data, after #540: a Fish's Undead
+//     read only for a living type, not NON_LIVING: their index 7 is something else), distance and position: at the series' start and about once a second after (rotn-data, after #540: a Fish's Undead
 //     Rising parasite or a Special Mobs variant may stay in the lane).
 import { setTimeout as sleepMs } from 'node:timers/promises';
 
@@ -49,6 +49,10 @@ const HEALTH = 7;            // EntityLivingBase.HEALTH (1.12): a float
 const AI_FLAGS = 11;         // EntityLiving.AI_FLAGS (1.12): a byte, 0x01 = NoAI. Read as is: a mod that adds data
                              // keys to Entity or EntityLivingBase would shift it, so the raw metadata is kept too.
 const CHILD = 12;            // EntityZombie.IS_CHILD (1.12): a boolean (the same caveat)
+// Entity types that are not alive (#549 review): mineflayer's 'other' (the Zombie Awareness scent marker), 'object'
+// (items, falling blocks), 'orb' (experience) and 'projectile'. Every other type ('mob', 'hostile', 'passive', ...) is.
+// mod_lavacow:parasite is 'hostile': counting only 'mob' as alive would hide it.
+export const NON_LIVING = new Set(['other', 'object', 'orb', 'projectile']);
 const FLAGS = 0;             // Entity.FLAGS: a byte, 0x01 on fire
 const STATUS_HURT = 2;
 const STATUS_DEAD = 3;
@@ -72,7 +76,9 @@ export function whisperOf(jsonMsg) {
     return { from: part(jsonMsg.with[0]), msg: part(jsonMsg.with[1]) };
 }
 
-const isZombie = (e) => /zombie/i.test(String(e?.name ?? '')) && !/zombie_?pigman|pig_?zombie/i.test(String(e?.name ?? ''));
+// Exactly the vanilla zombie, by registry name (attempt 3, #549: a substring match took zombieawareness:entityscent, the
+// Zombie Awareness scent marker, as the AI step's target).
+const isZombie = (e) => ['zombie', 'minecraft:zombie'].includes(String(e?.name ?? ''));
 const sameItem = (it, want) => !!it && (it.name === want || `minecraft:${it.name}` === want);
 
 /** Gaps (ms) between consecutive packets of one kind. */
@@ -142,18 +148,18 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
         if (p?.entityStatus === STATUS_DEAD) record(p.entityId, 'dead', true);
     });
     client.on('entity_destroy', (p) => { for (const id of p?.entityIds ?? []) record(id, 'gone', true); });
-    // Spawns near the bot (the lane), kept until the next reply.
+    // Spawns near the bot (the lane), kept until the next reply. From mineflayer's 'entitySpawn', which comes for the
+    // vanilla spawn packets and, through forge-bridge (fml-entities.js), for FML EntitySpawn too: the modded mobs, such as
+    // Fish's Undead Rising's parasite and the Zombie Awareness scent marker, which raw spawn packets miss (#549 review).
     let spawns = [];
-    const onSpawn = (packet) => (p) => {
+    bot.on('entitySpawn', (e) => {
         const me = bot.entity?.position;
-        if (!me || typeof p?.x !== 'number') return;
-        const d = Math.hypot(p.x - me.x, p.y - me.y, p.z - me.z);
+        if (!me || !e?.position || e === bot.entity) return;
+        const d = e.position.distanceTo(me);
         if (d > L.spawnRange || spawns.length >= L.spawnKeep) return;
-        spawns.push({ at: now(), packet, id: p.entityId, name: bot.entities?.[p.entityId]?.name ?? null, type: p.type ?? null,
-            pos: [p.x, p.y, p.z].map((v) => Math.round(v * 100) / 100), d: Math.round(d * 100) / 100 });
-    };
-    client.on('spawn_entity_living', onSpawn('spawn_entity_living'));
-    client.on('spawn_entity', onSpawn('spawn_entity'));
+        spawns.push({ at: now(), id: e.id, name: e.name ?? null, type: e.type ?? null, via: e.kind === 'Modded' || String(e.name ?? '').includes(':') ? 'fml' : 'vanilla',
+            pos: [e.position.x, e.position.y, e.position.z].map((v) => Math.round(v * 100) / 100), d: Math.round(d * 100) / 100 });
+    });
     // The bot's own hurts, and who swung just before them.
     const swungAt = new Map();
     client.on('animation', (p) => { if (p?.animation === 0) swungAt.set(p.entityId, now()); });
@@ -176,7 +182,8 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
 
     // Every reply carries the spawns recorded since the previous one (t: ms from this reply's command, < 0 before it).
     const reply = (data, t0 = now()) => {
-        const near = spawns.map(({ at, ...x }) => ({ t: at - t0, ...x }));
+        // The name is looked up now (attempt 3: at the packet, mineflayer had not named the entity yet).
+        const near = spawns.map(({ at, ...x }) => ({ t: at - t0, ...x, name: bot.entities?.[x.id]?.name ?? x.name }));
         spawns = [];
         emit('bc_hit', { v: BC_REPLY_VERSION, ...data, spawns: near });
     };
@@ -241,7 +248,8 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
             if (!me) return;
             census.push({ t: t - t0, entities: Object.values(bot.entities ?? {})
                 .filter((e) => e !== bot.entity && e?.position && e.type !== 'player' && e.position.distanceTo(me) <= L.censusRange)
-                .map((e) => ({ id: e.id, name: e.name ?? null, type: e.type ?? null, health: typeof e.metadata?.[HEALTH] === 'number' ? e.metadata[HEALTH] : null,
+                // health only for a living entity: a non-living one's metadata 7 is something else (attempt 3, #549: the scent marker's decay)
+                .map((e) => ({ id: e.id, name: e.name ?? null, type: e.type ?? null, health: !NON_LIVING.has(e.type) && typeof e.metadata?.[HEALTH] === 'number' ? e.metadata[HEALTH] : null,
                     d: Math.round(e.position.distanceTo(me) * 100) / 100, pos: [e.position.x, e.position.y, e.position.z].map((v) => Math.round(v * 100) / 100) }))
                 .sort((a, b) => a.d - b.d) });
         };
@@ -258,6 +266,9 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
         const hits = [];
         const reequips = [];
         let end = null;
+        // The item in hand is the series' item (or nothing, for hand): checked at the top of each round and again right
+        // before each attack, after the waits.
+        const stillHeld = () => (cmd.item === 'hand' ? !bot.heldItem : sameItem(bot.heldItem, cmd.item));
         const dead = () => series.events.some((e) => e.kind === 'dead' || e.kind === 'gone')
             || series.events.filter((e) => e.kind === 'health').at(-1)?.value <= 0;
         const left = () => L.maxMs - (now() - t0);
@@ -267,7 +278,7 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
                 if (hits.length >= L.maxHits) { end = 'maxHits'; break; }
                 if (left() <= 0) { end = 'maxMs'; break; }
                 if (!bot.entities?.[target.id]) { end = 'lost'; break; }
-                if (cmd.item !== 'hand' && !sameItem(bot.heldItem, cmd.item)) {
+                if (!stillHeld()) {
                     if (!(await hold(cmd.item))) { end = 'item_gone'; break; }
                     equipAt = now();
                     reequips.push({ afterHit: hits.length, t: equipAt });
@@ -285,6 +296,7 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
                     const wait = Math.max(last, equipAt) + ticks * TICK_MS - now();
                     if (wait > 0) await waitMs(wait);
                     if (dead()) { end = 'dead'; break; }
+                    if (!stillHeld()) continue;   // it broke (or changed) during the wait: take the next one first
                     bot.attackVanilla(target, true);
                     r = { sent: true, path: 'vanilla', waitedMs: Math.max(0, Math.round(wait)) };
                 } else {
@@ -294,6 +306,8 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
                         if (pre > 0) await waitMs(pre);
                         if (dead()) { end = 'dead'; break; }
                     }
+                    // Attempt 3 (#549): the crude axe broke during the pre-wait and hit 5 went out bare-handed.
+                    if (!stillHeld()) continue;
                     r = await bot.attack(target, true);
                 }
                 hits.push({ i: hits.length + 1, t: now(), path: r?.path ?? null, sent: r?.sent !== false, waitedMs: r?.waitedMs ?? null, reason: r?.reason ?? null, cooldownTicks: ticks });
@@ -308,11 +322,14 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
         const botHurts = series.botHurts.map((h) => ({ ...h, t: h.t - t0 }));
         series = null;
         const endPos = at(bot.entities?.[target.id]?.position ?? target.position);
+        // When the target died (its death status, or health 0), ms from the command, or null.
+        const deathEvent = events.find((e) => e.kind === 'dead' || (e.kind === 'health' && e.value <= 0));
+        const diedAt = deathEvent ? deathEvent.t - t0 : null;
         const mine = packets.slice(fromPacket).filter((p) => p.name !== 'use_entity' || p.target === target.id);
         const stamped = attribute(hits, events, startHealth, endAt).map((h) => ({ ...h, t: h.t - t0 }));
         reply({
             token: cmd.token, ok: !String(end).startsWith('error') && end !== 'cooldown_unknown', path: cmd.path, item: cmd.item,
-            target: { ...identity, endPos, moved: startPos && endPos ? Math.round(Math.hypot(endPos[0] - startPos[0], endPos[1] - startPos[1], endPos[2] - startPos[2]) * 100) / 100 : null },
+            target: { ...identity, diedAt, endPos, moved: startPos && endPos ? Math.round(Math.hypot(endPos[0] - startPos[0], endPos[1] - startPos[1], endPos[2] - startPos[2]) * 100) / 100 : null },
             end, botHurts, census,
             hits: stamped, hitCount: hits.length,
             healthEnd: stamped.at(-1)?.healthAfter ?? startHealth,
