@@ -18,7 +18,7 @@ const clamp = (x, lo, hi) => Math.min(Math.max(x, lo), hi);
  * A mob's fight numbers, or null when combat.json does not list it.
  * @returns {{name: string, maxHealth: number, armor: number, armorToughness: number, attackIntervalTicks?: number,
  *   reach?: number, bowIntervalTicks?: number, fuseTicks?: number, explosionRadius?: number, spawnArmor?: string,
- *   leaderBonus?: object, note?: string, confidence: string}|null}  (without evidence)
+ *   leaderBonus?: object, spawnsFrom?: object, note?: string, confidence: string}|null}  (without evidence)
  */
 export function combatOf(catalog, entityName) {
     const m = catalog.combatData?.mobs?.[entityName];
@@ -102,7 +102,10 @@ const hitsFor = (hp, first, rest) => (first >= hp ? 1 : rest > 0 ? 1 + Math.ceil
  * @param {{mob: string, weapon?: string, path?: 'bettercombat'|'vanilla', armorItems?: string[], health?: number,
  *   protection?: number, sneakAttack?: boolean}} fight armorItems: what the mob wears (e.g. ['minecraft:chainmail_helmet']);
  *   health: start health (default its maxHealth); sneakAttack: the mob has not noticed the bot (neither its attack nor its
- *   revenge target), so Better Combat's first hit is a crit.
+ *   revenge target), so Better Combat's first hit is a crit. On this pack Zombie Awareness makes every mob enabled in its
+ *   MobLists.cfg tickable_entities (126: zombies, skeletons, spiders, witches and more) target a player it has seen within 16
+ *   blocks horizontally and 8 vertically for 2 s, NoAI or not (combat.json zombieAwareness), so pass it only for one that has
+ *   not had the bot in sight.
  * @returns {{hits: number, minHits: number, perHit: number, critHit: number, ticks: number, cooldownTicks: number,
  *   health: number, armor: number}|null} hits: with no random crit (the most it takes); minHits: every hit a crit (the
  *   fewest; = hits on the vanilla path); critHit: one crit's damage (= perHit on the vanilla path). ticks: from the first

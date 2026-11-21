@@ -316,7 +316,7 @@ test('other reach rules: zombie attack, the giant\'s 1.9, zombie players\' +3 wi
 
 test('through-block answers follow from width, height and reach; every one is cited', () => {
     const through = Object.entries(MM.mobs).filter(([, m]) => m.hitsThroughWalls !== undefined && m.attack !== 'spell');
-    assert.equal(through.length, 37);
+    assert.equal(through.length, 38); // + the parasite (zombie-awareness PR)
     for (const [n, m] of through) {
         assert.ok(m.width > 0 && m.height > 0 && m.reach > 0, n);
         let t = 0;
@@ -325,7 +325,7 @@ test('through-block answers follow from width, height and reach; every one is ci
         assert.equal(m.wallBlocks, t, n);
         assert.equal(m.hitsThroughFloor === true, m.reach > 1 + Math.ceil(m.height), n);
         assert.equal(m.hitsThroughRoof === true, m.reach > 3, n);
-        assert.ok(m.evidence.some((e) => /walls\.javap\.txt|gaps\.javap\.txt|troll-trees-melee/.test(e)), n);
+        assert.ok(m.evidence.some((e) => /walls\.javap\.txt|gaps\.javap\.txt|troll-trees-melee|zombie-awareness-3\.3\.4/.test(e)), n);
     }
     assert.deepEqual(['mod_lavacow:sludgelord', 'ancientbeasts:giant_zombie'].map((n) => MM.mobs[n].wallBlocks), [3, 3]);
     assert.deepEqual(Object.keys(MM.mobs).filter((n) => MM.mobs[n].hitsThroughRoof).sort(), ['ancientbeasts:giant_zombie', 'mod_lavacow:sludgelord']);
