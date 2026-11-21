@@ -550,7 +550,7 @@ export class RotnData {
         return combatOf(this, entityName);
     }
 
-    /** A weapon's attackDamage, attackSpeed and cooldownTicks on this pack ('hand' when empty), or null (src/combat.js). */
+    /** A weapon's numbers on this pack ('hand' when empty): vanilla's attackDamage, attackSpeed, cooldownTicks and Better Combat's bc* ones, or null (src/combat.js). */
     weaponStats(item) {
         return weaponStats(this, item);
     }
