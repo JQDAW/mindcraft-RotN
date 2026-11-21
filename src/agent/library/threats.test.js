@@ -1,7 +1,7 @@
 // Offline tests for skills-rotn D2c: the modes react to mobs by rotn-data's threat
 // table (threatOf), not by type 'mob'. Real rotn-data entries, a fake bot with
 // entities at fixed distances; no server, no LLM.
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
@@ -11,6 +11,14 @@ import { __modeForTest, __resetThreatLease } from '../modes.js';
 
 let nextId = 1;
 const mob = (name, x, type = 'mob') => ({ id: nextId++, name, type, position: new Vec3(x, 64, 0), height: 1.8 });
+/**
+ * rotn-data #518: a zombie's maxDamage is data (12.5, then 10.5): the health thresholds below come
+ * from it. ZOMBIE_HIT: what a zombie may hit for; UNDER: the whole health just below it (12, or 10);
+ * OVER: the whole health just above it (13, or 11).
+ */
+const ZOMBIE_HIT = maxHitOf({ name: 'zombie', type: 'mob' });
+const UNDER = Number.isInteger(ZOMBIE_HIT) ? ZOMBIE_HIT - 1 : Math.floor(ZOMBIE_HIT);
+const OVER = Math.floor(ZOMBIE_HIT) + 1;
 function fakeBot(entities, extra = {}) {
     const self = { id: 0, name: 'player', type: 'player', position: new Vec3(0, 64, 0) };
     const all = { 0: self };
@@ -163,6 +171,11 @@ async function untilIdle(name, ms = 5000) {
 }
 
 // A bot whose pathfinder and pvp are fakes, so defendSelf and avoidEnemies really run.
+// #518 (rotn-lead): a test that fails with its fight still running (untilIdle throws) left defendSelf
+// looping, and the file never exited. After the file's tests every such fight is interrupted, so a
+// failure ends the run.
+const fightBots = [];
+after(() => { for (const b of fightBots) b.interrupt_code = true; });
 function fightBot(entities) {
     const bot = fakeBot(entities, {
         registry: minecraftData('1.12.2'), version: '1.12.2', output: '',
@@ -179,6 +192,7 @@ function fightBot(entities) {
         setMovements() {}, goto: () => Promise.resolve(), stop() {},
         setGoal(goal) { this.goals.push(goal); bot.interrupt_code = true; }, // one flee step, then stop
     };
+    fightBots.push(bot);
     return bot;
 }
 
@@ -471,20 +485,20 @@ test('soak 5: shelterTarget is a melee mob only (never a troll, a creeper, a ske
 // Soak 5 (rotn-v0.1.11), the lead's rule after deaths 2 and 3: at health 1.5 the bot fought a zombie
 // in the open and died within a second; respawned with no weapon, it fought one by hand for 15 s and
 // died. In the open a melee mob is fled from with no weapon or at a health one hit of it may take:
-// PR 5, that mob's maxDamage (rotn-data #496 mob-melee.json; a zombie 12.5 with Rough Mobs' stone
-// axe), UNKNOWN_MELEE (18) with no entry. Fix G used 8 for every mob.
+// PR 5, that mob's maxDamage (rotn-data mob-melee.json, with Rough Mobs' worst weapon: ZOMBIE_HIT),
+// UNKNOWN_MELEE (18) with no entry. Fix G used 8 for every mob.
 test('PR 5: in the open a melee mob is fled from with no weapon or at a health its maxDamage may take; armed above it it is fought', () => {
     const sword = { name: 'iron_sword', count: 1 };
     const zombie = mob('zombie', 3);
     const plan = ({ items = [sword], health = 20, of = zombie } = {}) => threatPlan(fakeBot([of], { health, inventory: { items: () => items, slots: [] } }));
     const bare = plan({ items: [] });
     assert.deepEqual([bare.action, bare.why, bare.from, bare.away, bare.isEnemy(zombie)], ['flee', 'melee, and no weapon', zombie, RANGES.fight.away, true]);
-    assert.equal(maxHitOf(zombie), 12.5);
-    const low = plan({ health: 12 });
-    assert.deepEqual([low.action, low.why], ['flee', 'melee, and health 12, a zombie hits up to 12.5'], 'the lead accepted it: armed at 12, a zombie is fled from');
-    assert.equal(plan({ health: 12.5 }).action, 'flee', 'equal: one hit may kill');
-    assert.equal(plan({ health: 1.5 }).why, 'melee, and health 1.5, a zombie hits up to 12.5', 'death 2');
-    assert.equal(plan({ health: 13 }).action, 'fight');
+    assert.ok(ZOMBIE_HIT > 3 && ZOMBIE_HIT < 18, `a zombie's maxDamage from rotn-data: ${ZOMBIE_HIT}`);
+    const low = plan({ health: UNDER });
+    assert.deepEqual([low.action, low.why], ['flee', `melee, and health ${UNDER}, a zombie hits up to ${ZOMBIE_HIT}`], 'the lead accepted it: armed just below it, a zombie is fled from');
+    assert.equal(plan({ health: ZOMBIE_HIT }).action, 'flee', 'equal: one hit may kill');
+    assert.equal(plan({ health: 1.5 }).why, `melee, and health 1.5, a zombie hits up to ${ZOMBIE_HIT}`, 'death 2');
+    assert.equal(plan({ health: OVER }).action, 'fight');
     // A spider hits for 2: fought down to health 2.1.
     const spider = mob('spider', 3);
     assert.equal(maxHitOf(spider), 2);
@@ -527,24 +541,24 @@ test('soak 5: modes: unarmed, a lone zombie makes cowardice back off, not self_d
     assert.deepEqual(a.ran, ['mode:cowardice']);
     assert.match(a.bot.modes.behavior_log, /Backing off: zombie \(melee, and no weapon\)!/);
     const low = modeAgent([mob('zombie', 4)]);
-    low.bot.health = 12;
+    low.bot.health = UNDER;
     await tick(low);
-    assert.deepEqual(low.ran, ['mode:cowardice'], 'armed at health 12: back off (a zombie hits up to 12.5)');
+    assert.deepEqual(low.ran, ['mode:cowardice'], `armed at health ${UNDER}: back off (a zombie hits up to ${ZOMBIE_HIT})`);
 });
 
-test('soak 5 / PR 5: a fight that drops to health 12 (a zombie hits up to 12.5) ends, and the bot backs off from the same zombie', async (t) => {
+test('soak 5 / PR 5: a fight that drops just below what a zombie may hit for (ZOMBIE_HIT) ends, and the bot backs off from the same zombie', async (t) => {
     t.mock.method(console, 'log', () => {});
     const zombie = mob('zombie', 3);
     const bot = fightBot([zombie]);
     bot.health = 20;
     const attack = bot.pvp.attack.bind(bot.pvp);
-    bot.pvp.attack = (e) => { attack(e); bot.health = 12; }; // one exchange of hits
+    bot.pvp.attack = (e) => { attack(e); bot.health = UNDER; }; // one exchange of hits
     const agent = { bot, shut_up: true, openChat() {}, actions: { currentActionLabel: '', resume_func: null,
         runAction: async (label, fn) => { await fn(); return { message: 'ok', interrupted: false }; } } };
     await __modeForTest('self_defense').update(agent);
     await untilIdle('self_defense');
     assert.deepEqual(bot.pvp.attacks, ['zombie'], 'one round, then it stopped');
-    assert.match(bot.modes.behavior_log, /Fighting zombie!\nBacking off: zombie \(melee, and health 12, a zombie hits up to 12\.5\)!/);
+    assert.ok(bot.modes.behavior_log.includes(`Fighting zombie!\nBacking off: zombie (melee, and health ${UNDER}, a zombie hits up to ${ZOMBIE_HIT})!`), bot.modes.behavior_log);
     assert.equal(bot.pathfinder.goals.length, 1, 'it moved away');
 });
 
@@ -743,7 +757,7 @@ test('soak 7 (A): fightOdds: unknown numbers are no fight; with numbers, the fig
     const armed = fakeBot([zombie], { inventory: { items: () => [{ name: 'pyrotech:crude_axe', count: 1 }, { name: 'stone_axe', count: 1 }], slots: [] } });
     const n = fightNumbers(armed, zombie);
     assert.deepEqual(n, { health: 20, mobHealth: null, mobHit: 3, mobIntervalMs: null, hitDamage: null, cooldownMs: 1250 }, 'rotn-data: no mob health, no zombie interval, no weapon damage yet');
-    assert.equal(fightNumbers(armed, { ...zombie, heldItem: { name: 'stone_axe' } }).mobHit, 12.5, 'holding a weapon: its maxDamage');
+    assert.equal(fightNumbers(armed, { ...zombie, heldItem: { name: 'stone_axe' } }).mobHit, ZOMBIE_HIT, 'holding a weapon: its maxDamage');
     assert.equal(fightNumbers(armed, mob('iceandfire:if_troll', 1)).mobIntervalMs, 1000);
     assert.deepEqual(fightOdds(n, maxHitOf(zombie)), { winnable: false, why: 'the fight cannot be judged yet (unknown: its health, its attack interval, our weapon damage)' });
     // Soak 7's zombie as estimated: 30 health (Rough Mobs x1.5), 7 a hit at best with a stone axe, 3 a second from it.
