@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -261,6 +261,13 @@ export function initBot(username, { onMsaCode } = {}) {
     });
     // SIGTERM/SIGINT (systemctl stop, Ctrl-C, AgentProcess.stop): quit the server connection, then exit 0.
     forge.gracefulQuit = installGracefulQuit(bot);
+    // G4 (soak 7, #518): bot.attack sends Better Combat's attack packet, which hits in full, when
+    // bc_attack (or FORGE_BC_ATTACK=on) is set and the server has the channel; otherwise vanilla.
+    const bc = bcAttackSetting(env.bcAttackRaw, settings.bc_attack);
+    if (bc.warning) console.warn(`[initBot] ${bc.warning}`);
+    forge.bcAttack = installBetterCombatAttack(bot, { bridge: () => forge.bridge, enabled: bc.on });
+    forge.attackCooldownTicks = () => forge.bcAttack.cooldownTicks(); // Better Combat's pacing for the held item, for skills
+    bot.once('spawn', () => { if (forge.bridge) console.log(`[forge-bridge] ${forge.bcAttack.status()}`); });
 
     // Throttle position packets to avoid kicks on Paper/Spigot servers. Inside each
     // 50 ms window the newest position and look are kept and merged, so the server

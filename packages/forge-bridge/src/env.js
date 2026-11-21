@@ -9,6 +9,8 @@
 //   MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS  placeBlock's wait for the block update (overrides
 //                              settings.place_block_timeout_ms; default 500, patches/mineflayer)
 //   PROTODEF_LOG_PARTIAL=1     protodef's own "partial packet" log (patches/protodef)
+//   FORGE_BC_ATTACK            on | off: Better Combat's attack packet for bot.attack (overrides
+//                              settings.bc_attack; default off; src/bettercombat.js)
 
 import process from 'node:process';
 
@@ -27,6 +29,7 @@ export function forgeOptionsFromEnv(username, env = process.env, now = new Date(
         profilesFolder: env.MINDCRAFT_PROFILES_FOLDER || null,
         pingTimeoutMs: Number(env.FORGE_PING_TIMEOUT_MS) > 0 ? Number(env.FORGE_PING_TIMEOUT_MS) : null,
         placeBlockTimeoutRaw: env.MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS ?? null,
+        bcAttackRaw: env.FORGE_BC_ATTACK ?? null,
     };
 }
 
