@@ -89,10 +89,10 @@ test('G4 #2, #396 review 3: the entity line: as !entities lists them (16 blocks,
     ];
     const { bot } = worldBot([], ents);
     const line = entityLine('FRCFLD', entitiesNearSpawn(bot), 0);
-    // #396 nit 1: "unknown" and the nameless one are keyed by their type (#?: none known), like blocks.
-    assert.equal(line, '[naming] FRCFLD entities +0s: 6 kinds; unknown 3; #?:2 cow:2 #77:1 mocreatures:entity_12:1 quark:crab:1 zombie:1');
+    // #396 nit 1: "unknown", the nameless one and the placeholder name (any type) are keyed by their type (#?: none known), like blocks.
+    assert.equal(line, '[naming] FRCFLD entities +0s: 5 kinds; unknown 2; #?:3 cow:2 #77:1 quark:crab:1 zombie:1');
     const { m } = parse(line, ENTITY_RE);
-    assert.deepEqual([m[2], m[3], m[4]], ['0', '6', '3']);
+    assert.deepEqual([m[2], m[3], m[4]], ['0', '5', '2']);
     assert.ok(!line.includes('JQDAW') && !line.includes('item') && !line.includes('skeleton'));
     assert.equal(unknownEntityName('mod:entity_3'), true);
     assert.equal(unknownEntityName('zombie_players:zombie_player'), false);
@@ -213,6 +213,22 @@ test('#396 nit 1: an unknown entity (type "other" with a name forge-bridge does 
     const line = entityLine('FRCFLD', entitiesNearSpawn(worldBot([], ents).bot), 0);
     assert.equal(line, '[naming] FRCFLD entities +0s: 4 kinds; unknown 3; #mocreatures:12:2 #300:1 #5:1 quark:crab:1');
     assert.match(line, ENTITY_RE);
+});
+
+test('net-forge types an unknown living FML entity "mob": it is keyed #<entityType>, else #<modId>:<modEntityTypeId>, as with type "other"; a known name is kept', () => {
+    const fml = (name, type, modEntityTypeId, nameKnown, entityType = null) => ({ name, type, entityType, forge: { modId: 'mocreatures', modEntityTypeId, nameKnown } });
+    for (const type of ['mob', 'other']) {
+        const ents = [
+            fml('mocreatures:entity_12', type, 12, false), fml('mocreatures:entity_12', type, 12, false),
+            fml('mocreatures:entity_3', type, 3, false, 300),
+            { name: 'mocreatures:entity_9', type }, // a placeholder name with no forge data
+            fml('mocreatures:bigcat', type, 5, true), // known: kept
+        ];
+        const line = entityLine('FRCFLD', entitiesNearSpawn(worldBot([], ents).bot), 0);
+        assert.equal(line, '[naming] FRCFLD entities +0s: 4 kinds; unknown 3; #mocreatures:12:2 #300:1 #?:1 mocreatures:bigcat:1', type);
+        assert.match(line, ENTITY_RE);
+        assert.ok(!line.includes('entity_'), `no placeholder name printed (${type})`);
+    }
 });
 
 test('#396 nit 2: a failure is logged with safeError (one line, no stack)', async (t) => {

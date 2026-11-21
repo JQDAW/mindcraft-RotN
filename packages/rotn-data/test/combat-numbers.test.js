@@ -361,3 +361,40 @@ test('mob-melee.json: the zombie weapon worst case is +6 with Material Changer (
         assert.ok(!m.evidence.some((e) => /the strongest is the stone axe/.test(e)), n);
     }
 });
+
+test('durability: an item breaks only when its damage goes above its durability, so the crude axe breaks on its 5th hit (#550 review)', () => {
+    // ItemStack.attemptDamageItem: damage += amount, then return damage > max damage (if_icmple skips the true).
+    const attempt = section(jp, 'aip (ItemStack, Forge-patched) attemptDamageItem');
+    inOrder(attempt, 'Method i:()I', 'iload_1', 'iadd', 'Method b:(I)V', 'Method i:()I', 'Method k:()I', 'if_icmple', 'iconst_1', 'iconst_0', 'ireturn');
+    // damageItem shrinks the stack (g(1)) only when attemptDamageItem returned true.
+    inOrder(section(jp, 'aip (ItemStack, Forge-patched) damageItem'), 'Method a:(ILjava/util/Random;Loq;)Z', 'ifeq', 'Method g:(I)V');
+    const getSet = section(jp, 'aip (ItemStack, Forge-patched) hitEntity');
+    inOrder(getSet, 'public void a(vp, aed);', 'Method ain.a:(Laip;Lvp;Lvp;)Z', 'public int i();', 'ain.getDamage', 'public int k();', 'ain.getMaxDamage', 'public void b(int);', 'ain.setDamage');
+    // Item.setDamage only clamps below 0; Item.getMaxDamage(stack) is the item's own max damage (Material Changer sets 8).
+    const item = section(jp, 'ain (Item, Forge-patched)');
+    inOrder(item, 'public int getMaxDamage(aip);', 'Method l:()I', 'public void setDamage(aip, int);', 'putfield', 'ifge', 'iconst_0', 'putfield');
+    assert.doesNotMatch(item, /if_icm/);
+    // ItemTool.hitEntity costs 2; nothing between it and the crude axe overrides the durability path.
+    inOrder(section(jp, 'ahq (ItemTool) hitEntity'), 'iconst_2', 'Method aip.a:(ILvp;)V');
+    assert.deepEqual(section(jp, 'agy (ItemAxe), ItemAxeBase, ItemCrudeAxe').trim().split('\n').slice(1).map((l) => l.split(': ')[1]), ['0', '0', '0']);
+    assert.match(section(jp, 'SRG names for the durability excerpts'), /MD: aip\/a \(ILjava\/util\/Random;Loq;\)Z net\/minecraft\/item\/ItemStack\/func_96631_a /);
+    assert.match(section(jp, 'SRG names for the durability excerpts'), /MD: ahq\/a \(Laip;Lvp;Lvp;\)Z net\/minecraft\/item\/ItemTool\/func_77644_a /);
+    // Vanilla calls hitEntity only after attackEntityFrom returned true; Better Combat after every attack on a living entity.
+    inOrder(section(jp, 'aed (EntityPlayer, Forge-patched) attackTargetEntityWithCurrentItem f(vg): hitEntity only'), 'Method vg.a:(Lur;F)Z', 'istore        22', 'iload         22', 'ifeq          1256', 'Method aip.a:(Lvp;Laed;)V');
+    const bcHit = section(jp, 'Better Combat Helpers.playerAttackVictim: hitEntity');
+    inOrder(bcHit, 'playerAttackVictimWithWeapon', 'istore        5', 'instanceof', 'EntityLivingBase', 'ItemStack.func_77961_a');
+    assert.doesNotMatch(bcHit, /iload +5\n/);
+    assert.deepEqual(section(jp, 'Every Better Combat class that calls setItemDamage').trim().split('\n').slice(1),
+        ['bettercombat.mod.server.EventHandlers: setItemDamage 0, damageItem 1, attemptDamageItem 0, hitEntity 0',
+            'bettercombat.mod.util.Helpers: setItemDamage 1, damageItem 0, attemptDamageItem 0, hitEntity 2']);
+    inOrder(section(jp, 'Better Combat Helpers.playerAttackVictimWithWeapon: its one setItemDamage'), 'String wards:effect_unbreaking', 'bipush        8', '8: 1444', '1444:', 'func_77952_i', 'iconst_1', 'isub', 'func_77964_b');
+    // The crude axe: 8 durability, 2 a hit. Hits until the damage first goes above 8.
+    const axe = pack.weaponStats('pyrotech:crude_axe');
+    assert.deepEqual([axe.durability, axe.durabilityPerHit], [8, 2]);
+    let damage = 0, hits = 0;
+    while (!(damage > axe.durability)) { damage += axe.durabilityPerHit; hits++; }
+    assert.equal(hits, 5);
+    assert.equal(Math.floor(axe.durability / axe.durabilityPerHit) + 1, hits);
+    assert.match(axe.note, /the 5th hit breaks it \(damage 10 > 8\)/);
+    assert.doesNotMatch(axe.note, /after 4 hits/);
+});

@@ -12,11 +12,11 @@
 // null or empty) is printed "#<type>:<meta>", e.g. "#4321:2:7"; a numeric name ("1234", "1234:5") or
 // one with an "unknown" part is printed as it is.
 // Entities: as !entities lists them (within ENTITY_RADIUS; no players, no dropped items), the same
-// rules; an unknown entity (no name, "unknown", or type "other" with a name forge-bridge does not
-// know, such as its placeholder "<mod>:entity_<n>") is keyed "#<entityType>", else
-// "#<modId>:<modEntityTypeId>", else "#?" (entityKey). A placeholder name with another type is
-// printed as it is; either way it counts as unknown. Taken with the block scan; when no entity is
-// near, again every ENTITY_SCAN.retryMs, at most ENTITY_SCAN.tries times; "+<secs>s" says when.
+// rules; an unknown entity (no name, "unknown", or a name forge-bridge does not know, such as its
+// placeholder "<mod>:entity_<n>", whatever its type) is keyed "#<entityType>", else
+// "#<modId>:<modEntityTypeId>", else "#?" (entityKey), and counts as unknown. Taken with the block
+// scan; when no entity is near, again every ENTITY_SCAN.retryMs, at most ENTITY_SCAN.tries times;
+// "+<secs>s" says when.
 // "Near spawn" is near the bot when the scan is taken: up to ~55 s after the spawn for the blocks
 // (the chunk waits), up to ~4 min for the entities.
 // Block keys "#<type>:<meta>" and entity keys such as "#<mod>:<id>" are on separate lines; in every
@@ -80,14 +80,14 @@ function census(items, keyOf, isUnknown) {
 
 const blockKey = (b) => (noName(b?.name) ? `#${b?.type ?? '?'}:${b?.metadata ?? 0}` : String(b.name));
 /**
- * An unknown entity (no name, "unknown", or forge-bridge's type "other" with a name it does not know)
- * is keyed by its type, like a block (#396 nit 1): "#<entityType>", else forge-bridge's
- * "#<modId>:<modEntityTypeId>", else "#?". A known name is kept, also with type "other" (forge-bridge
- * gives that type to every modded entity its table has no type for; no 1.12 vanilla entity has it).
+ * An unknown entity (no name, "unknown", or a name forge-bridge does not know) is keyed by its type,
+ * like a block (#396 nit 1): "#<entityType>", else forge-bridge's "#<modId>:<modEntityTypeId>", else
+ * "#?". Any type: forge-bridge types an unknown modded entity that looks living "mob", others "other".
+ * A known name is kept, whatever the type.
  */
 const entityKey = (e) => {
     const name = e?.name;
-    const unknown = noName(name) || name === 'unknown' || (e?.type === 'other' && (e?.forge?.nameKnown === false || unknownEntityName(name)));
+    const unknown = e?.forge?.nameKnown === false || unknownEntityName(name); // unknownEntityName covers no name and "unknown"
     if (!unknown) return String(name);
     const mod = e?.forge?.modId != null && e?.forge?.modEntityTypeId != null ? `${e.forge.modId}:${e.forge.modEntityTypeId}` : null;
     return `#${e?.entityType ?? mod ?? '?'}`;
