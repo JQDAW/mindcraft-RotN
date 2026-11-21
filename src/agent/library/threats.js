@@ -108,9 +108,12 @@ export function threatFor(entity) {
             // fightBack, ...}; fightBack false: never fight it, get away), or null.
             provoked: t.provoked ?? null,
             // rotn-data #496 (mob-melee.json): {damage, maxDamage, hitsThroughWalls?, reach?}, or null
-            // when unknown (never zero: maxHitOf assumes UNKNOWN_MELEE).
+            // when unknown (never zero: maxHitOf assumes UNKNOWN_MELEE). Soak 7: its width (#511) and
+            // attack interval (meleeReach, fightNumbers), null when not given.
             melee: t.melee ? { damage: t.melee.damage, maxDamage: t.melee.maxDamage ?? t.melee.damage,
-                hitsThroughWalls: !!t.melee.hitsThroughWalls, reach: Number.isFinite(t.melee.reach) ? t.melee.reach : null } : null,
+                hitsThroughWalls: !!t.melee.hitsThroughWalls, reach: Number.isFinite(t.melee.reach) ? t.melee.reach : null,
+                width: Number.isFinite(t.melee.width) ? t.melee.width : null,
+                intervalTicks: Number.isFinite(t.melee.intervalTicks) ? t.melee.intervalTicks : null } : null,
         } : null);
     }
     const known = cache.get(entity.name);
@@ -236,6 +239,101 @@ export function fightRefusal(bot, mob = null) {
     const name = shortName(mob);
     const who = name ? `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}` : 'an unknown mob';
     return `health ${round1(h)}, ${who} hits up to ${round1(max)}`;
+}
+
+/** A player's hitbox width (1.12): the target width in the vanilla melee reach rule. */
+const PLAYER_WIDTH = 0.6;
+/** Soak 7: how much nearer than its reach + this a mob counts as in reach of the bot (it steps in to swing). */
+export const REACH_SLACK = 0.25;
+
+/**
+ * A mob's melee reach in blocks, from its position to the bot's feet (rotn-data #511 `melee.reach`),
+ * else the vanilla 1.12 rule EntityAIAttackMelee.getAttackReachSqr: sqrt((2 x its width)^2 + the
+ * target's width) (a zombie: 1.43), its width from rotn-data, the entity, or 0.6.
+ */
+export function meleeReach(entity) {
+    const m = entity ? threatFor(entity)?.melee : null;
+    if (Number.isFinite(m?.reach)) return m.reach;
+    const w = Number.isFinite(m?.width) ? m.width : Number.isFinite(entity?.width) ? entity.width : 0.6;
+    return Math.sqrt((2 * w) ** 2 + PLAYER_WIDTH);
+}
+
+/** Whether the mob is within its melee reach (+ slack) of the bot's feet. */
+export function inMeleeReach(bot, entity, slack = REACH_SLACK) {
+    const me = bot?.entity?.position;
+    return !!me && !!entity?.position && entity.position.distanceTo(me) <= meleeReach(entity) + slack;
+}
+
+/**
+ * Soak 7 (death 1, 23:24:27): the shelter fight was capped ("4 hits did not hurt the zombie") while
+ * the zombie stood 0.8 m away and hit the bot. Whether this mob is hurting the bot now: a hit within
+ * PROVOKED_MS that the world did not do (a fall, starving), with the mob within its reach.
+ */
+export function hurtingInReach(bot, entity, now = Date.now()) {
+    return now - (bot?.lastDamageTime ?? -Infinity) <= PROVOKED_MS && !worldDamage(bot) && inMeleeReach(bot, entity);
+}
+
+/**
+ * Soak 7: how long the held item needs between two full-strength hits, in ms: the vanilla 1.12
+ * attack speeds (a sword 1.6 a second, an axe 0.8, a pickaxe 1.2, a shovel 1.0, an empty hand or any
+ * other item 4.0, which the pack's Better Combat Rebirth raises to at least 8 ticks). A hit sooner
+ * than this does less damage (0.2 + 0.8 x (elapsed / cooldown)^2). To come from rotn-data (asked
+ * after soak 7) with the weapons' damage on this pack.
+ */
+export const WEAPON_COOLDOWN_MS = { sword: 625, axe: 1250, pickaxe: 850, shovel: 1000, other: 400 };
+export function weaponCooldownMs(item) {
+    const name = typeof item?.name === 'string' ? item.name.replace(/:\d+$/, '') : '';
+    if (/pickaxe/.test(name)) return WEAPON_COOLDOWN_MS.pickaxe;
+    if (/sword/.test(name)) return WEAPON_COOLDOWN_MS.sword;
+    if (/(^|[:_])axe$/.test(name)) return WEAPON_COOLDOWN_MS.axe;
+    if (/shovel|spade/.test(name)) return WEAPON_COOLDOWN_MS.shovel;
+    return WEAPON_COOLDOWN_MS.other;
+}
+
+/** The bot's best weapon by WEAPON_ATTACK (any sword or axe when none is listed), or null. */
+function bestWeapon(bot) {
+    const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]].filter(i => typeof i?.name === 'string' && /sword|(^|[:_])axe$/.test(i.name));
+    return items.sort((a, b) => (WEAPON_ATTACK[fullItemName(b.name)] ?? 0) - (WEAPON_ATTACK[fullItemName(a.name)] ?? 0))[0] ?? null;
+}
+
+/**
+ * Soak 7 (A), the lead's rule: the numbers a fight with this mob is judged by. null is unknown.
+ * rotn-data has not published (asked after soak 7) the mob's health on this pack, its attack
+ * interval (only the troll's so far) or our weapons' damage per hit; until then mobHealth and
+ * hitDamage are null and no fight is judged winnable. mobHit is its hit with what it holds
+ * (maxDamage when it holds anything, else its empty-hand damage).
+ */
+export function fightNumbers(bot, mob) {
+    const m = mob ? threatFor(mob)?.melee : null;
+    const holds = !!(mob?.heldItem?.name ?? (Array.isArray(mob?.equipment) ? mob.equipment[0]?.name : null));
+    const hit = holds ? m?.maxDamage : m?.damage;
+    const weapon = bestWeapon(bot);
+    return {
+        health: Number.isFinite(bot?.health) ? bot.health : null,
+        mobHealth: null,
+        mobHit: Number.isFinite(hit) ? hit : null,
+        mobIntervalMs: Number.isFinite(m?.intervalTicks) ? m.intervalTicks * 50 : null,
+        hitDamage: null,
+        cooldownMs: weapon ? weaponCooldownMs(weapon) : null,
+    };
+}
+
+const FIGHT_NUMBER_NAMES = { health: 'our health', mobHealth: 'its health', mobHit: 'its hit', mobIntervalMs: 'its attack interval', hitDamage: 'our weapon damage', cooldownMs: 'our weapon cooldown' };
+
+/**
+ * Soak 7 (A): whether a fight with the mob ends with the bot above maxHit (the health at which
+ * fightRefusal would stop it anyway). Hits to kill = ceil(mobHealth / hitDamage), the first at once
+ * and one every cooldownMs; the mob hits at once too and every mobIntervalMs. {winnable, why}.
+ */
+export function fightOdds(n, maxHit) {
+    const missing = Object.keys(FIGHT_NUMBER_NAMES).filter(k => !(Number.isFinite(n?.[k]) && n[k] > 0));
+    if (missing.length) return { winnable: false, why: `the fight cannot be judged yet (unknown: ${missing.map(k => FIGHT_NUMBER_NAMES[k]).join(', ')})` };
+    const hits = Math.ceil(n.mobHealth / n.hitDamage);
+    const killMs = (hits - 1) * n.cooldownMs;
+    const taken = (Math.floor(killMs / n.mobIntervalMs) + 1) * n.mobHit;
+    const left = n.health - taken;
+    const how = `${hits} hits in about ${round1(killMs / 1000)} s, taking about ${round1(taken)}: health ${round1(left)} left`;
+    return left > maxHit ? { winnable: true, why: how } : { winnable: false, why: `${how}, not above the ${round1(maxHit)} it may hit for` };
 }
 
 /** A 'fight' plan becomes a flee from the same mobs when fightRefusal says so. */
@@ -482,6 +580,25 @@ export function blocksEating(bot, { now = Date.now() } = {}) {
     const here = bot.entity?.position;
     const close = !here || !plan.from?.position || plan.from.position.distanceTo(here) <= EAT_SAFE.distance;
     return close || now - (bot.lastDamageTime ?? -Infinity) <= EAT_SAFE.hurtMs;
+}
+
+/**
+ * Soak 7 (death 1, 23:24:28): after the shelter fight the bot ate okra with the zombie 0.8 m away
+ * and hitting it (health 14 -> 11 while eating). Eating does not heal at once (regeneration needs
+ * food 18), and the 1.6 s of it is 1.6 s of not hitting back. Why the bot must not eat in its
+ * shelter now, or null: a hostile mob within EAT_SAFE.distance, or (withHurt) a hurt within
+ * EAT_SAFE.hurtMs that the world did not do.
+ */
+export function shelterEatBlock(bot, { now = Date.now(), withHurt = true } = {}) {
+    const here = bot?.entity?.position;
+    if (here) {
+        const near = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && shelterEnemy(e))
+            .map(e => ({ e, d: e.position.distanceTo(here) })).filter(x => x.d <= EAT_SAFE.distance).sort((a, b) => a.d - b.d)[0];
+        if (near) return `${shortName(near.e) ?? 'a hostile mob'} ${round1(near.d)} blocks away`;
+    }
+    const ago = now - (bot?.lastDamageTime ?? -Infinity);
+    if (withHurt && ago <= EAT_SAFE.hurtMs && !worldDamage(bot)) return `hurt ${round1(ago / 1000)} s ago`;
+    return null;
 }
 
 /**

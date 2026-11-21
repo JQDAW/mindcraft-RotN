@@ -160,9 +160,16 @@ function fightInShelter(mode, agent, { override = false } = {}) {
         // (fightRefusal; PR 5: its maxDamage), unless cornered.
         await skills.defendInPlace(bot, threats.shelterTarget, (enemy) => !threats.fightRefusal(bot, enemy) || !!agent._night?.handFight);
         // CX23 soak: between fights, hurt and too hungry to heal (food below REGEN_FOOD): eat.
+        // Soak 7 (death 1): not with a hostile mob within EAT_SAFE.distance or a hurt within
+        // EAT_SAFE.hurtMs (it ate okra with the zombie 0.8 m away, hitting it).
         if (!bot.interrupt_code) {
-            const ate = await food.eatToHeal(bot);
-            if (ate?.ate) console.log(`[reflex] ate between fights in the shelter (health ${bot.health}, food ${ate.before} -> ${bot.food})`);
+            const unsafe = threats.shelterEatBlock(bot);
+            if (unsafe) {
+                if (bot.health < 20 && bot.food < food.REGEN_FOOD) console.log(`[reflex] not eating between fights in the shelter: ${unsafe}`);
+            } else {
+                const ate = await food.eatToHeal(bot);
+                if (ate?.ate) console.log(`[reflex] ate between fights in the shelter (health ${bot.health}, food ${ate.before} -> ${bot.food})`);
+            }
         }
     }).catch(err => reportModeError(mode.name, err));
     return true;
@@ -210,12 +217,21 @@ function keepFromWallHitters(mode, agent) {
  * night. While the night's repair runs, nothing (it closes the opening). Else a mob within reach is
  * hit from where the bot stands; else, hungry with food held, the bot eats.
  */
+let holdEatSaidAt = -Infinity;
+
 function holdInShelter(mode, agent) {
     const bot = agent.bot;
     if (fightInShelter(mode, agent, { override: true })) return;
     if (nightRoutineBusy(agent)) return;
     const item = Number.isFinite(bot.food) && bot.food < 20 ? food.chooseFood(bot) : null;
     if (!item) return;
+    // Soak 7 (D): not with a hostile mob within EAT_SAFE.distance. This reflex runs only within 3 s of
+    // a hurt, so EAT_SAFE's hurt window would stop it always: the mob's distance alone decides here.
+    const unsafe = threats.shelterEatBlock(bot, { withHurt: false });
+    if (unsafe) {
+        if (Date.now() - holdEatSaidAt >= SHELTER_SAY_MS) { holdEatSaidAt = Date.now(); console.log(`[reflex] hurt in the shelter: not eating (${unsafe})`); }
+        return;
+    }
     execute(mode, agent, async () => {
         // Soak 5 (00:46:52): the fight's eat-between-fights ate this bread first; "could not eat
         // bread (food 20)" followed. Checked again when it runs.
