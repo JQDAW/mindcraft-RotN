@@ -7,7 +7,7 @@ import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES, shelterTarget, shelterEnemy, fightRefusal, maxHitOf,
     meleeReach, inMeleeReach, hurtingInReach, weaponCooldownMs, WEAPON_COOLDOWN_MS, fightNumbers, fightOdds, shelterEatBlock, EAT_SAFE,
-    weaponNumbers, weaponOrder, attackPath, weaponRank } from './threats.js';
+    weaponNumbers, weaponOrder, attackPath, weaponRank, WEAPON_ATTACK } from './threats.js';
 import { weaponStats } from '../../../packages/rotn-data/index.js';
 import { __modeForTest, __resetThreatLease } from '../modes.js';
 
@@ -783,13 +783,35 @@ test('soak 7 (D): shelterEatBlock: a hostile mob within EAT_SAFE.distance, or a 
 
 // Soak 7 (e), the lead's rule: weapons rank by rotn-data's weaponStats (#518), damage per tick of
 // cooldown on the path bot.attack takes (#521); weaponRank is the fallback.
+// rotn-data #534 lists far more weapons (the iron axe: 9 every 50 ticks, Material Changer's 0.4), so
+// these tests take their expected numbers from weaponStats, and the cited fallback (WEAPON_ATTACK
+// with the vanilla class cooldown) only where it lists none: they hold before and after #534.
+const fullName = (n) => (n.includes(':') ? n : `minecraft:${n}`);
+/** What weaponNumbers should give, from rotn-data (or the cited fallback); the spec, written out. */
+function expectedNumbers(name, path = 'vanilla') {
+    const w = weaponStats(fullName(name));
+    const [damage, cooldownTicks] = path === 'bettercombat' ? [w?.bcAttackDamage, w?.bcCooldownTicks] : [w?.attackDamage, w?.cooldownTicks];
+    if (Number.isFinite(damage) && cooldownTicks > 0) return { damage, cooldownTicks, from: 'rotn-data' };
+    const a = WEAPON_ATTACK[fullName(name)];
+    return Number.isFinite(a) ? { damage: a, cooldownTicks: weaponCooldownMs({ name }) / 50, from: 'WEAPON_ATTACK' } : null;
+}
+/** Whether a ranks above b on a path, by those numbers (vanilla: the one hit, then the rate). */
+function expectedAbove(a, b, path) {
+    const na = expectedNumbers(a, path), nb = expectedNumbers(b, path);
+    const ka = path === 'bettercombat' ? [na.damage / na.cooldownTicks] : [na.damage, na.damage / na.cooldownTicks];
+    const kb = path === 'bettercombat' ? [nb.damage / nb.cooldownTicks] : [nb.damage, nb.damage / nb.cooldownTicks];
+    for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] > kb[i];
+    return null;
+}
 test('soak 7 (e): weapons rank by rotn-data weaponStats: damage per tick of cooldown on the attack path (vanilla: the one hit that lands, then the rate); weaponRank for the rest', () => {
     for (const [item, full] of [['stone_sword', 'minecraft:stone_sword'], ['stone_axe:0', 'minecraft:stone_axe'], ['pyrotech:crude_axe', 'pyrotech:crude_axe']]) {
         const w = weaponStats(full);
         assert.ok(w, `rotn-data lists ${full}`);
         assert.deepEqual(weaponNumbers({ name: item }), { damage: w.attackDamage, cooldownTicks: w.cooldownTicks, from: 'rotn-data' }, item);
     }
-    assert.deepEqual(weaponNumbers({ name: 'iron_axe' }), { damage: 9, cooldownTicks: 25, from: 'WEAPON_ATTACK' }, 'not in combat.json: the cited table and the vanilla class cooldown');
+    assert.deepEqual(weaponNumbers({ name: 'iron_axe' }), expectedNumbers('iron_axe'), 'rotn-data, else the cited table and the vanilla class cooldown');
+    // The bone sword has no damage in rotn-data (before or after #534): the cited table and a sword's cooldown.
+    assert.deepEqual(weaponNumbers({ name: 'mod_lavacow:bonesword' }), { damage: 4, cooldownTicks: 12.5, from: 'WEAPON_ATTACK' });
     assert.equal(weaponNumbers({ name: 'somemod:mystery_sword' }), null);
     assert.equal(weaponNumbers(null), null);
 
@@ -802,7 +824,8 @@ test('soak 7 (e): weapons rank by rotn-data weaponStats: damage per tick of cool
         assert.deepEqual(ranked(['somemod:wood_sword', 'somemod:obsidian_axe'], path), ['somemod:obsidian_axe', 'somemod:wood_sword'], path);
     }
     // The path decides: on vanilla only the first hit lands, so the iron axe's 9 beats the diamond
-    // sword's 8; on Better Combat every hit lands, and 8 per 12.5 ticks beats 9 per 25.
+    // sword's 8; on Better Combat every hit lands, and 8 per 12.5 (or 13) ticks beats 9 per 25 (or 50).
+    assert.ok(expectedAbove('iron_axe', 'diamond_sword', 'vanilla') && expectedAbove('diamond_sword', 'iron_axe', 'bettercombat'), 'the data still makes this a flip');
     assert.deepEqual(ranked(['diamond_sword', 'iron_axe'], 'vanilla'), ['iron_axe', 'diamond_sword']);
     assert.deepEqual(ranked(['iron_axe', 'diamond_sword'], 'bettercombat'), ['diamond_sword', 'iron_axe']);
     assert.ok(weaponRank({ name: 'stone_sword' }) > weaponRank({ name: 'stone_axe' }), 'weaponRank, moved here from skills.js');
@@ -814,7 +837,7 @@ test('soak 7 (e): weapons rank by rotn-data weaponStats: damage per tick of cool
 
 // (f), before bc_attack goes on: on the Better Combat path the numbers are Better Combat's own (#528:
 // bcAttackDamage, bcCooldownTicks from its client's attack speed), not the vanilla ones.
-test('(f): on the Better Combat path weaponNumbers and weaponOrder use weaponStats bcAttackDamage and bcCooldownTicks (#528): an iron axe and a wooden sword swap places', () => {
+test('(f): on the Better Combat path weaponNumbers and weaponOrder use weaponStats bcAttackDamage and bcCooldownTicks (#528); where those and the vanilla numbers disagree, the Better Combat order follows bc', () => {
     for (const [item, full] of [['stone_sword', 'minecraft:stone_sword'], ['stone_axe', 'minecraft:stone_axe'], ['pyrotech:crude_axe', 'pyrotech:crude_axe'], ['wooden_sword', 'minecraft:wooden_sword']]) {
         const w = weaponStats(full);
         assert.deepEqual(weaponNumbers({ name: item }, 'bettercombat'), { damage: w.bcAttackDamage, cooldownTicks: w.bcCooldownTicks, from: 'rotn-data' }, item);
@@ -823,14 +846,30 @@ test('(f): on the Better Combat path weaponNumbers and weaponOrder use weaponSta
     }
     const wooden = weaponStats('minecraft:wooden_sword');
     assert.ok(wooden.bcCooldownTicks < wooden.cooldownTicks, `Better Combat paces a wooden sword faster (${wooden.bcCooldownTicks} ticks) than vanilla (${wooden.cooldownTicks})`);
-    assert.deepEqual(weaponNumbers({ name: 'iron_axe' }, 'bettercombat'), { damage: 9, cooldownTicks: 25, from: 'WEAPON_ATTACK' }, 'not in combat.json: the same fallback on either path');
+    assert.deepEqual(weaponNumbers({ name: 'iron_axe' }, 'bettercombat'), expectedNumbers('iron_axe', 'bettercombat'));
+    assert.deepEqual(weaponNumbers({ name: 'mod_lavacow:bonesword' }, 'bettercombat'), { damage: 4, cooldownTicks: 12.5, from: 'WEAPON_ATTACK' }, 'not in rotn-data: the same fallback on either path');
 
     const ranked = (names, path) => names.map(name => ({ name })).sort(weaponOrder(path)).map(i => i.name);
-    // Vanilla: the one hit that lands, 9 against 4. Better Combat: 4 per 11 ticks beats 9 per 25
-    // (with the vanilla 12.5 ticks it would not: 4/12.5 < 9/25).
+    // Vanilla: the one hit that lands, 9 against 4. Better Combat: 4 per 11 ticks beats the iron axe's
+    // 9 per 25 (the fallback before #534) or 9 per 50 (#534).
     assert.deepEqual(ranked(['wooden_sword', 'iron_axe'], 'vanilla'), ['iron_axe', 'wooden_sword']);
     assert.deepEqual(ranked(['iron_axe', 'wooden_sword'], 'bettercombat'), ['wooden_sword', 'iron_axe']);
-    assert.ok(wooden.attackDamage / wooden.cooldownTicks < 9 / 25, 'the swap needs the Better Combat numbers');
+    // That swap alone no longer shows the bc numbers are used (at 50 ticks the vanilla 4/12.5 wins too).
+    // Every pair of these ranks on Better Combat as its bc numbers say; and at least one pair would
+    // rank the other way on the vanilla numbers (before #534: the wooden sword and the iron axe at
+    // 9/25; with #534: the wooden or golden sword and a flint or bone axe, 9/25).
+    const pool = ['wooden_sword', 'golden_sword', 'stone_sword', 'diamond_sword', 'iron_axe', 'stone_axe', 'pyrotech:crude_axe', 'pyrotech:flint_axe', 'pyrotech:bone_axe'];
+    const known = pool.filter(n => expectedNumbers(n, 'bettercombat') && expectedNumbers(n, 'vanilla'));
+    const rate = (n, path) => { const x = expectedNumbers(n, path); return x.damage / x.cooldownTicks; };
+    let decided = 0;
+    for (const a of known) for (const b of known) {
+        if (a >= b) continue;
+        const above = expectedAbove(a, b, 'bettercombat');
+        if (above === null) continue;
+        assert.deepEqual(ranked([b, a], 'bettercombat'), above ? [a, b] : [b, a], `${a} / ${b} on Better Combat`);
+        if ((rate(a, 'vanilla') > rate(b, 'vanilla')) !== above && rate(a, 'vanilla') !== rate(b, 'vanilla')) decided++;
+    }
+    assert.ok(decided > 0, 'some pair ranks by the bc numbers against the vanilla ones');
     // The early game keeps its order on Better Combat's numbers too.
     assert.deepEqual(ranked(['stone_axe', 'pyrotech:crude_axe', 'stone_sword'], 'bettercombat'), ['stone_sword', 'pyrotech:crude_axe', 'stone_axe']);
 });
