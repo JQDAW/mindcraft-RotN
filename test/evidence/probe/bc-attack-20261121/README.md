@@ -43,7 +43,7 @@ The bot spawned at -45.5, 65, -59.5, about 6 blocks north of the lane.
 | `vanilla_*` and `bc_*` (8 checks), `bc_ai_zombie` | not reached |
 | `server_log`, `self_check` | not reached |
 
-**The server-log grep** was not reached as a check. By hand: the saved `server.log` has no `FMLIndexedMessageCodec` line, no WARN or ERROR line naming `bettercombat`, and no kick. The only `bettercombat` mention is the mod in the join line's mod list (`bettercombat@1.5.6`).
+**The server-log grep** was not reached as a check. By hand: the saved `server.log` has no `FMLIndexedMessageCodec` line, no WARN or ERROR line naming `bettercombat`, and no kick. Its only `lost connection` is the bot's own quit when the runner stopped it (`<bot> lost connection: Disconnected`, 13:47:44, line 120). The only `bettercombat` mention is the mod in the join line's mod list (`bettercombat@1.5.6`).
 
 ## Not measurable this time (nits from the #533 review)
 There are no series, so there are no hits, health drops, crits or gaps to report.
