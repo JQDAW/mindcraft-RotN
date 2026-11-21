@@ -126,6 +126,11 @@ export class DeathReporter {
         return this.spots.filter(s => now - s.at < DEATH_SPOTS_KEPT_MS);
     }
 
+    /** The time of the newest death (with or without a known position), or null (#523 nit 1). */
+    lastDeathAt() {
+        return this.deaths.at(-1) ?? null;
+    }
+
     /** While alive (health > 0), about once a second. */
     sample(bot) {
         this.samples.push({ counts: inventoryCounts(bot), xp: bot?.experience?.level ?? null });
@@ -322,6 +327,8 @@ export function bindDeathReport(agent, { setTimer = setTimeout, clearTimer = cle
     let lastSample = -Infinity, retry = null, settle = null;
     // CX23 soak: the recent death spots, for skills (collectBlock keeps its targets out of their radius).
     bot.rotnDeathSpots = (now = Date.now()) => d.recentSpots(now);
+    // #523 nit 1: the newest death's time, for the agenda's food-first window; a death at an unknown position counts too.
+    bot.rotnLastDeathAt = () => d.lastDeathAt();
     // #474 review 1: the dimension id from the login and respawn packets, for a modded dimension that
     // mineflayer leaves unnamed (dimensionKey).
     const keepId = (packet) => { if (Number.isFinite(packet?.dimension)) bot.rotnDimensionId = packet.dimension; };

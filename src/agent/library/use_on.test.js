@@ -365,10 +365,12 @@ test('#238 nits: the better weapon is held, from the off hand or not; a full inv
     await skills.defendSelf(better.bot, 9, () => true);
     assert.equal(better.bot.hitWith, 'iron_sword', 'the better off-hand sword');
 
-    const worse = weaponBot({ inventory: [{ name: 'stone_sword' }], offHand: { name: 'wooden_sword' } });
+    // Soak 7 (e): a crude axe is worse than a stone sword by weaponRank and by rotn-data's numbers alike
+    // (a wooden sword no longer is: 4 a hit on this pack against the stone sword's 3.5).
+    const worse = weaponBot({ inventory: [{ name: 'stone_sword' }], offHand: { name: 'pyrotech:crude_axe' } });
     await skills.defendSelf(worse.bot, 9, () => true);
     assert.equal(worse.bot.hitWith, 'stone_sword');
-    assert.equal(worse.slots[45]?.name, 'wooden_sword', 'a worse one stays in the off hand');
+    assert.equal(worse.slots[45]?.name, 'pyrotech:crude_axe', 'a worse one stays in the off hand');
 
     const full = weaponBot({ inventory: [{ name: 'stone_pickaxe' }], offHand: { name: 'stone_sword' }, full: true });
     await skills.defendSelf(full.bot, 9, () => true);
