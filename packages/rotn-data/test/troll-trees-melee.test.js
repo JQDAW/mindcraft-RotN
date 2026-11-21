@@ -303,7 +303,7 @@ test('threatOf carries melee; nightThreats carries damage; the uncovered night t
 
 // ---- #496 review (lead): weapons, ESM demolition and damage, the troll's through-wall hit and blast, UNKNOWN_MELEE ----
 
-test('zombie worst case: the stone axe (+8) and Sharpness II (+1.5) for every mob on Rough Mobs\' zombie list', () => {
+test('zombie worst case: a +6 axe (Material Changer cuts the stone axe to +2; test/combat-numbers.test.js) and Sharpness II (+1.5) for every mob on Rough Mobs\' zombie list', () => {
     const axe = section(melee, 'agy (ItemAxe)');
     inOrder(axe, 'protected agy(ain$a)', 'Field f:[F', 'ain$a.ordinal', 'faload', 'putfield', 'Field b:F');
     inOrder(axe, 'static {}', 'newarray       float', 'float 6.0f', 'float 8.0f', 'float 8.0f', 'float 8.0f', 'float 6.0f', 'putstatic', 'Field f:[F');
@@ -325,10 +325,10 @@ test('zombie worst case: the stone axe (+8) and Sharpness II (+1.5) for every mo
     const sharpnessII = 1 + 0.5 * (Math.ceil(5 * 0.3) - 1);
     for (const n of list.filter((x) => MM.mobs[x])) {
         const m = pack.mobMelee(n);
-        assert.equal(m.maxDamage, m.damage + 8 + sharpnessII, n);
-        assert.match(m.weapon, /stone axe/, n);
+        assert.equal(m.maxDamage, m.damage + 6 + sharpnessII, n);
+        assert.match(m.weapon, /wooden or ATOP mud axe \(\+6; Material Changer cuts the stone axe to \+2\)/, n);
     }
-    assert.deepEqual([pack.mobMelee('minecraft:zombie').maxDamage, pack.mobMelee('minecraft:husk').maxDamage, pack.mobMelee('minecraft:zombie_villager').maxDamage], [12.5, 12.5, 12.5]);
+    assert.deepEqual([pack.mobMelee('minecraft:zombie').maxDamage, pack.mobMelee('minecraft:husk').maxDamage, pack.mobMelee('minecraft:zombie_villager').maxDamage], [10.5, 10.5, 10.5]);
     // Not on the list: no weapon worst case.
     for (const n of ['zombie_players:zombie_player', 'minecraft:zombie_pigman', 'specialmobs:specialzombie']) assert.equal(pack.mobMelee(n).maxDamage, pack.mobMelee(n).damage, n);
 });

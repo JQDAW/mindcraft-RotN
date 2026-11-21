@@ -23,6 +23,7 @@ import { howToGet, rockRecipes } from './howto.js';
 import { threatOf, nightThreats } from './threats.js';
 import { mobDigging, canMobDig } from './digging.js';
 import { mobMelee, fallingTree, fallingTreeDamage } from './melee.js';
+import { combatOf, weaponStats, meleeHitDamage, hitsToKill } from './combat.js';
 import { forageFood, forageSources, forageHazard } from './forage.js';
 import { canFill } from './craft-fill.js';
 import { parseOld, registryName, WILDCARD_META } from './names.js';
@@ -104,6 +105,9 @@ export class RotnData {
         // bytecode and configs (mob-melee.json, falling-trees.json; hand-written with evidence).
         this.mobMeleeData = readJson(dir, 'mob-melee') ?? null;
         this.fallingTreesData = readJson(dir, 'falling-trees') ?? null;
+        // A melee fight in numbers (soak 7): mob health and armour, the bot's weapons, the two attack packets
+        // (combat.json; hand-written with evidence).
+        this.combatData = readJson(dir, 'combat') ?? null;
         // Wild food blocks and plant hazards (forage-food.json, hand-written with citations).
         this.forageData = readJson(dir, 'forage-food') ?? null;
         // Which blocks fall (gravity), from the pack's bytecode and configs (falling-blocks.json,
@@ -539,6 +543,26 @@ export class RotnData {
     /** A mob's melee hit: damage, maxDamage, hitsToKill (src/melee.js), or null when unknown (assume UNKNOWN_MELEE). */
     mobMelee(entityName) {
         return mobMelee(this, entityName);
+    }
+
+    /** A mob's fight numbers: maxHealth, armor, attackIntervalTicks, reach (src/combat.js), or null when not listed. */
+    combatOf(entityName) {
+        return combatOf(this, entityName);
+    }
+
+    /** A weapon's attackDamage, attackSpeed and cooldownTicks on this pack ('hand' when empty), or null (src/combat.js). */
+    weaponStats(item) {
+        return weaponStats(this, item);
+    }
+
+    /** The health one bot hit takes off a target (src/combat.js). */
+    meleeHitDamage(hit) {
+        return meleeHitDamage(this, hit);
+    }
+
+    /** How many bot hits a mob takes, and how many ticks at the weapon's cooldown (src/combat.js). */
+    hitsToKill(fight) {
+        return hitsToKill(this, fight);
     }
 
     /** What a falling Dynamic Trees tree does to entities (src/melee.js), or null. */
