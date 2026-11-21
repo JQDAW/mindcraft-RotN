@@ -7,8 +7,8 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting } from '../../packages/forge-bridge/index.js';
-import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, requireRotnData, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting } from '../../packages/forge-bridge/index.js';
+import { loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
@@ -112,7 +112,7 @@ export const WOOL_COLORS = [
 ]
 
 
-export function initBot(username, { onMsaCode } = {}) {
+export function initBot(username, { onMsaCode, loadRotnData: loadRd = () => loadRotnData(PACK_VERSION) } = {}) {
     // Read the version here, not at module load: settings are empty until
     // setSettings() runs, which is after this module is imported (seam-map A).
     const configuredVersion = settings.minecraft_version;
@@ -159,6 +159,18 @@ export function initBot(username, { onMsaCode } = {}) {
     // when the ping reports FML.
     const forge = { bridge: null, capture: null, mode: env.mode };
     if (forge.mode !== 'off') {
+        // Fail closed (#555): without rotn-data, or with an empty mod entity table, the bot would
+        // treat every living modded entity as hostile and misread blocks. A broken checkout or
+        // deploy, the same on every start: refuse with exit 3 (never restarted), category rotn-data,
+        // before anything else (no capture file, no socket).
+        let rd;
+        let modEntityTable;
+        try {
+            ({ rd, modEntityTable } = requireRotnData(loadRd));
+        } catch (e) {
+            recordAgentExit({ error: e });
+            throw e;
+        }
         if (env.captureFile) {
             forge.capture = new CaptureWriter({ file: env.captureFile, redact: { username } });
             console.log(`[mcdata] forge-bridge capture: ${env.captureFile}`);
@@ -167,7 +179,7 @@ export function initBot(username, { onMsaCode } = {}) {
         // through its catalog API. Without them, metadata using ids 15-18 is dropped.
         let metadataSerializers = {};
         try {
-            const { map, unknown } = metadataSerializersFromDump(loadRotnData(PACK_VERSION).serializers());
+            const { map, unknown } = metadataSerializersFromDump(rd.serializers());
             metadataSerializers = map;
             for (const u of unknown) console.warn(`[forge-bridge] entity-metadata serializer ${u.id} (${u.class}) has no known wire format`);
         } catch (e) {
@@ -179,7 +191,7 @@ export function initBot(username, { onMsaCode } = {}) {
         // Whether it is active is logged once at login.
         let stateIdTable = null;
         try {
-            const remap = loadRotnData(PACK_VERSION).stateMetaRemap();
+            const remap = rd.stateMetaRemap();
             stateIdTable = remap ? { blocks: remap.byBlock } : null;
         } catch (e) {
             console.warn(`[forge-bridge] rotn-data state-id remap table unavailable: ${e.message}`);
@@ -203,7 +215,6 @@ export function initBot(username, { onMsaCode } = {}) {
                     // rock piles and plants walk-through, Dynamic Trees leaves a half-height box), not the full cube
                     // extendRegistry defaults to.
                     try {
-                        const rd = loadRotnData(PACK_VERSION);
                         forge.collision = applyCollisionShapes(bot.registry, rd.dump?.blocks?.blocks, {
                             playerCollision: (name, meta) => rd.playerCollision({ name, metadata: meta }),
                             log: (m) => console.log(`[forge-bridge] ${m}`),
@@ -218,13 +229,7 @@ export function initBot(username, { onMsaCode } = {}) {
                 });
                 // Mod entities spawned with FML EntitySpawn go into bot.entities (brief item 6).
                 // Names, type and category from rotn-data's mod-local entity table (its catalog
-                // API). Without a dump, or if rotn-data fails, FML mobs keep placeholder names.
-                let modEntityTable = null;
-                try {
-                    modEntityTable = fmlEntityTable({ modEntityTable: rdModEntityTable, entityByModId: rdEntityByModId });
-                } catch (e) {
-                    console.warn(`[forge-bridge] rotn-data mod entity table unavailable: ${e.message}`);
-                }
+                // API), built above by requireRotnData (initBot does not start without it).
                 attachFmlEntities(bot, bridge, { log: (m) => console.log(`[forge-bridge] ${m}`), modEntityTable });
                 // The Hordes horde start/end and waves as bot.emit('rotn:horde', ev) (skills-rotn D1b).
                 attachHordeEvents(bot, bridge, { log: (m) => console.log(`[forge-bridge] ${m}`) });
