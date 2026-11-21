@@ -81,7 +81,8 @@ export default {
         tpSettleMs: 3 * MS,
         summonSettleMs: 3 * MS,    // the zombies' spawn packets reach the bot
         logTail: 20000,
-        viewDistanceTail: 5000,    // server log lines searched for DynView's latest view distance at each kill
+        viewDistanceTail: 5000,
+        parasiteWaitMs: 1500,      // between a zombie kill and the lane clear: a death animation is 20 ticks, a parasite comes after it    // server log lines searched for DynView's latest view distance at each kill
         consoleWaitS: 1,
         lateReplyMs: 5 * MS,
         latePollMs: 1 * MS,
@@ -238,6 +239,7 @@ export default {
         // 3. each weapon: A on the vanilla path, B on Better Combat's
         for (const w of plan.weapons) {
             await killZombies(`${w.check}: before`);
+            await clock.sleep(p.parasiteWaitMs);   // a parasite comes at the end of a zombie's death animation (#543 review)
             await clearLane(w.check);
             con(`clear ${name}`);
             // One item per give (attempt 2, #540: a tool's give count is at most 1).
@@ -253,16 +255,17 @@ export default {
                 continue;
             }
             const rv = await ask((t) => bcHit(name, t, 'vanilla', plan.zombieA, w.item));
-            judged(`vanilla_${w.check}`, rv, { path: 'vanilla', cooldownTicks: w.cooldownTicks });
+            judged(`vanilla_${w.check}`, rv, { path: 'vanilla', cooldownTicks: w.cooldownTicks, noAiCells: [plan.zombieA, plan.zombieB] });
             if (aborted) return;
             const rb = await ask((t) => bcHit(name, t, 'bc', plan.zombieB, w.item));
-            judged(`bc_${w.check}`, rb, { path: 'bc', cooldownTicks: w.cooldownTicks, maxHits: plan.maxHits }, { item: w.item, firstHit: true });
+            judged(`bc_${w.check}`, rb, { path: 'bc', cooldownTicks: w.cooldownTicks, maxHits: plan.maxHits, noAiCells: [plan.zombieA, plan.zombieB] }, { item: w.item, firstHit: true });
             if (aborted) return;
             await killZombies(`${w.check}: after`);
         }
 
         // 4. one zombie with its AI, Better Combat's path, stone sword
         await killZombies('ai: before');
+        await clock.sleep(p.parasiteWaitMs);
         await clearLane('ai');
         con(`clear ${name}`);
         const sword = giveVerdict(await confirm(`give ${name} ${plan.ai.item} 1 0`, (l) => giveVerdict(l, name).ok), name);

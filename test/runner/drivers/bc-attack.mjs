@@ -32,8 +32,8 @@
 //     B's summons in the stone-axe step): spawn_entity_living and spawn_entity within spawnRange of the bot, with
 //     time, id, name, type and position. Each reply carries those recorded since the previous reply (so the
 //     summons and whatever came with them before the series, and anything during it);
-//   - a census of every entity within censusRange (8) of the bot, with id, name, health (metadata 7, when it has one)
-//     and distance: at the series' start and about once a second after (rotn-data, after #540: a Fish's Undead
+//   - a census of every entity but players within censusRange (8) of the bot, with id, name, type, health (metadata 7,
+//     when it has one), distance and position: at the series' start and about once a second after (rotn-data, after #540: a Fish's Undead
 //     Rising parasite or a Special Mobs variant may stay in the lane).
 import { setTimeout as sleepMs } from 'node:timers/promises';
 
@@ -240,9 +240,9 @@ export function attachBcAttack(bot, { emit, now = Date.now, sleep = (ms) => slee
             const me = bot.entity?.position;
             if (!me) return;
             census.push({ t: t - t0, entities: Object.values(bot.entities ?? {})
-                .filter((e) => e !== bot.entity && e?.position && e.position.distanceTo(me) <= L.censusRange)
-                .map((e) => ({ id: e.id, name: e.name ?? null, health: typeof e.metadata?.[HEALTH] === 'number' ? e.metadata[HEALTH] : null,
-                    d: Math.round(e.position.distanceTo(me) * 100) / 100 }))
+                .filter((e) => e !== bot.entity && e?.position && e.type !== 'player' && e.position.distanceTo(me) <= L.censusRange)
+                .map((e) => ({ id: e.id, name: e.name ?? null, type: e.type ?? null, health: typeof e.metadata?.[HEALTH] === 'number' ? e.metadata[HEALTH] : null,
+                    d: Math.round(e.position.distanceTo(me) * 100) / 100, pos: [e.position.x, e.position.y, e.position.z].map((v) => Math.round(v * 100) / 100) }))
                 .sort((a, b) => a.d - b.d) });
         };
         const waitMs = async (ms) => {

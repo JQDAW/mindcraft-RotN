@@ -360,6 +360,32 @@ export function notMeasured(r, catalogue = zombieCatalogueHealth()) {
     return Math.abs(h - catalogue) > 1e-3 ? `not measured: the zombie started at ${h} health, not the catalogue's ${catalogue}` : null;
 }
 
+/**
+ * A NoAI series is clean only if nothing else was there (the lead, after #543): returns why it is not, or null.
+ * - the census saw a living entity that is not a player (health above 0) inside the lane's box (bcLaneFills' first
+ *   fill: x xFrom-1..xTo+1, y y-1..y+2, z z-1..z+1, block coordinates) other than the zombies standing in the
+ *   step's own cells (cells: the target's and its partner's, within 0.75 of either cell's centre: a NoAI zombie
+ *   does not move);
+ * - or the bot was hurt during the series (botHurts).
+ */
+export function noAiIntrusion(r, { cells, lane = BC_PLAN.lane } = {}) {
+    const inBox = ([x, y, z]) => x >= lane.xFrom - 1 && x < lane.xTo + 2 && y >= lane.y - 1 && y < lane.y + 3 && z >= lane.z - 1 && z < lane.z + 2;
+    const atCell = ([x, y, z]) => (cells ?? []).some(([cx, cy, cz]) => Math.hypot(x - (cx + 0.5), y - cy, z - (cz + 0.5)) <= 0.75);
+    const seen = new Map();
+    for (const c of r?.census ?? []) {
+        for (const e of c.entities ?? []) {
+            if (!(typeof e.health === 'number' && e.health > 0) || !Array.isArray(e.pos) || !inBox(e.pos)) continue;
+            if (atCell(e.pos) && /zombie/i.test(String(e.name ?? ''))) continue;
+            if (!seen.has(e.id)) seen.set(e.id, `${e.name ?? '?'} #${e.id} at ${e.pos.join(' ')} (t ${c.t} ms)`);
+        }
+    }
+    const why = [];
+    if (seen.size) why.push(`the census saw ${[...seen.values()].join(', ')} in the lane`);
+    const hurts = r?.botHurts ?? [];
+    if (hurts.length) why.push(`the bot was hurt ${hurts.length}x (${hurts.map((h) => `${h.amount} at t ${h.t} ms, ${h.cause}`).join('; ')})`);
+    return why.length ? `not clean: ${why.join('; ')}` : null;
+}
+
 /** A timer may fire up to 1 ms early against Date.now: a gap this much under the cooldown still counts as on time. */
 export const GAP_SLACK_MS = 2;
 
@@ -386,12 +412,13 @@ export function projectedHits(r) {
  * (markCrits), and whether the first hit was one (firstHitCrit: true, false or null for unknown; a NoAI zombie's
  * first Better Combat hit is a sneak attack, #528). A zombie that did not start at the catalogue's health
  * (notMeasured) makes the series inconclusive: not ok, but inconclusive: true and no pass rule applied (the
- * lead, after #540). Returns {ok, inconclusive, why, projected, inRange, crits, firstHitCrit}.
+ * lead, after #540). So does, for a NoAI series (noAiCells: the step's two zombie cells), anything else alive in
+ * the lane or a hurt to the bot (noAiIntrusion, after #543). Returns {ok, inconclusive, why, projected, inRange, crits, firstHitCrit}.
  */
-export function judgeSeries(r, { path, expected = null, cooldownTicks = null, maxHits = BC_PLAN.maxHits, ai = false, catalogueHealth = zombieCatalogueHealth() } = {}) {
+export function judgeSeries(r, { path, expected = null, cooldownTicks = null, maxHits = BC_PLAN.maxHits, ai = false, catalogueHealth = zombieCatalogueHealth(), noAiCells = null } = {}) {
     const bad = [];
     if (!r) return { ok: false, inconclusive: false, why: 'no reply', projected: null, inRange: null, crits: null, firstHitCrit: null };
-    const nm = notMeasured(r, catalogueHealth);
+    const nm = notMeasured(r, catalogueHealth) ?? (noAiCells ? noAiIntrusion(r, { cells: noAiCells }) : null);
     if (nm) return { ok: false, inconclusive: true, why: nm, projected: null, inRange: null, crits: null, firstHitCrit: null };
     if (!r.ok) bad.push(`driver: ${r.error ?? 'not ok'}`);
     if (!r.target) bad.push('no zombie found');
@@ -402,7 +429,10 @@ export function judgeSeries(r, { path, expected = null, cooldownTicks = null, ma
     const want = path === 'vanilla' ? 'vanilla' : 'bettercombat';
     const off = sent.filter((h) => h.path !== want);
     if (off.length) bad.push(`${off.length} hit(s) not on the ${want} path (#${off.map((h) => h.i).join(', #')})`);
-    if (sent.length !== hits.length) bad.push(`${hits.length - sent.length} call(s) sent nothing`);
+    // #541: the wrapper refuses a target out of reach or sight ({sent: false, reason: 'reach'|'sight'}): the wrapper
+    // refusing, not Better Combat failing; the reasons are named.
+    const unsentReasons = [...new Set(hits.filter((h) => !h.sent).map((h) => h.reason ?? 'no reason'))];
+    if (sent.length !== hits.length) bad.push(`${hits.length - sent.length} call(s) sent nothing (${unsentReasons.join(', ')})`);
     let projected = null;
     let inRange = null;
     let crits = null;
