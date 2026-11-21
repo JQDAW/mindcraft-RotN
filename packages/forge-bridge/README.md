@@ -81,6 +81,7 @@ The bridge also decodes the other Forge and REID channels:
 | `FORGE_CAPTURE` | `1`: write `captures/raw/<bot>-<time>.jsonl` (git-ignored). Any other value is used as the file path. |
 | `FORGE_PING_TIMEOUT_MS` | Total status-ping budget, retry included (default 15000). Only a fast failure (under 3 s, such as a refused or dropped connect) is retried, once, 1 s later and within what is left. A ping that times out goes straight to the `FORGE_MODLIST_FILE` fallback. Keep it well under Mindcraft's `spawn_timeout` (30 s). g1-driver maps `ROTN_DRIVER_PING_TIMEOUT_MS` to it. |
 | `FORGE_MODLIST_FILE` | Ping JSON to use when the live ping has no mod list. The pinned one is `test/fixtures/rotn-3.3.4/ping.json`. |
+| `FORGE_BC_ATTACK` | `on` or `off`: Better Combat's attack packet for `bot.attack` (see below). It wins over `settings.bc_attack`; the default is off. Any other value is warned about and ignored. |
 | `MINDCRAFT_PROFILES_FOLDER` | Per-bot Microsoft token cache, outside the repo. Becomes nmp's `profilesFolder`. |
 | `PROTODEF_LOG_PARTIAL=1` | Turns protodef's "partial packet" console line back on (`patches/protodef+1.19.0.patch`). |
 | `MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS` | How long `bot.placeBlock` waits for the server's block update before it fails ("Event blockUpdate:... did not fire within timeout"). The default is 500 ms (Mindcraft's value; upstream mineflayer uses 5000). It wins over `settings.place_block_timeout_ms` and must be an integer from 50 to 60000; any other value is warned about and ignored. A successful placement returns as soon as the update arrives, so a larger value only delays real failures. `bot.placeBlockTimeout` changes it at runtime, and `bot._placeBlockWithOptions(ref, face, { timeout })` changes it for one call (`patches/mineflayer+4.33.0.patch`, `place_block.js`). A value set on the bot before the plugins load is kept. The first finite number among the per-call value, `bot.placeBlockTimeout` and the createBot option is rounded and clamped to 50-60000 ms; with none, 500 is used. So `0` or a negative number can no longer mean "wait forever", and a bad per-call value falls back to the configured one. mineflayer's `onceWithCleanup` leaves its timer running after a success (upstream behaviour), so each placement leaves one harmless pending timer of this length. |
@@ -248,6 +249,42 @@ In RotN 3.3.4, `minecraft:crafting_table` is FastWorkbench 1.7.4's block: Run A'
   - `test/mod-guis.test.js`: a golden OpenGui vector, the mapping, the order before `window_items`, and the unknown-GUI path.
   - `test/craft-e2e.test.js`: `initBot` crafts the crude axe, Crafting Tools and the crafting table in the 2x2 grid, then a stone pickaxe at the FastWorkbench table. It also places cobblestone and eats bread, all against `test/fake-containers.js`, a model of the server code above. That is a model, not a server; the live probe is the proof.
   - Captured by default now: `transaction`, `close_window` and `block_change` (S2C), and `transaction`, `close_window`, `block_place` and `use_item` (C2S), with `window_click` raised to 300.
+
+## Better Combat's attack (G4 soak 7, rotn-data #518)
+
+**The problem.** On RotN 3.3.4 a vanilla `use_entity` ATTACK (mineflayer `bot.attack`, mineflayer-pvp) deals full damage only on the first hit per mob. Better Combat's `AttackEntityEvent` handler sets the target's `hurtResistantTime` to 20 on every vanilla player attack, so later hits deal only the amount above `lastDamage`. Better Combat's own `PacketMainhandAttack` hits in full every time.
+
+**The fix: `src/bettercombat.js`.**
+- `initBot` installs it. It replaces `bot.attack` and keeps the original as `bot.attackVanilla`.
+- It is used only when **all** of these hold:
+  - `settings.bc_attack` is true, or `FORGE_BC_ATTACK=on`. It is off by default until the test-server run passes.
+  - The server's mod list has `bettercombat`.
+  - The server's REGISTER lists the `bettercombat` channel.
+- Otherwise the attack is vanilla. One line at spawn says which.
+
+**Facts, from `javap` on the pinned zip:**
+- **The server accepts it.** Forge's `NetworkDispatcher.handleServerSideCustomPacket` accepts a C2S payload on any channel in the server's own `NetworkRegistry`; the client's REGISTER is not consulted. Better Combat registers `bettercombat` there.
+  - We echo the server's REGISTER anyway; G1 Run A's REGISTER carries `bettercombat` both ways.
+- **Bytes:** discriminator `5`, a boolean, then the entity id as a VarInt of at most 4 bytes. Entity 500 is `05 01 f4 03`; a swing at nothing is `05 00`.
+- **The server handler** checks no reach and no cooldown. It halves the player's horizontal motion on the ground (`"Intertia on Attack"=0.5`).
+  - A decode failure would be logged as `FMLIndexedMessageCodec exception caught`.
+- **Pacing, as Better Combat's client does it:**
+  - The cooldown is `max(8, (int)(20 / attackSpeed + 0.5))` ticks.
+  - The attack speed is the player's attribute from `entity_update_attributes`, which includes Material Changer's values. Then come the config's sword tweaks: stone sword -0.1, wooden and golden swords +0.2.
+  - An empty hand and non-weapons use 1.5 (13 ticks). An item not recognised by name gets the slower of the two cooldowns.
+  - The cooldown restarts on every swing and when the held item changes. A durability change is not an item change.
+  - Examples: stone sword 13 ticks, stone axe (0.4) 50, crude axe (0.9) 22.
+
+**`bot.attack(target, swing = true)` returns a promise of `{ sent, path, waitedMs, reason? }`:**
+- **Wire order:** `arm_animation` (main hand) then the `bettercombat` payload, and never `use_entity` as well.
+- **Waiting:** a call before the cooldown is up waits. A newer call replaces a waiting one; the replaced call resolves `{ sent: false, reason: 'replaced' }`.
+- **Falls back to vanilla** for any of these:
+  - a target beyond Better Combat's reach: 4.0 for weapons, 3.5 for an empty hand or a non-weapon, eye to the nearest point of the hitbox;
+  - a target not in sight (a world raycast);
+  - an unknown attack speed.
+- **Self-check:** after 5 hits in a row with no `entityHurt` or `entityDead` for the target within 500 ms, it goes back to vanilla for the connection and logs one line.
+
+**For skills:** `bot.forge.attackCooldownTicks()` gives the held item's Better Combat cooldown. `bot.forge.bcAttack.stats` has the counts.
 
 ## Other protocol changes
 
@@ -443,6 +480,11 @@ What different setups do:
 - The exact outgoing handshake sequence, using synthetic server messages built from the pinned mod list.
 - `real-handshake.test.js`: **the real RotN 3.3.4 handshake** from G1 Batch A (`test/fixtures/rotn-3.3.4/handshake-runA.{json,bin.br}`, all 67 plugin-channel payloads, sanitized). The real server messages are replayed into `attachForgeBridge`, and the bridge must answer with exactly the bytes it really sent. It also checks the ServerHello, the 346-mod ModList (same entries as the pinned ping), all 52 RegistryData read to the last byte (`minecraft:blocks` 4896, ids above 4095), and the FORGE FluidIdMap.
 - FML, FORGE, `jeid` and FML|MP decoders.
+- `bettercombat.test.js` and `bettercombat-e2e.test.js`:
+  - Better Combat's attack bytes against the `javap` layout, and the pacing against `bettercombat.cfg`.
+  - The wrapper's waiting and fallbacks on a fake bot.
+  - Run A's REGISTER.
+  - `initBot` against the fake Forge server: on with the channel gives `arm_animation` then the `bettercombat` payload; off, or no channel, gives `use_entity`.
 - REID `window_items`, `set_slot`, `window_click`, `entity_effect` and `remove_entity_effect`, through nmp's real compiled 1.12.2 protocol.
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.
 - `state-remap.test.js`: Forge's two-pass state ids, with mineflayer's real blocks plugin on a fake bot. Inputs:

@@ -16,7 +16,10 @@ import { STACKUP_MODID } from '../src/stackup.js';
 const require = createRequire(import.meta.url);
 const mc = require('minecraft-protocol');
 
-export async function startFakeForgeServer({ modList, registries, reid = true, onJoin }) {
+// serverChannels: the server's REGISTER list (default: the core channels and jeid).
+export const DEFAULT_SERVER_CHANNELS = Object.freeze(['FML|HS', 'FML', 'FML|MP', 'FML', 'FORGE', 'jeid']);
+
+export async function startFakeForgeServer({ modList, registries, reid = true, onJoin, serverChannels = DEFAULT_SERVER_CHANNELS }) {
     const server = mc.createServer({
         'online-mode': false,
         host: '127.0.0.1',
@@ -32,7 +35,7 @@ export async function startFakeForgeServer({ modList, registries, reid = true, o
     });
     await once(server, 'listening');
     const port = server.socketServer.address().port;
-    const state = { serverHost: null, fromClient: [], hsState: 'START', kicked: null, client: null, chats: [], positions: [] };
+    const state = { serverHost: null, fromClient: [], hsState: 'START', kicked: null, client: null, chats: [], positions: [], attacks: [] };
 
     server.on('login', (client) => {
         state.client = client;
@@ -43,7 +46,7 @@ export async function startFakeForgeServer({ modList, registries, reid = true, o
             return;
         }
         const send = (channel, data) => client.write('custom_payload', { channel, data });
-        send('REGISTER', encodeRegister(['FML|HS', 'FML', 'FML|MP', 'FML', 'FORGE', 'jeid']));
+        send('REGISTER', encodeRegister([...serverChannels]));
         send('FML|HS', hs.encodeServerHello(2, 0));
         state.hsState = 'HELLO';
 
@@ -73,6 +76,12 @@ export async function startFakeForgeServer({ modList, registries, reid = true, o
             default:
                 return; // DONE: acks 4 and 5 are ignored
             }
+        });
+        // What a client attack looks like on the wire, in order: use_entity, arm_animation and
+        // the bettercombat payload (bettercombat-e2e.test.js).
+        client.on('packet', (p, meta) => {
+            if (meta.name === 'use_entity' || meta.name === 'arm_animation') state.attacks.push({ name: meta.name, params: p });
+            else if (meta.name === 'custom_payload' && p.channel === 'bettercombat') state.attacks.push({ name: 'bettercombat', data: Buffer.from(p.data) });
         });
         client.on('chat', (p) => state.chats.push(p.message));
         client.on('position', (p) => state.positions.push(p));
