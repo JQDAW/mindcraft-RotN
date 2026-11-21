@@ -275,20 +275,25 @@ In RotN 3.3.4, `minecraft:crafting_table` is FastWorkbench 1.7.4's block: Run A'
   - The cooldown restarts on every swing and when the held item changes. A durability change is not an item change.
   - Examples: stone sword 13 ticks, stone axe (0.4) 50, crude axe (0.9) 22.
   - The clock is `performance.now()` (monotonic), so a wall-clock (NTP) step cannot send a hit early.
-- **Weapons by name:** Better Combat matches its class whitelist (`ItemSword`, `ItemTool`, `ItemHoe`) with `Class.isInstance`, so subclasses count. The client cannot see classes, so names ending in sword, axe, pickaxe, shovel, spade or hoe count as weapons. Pyrotech's crude tools are weapons by class too (javap on `pyrotech-1.12.2-1.5.25.jar` and the vanilla server jar, mapped with Forge's `deobfuscation_data`): `ItemCrudeAxe` (`crude_axe`) < `ItemAxeBase` < `ItemAxe` (`agy`) < `ItemTool` (`ahq`). So `pyrotech:crude_axe` has the 4.0 reach.
+- **Weapons by name:** Better Combat matches its class whitelist (`ItemSword`, `ItemTool`, `ItemHoe`) with `Class.isInstance`, so subclasses count. The client cannot see classes, so names ending in sword, axe, pickaxe, shovel, spade or hoe count as weapons. Pyrotech's crude tools are weapons by class too (javap on `pyrotech-1.12.2-1.5.25.jar` and the vanilla server jar, mapped with Forge's `deobfuscation_data`): `ItemCrudeAxe` (`crude_axe`) < `ItemAxeBase` < `ItemAxe` (`agy`) < `ItemTool` (`ahq`). So `pyrotech:crude_axe` has the 4.0 reach. One name is excluded: Earthworks' `tool_hand_axe` is a plain `Item`, so a Better Combat non-weapon with the 3.5 reach (rotn-data `weapons.json`, `bcWeapon: false`). Of the pack's 1150 weapons, 875 Better Combat weapons have names this rule does not recognise; they get the non-weapon reach (3.5) and the slower cooldown, which is never more than a client could do.
 
 **`bot.attack(target, swing = true)` returns a promise of `{ sent, path, waitedMs, reason? }`:**
 - **Wire order:** `arm_animation` (main hand) then the `bettercombat` payload, and never `use_entity` as well.
 - **Waiting:** a call before the cooldown is up waits. A newer call replaces a waiting one; the replaced call resolves `{ sent: false, reason: 'replaced' }`.
 - **Gone:** a waiting call whose target is gone when its cooldown is up (`isValid === false`, or no longer in `bot.entities`) sends nothing and resolves `{ sent: false, reason: 'gone' }`. It is not a miss.
 - **Cancel:** `bot.forge.cancelAttack(reason)` ends a call waiting for its cooldown at once: it sends nothing (no swing, no payload) and resolves `{ sent: false, path: null, waitedMs, reason }` (default reason `'cancelled'`). It returns `true` if a call was waiting, and is a no-op (`false`) otherwise. It is not a miss. Skills call it on an interrupt, so no hit goes out up to one cooldown (2.5 s with a stone axe) later.
-- **Falls back to vanilla** for any of these:
-  - a target beyond Better Combat's reach: 4.0 for weapons, 3.5 for an empty hand or a non-weapon, eye to the nearest point of the hitbox;
-  - a target not in sight (a world raycast);
-  - an unknown attack speed.
-- **Self-check:** after 5 hits in a row with no `entityHurt` or `entityDead` for the target within 500 ms, it goes back to vanilla for the connection and logs one line. A hit target that leaves the bot's view (`entityGone`) within the 500 ms is neither a hit nor a miss.
+- **Out of reach or sight sends nothing** while Better Combat's path is active. No `use_entity` goes out instead. The check runs at the call and again when a wait ends:
+  - a target beyond Better Combat's reach, or one without a position, resolves `{ sent: false, reason: 'reach' }`. The reach is 4.0 for weapons and 3.5 for an empty hand or a non-weapon, from the eye to the nearest point of the hitbox;
+  - a target not in sight (a world raycast) resolves `{ sent: false, reason: 'sight' }`.
+- **An unknown attack speed** (no attribute from the server) still sends Better Combat's packet, paced at 50 ticks (`UNKNOWN_SPEED_TICKS`): the pack's slowest main-hand speed, 0.4 (rotn-data `weapons.json`).
+- **Vanilla fallback, only with `bc_attack` on and either the server lacking the mod or the channel, or the self-check tripped:**
+  - the vanilla attack (`use_entity`, then the swing), paced by the same cooldown;
+  - it waits, is replaced, gone and cancelled like Better Combat's path, and its swing restarts the cooldown;
+  - there is no reach check of our own on this path: the server judges it, as for a client without the mod.
+- **Setting off:** the vanilla attack at once, unpaced, exactly as mineflayer sends it.
+- **Self-check:** after 5 hits in a row with no `entityHurt`, no `entityDead` and no drop in the target's health (`entity.health`, else 1.12 metadata 7, compared with its value at the hit) within 500 ms, it goes back to vanilla for the connection and logs one line. A hit target that leaves the bot's view (`entityGone`) within the 500 ms is neither a hit nor a miss.
 
-**For skills:** `bot.forge.attackCooldownTicks()` gives the held item's Better Combat cooldown. `bot.forge.cancelAttack(reason)` drops a waiting hit. `bot.forge.bcAttack.stats` has the counts.
+**For skills:** `bot.forge.attackCooldownTicks()` gives the ticks the held item is paced at (Better Combat's, or 50 when the speed is unknown; never null). `bot.forge.cancelAttack(reason)` drops a waiting hit. `bot.forge.bcAttack.stats` has the counts.
 
 ## Other protocol changes
 
