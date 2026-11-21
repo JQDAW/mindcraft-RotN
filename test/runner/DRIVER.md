@@ -773,10 +773,23 @@ Step 3 of the lead's Better Combat plan (2026-11-21). On RotN 3.3.4 a vanilla `u
       node test/runner/drivers/bc-attack-driver.mjs
 
 - **The driver** is harness-ops' `test/runner/drivers/bc-attack-driver.mjs`: Mindcraft's real `initBot` (with forge-bridge and #521's wrapper), the scenario protocol's hello, and the `bc-hit` command of `test/runner/drivers/bc-attack.mjs`. It turns `ROTN_DRIVER_BC_ATTACK=on`, which the scenario passes (`BC_DRIVER_ENV`), into `FORGE_BC_ATTACK=on`. There is no LLM and no key. It refuses the CX23 service as the bot.
-- **The console** (`guardBcConsole`, `BC_CONSOLE_ALLOW` in `test/runner/lib/probe.mjs`):
+- **The console** (`guardBcConsole`, `bcConsoleAllow(bot)` in `test/runner/lib/probe.mjs`):
   - It refuses **every** command unless `TEST_SERVER_NAME` is a disposable test server's name (`mcr-test-YYYYMMDD-HHMMSS`). The lead allowed `summon` and `kill` on the disposable CPX42 only, and the scenario sends nothing at all, not even the begin marker, on any other name.
-  - `summon` is exactly `summon minecraft:zombie X Y Z`, with whole-block coordinates and either no NBT or exactly `{NoAI:1}`. `kill` is exactly `kill @e[type=zombie]`. No other mob, NBT, selector or target gets through, and P1's list does not get them.
-  - The rest: the begin marker, `seed`, `gamerule doDaylightCycle false`, `time set day`, `tp`, `clear <bot>`, `give`, `setblock` and `testforblock` of air or stone, and `tell <bot> bc-hit ...`. The bot never gets op.
+  - **Exactly the plan's commands** (#527 review); the bot never gets op:
+
+    | Command | What is admitted |
+    | --- | --- |
+    | `summon` | Only the plan's three zombies at their fixed cells: `summon minecraft:zombie -47 66 -66 {NoAI:1}` (A), `... -43 66 -66 {NoAI:1}` (B) and `... -42 66 -66` (the AI zombie, bare) |
+    | `kill` | Exactly `kill @e[type=zombie]` |
+    | `give` | Only to this bot, and only the BC items with the plan's counts: stone sword 1, stone axe 1, crude axe 6 |
+    | `tp` | Only this bot, to the landing spot or `~ ~ ~` |
+    | `clear` | Only `clear <bot>` |
+    | `setblock` | Only the lane's 32 cells, each with its planned block |
+    | `testforblock` | Only the 12 cells the setup checks |
+    | `tell <bot> bc-hit` | Only as the plan pairs them: `vanilla` on A, `bc` on B, each with one of the four items (`hand` included), and `bc ai` with the stone sword |
+    | Also | The begin marker, `seed`, `gamerule doDaylightCycle false` and `time set day` |
+
+  - No other mob, NBT, cell, selector, bot or item gets through, and P1's list stays separate and gets none of these.
 - **The steps** (`BC_PLAN`):
   1. Log in.
   2. **Setup.** The driver's `bc_status` must say Better Combat's path is active. Then `gamerule doDaylightCycle false`, `time set day` and `kill @e[type=zombie]`. Then the lane at z -66, x -48 to -41: a stone floor at y 65, air at 66 and 67, and a stone roof at 68, so no zombie burns in daylight. It is checked with `testforblock`, and the bot is teleported to -45 66 -66.
@@ -786,6 +799,7 @@ Step 3 of the lead's Better Combat plan (2026-11-21). On RotN 3.3.4 a vanilla `u
      - `bc-hit bc` on B: `bot.attack`;
      - each series runs until the zombie dies, 40 hits or 60 s; then `kill @e[type=zombie]`.
   4. **The AI zombie:** one zombie with its AI at -42 (3 blocks east), Better Combat's path, stone sword. Then `kill @e[type=zombie]` and `clear`.
+     - **This step is uncontrolled.** The zombie may spawn as a baby, with equipment or with the pack's augments. It hits back, and the lane's sides are open, so it can step out of line. Read a `bc_ai_zombie` failure in that light: the NoAI series are the controlled measurement.
   5. **`server_log`** reads from the begin marker. It fails on an `FMLIndexedMessageCodec` exception (how a bad `bettercombat` payload shows), a WARN or ERROR line or exception naming `bettercombat`, or any kick or lost connection.
   6. **`self_check`:** the wrapper's "5 hits without a hurt, back to vanilla" never appeared in the driver's output, and no reply says `tripped`.
 - **The pass rules** (`judgeSeries`):
@@ -793,9 +807,15 @@ Step 3 of the lead's Better Combat plan (2026-11-21). On RotN 3.3.4 a vanilla `u
   | Series | Passes when |
   | --- | --- |
   | Vanilla | At least 2 hits, all on the vanilla path. The first lowers the zombie's health and no later one does. |
-  | Better Combat | Every hit is on Better Combat's path and lowers the health. The zombie dies, and the hits to kill are near #518's `hitsToKill` (within the larger of 1 and 15%): stone sword 8, stone axe 9, crude axe 9 (the stone axe's damage; #518 has no row for it), bare hand 27, or about 54 if the 0.5 unarmed reduction applies. Only the bare hand may stop at 40 hits; it is then judged by `ceil(start health / mean drop)`. No gap between Better Combat packets is under the cooldown: 13, 50, 22 and 13 ticks, with 2 ms of timer slack. The self-check did not trip. |
+  | Better Combat | Every hit is on Better Combat's path and lowers the health. The zombie dies, and the hits to kill are in rotn-data's range from `hitsToKill` (#518, #528; `bcExpected`), from every hit a crit (`minHits`) to none (`hits`): stone sword 5-8, stone axe 6-9, crude axe 6-9 and bare hand 36-54 (Better Combat takes 0.5 off an empty hand). Only the bare hand may stop at 40 hits (its plain count is 54); it is then judged by `ceil(start health / mean drop)`. No gap between Better Combat packets is under the cooldown: 13, 50, 22 and 13 ticks, with 2 ms of timer slack. The self-check did not trip. |
   | AI zombie | Every hit lands, it dies, and no gap is under 13 ticks. No count is judged. |
   | Both | The zombie was found and did not burn. |
+
+  **Crits** (rotn-data #528). Better Combat crits (x1.5):
+  - every sneak attack: an IMob whose attack target and revenge target are both not the player. A NoAI zombie has neither before its first hit, so the first Better Combat hit on each crits. After that the bot is its revenge target until 100 ticks pass without a hit; a longer pause would make the next hit another sneak crit, and the slowest cooldown, the stone axe's 50 ticks, stays under that;
+  - at random: 5% base, +0.1 with a sword, +0.25 with an axe.
+
+  A zombie with its AI already targets the bot, so its first hit is no sneak crit. Each Better Combat series' verdict marks the crits the health drops show (`markCrits`): a drop at least halfway from rotn-data's `perHit` to its `critHit` is a crit; a smaller killing hit, cut short by the health left, is "unknown". The check's detail lists them (`crits #1, ...`).
 
 - **The bc-hit command and its reply:**
 
