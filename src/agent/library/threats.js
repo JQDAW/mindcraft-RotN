@@ -310,6 +310,30 @@ export function attackCooldownMs(bot, item = bot?.heldItem) {
  */
 export const attackSent = (r) => r?.sent !== false;
 
+/** #532 re-review nit 3: how often a waiting bot.attack is checked for a reason to cancel it. */
+export const ATTACK_WATCH = { pollMs: 100 };
+
+/**
+ * #532 re-review nit 3 (net-forge #536): bot.attack, cancelled while it waits when stopWhy() gives a
+ * reason. Better Combat's path waits up to one cooldown (a stone axe: 2.5 s); every ATTACK_WATCH.pollMs
+ * of that wait stopWhy() is asked ('interrupted', 'maxMs' or null), and on a reason
+ * bot.forge.cancelAttack(reason) ends the call at once: it resolves { sent: false, reason } and sends
+ * nothing, so the hit never goes out late. Without cancelAttack (an older forge-bridge, tests): a plain
+ * await. The callers still check right after it resolves (the backstop).
+ */
+export async function attackWatched(bot, target, stopWhy = () => null) {
+    const call = Promise.resolve(bot.attack(target));
+    if (typeof bot?.forge?.cancelAttack !== 'function') return await call;
+    const timer = setInterval(() => {
+        let why = null;
+        try { why = stopWhy(); } catch { why = null; }
+        if (!why) return;
+        clearInterval(timer);
+        try { bot.forge.cancelAttack(why); } catch { /* the backstop check still stops it */ }
+    }, ATTACK_WATCH.pollMs);
+    try { return await call; } finally { clearInterval(timer); }
+}
+
 /**
  * A weapon's rank by its material, a sword above an axe of the same material: the fallback order
  * (weaponOrder) for weapons with no numbers, and the tie-break. A heuristic: RotN's durabilities do

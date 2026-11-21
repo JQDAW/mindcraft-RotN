@@ -7,7 +7,7 @@ import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES, shelterTarget, shelterEnemy, fightRefusal, maxHitOf,
     meleeReach, inMeleeReach, hurtingInReach, weaponCooldownMs, WEAPON_COOLDOWN_MS, fightNumbers, fightOdds, shelterEatBlock, EAT_SAFE,
-    weaponNumbers, weaponOrder, attackPath, weaponRank, WEAPON_ATTACK } from './threats.js';
+    weaponNumbers, weaponOrder, attackPath, weaponRank, WEAPON_ATTACK, attackWatched, ATTACK_WATCH } from './threats.js';
 import { weaponStats } from '../../../packages/rotn-data/index.js';
 import { __modeForTest, __resetThreatLease } from '../modes.js';
 
@@ -872,4 +872,28 @@ test('(f): on the Better Combat path weaponNumbers and weaponOrder use weaponSta
     assert.ok(decided > 0, 'some pair ranks by the bc numbers against the vanilla ones');
     // The early game keeps its order on Better Combat's numbers too.
     assert.deepEqual(ranked(['stone_axe', 'pyrotech:crude_axe', 'stone_sword'], 'bettercombat'), ['stone_sword', 'pyrotech:crude_axe', 'stone_axe']);
+});
+
+// #532 re-review nit 3 (net-forge #536): attackWatched.
+test('#532 re-review nit 3: attackWatched cancels a waiting bot.attack once stopWhy gives a reason; without bot.forge.cancelAttack it is a plain await', async () => {
+    assert.equal(ATTACK_WATCH.pollMs, 100);
+    const waiting = (ms) => {
+        let pending = null;
+        const bot = {
+            attack: () => new Promise(resolve => { pending = { resolve, timer: setTimeout(() => { pending = null; resolve({ sent: true }); }, ms) }; }),
+            forge: { cancelAttack: (reason) => { if (!pending) return false; clearTimeout(pending.timer); pending.resolve({ sent: false, reason }); pending = null; return true; } },
+        };
+        return bot;
+    };
+    let stop = null;
+    const bot = waiting(1000);
+    setTimeout(() => { stop = 'interrupted'; }, 50);
+    const t0 = Date.now();
+    assert.deepEqual(await attackWatched(bot, {}, () => stop), { sent: false, reason: 'interrupted' });
+    assert.ok(Date.now() - t0 < 400, 'within a poll or two');
+    assert.deepEqual(await attackWatched(waiting(30), {}, () => null), { sent: true }, 'nothing to stop it');
+    const old = waiting(30);
+    delete old.forge;
+    assert.deepEqual(await attackWatched(old, {}, () => 'interrupted'), { sent: true }, 'no cancelAttack: a plain await');
+    assert.equal(await attackWatched({ attack: () => undefined, forge: { cancelAttack: () => false } }, {}, () => null), undefined, "mineflayer's own bot.attack");
 });
