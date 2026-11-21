@@ -10,7 +10,7 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD, FOOD_AFTER_DEATH } from './agenda.js';
 import { Vec3 } from 'vec3';
 import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
@@ -1021,4 +1021,33 @@ test('#502 nit 4: after a restart, a weapon spent by day still gets a fresh budg
     assert.ok(after.agenda.spentOn('weapon').llm_ms >= STEP_LLM_MS, 'and the spent budget');
     assert.equal(agendaTick(after, { now: 0 }), 'weapon', 'a fresh dusk budget, not stuck at once');
     assert.equal(after.agenda.spentOn('weapon').llm_ms, 0);
+});
+
+// Soak 7 (rotn-v0.1.13, ate_when_low FAIL): the bot died at 23:24:33 and respawned at food 12 with an
+// empty inventory; the agenda put the shelter blocks (night ~12 min off) and the weapon first, food at
+// 23:27:21, and the bot first ate 5 min 48 s after its "low" food line (the check allows 5 min). The
+// lead's rule (d): after a respawn, hungry with nothing to eat, getting food comes first.
+test('soak 7 (d): within FOOD_AFTER_DEATH.windowMs of a death, at food 12 or lower with no food held, food comes before the shelter blocks and the weapon', (t) => {
+    assert.deepEqual(FOOD_AFTER_DEATH, { windowMs: 4 * 60_000 });
+    const cow = { id: 1, type: 'mob', name: 'animania:cow_holstein', metadata: { 7: 10 }, position: new Vec3(6.5, 64, 0.5) };
+    const died = (agent, agoMs) => { agent.bot.rotnDeathSpots = () => [{ at: Date.now() - agoMs, pos: { x: 0, y: 64, z: 0 } }]; return agent; };
+    const soak7 = (items = [], opts = {}) => hFixAgent(t, items, { food: 12, timeOfDay: dayAt(7), entities: { 1: cow }, ...opts });
+    // No death: the shelter blocks first, as before (night is near).
+    assert.equal(agendaTick(soak7(), { now: 0 }), 'shelter_blocks');
+    // 20 s after the death (the respawn walk): food first; unarmed, it forages and names no animal (Fix H).
+    const after = died(soak7(), 20_000);
+    assert.equal(agendaTick(after, { now: 0 }), 'food');
+    assert.match(after.self_prompter.prompt, /You hold no weapon: gather ripe wild food with !forage/);
+    assert.doesNotMatch(after.self_prompter.prompt, /!attack\(/);
+    // By day too (Fix H would put the weapon first at food 12).
+    assert.equal(agendaTick(died(hFixAgent(t, [], { food: 12 }), 20_000), { now: 0 }), 'food');
+    assert.equal(agendaTick(hFixAgent(t, [], { food: 12 }), { now: 0 }), 'weapon', 'no death: Fix H as before');
+    // Bounded: past the window the shelter blocks come first again.
+    assert.equal(agendaTick(died(soak7(), FOOD_AFTER_DEATH.windowMs + 1000), { now: 0 }), 'shelter_blocks');
+    // Food held, or food above 12: no change.
+    assert.equal(agendaTick(died(soak7([stack('bread', 0, 1)]), 20_000), { now: 0 }), 'shelter_blocks');
+    assert.equal(agendaTick(died(soak7([], { food: 13 }), 20_000), { now: 0 }), 'shelter_blocks');
+    // !agenda (readOnly) shows the same step.
+    const shown = died(soak7(), 20_000);
+    assert.equal(shown.agenda.judge(agendaState(shown.bot), { readOnly: true }).step.id, 'food');
 });

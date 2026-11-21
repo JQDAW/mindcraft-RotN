@@ -83,6 +83,12 @@ export function agendaState(bot, clock = null) {
         // G4 #5: the food level, the hunger value of the safe food held, and the wild animals and
         // ripe wild food near that the bot may take (never what may belong to a player).
         food: () => bot.food,
+        // Soak 7 (d): ms since the last death (death_report's newest spot), Infinity when none is recent.
+        sinceDeathMs: () => {
+            const spots = typeof bot.rotnDeathSpots === 'function' ? bot.rotnDeathSpots() : [];
+            const at = spots.at?.(-1)?.at;
+            return Number.isFinite(at) ? Date.now() - at : Infinity;
+        },
         day: () => bot.time?.day, // the in-game day (the food reserve's runs per day)
         foodHeld: () => heldFoodHunger(bot),
         huntable: () => { try { return [...new Set(nearbyHuntable(bot, { bases: bot.rotnBases?.() ?? [] }))]; } catch { return []; } },
