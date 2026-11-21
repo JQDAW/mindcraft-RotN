@@ -375,20 +375,21 @@ test('#502 nit 1: the falling-block source is only one above the bot', async () 
 });
 
 // Soak 7 (c): every fight path takes its best weapon in hand before its first hit and says what it holds.
-const AXES = () => [{ name: 'pyrotech:crude_axe', metadata: 0, count: 1, slot: 36 }, { name: 'stone_axe', metadata: 0, count: 1, slot: 37 }];
+// Soak 7 (e): the stone sword is the best of these on either attack path (threats.weaponOrder).
+const AXES = () => [{ name: 'pyrotech:crude_axe', metadata: 0, count: 1, slot: 36 }, { name: 'stone_axe', metadata: 0, count: 1, slot: 37 }, { name: 'stone_sword', metadata: 0, count: 1, slot: 38 }];
 
-test('soak 7 (c): defendSelf (the open field) holds the stone axe (its best weapon) at its first hit, and logs it', async (t) => {
+test('soak 7 (c): defendSelf (the open field) holds the stone sword (its best weapon) at its first hit, and logs it', async (t) => {
     const logs = capture(t);
     const held = [];
     const bot = openFight(logs, { attack: (b) => { held.push(b.heldItem?.name ?? 'hand'); delete b.entities[1]; } });
     bot.inventory = { items: AXES, slots: [] };
     bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
     assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
-    assert.deepEqual(held, ['stone_axe']);
-    assert.ok(logs.includes('[survival] weapon stone_axe (open)'), logs.join('\n'));
+    assert.deepEqual(held, ['stone_sword']);
+    assert.ok(logs.includes('[survival] weapon stone_sword (open)'), logs.join('\n'));
 });
 
-test('soak 7 (c): attackEntity (the !attack command, a cornered hit) holds the stone axe at its hit, and logs it', async (t) => {
+test('soak 7 (c): attackEntity (the !attack command, a cornered hit) holds the stone sword at its hit, and logs it', async (t) => {
     const logs = capture(t);
     const held = [];
     const bot = openFight(logs);
@@ -396,6 +397,73 @@ test('soak 7 (c): attackEntity (the !attack command, a cornered hit) holds the s
     bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
     bot.attack = () => { held.push(bot.heldItem?.name ?? 'hand'); return Promise.resolve(); };
     await skills.attackEntity(bot, bot.entities[1], false);
-    assert.deepEqual(held, ['stone_axe']);
-    assert.ok(logs.includes('[survival] weapon stone_axe (attack)'), logs.join('\n'));
+    assert.deepEqual(held, ['stone_sword']);
+    assert.ok(logs.includes('[survival] weapon stone_sword (attack)'), logs.join('\n'));
+});
+
+// Soak 7 (e): equipHighestAttack takes the best weapon by threats.weaponOrder on the path bot.attack takes.
+test('soak 7 (e): equipHighestAttack: a crude axe over a stone axe (more damage per tick); the attack path decides between an iron axe and a diamond sword', async (t) => {
+    capture(t);
+    const held = async (names, bot = openFight([])) => {
+        bot.inventory = { items: () => names.map((name, i) => ({ name, metadata: 0, count: 1, slot: 36 + i })), slots: [] };
+        bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+        assert.equal(await skills.equipHighestAttack(bot), true);
+        return bot.heldItem.name;
+    };
+    assert.equal(await held(['stone_axe', 'pyrotech:crude_axe']), 'pyrotech:crude_axe');
+    assert.equal(await held(['diamond_sword', 'iron_axe']), 'iron_axe', 'vanilla: the first hit is all that lands');
+    const bc = openFight([]);
+    bc.forge = { bcAttack: { active: true } };
+    assert.equal(await held(['iron_axe', 'diamond_sword'], bc), 'diamond_sword', 'Better Combat: every hit lands, the rate wins');
+});
+
+// Soak 7 (e): avoidEnemies' cornered hit (attackEntity every 500 ms) logged the weapon line each time.
+test('soak 7 (e): the weapon line is logged only when the held item changes', async (t) => {
+    const logs = capture(t);
+    const bot = openFight(logs);
+    let items = AXES();
+    bot.inventory = { items: () => items, slots: [] };
+    bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+    bot.attack = () => Promise.resolve();
+    for (let i = 0; i < 3; i++) await skills.attackEntity(bot, bot.entities[1], false);
+    assert.deepEqual(survival(logs), ['[survival] weapon stone_sword (attack)'], 'three cornered hits, one line');
+    items = items.filter(i => i.name !== 'stone_sword'); // the sword broke
+    await skills.attackEntity(bot, bot.entities[1], false);
+    // A fight in the open with the same crude axe: no line again (the fight start is still logged).
+    bot.pvp.attack = () => { delete bot.entities[1]; };
+    assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
+    assert.ok(survival(logs).includes('[survival] fight start zombie (open)'), logs.join('\n'));
+    assert.deepEqual(survival(logs).filter(l => l.includes(' weapon ')), ['[survival] weapon stone_sword (attack)', '[survival] weapon pyrotech:crude_axe (attack)'], 'a new line for the new item only');
+    assert.equal(skills.weaponRank({ name: 'stone_sword' }), 5, 'still exported from skills.js');
+});
+
+// (f): equipHighestAttack on the Better Combat path ranks by Better Combat's numbers (#528).
+test('(f): with Better Combat\'s attack on, equipHighestAttack takes the wooden sword over the iron axe; on vanilla the iron axe', async (t) => {
+    capture(t);
+    const held = async (bc) => {
+        const bot = openFight([]);
+        if (bc) bot.forge = { bcAttack: { active: true } };
+        bot.inventory = { items: () => [{ name: 'iron_axe', metadata: 0, count: 1, slot: 36 }, { name: 'wooden_sword', metadata: 0, count: 1, slot: 37 }], slots: [] };
+        bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+        await skills.equipHighestAttack(bot);
+        return bot.heldItem?.name;
+    };
+    assert.equal(await held(false), 'iron_axe');
+    assert.equal(await held(true), 'wooden_sword');
+});
+
+// (f), #521: attackEntity's one hit (the !attack command without kill, avoidEnemies' cornered hit)
+// uses bot.attack's result: false, and a line, when the hit was not sent.
+test('(f): attackEntity (one hit) returns whether bot.attack sent it; a replaced hit is said', async (t) => {
+    capture(t);
+    const bot = openFight([]);
+    bot.attack = () => Promise.resolve({ sent: false, path: null, waitedMs: 120, reason: 'replaced' });
+    assert.equal(await skills.attackEntity(bot, bot.entities[1], false), false);
+    assert.match(bot.output, /The hit on the zombie was not sent \(replaced\)\./);
+    bot.output = '';
+    bot.attack = () => Promise.resolve({ sent: true, path: 'bettercombat', waitedMs: 0 });
+    assert.equal(await skills.attackEntity(bot, bot.entities[1], false), true);
+    bot.attack = () => undefined; // mineflayer's own: no result, counts as sent
+    assert.equal(await skills.attackEntity(bot, bot.entities[1], false), true);
+    assert.equal(bot.output, '');
 });

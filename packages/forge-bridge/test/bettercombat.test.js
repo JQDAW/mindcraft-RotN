@@ -65,6 +65,10 @@ test('cooldown: Better Combat client pacing from bettercombat.cfg', () => {
     assert.equal(bcReach('stone_sword'), 4.0);
     assert.equal(bcReach(null), 3.5);
     assert.equal(bcReach('stick'), 3.5);
+    // javap: ItemCrudeAxe < ItemAxeBase < ItemAxe < ItemTool, matched by Class.isInstance.
+    assert.equal(bcReach('pyrotech:crude_axe'), 4.0, 'the crude axe is a Better Combat weapon');
+    assert.ok(['crude_pickaxe', 'crude_shovel', 'crude_hoe'].every((n) => isBcWeaponName(`pyrotech:${n}`)));
+    assert.equal(bcCooldownTicks({ itemName: 'pyrotech:crude_axe', attackSpeed: 0.9 }), 22);
 });
 
 test('setting: off by default; FORGE_BC_ATTACK wins over bc_attack', () => {
@@ -123,7 +127,8 @@ function rig(o = {}) {
         await Promise.resolve();
     };
     const bc = installBetterCombatAttack(bot, {
-        bridge: () => bridge, enabled, log: (m) => lines.push(m), now: () => clock.t, setTimer, clearTimer,
+        bridge: () => bridge, enabled, log: (m) => lines.push(m), setTimer, clearTimer,
+        ...(o.defaultClock ? {} : { now: () => clock.t }),
         ...(o.defaultSight ? {} : { lineOfSight }),
     });
     const target = (id = 1234, z = 2) => ({ id, position: new Vec3(0, 64, z), width: 0.6, height: 1.95 });
@@ -162,8 +167,57 @@ test('wrapper: paced at the cooldown; a newer call replaces a waiting one', asyn
     assert.deepEqual(res, { sent: true, path: 'bettercombat', waitedMs: 550 });
     const payloads = r.bot.writes.filter((w) => w.name === 'custom_payload').map((w) => decodeMainhandAttack(w.params.data).entityId);
     assert.deepEqual(payloads, [1234, 2]);
-    assert.deepEqual(r.bc.stats, { bettercombat: 2, vanilla: 0, waits: 2, replaced: 1, misses: 1 }, 'the first hit got no hurt within 500 ms');
+    assert.deepEqual(r.bc.stats, { bettercombat: 2, vanilla: 0, waits: 2, replaced: 1, gone: 0, misses: 1 }, 'the first hit got no hurt within 500 ms');
     assert.equal(r.bc.cooldownTicks(), 13);
+});
+
+test('wrapper: the default clock is monotonic: a wall-clock step does not send early', async (t) => {
+    const r = rig({ defaultClock: true });
+    await r.bot.attack(r.target());
+    const realNow = Date.now;
+    t.after(() => { Date.now = realNow; });
+    Date.now = () => realNow() + 3_600_000; // an NTP step one hour forward
+    const p = r.bot.attack(r.target());
+    await Promise.resolve();
+    assert.equal(r.names().filter((n) => n === 'custom_payload').length, 1, 'the second hit waits for its cooldown');
+    r.bot.emit('end');
+    assert.equal((await p).reason, 'ended');
+});
+
+test('wrapper: a waiting call whose target is gone sends nothing and is not a miss', async () => {
+    // isValid false (mineflayer's entity_destroy)
+    const r = rig();
+    await r.bot.attack(r.target());
+    r.bot.emit('entityHurt', { id: 1234 });
+    const dead = r.target(7);
+    const p = r.bot.attack(dead);
+    await r.advance(100);
+    dead.isValid = false;
+    await r.advance(600);
+    assert.deepEqual(await p, { sent: false, path: null, waitedMs: 650, reason: 'gone' });
+    assert.equal(r.names().filter((n) => n === 'custom_payload').length, 1);
+    assert.equal(r.bc.stats.gone, 1);
+    assert.equal(r.bc.stats.misses, 0);
+
+    // no longer in bot.entities; one still there is hit
+    const e = rig();
+    const kept = e.target(8), left = e.target(9);
+    e.bot.entities = { 8: kept, 9: left };
+    await e.bot.attack(kept);
+    const q = e.bot.attack(left);
+    delete e.bot.entities[9];
+    await e.advance(650);
+    assert.equal((await q).reason, 'gone');
+    const q2 = e.bot.attack(kept);
+    await e.advance(650);
+    assert.equal((await q2).path, 'bettercombat');
+
+    // a hit target that leaves the bot's view: its check is dropped, not a miss
+    const g = rig();
+    await g.bot.attack(g.target());
+    g.bot.emit('entityGone', { id: 1234 });
+    await g.advance(600);
+    assert.equal(g.bc.stats.misses, 0);
 });
 
 test('wrapper: a different held item restarts the cooldown; a durability change does not', async () => {

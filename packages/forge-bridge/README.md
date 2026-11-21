@@ -274,15 +274,18 @@ In RotN 3.3.4, `minecraft:crafting_table` is FastWorkbench 1.7.4's block: Run A'
   - An empty hand and non-weapons use 1.5 (13 ticks). An item not recognised by name gets the slower of the two cooldowns.
   - The cooldown restarts on every swing and when the held item changes. A durability change is not an item change.
   - Examples: stone sword 13 ticks, stone axe (0.4) 50, crude axe (0.9) 22.
+  - The clock is `performance.now()` (monotonic), so a wall-clock (NTP) step cannot send a hit early.
+- **Weapons by name:** Better Combat matches its class whitelist (`ItemSword`, `ItemTool`, `ItemHoe`) with `Class.isInstance`, so subclasses count. The client cannot see classes, so names ending in sword, axe, pickaxe, shovel, spade or hoe count as weapons. Pyrotech's crude tools are weapons by class too (javap on `pyrotech-1.12.2-1.5.25.jar` and the vanilla server jar, mapped with Forge's `deobfuscation_data`): `ItemCrudeAxe` (`crude_axe`) < `ItemAxeBase` < `ItemAxe` (`agy`) < `ItemTool` (`ahq`). So `pyrotech:crude_axe` has the 4.0 reach.
 
 **`bot.attack(target, swing = true)` returns a promise of `{ sent, path, waitedMs, reason? }`:**
 - **Wire order:** `arm_animation` (main hand) then the `bettercombat` payload, and never `use_entity` as well.
 - **Waiting:** a call before the cooldown is up waits. A newer call replaces a waiting one; the replaced call resolves `{ sent: false, reason: 'replaced' }`.
+- **Gone:** a waiting call whose target is gone when its cooldown is up (`isValid === false`, or no longer in `bot.entities`) sends nothing and resolves `{ sent: false, reason: 'gone' }`. It is not a miss.
 - **Falls back to vanilla** for any of these:
   - a target beyond Better Combat's reach: 4.0 for weapons, 3.5 for an empty hand or a non-weapon, eye to the nearest point of the hitbox;
   - a target not in sight (a world raycast);
   - an unknown attack speed.
-- **Self-check:** after 5 hits in a row with no `entityHurt` or `entityDead` for the target within 500 ms, it goes back to vanilla for the connection and logs one line.
+- **Self-check:** after 5 hits in a row with no `entityHurt` or `entityDead` for the target within 500 ms, it goes back to vanilla for the connection and logs one line. A hit target that leaves the bot's view (`entityGone`) within the 500 ms is neither a hit nor a miss.
 
 **For skills:** `bot.forge.attackCooldownTicks()` gives the held item's Better Combat cooldown. `bot.forge.bcAttack.stats` has the counts.
 
@@ -325,7 +328,7 @@ In RotN 3.3.4, `minecraft:crafting_table` is FastWorkbench 1.7.4's block: Run A'
 Captures are JSONL, one object per line, written synchronously. `kind` is one of:
 
 - `payload`: a plugin-channel message, in either direction, with base64 data and a decoded summary.
-- `packet`: selected play packets, capped per name: `map_chunk`, `window_items`, `set_slot`, `entity_effect`, `remove_entity_effect`, `login`, spawns and `entity_metadata`. Outgoing `window_click`, `set_creative_slot` and `held_item_slot` are capped as `C2S:<name>`.
+- `packet`: selected play packets, capped per name: `map_chunk`, `window_items`, `set_slot`, `entity_effect`, `remove_entity_effect`, `login`, spawns and `entity_metadata`. Outgoing `window_click`, `set_creative_slot`, `held_item_slot`, `use_entity` and `arm_animation` are capped as `C2S:<name>`. With the `bettercombat` payloads, the last two give the gaps between hits on both attack paths.
 - `event`: handshake states, registries, kicks, end.
 - `parse_error` and `partial_packet`.
 

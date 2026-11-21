@@ -804,21 +804,21 @@ test('soak 7 replay (the fight in the cell): the zombie at 0.8 m hitting the bot
     assert.ok(logs.includes('[reflex] not eating between fights in the shelter: zombie 0.8 blocks away'), logs.join('\n'));
 });
 
-test('soak 7 (c): the shelter fight (fightInShelter -> defendInPlace; also the morning fight-on and hand-fight) holds the stone axe at its first swing, and logs it', async (t) => {
+test('soak 7 (c): the shelter fight (fightInShelter -> defendInPlace; also the morning fight-on and hand-fight) holds its best weapon (the stone sword over a crude axe and a stone axe, on either attack path: soak 7 (e)) at its first swing, and logs it', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
     const saved = { ...SHELTER_FIGHT };
     Object.assign(SHELTER_FIGHT, { swingMs: 10 });
     t.after(() => Object.assign(SHELTER_FIGHT, saved));
     const { agent, bot } = shelter({ killAfter: 1 });
-    bot.inventory = { items: () => [{ name: 'pyrotech:crude_axe', metadata: 0, count: 1 }, AXE], slots: [] };
+    bot.inventory = { items: () => [{ name: 'pyrotech:crude_axe', metadata: 0, count: 1 }, AXE, { name: 'stone_sword', metadata: 0, count: 1 }], slots: [] };
     bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
     const held = [];
     const attack = bot.attack;
     bot.attack = (e) => { held.push(bot.heldItem?.name ?? 'hand'); attack(e); };
     await selfDefense(agent);
-    assert.deepEqual(held, ['stone_axe']);
-    assert.deepEqual(logs.filter(l => l.startsWith('[survival] ')).slice(0, 2), ['[survival] fight start zombie (shelter)', '[survival] weapon stone_axe (shelter)']);
+    assert.deepEqual(held, ['stone_sword']);
+    assert.deepEqual(logs.filter(l => l.startsWith('[survival] ')).slice(0, 2), ['[survival] fight start zombie (shelter)', '[survival] weapon stone_sword (shelter)']);
 });
 
 // Better Combat plan step 2 (#521): defendInPlace awaited nothing; with Better Combat's attack a

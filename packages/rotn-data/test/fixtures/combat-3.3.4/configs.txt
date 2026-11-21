@@ -19,6 +19,31 @@ config/bettercombat.cfg:77:     D:"Attribute Base Weapon Attack Speed"=4.0
 config/bettercombat.cfg:80:     D:"Base Critical Percent Chance"=0.05
 config/bettercombat.cfg:83:     D:"Base Critical Percent Damage"=1.5
 config/bettercombat.cfg:86:     I:"Minimum Attack Speed Tick Cooldown"=8
+config/bettercombat.cfg:66: "attributes (advanced settings)" {
+config/bettercombat.cfg:173: "critical strikes" {
+config/bettercombat.cfg:175:     D:"Add Critical Chance On Falling"=0.1
+config/bettercombat.cfg:178:     B:"Auto Critical On Sneak Attacks"=true
+config/bettercombat.cfg:184:     D:"Luck Affects Critical Chance"=0.1
+config/bettercombat.cfg:241: "custom weapons" {
+config/bettercombat.cfg:315:     S:"Custom Weapon Tweaker" <
+config/bettercombat.cfg:343:         [Weapon Substring=_sword]			[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:345:         [Weapon Substring=battleaxe_]		[Sound Type=AXE]		[Animation=CHOP]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.0]		[Crit Chance=0.25]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:349:         [Weapon Substring=_pickaxe]			[Sound Type=AXE]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:350:         [Weapon Substring=_axe]				[Sound Type=AXE]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.5]		[Crit Chance=0.25]	[Additional Crit Damage=0.0]	[Parry=false]
+config/bettercombat.cfg:674: swords {
+config/bettercombat.cfg:686:     S:"Sword Tweaker" <
+config/bettercombat.cfg:687:         [Sword Substring=golden_sword]		[Additional Attack Speed=0.2]
+config/bettercombat.cfg:688:         [Sword Substring=stone_sword]		[Additional Attack Speed=-0.1]
+config/bettercombat.cfg:689:         [Sword Substring=wooden_sword]		[Additional Attack Speed=0.2]
+config/bettercombat.cfg:727: unarmed {
+config/bettercombat.cfg:729:     D:"Unarmed & Non-Weapon Attack Speed"=1.5
+config/bettercombat.cfg:732:     D:"Unarmed & Non-Weapon Damage Reduction"=0.5
+config/bettercombat.cfg:839:     S:"(Class) Item Weapon Whitelist" <
+config/bettercombat.cfg:840:         net.minecraft.item.ItemSword
+config/bettercombat.cfg:841:         net.minecraft.item.ItemTool
+config/bettercombat.cfg:842:         net.minecraft.item.ItemHoe
+config/bettercombat.cfg:843:         com.oblivioussp.spartanweaponry.item.ItemThrowingWeapon
+config/bettercombat.cfg:844:      >
 config/bettercombat.cfg:803: "white/black lists" {
 config/bettercombat.cfg:834:     S:"(Class) Item Left/Right Click Blacklist" <
 config/bettercombat.cfg:835:      >

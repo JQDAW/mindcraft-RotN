@@ -51,6 +51,10 @@ test('combat.json: well formed, every fact cited', () => {
     for (const [k, w] of Object.entries(C.weapons)) {
         assert.ok(w.evidence.length > 0, k);
         assert.equal(w.cooldownTicks, Math.round(20 / w.attackSpeed * 10) / 10, k);
+        // Better Combat's client pacing and its unarmed & non-weapon reduction.
+        assert.equal(w.bcCooldownTicks, Math.max(8, Math.trunc(20 / w.bcAttackSpeed + 0.5)), k);
+        assert.equal(w.bcAttackDamage, w.attackDamage - (w.bcWeapon ? 0 : C.playerAttack.betterCombatPacket.unarmedDamageReduction), k);
+        assert.ok(w.bcCritChance > 0 && w.bcCritChance < 1, k);
     }
     for (const re of [/scratchpad/i, /\/home\//, /\/tmp\//]) assert.doesNotMatch(JSON.stringify(C), re);
 });
@@ -131,7 +135,21 @@ test('Better Hurt Timer leaves player hits alone and lets every mob land a full 
     inOrder(section(jp, 'Better Hurt Timer BHTAPI'), 'String ticksSinceLastSwing', 'String field_184617_aD', 'ObfuscationReflectionHelper.findField', 'ticksSinceLastSwingField');
     inOrder(section(jp, 'Better Hurt Timer Events.canSwing'), 'ticksSinceLastSwingField', 'getInt', 'iflt');
     assert.match(section(jp, 'SRG names'), /FD: vp\/aE net\/minecraft\/entity\/EntityLivingBase\/field_184617_aD/);
-    assert.doesNotMatch(section(jp, 'vp (EntityLivingBase, Forge-patched) attackEntityFrom'), /putfield .*Field aE:I/);
+    // Every access of aE (ticksSinceLastSwing) and bc (lastDamage) in the patched vp and aed: vp never touches aE, only
+    // aed's onUpdate and resetCooldown write it; lastDamage is read and written only in vp's attackEntityFrom.
+    const acc = section(jp, 'vp and aed (Forge-patched): every access of aE and bc');
+    const listed = (cls, fld) => {
+        const m = acc.match(new RegExp(`^# ${cls}: every access of ${fld} \\(.*\\): (\\d+)$`, 'm'));
+        assert.ok(m, `${cls} ${fld}`);
+        const rows = acc.slice(m.index).split('\n').slice(1).filter((l) => !l.startsWith('#')).slice(0, +m[1]);
+        rows.forEach((r) => assert.match(r, new RegExp(`Field ${fld}:`)));
+        return rows.map((r) => `${r.split(' :: ')[0].replace(/^\S+ \S+ /, '')} ${r.split(' :: ')[1].split(/\s+/)[1]}`);
+    };
+    assert.deepEqual(listed('vp', 'aE'), []);
+    assert.deepEqual(listed('aed', 'aE'), ['B_(); getfield', 'B_(); putfield', 'n(float); getfield', 'ds(); putfield']);
+    assert.deepEqual(listed('vp', 'bc'), ['a(ur, float); getfield', 'a(ur, float); getfield', 'a(ur, float); putfield', 'a(ur, float); putfield']);
+    assert.deepEqual(listed('aed', 'bc'), []);
+    assert.match(section(jp, 'SRG names'), /FD: vp\/bc net\/minecraft\/entity\/EntityLivingBase\/field_110153_bc/);
     inOrder(section(jp, 'aed onUpdate B_()'), 'Field aE:I', 'iadd', 'putfield');
     assert.ok(!C.notSettled.some((x) => /NullPointerException|getCoolPeriod/.test(x)));
     assert.match(C.mobsHittingPlayer.summary, /An armed mob takes the same path/);
@@ -168,6 +186,10 @@ test('weapons: Material Changer rewrites the stone axe, stone sword and crude ax
     assert.deepEqual([W('pyrotech:crude_axe').attackDamage, W('pyrotech:crude_axe').attackSpeed, W('pyrotech:crude_axe').durability], [3, 0.9, 8]);
     assert.deepEqual([W('minecraft:stone_sword').attackDamage, W('minecraft:stone_sword').attackSpeed], [3.5, 1.6]);
     assert.deepEqual([W('minecraft:wooden_sword').attackDamage, W('hand').attackDamage, W('hand').cooldownTicks], [4, 1, 5]);
+    // Better Combat's packet: [damage, speed, ticks, crit chance].
+    const bc = (k) => [W(k).bcAttackDamage, W(k).bcAttackSpeed, W(k).bcCooldownTicks, W(k).bcCritChance];
+    assert.deepEqual(['minecraft:stone_axe', 'pyrotech:crude_axe', 'minecraft:stone_sword', 'minecraft:wooden_sword', 'hand'].map(bc),
+        [[3, 0.4, 50, 0.25], [3, 0.9, 22, 0.25], [3.5, 1.5, 13, 0.1], [4, 1.8, 11, 0.1], [0.5, 1.5, 13, 0.05]]);
     assert.match(W('minecraft:wooden_sword').note, /removeAndHide/);
     assert.ok(configs.includes('scripts/minecraft_(max-file-size).zs:1079: JEI.removeAndHide(<minecraft:wooden_sword>);'));
     assert.equal(W('minecraft:nothing'), null);
@@ -251,10 +273,67 @@ test('armour: vanilla formula and materials; In Control gives a zombie at most o
     assert.equal(afterArmor(0.8, 2), 0.8 * (1 - 1.6 / 25));
 });
 
+test('Better Combat\'s packet: 0.5 off an empty hand, random and sneak-attack crits, its client\'s pacing', () => {
+    const p = C.playerAttack.betterCombatPacket;
+    // The unarmed & non-weapon reduction: a flat subtraction unless the item is in the weapon class whitelist.
+    const u = section(jp, 'Better Combat Helpers.playerAttackVictimWithWeapon: weapon check');
+    inOrder(u, 'getMainhandAttackDamage', 'dstore        22', 'isConfigWeapon', 'ifeq          530', '530: dload         22', 'fistAndNonWeaponDamageReduction', 'dsub', 'dstore        22');
+    inOrder(section(jp, 'Better Combat ConfigurationHandler.isConfigWeapon'), 'isItemClassWhiteList', 'isBlacklisted', 'itemClassWhiteArray', 'Class.isInstance');
+    const keys = section(jp, 'Better Combat ConfigurationHandler: config keys read');
+    inOrder(keys, '# fistAndNonWeaponDamageReduction', 'String Unarmed & Non-Weapon Damage Reduction', 'putstatic', 'fistAndNonWeaponDamageReduction');
+    inOrder(keys, '# fistAndNonWeaponAttackSpeed', 'String Unarmed\n', 'String Unarmed & Non-Weapon Attack Speed', 'fistAndNonWeaponAttackSpeed');
+    inOrder(keys, '# itemClassWhitelist', 'String White/Black Lists', 'String (Class) Item Weapon Whitelist', 'itemClassWhitelist');
+    inOrder(keys, '# swordList', 'String Swords', 'String Sword Tweaker', 'swordList');
+    inOrder(keys, '# autoCritOnSneakAttacks', 'String Critical Strikes', 'String Auto Critical On Sneak Attacks', 'autoCritOnSneakAttacks');
+    assert.match(cfg('config/bettercombat.cfg', /"Unarmed & Non-Weapon Damage Reduction"=/), /:732: .*=0\.5$/);
+    assert.match(cfg('config/bettercombat.cfg', /"Unarmed & Non-Weapon Attack Speed"=/), /:729: .*=1\.5$/);
+    assert.match(cfg('config/bettercombat.cfg', /^config\/bettercombat\.cfg:727: unarmed \{/), /unarmed/);
+    for (const [n, cls] of [[840, 'ItemSword'], [841, 'ItemTool'], [842, 'ItemHoe']]) assert.match(cfg('config/bettercombat.cfg', new RegExp(`:${n}:`)), new RegExp(`net\\.minecraft\\.item\\.${cls}$`));
+    assert.match(cfg('config/bettercombat.cfg', /:839:/), /\(Class\) Item Weapon Whitelist/);
+    assert.equal(p.unarmedDamageReduction, 0.5);
+    assert.equal(C.weapons.hand.bcWeapon, false);
+    // Crits: chance = the attribute + (the matched weapon's [Crit Chance] - its base); x CRIT_DAMAGE; sneak attacks always crit.
+    const cr = section(jp, 'Better Combat Helpers.playerAttackVictimWithWeapon: crits');
+    inOrder(cr, 'autoCritOnSneakAttacks', 'IMob', 'EntityLiving', 'func_70638_az', 'if_acmpeq', 'func_70643_av', 'if_acmpeq', 'iconst_1', 'istore        5');
+    inOrder(cr, 'baseCritPercentChance', 'jumpCrits', 'luckCritModifier', 'nextFloat', 'dcmpl', 'istore        5', 'iload         5', 'ForgeHooks.getCriticalHit', 'dload         22', 'dload         12', 'dmul', 'dstore        22', 'playerAttackedVictim');
+    inOrder(section(jp, 'Better Combat Helpers.playerAttackVictimWithWeapon: calls and field reads'), 'critChanceMod', 'func_111125_b', 'additionalCritDamageMod');
+    inOrder(section(jp, 'Better Combat EventHandlers static init'), 'String bettercombat.critChance', 'baseCritPercentChance', 'CRIT_CHANCE', 'String bettercombat.critDamage', 'baseCritPercentDamage', 'CRIT_DAMAGE');
+    assert.match(cfg('config/bettercombat.cfg', /"Base Critical Percent Chance"=/), /=0\.05$/);
+    assert.match(cfg('config/bettercombat.cfg', /"Base Critical Percent Damage"=/), /=1\.5$/);
+    assert.match(cfg('config/bettercombat.cfg', /"Auto Critical On Sneak Attacks"=/), /=true$/);
+    assert.match(cfg('config/bettercombat.cfg', /Weapon Substring=_sword\]/), /:343: .*\[Crit Chance=0\.1\]\s+\[Additional Crit Damage=0\.0\]/);
+    assert.match(cfg('config/bettercombat.cfg', /Weapon Substring=_axe\]/), /:350: .*\[Crit Chance=0\.25\]\s+\[Additional Crit Damage=0\.0\]/);
+    assert.equal(p.crit.multiplier, 1.5);
+    // Client pacing: (int)(20 / speed + 0.5), at least 8; a non-weapon uses 1.5; the Sword Tweaker shifts vanilla swords.
+    const pace = section(jp, 'Better Combat EventHandlersClient.getMainhandCooldown');
+    inOrder(pace, 'hasConfigWeapon', 'field_188790_f', 'func_111125_b', 'fistAndNonWeaponAttackSpeed', 'func_111122_c', 'ItemSword', 'swords', 'String.contains', 'attackSpeed', 'dadd', 'calculateAttackSpeedTicks');
+    inOrder(method(pace, 'calculateAttackSpeedTicks('), 'double 20.0d', 'calculateAttribute', 'double 0.1d', 'double 20.0d', 'ddiv', 'addedSwingTickCooldown', 'dadd', 'd2i');
+    inOrder(section(jp, 'Better Combat BetterCombatHand.setAttackCooldown'), 'minimumAttackSpeedTicks', 'if_icmpge', 'minimumAttackSpeedTicks', 'putfield');
+    assert.match(cfg('config/bettercombat.cfg', /Sword Substring=stone_sword/), /:688: .*\[Additional Attack Speed=-0\.1\]/);
+    assert.match(cfg('config/bettercombat.cfg', /Sword Substring=wooden_sword/), /:689: .*\[Additional Attack Speed=0\.2\]/);
+    assert.match(cfg('config/bettercombat.cfg', /Added Attack Speed Tick Cooldown"=/), /=0\.5$/);
+    assert.deepEqual([p.clientPacing.minimumTicks, p.clientPacing.addedTicks, p.clientPacing.unarmedAttackSpeed], [8, 0.5, 1.5]);
+    assert.ok(!C.notSettled.some((x) => /pacing/.test(x)));
+    // A crit, and lastDamage still does not matter on this path.
+    assert.equal(pack.meleeHitDamage({ weapon: 'minecraft:stone_sword', crit: true }), 3.5 * 1.5 * 0.8);
+    assert.equal(pack.meleeHitDamage({ weapon: 'hand' }), 0.5 * 0.8);
+    assert.equal(pack.meleeHitDamage({ weapon: 'hand', path: 'vanilla' }), 1 * 0.8, 'the vanilla packet has no unarmed reduction');
+});
+
 test('the soak 7 fight: a zombie with a chainmail helmet', () => {
     const fight = (weapon, path, armorItems = ['minecraft:chainmail_helmet']) => hitsToKillFromIndex({ mob: 'minecraft:zombie', weapon, path, armorItems });
     // Better Combat's packet: every hit counts.
-    assert.deepEqual([fight('minecraft:stone_axe').hits, fight('pyrotech:crude_axe').hits, fight('minecraft:stone_sword').hits, fight('hand').hits], [10, 10, 8, 30]);
+    assert.deepEqual([fight('minecraft:stone_axe').hits, fight('pyrotech:crude_axe').hits, fight('minecraft:stone_sword').hits, fight('hand').hits], [10, 10, 8, 59]);
+    // Without the helmet (the net-forge test-server run): stone sword 8, stone axe 9, bare hand 54 (0.5 - not 1 - a punch).
+    assert.deepEqual(['minecraft:stone_sword', 'minecraft:stone_axe', 'hand'].map((w) => fight(w, 'bettercombat', []).hits), [8, 9, 54]);
+    // Random crits only lower the count: every hit a crit is the fewest; a sneak attack crits the first hit.
+    assert.deepEqual(['minecraft:stone_sword', 'minecraft:stone_axe', 'hand'].map((w) => fight(w, 'bettercombat', []).minHits), [5, 6, 36]);
+    // (stone sword 4.13 then 2.73s: 7; the hand's 0.56 crit saves none of its 54.)
+    assert.equal(hitsToKillFromIndex({ mob: 'minecraft:zombie', weapon: 'minecraft:stone_sword', sneakAttack: true }).hits, 7);
+    assert.equal(hitsToKillFromIndex({ mob: 'minecraft:zombie', weapon: 'hand', sneakAttack: true }).hits, 54);
+    // Ticks at Better Combat's pacing: the stone sword 13 a hit, the hand 13, the stone axe 50.
+    assert.deepEqual([fight('minecraft:stone_sword').ticks, fight('hand', 'bettercombat', []).ticks, fight('minecraft:stone_axe', 'bettercombat', []).ticks], [7 * 13, 53 * 13, 8 * 50]);
+    assert.equal(fight('minecraft:stone_sword', 'vanilla').cooldownTicks, 12.5);
     assert.equal(fight('minecraft:stone_axe').armor, 4);
     // Without the helmet the axe needs one hit fewer; full chainmail (armour 14) about doubles every count.
     assert.equal(fight('minecraft:stone_axe', 'bettercombat', []).hits, 9);
@@ -262,8 +341,8 @@ test('the soak 7 fight: a zombie with a chainmail helmet', () => {
     // The vanilla packet: the first hit (2.4 after x0.8) is all the zombie ever takes.
     for (const w of ['minecraft:stone_axe', 'minecraft:stone_sword', 'hand']) assert.equal(fight(w, 'vanilla').hits, Infinity, w);
     // The stone sword is the better weapon here: more damage per tick of cooldown than either axe.
-    const per = (w) => pack.meleeHitDamage({ weapon: w }) / pack.weaponStats(w).cooldownTicks;
-    assert.ok(per('minecraft:stone_sword') > per('pyrotech:crude_axe') && per('pyrotech:crude_axe') > per('minecraft:stone_axe'));
+    const per = (w) => pack.meleeHitDamage({ weapon: w }) / pack.weaponStats(w).bcCooldownTicks;
+    assert.ok(per('minecraft:stone_sword') > per('pyrotech:crude_axe') && per('pyrotech:crude_axe') > per('minecraft:stone_axe') && per('minecraft:stone_axe') > per('hand'));
     assert.throws(() => pack.meleeHitDamage({ path: 'other' }));
 });
 

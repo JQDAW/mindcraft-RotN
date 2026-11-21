@@ -32,7 +32,8 @@ export const CAPTURE_CAPS = Object.freeze({
         login: 5, map_chunk: 40, window_items: 50, set_slot: 300, entity_effect: 100, remove_entity_effect: 100, kick_disconnect: 5,
         spawn_entity_living: 100, spawn_entity: 100, entity_metadata: 300, open_window: 20, transaction: 300, close_window: 20, block_change: 300,
     }),
-    C2S: Object.freeze({ window_click: 300, set_creative_slot: 20, held_item_slot: 50, transaction: 300, close_window: 20, block_place: 100, use_item: 50 }),
+    // use_entity and arm_animation: both attack paths (net-forge #526, G4 soak 7), so a run can measure the gaps between hits.
+    C2S: Object.freeze({ window_click: 300, set_creative_slot: 20, held_item_slot: 50, transaction: 300, close_window: 20, block_place: 100, use_item: 50, use_entity: 2000, arm_animation: 2000 }),
 });
 
 /** The capture's records, skipping lines that are not JSON. */

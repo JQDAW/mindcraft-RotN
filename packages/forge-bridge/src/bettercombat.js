@@ -28,6 +28,7 @@
 // config/bettercombat.cfg (the numbers are in BC_CONFIG).
 
 import { Buffer } from 'node:buffer';
+import { performance } from 'node:perf_hooks';
 import { Reader, Writer, WireError } from './wire.js';
 
 export const BC_MODID = 'bettercombat';
@@ -89,6 +90,12 @@ export function attributeValue(attr) {
 // Better Combat counts ItemSword, ItemTool and ItemHoe as weapons (its "(Class) Item
 // Whitelist"). The client cannot see classes, so this goes by name. An item this does not
 // recognise gets the slower of the two possible cooldowns (see bcCooldownTicks).
+// Pyrotech's crude tools are weapons by class too (javap on pyrotech-1.12.2-1.5.25.jar from the
+// pinned zip, and the vanilla 1.12.2 server jar mapped with Forge's deobfuscation_data):
+// ItemCrudeAxe (registry name crude_axe) extends ItemAxeBase extends ItemAxe (agy) extends
+// ItemTool (ahq); the crude pickaxe, shovel and hoe extend ItemPickaxe, ItemSpade and ItemHoe.
+// Better Combat matches its class list with Class.isInstance (ConfigurationHandler), so
+// subclasses count: pyrotech:crude_axe has the weapon reach, 4.0.
 const WEAPON_NAME = /(?:^|[_:])(?:sword|axe|pickaxe|shovel|spade|hoe)$/;
 
 export function isBcWeaponName(name) {
@@ -212,6 +219,10 @@ function defaultLineOfSight(bot, eye, target) {
  * - Better Combat path: wait out the cooldown, then send arm_animation (main hand), then
  *   PacketMainhandAttack(target.id). It never sends use_entity as well. A newer call
  *   replaces a waiting one; the replaced call resolves { sent: false, reason: 'replaced' }.
+ *   A waiting call whose target is gone (isValid false, or no longer in bot.entities) when
+ *   its cooldown is up sends nothing and resolves { sent: false, reason: 'gone' }; it does
+ *   not count toward the self-check.
+ * - The clock is performance.now() (monotonic), so a wall-clock step cannot send early.
  * - Vanilla path: any of these sends the vanilla attack instead:
  *   - the setting is off;
  *   - the server lacks the mod or the channel;
@@ -229,14 +240,14 @@ function defaultLineOfSight(bot, eye, target) {
  */
 export function installBetterCombatAttack(bot, {
     bridge, enabled, log = (m) => console.log(`[forge-bridge] ${m}`),
-    now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout,
+    now = () => performance.now(), setTimer = setTimeout, clearTimer = clearTimeout,
     lineOfSight = defaultLineOfSight, checkMs = 500, maxMisses = 5,
 } = {}) {
     const st = {
         enabled: !!enabled, tripped: false, misses: 0,
         lastSwingAt: -Infinity, itemKey: undefined, itemChangedAt: -Infinity,
         pending: null,
-        stats: { bettercombat: 0, vanilla: 0, waits: 0, replaced: 0, misses: 0 },
+        stats: { bettercombat: 0, vanilla: 0, waits: 0, replaced: 0, gone: 0, misses: 0 },
     };
     const checks = new Map(); // target id -> [{ timer, done }]
 
@@ -286,6 +297,13 @@ export function installBetterCombatAttack(bot, {
     }
     bot.on?.('entityHurt', onHurt);
     bot.on?.('entityDead', onHurt);
+    // A target that leaves the bot's view proves nothing either way: its checks are dropped, not missed.
+    bot.on?.('entityGone', (entity) => {
+        const list = entity && checks.get(entity.id);
+        if (!list) return;
+        checks.delete(entity.id);
+        for (const c of list) { c.done = true; clearTimer(c.timer); }
+    });
 
     function watch(id) {
         const c = { done: false, timer: null };
@@ -320,12 +338,25 @@ export function installBetterCombatAttack(bot, {
         return { sent: true, path: 'bettercombat', waitedMs };
     }
 
+    // The target of a waiting call died, despawned or left the bot's view while it waited.
+    function gone(target) {
+        if (target?.isValid === false) return true;
+        const id = target?.id;
+        return id !== undefined && id !== null && !!bot.entities && !bot.entities[id];
+    }
+
     function schedule() {
         const p = st.pending;
         const ticks = cooldownTicks();
         const delay = ticks === null ? 0 : Math.max(0, readyAt(ticks) - now());
         p.timer = setTimer(() => {
             if (st.pending !== p) return;
+            if (gone(p.target)) {
+                st.pending = null;
+                st.stats.gone++;
+                p.resolve({ sent: false, path: null, waitedMs: now() - p.since, reason: 'gone' });
+                return;
+            }
             if (!active()) { st.pending = null; p.resolve(vanilla(p.target, p.swing, now() - p.since)); return; }
             const r = fire(p.target, p.swing, now() - p.since);
             if (r === null) { schedule(); return; }
