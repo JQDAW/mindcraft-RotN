@@ -12,8 +12,8 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
-import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable } from "./threats.js";
-import { logAte, fightJournal } from "./survival_log.js";
+import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, weaponCooldownMs } from "./threats.js";
+import { logAte, fightJournal, swingLine } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
 import pf from 'mineflayer-pathfinder';
@@ -810,8 +810,11 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
  * #331 review 3: a fight is capped (maxMs, maxSwings, and sameTargetSwings hits on one mob whose
  * health did not go down), so the night routine gets to repair the opening; after a fight,
  * self_defense waits restMs before it fights again, so the repair starts first.
+ * Soak 7 (death 1): never capped while the mob is in reach and hurting the bot (the cap ended the
+ * bot's hits, not the zombie's). swingMs null: each swing waits for the held weapon's cooldown
+ * (threats.weaponCooldownMs; 600 ms before, under an axe's 1250); a number overrides it (tests).
  */
-export const SHELTER_FIGHT = { reach: 3, swingMs: 600, maxMs: 6000, maxSwings: 8, sameTargetSwings: 4, restMs: 1500 };
+export const SHELTER_FIGHT = { reach: 3, swingMs: null, maxMs: 6000, maxSwings: 8, sameTargetSwings: 4, restMs: 1500 };
 
 /** Whether an entity is within SHELTER_FIGHT.reach of the bot's feet. */
 export function inShelterReach(bot, entity) {
@@ -826,7 +829,9 @@ const healthOf = (e) => (Number.isFinite(e?.health) ? e.health : Number.isFinite
  * nearest enemy within SHELTER_FIGHT.reach while one is in reach and keepFighting(enemy) holds (PR 5:
  * the mob in reach, for its maxDamage), at
  * most SHELTER_FIGHT.maxMs and maxSwings, and at most sameTargetSwings hits on one mob whose
- * health does not go down (when it is known). No walk and no mineflayer-pvp (pvp.attack follows
+ * health does not go down (when it is known); none of these caps while the mob is in its reach and
+ * hurting the bot (soak 7: threats.hurtingInReach). Each swing waits for the weapon's cooldown and
+ * is journaled ("[survival] swing ..."). No walk and no mineflayer-pvp (pvp.attack follows
  * its target, which took the bot out of the shelter). While it runs, bot.rotnFightingInPlace is
  * true (#334 nit: nothing else takes a block in hand then); at the end bot.rotnFightEndedAt is set.
  * @returns {Promise<boolean>} true when it hit something.
@@ -841,25 +846,45 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
     const nearest = () => world.getNearestEntityWhere(bot, (e) => isEnemy(e) && inShelterReach(bot, e), SHELTER_FIGHT.reach + 1);
     const journal = fightJournal(bot, 'shelter'); // G4 #5: "[survival] fight start/end"
     let outcome = 'gone';
+    let last = null; // the swing before: {mob, item, sinceMs, before}, journaled at the next look
+    const sayLast = () => {
+        if (!last) return;
+        const now = bot.entities?.[last.mob.id];
+        console.log(swingLine(last.mob.name, last.item, last.sinceMs, last.before, now ? healthOf(now) : 'gone'));
+        last = null;
+    };
+    let lastSwingAt = null;
     bot.rotnFightingInPlace = true;
     try {
         for (let enemy = nearest(); enemy; enemy = nearest()) {
-            if (Date.now() - start >= SHELTER_FIGHT.maxMs) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; outcome = 'capped'; break; }
-            if (swings >= SHELTER_FIGHT.maxSwings) { why = `${swings} swings`; outcome = 'capped'; break; }
+            const pressed = hurtingInReach(bot, enemy);
+            if (!pressed && Date.now() - start >= SHELTER_FIGHT.maxMs) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; outcome = 'capped'; break; }
+            if (!pressed && swings >= SHELTER_FIGHT.maxSwings) { why = `${swings} swings`; outcome = 'capped'; break; }
             const health = healthOf(enemy);
             if (same.id !== enemy.id || health === null || health !== same.health) Object.assign(same, { id: enemy.id, health, hits: 0 });
-            else if (same.hits >= SHELTER_FIGHT.sameTargetSwings) { why = `${same.hits} hits did not hurt the ${enemy.name}`; outcome = 'capped'; break; }
+            else if (!pressed && same.hits >= SHELTER_FIGHT.sameTargetSwings) { why = `${same.hits} hits did not hurt the ${enemy.name}`; outcome = 'capped'; break; }
             journal.start(enemy);
-            await bot.lookAt(enemy.position.offset(0, (enemy.height ?? 1.8) * 0.8, 0), true);
             await equipHighestAttack(bot, fight); // just before the swing (#334 nit)
+            const item = bot.heldItem ?? null;
+            const cooldown = SHELTER_FIGHT.swingMs ?? weaponCooldownMs(item);
+            if (lastSwingAt !== null && Date.now() - lastSwingAt < cooldown) {
+                await new Promise(resolve => setTimeout(resolve, cooldown - (Date.now() - lastSwingAt)));
+                if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
+                if (!bot.entities?.[enemy.id] || !inShelterReach(bot, enemy)) continue; // gone or out of reach while waiting: look again
+            }
+            sayLast();
+            await bot.lookAt(enemy.position.offset(0, (enemy.height ?? 1.8) * 0.8, 0), true);
+            const swungAt = Date.now();
+            last = { mob: enemy, item: item?.name ?? null, sinceMs: lastSwingAt === null ? null : swungAt - lastSwingAt, before: healthOf(enemy) };
+            lastSwingAt = swungAt;
             bot.attack(enemy);
             swings++;
             same.hits++;
-            await new Promise(resolve => setTimeout(resolve, SHELTER_FIGHT.swingMs));
             if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
             if (!keepFighting(nearest() ?? enemy)) { why = 'the situation changed'; outcome = 'stopped'; break; }
         }
     } finally {
+        sayLast();
         bot.rotnFightingInPlace = false;
         bot.rotnFightEndedAt = Date.now();
         journal.end(outcome);

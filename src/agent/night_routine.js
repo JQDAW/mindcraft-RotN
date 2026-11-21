@@ -21,7 +21,7 @@ import { stowCarried, toolAllows } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
-import { hasWeapon, shelterEnemy, shelterTarget, threatFor, isPlayerZombie, canFightHard, maxHitOf } from './library/threats.js';
+import { hasWeapon, shelterEnemy, shelterTarget, threatFor, isPlayerZombie, canFightHard, maxHitOf, inMeleeReach, meleeReach, fightNumbers, fightOdds, hurtingInReach } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
 import { say, isGiverGoal, ownsPrompt } from './agenda_driver.js';
@@ -147,7 +147,7 @@ export function resetNight(agent, why) {
  * The morning rule's state (#477 review 1: resetNight, leaveShelterFor and the hand-back clear it all;
  * a stale "leaving" would silence the shelter fight, the hurt-eating and the hand fight a whole night).
  */
-const MORNING_CLEAR = { morningAct: null, morningWhy: null, morningLeaving: false, mobFirst: null, mobStateSaid: false, mobGoneAt: null };
+const MORNING_CLEAR = { morningAct: null, morningWhy: null, morningLeaving: false, mobFirst: null, mobStateSaid: false, mobGoneAt: null, closeSaid: null, closeBurrowTried: null, closeBurrowWhy: null, closeSealTried: null, capHeldSaid: false, capReleaseSaid: false };
 
 export function leaveShelterFor(agent, why) {
     const n = agent?._night;
@@ -238,19 +238,7 @@ function startBurrow(agent, n, ops, threat) {
     line(agent, `[night] ${aMob(name)} (digs through anything) ${threat.d.toFixed(1)} blocks from the shelter at ${at(n.site)}: burrowing away from it`);
     startJob(agent, n, BURROW_LABEL, () => ops.burrowAway(bot, mob, { maxSteps: BURROW.maxSteps - (n.burrowSteps ?? 0) }), (r) => {
         n.burrowSteps = (n.burrowSteps ?? 0) + (r?.steps ?? 0);
-        const here = bot.entity.position.floored();
-        if (n.site && !here.equals(n.site)) {
-            // #507 review 3: pitOut assumes the hole's 3 below the surface; after a burrow that changed
-            // the bot's level, the morning digs out with digOut from where it is.
-            if (here.y !== n.site.y) n.pit = false;
-            n.site = here;
-            n.repairStall = null;
-            n.checkedAt = null;
-            n.pocketTried = true; // the hole's side pocket is no longer under the bot's roof
-            n.closedOn = { at: exactAt(bot), floor: bot.blockAt?.(here.offset(0, -1, 0))?.name ?? 'unknown' };
-            const still = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody: n.tolerated });
-            bot.rotnSheltered = still && still.todo.length === 0 ? true : 'open';
-        }
+        const here = burrowedInto(bot, n, ops);
         const far = r?.stopped === 'far' || r?.stopped === 'gone';
         // #507 review 4: when the burrow ended (up to BURROW.maxMs after the tick that started it).
         n.burrowNoneAt = far ? null : (ops.now ?? Date.now)();
@@ -457,7 +445,7 @@ const exitWalk = (bot, goal) => goToGoal(bot, goal, { canDig: false });
  * capMs: never later than this, it hands back to the agenda. goneMs: a mob out of range for less
  * than this keeps the wait's start (and the cap).
  */
-export const MORNING = { waitMs: 2 * 60_000, capMs: 5 * 60_000, fightHealth: 14, fleeHealth: 12, maxFight: 1, dangerRange: 16, awayDist: 16, goneMs: 30_000 };
+export const MORNING = { waitMs: 2 * 60_000, capMs: 5 * 60_000, fightHealth: 14, fleeHealth: 12, maxFight: 1, dangerRange: 16, awayDist: 16, goneMs: 30_000, capQuietMs: 30_000 };
 
 /**
  * #477 review 2: why the morning fight must not go on (more than maxFight hostile mobs within
@@ -473,8 +461,14 @@ export function morningDanger(bot, site) {
     return null;
 }
 
-/** The morning choice with a mob near: {action: 'fight'|'leave', why}. pit: a hole or side-pocket shelter. */
-export function morningChoice(bot, site, { pit = false } = {}) {
+/**
+ * The morning choice with a mob near: {action: 'fight'|'leave', why}. pit: a hole or side-pocket shelter.
+ * Soak 7 (death 1, A), the lead's rule: a fight only when it is winnable by the numbers
+ * (threats.fightOdds: the bot ends it above what the mob may hit for). Until rotn-data publishes
+ * the mob's health, its attack interval and our weapon's damage (asked after soak 7), no fight is
+ * judged winnable, so the bot leaves by the far side. numbers: tests pass their own.
+ */
+export function morningChoice(bot, site, { pit = false, numbers = fightNumbers } = {}) {
     const c = site.offset(0.5, 0, 0.5);
     const near = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && shelterEnemy(e) && e.position.distanceTo(c) <= LEAVE_MOB_RANGE);
     const health = Math.round(bot.health ?? 0);
@@ -485,7 +479,9 @@ export function morningChoice(bot, site, { pit = false } = {}) {
     const danger = morningDanger(bot, site);
     if (danger) return { action: 'leave', why: danger };
     if (near[0] && isPlayerZombie(near[0]) && !canFightHard(bot)) return { action: 'leave', why: 'a player zombie, and no weapon or health at half or less' };
-    return { action: 'fight', why: `armed, health ${health}, one ${near[0]?.name ?? 'mob'} near` };
+    const odds = fightOdds(numbers(bot, near[0] ?? null), maxHitOf(near[0] ?? null));
+    if (!odds.winnable) return { action: 'leave', why: `armed, health ${health}, but ${odds.why}` };
+    return { action: 'fight', why: `armed, health ${health}, one ${near[0]?.name ?? 'mob'} near (${odds.why})` };
 }
 
 /** The shelter's side facing pos (a mob): the horizontal direction most towards it (x first on a tie). */
@@ -677,6 +673,141 @@ const aMob = (name) => `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}`;
 
 /** "a zombie at x, y, z" for hostileNear's mob (tests' ops may return just true). */
 const mobText = (e) => e?.position ? `a ${e.name ?? e.displayName ?? 'hostile mob'} at ${at(e.position.floored())}` : 'a hostile mob';
+
+/**
+ * Soak 7 (death 1, C): the zombie walked through the opened wall into the bot's cell, the bot fell
+ * below MORNING.fleeHealth, and the morning rule "left by the side away from it": there is no side
+ * away from a mob in the bot's own cell, and the bot stood still, hit from 11 to 0. The nearest
+ * hostile mob whose body is in the bot's two cells (inCell), or, while the shelter is open toward
+ * it (exposed), a melee mob within its reach (threats.inMeleeReach), as {mob, inCell, d}; else null.
+ */
+export function closeMob(bot, site, { exposed = true } = {}) {
+    const here = bot?.entity?.position;
+    if (!here || !site) return null;
+    const cells = [site, site.offset(0, 1, 0)];
+    let best = null;
+    for (const e of Object.values(bot.entities ?? {})) {
+        if (!e || e === bot.entity || !e.position || !shelterEnemy(e)) continue;
+        const inCell = cells.some(c => Math.floor(e.position.x) === c.x && Math.floor(e.position.z) === c.z
+            && e.position.y > c.y - (e.height ?? 1.8) && e.position.y < c.y + 1); // as shelter.js mobIn
+        if (!inCell && !(exposed && shelterTarget(e) && inMeleeReach(bot, e))) continue;
+        const d = e.position.distanceTo(here);
+        if (!best || d < best.d) best = { mob: e, inCell, d };
+    }
+    return best;
+}
+
+/** Soak 7 (C): a burrow away from a mob in reach: at most this many steps, until its reach + margin. */
+export const CLOSE = { burrowSteps: 3, margin: 0.5 };
+
+/** The bot moved out of n.site (a burrow): its new cell is the shelter, held or repaired there. */
+function burrowedInto(bot, n, ops) {
+    const here = bot.entity.position.floored();
+    if (!n.site || here.equals(n.site)) return here;
+    // #507 review 3: pitOut assumes the hole's 3 below the surface; after a burrow that changed
+    // the bot's level, the morning digs out with digOut from where it is.
+    if (here.y !== n.site.y) n.pit = false;
+    n.site = here;
+    n.repairStall = null;
+    n.checkedAt = null;
+    n.pocketTried = true; // the hole's side pocket is no longer under the bot's roof
+    n.closedOn = { at: exactAt(bot), floor: bot.blockAt?.(here.offset(0, -1, 0))?.name ?? 'unknown' };
+    const still = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody: n.tolerated });
+    bot.rotnSheltered = still && still.todo.length === 0 ? true : 'open';
+    return here;
+}
+
+/** closeMob for the shelter now: {close, todo}, with the shelter's open cells (exposed when any, or when 'open'). */
+function closeNow(bot, n, ops) {
+    const need = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody: n.tolerated });
+    const todo = need?.todo ?? [];
+    return { close: (ops.closeMob ?? closeMob)(bot, n.site, { exposed: bot.rotnSheltered === 'open' || todo.length > 0 }), todo };
+}
+
+/**
+ * #514 review 2: MORNING.capMs never hands back with a mob in the bot's cell or in reach (closeNow):
+ * the bot stays sheltered (handFight kept) and the hand-back waits until the mob is gone.
+ * #514 re-review: not without end: a mob that is not in the bot's cell and has not hurt it for
+ * MORNING.capQuietMs (threats.hurtingInReach) lets the far-side leave go ahead; never past a mob in
+ * the cell. Returns 'night:inside' while it holds, 'release' when the leave may go ahead, null when
+ * no mob is in the cell or in reach.
+ */
+function holdPastCap(agent, n, ops) {
+    const bot = agent.bot;
+    const { close } = closeNow(bot, n, ops);
+    if (!close) return null;
+    const name = aMob(close.mob.name ?? 'hostile mob');
+    if (!close.inCell && !hurtingInReach(bot, close.mob, Date.now(), MORNING.capQuietMs)) {
+        const text = `[night] morning: ${MORNING.capMs / 60_000} min are up and ${name} ${close.d.toFixed(1)} blocks away has not hurt the bot for ${MORNING.capQuietMs / 1000} s: leaving by the side away from it`;
+        if (n.capReleaseSaid) console.log(text); else { n.capReleaseSaid = true; line(agent, text); }
+        return 'release';
+    }
+    const text = `[night] morning: ${MORNING.capMs / 60_000} min are up, but ${name} is still ${close.inCell ? 'in the bot\'s cell' : 'in reach and hurt the bot within ' + MORNING.capQuietMs / 1000 + ' s'} at ${at(n.site)}: staying sheltered until it is gone`;
+    if (n.capHeldSaid) console.log(text); else { n.capHeldSaid = true; line(agent, text); }
+    return 'night:inside';
+}
+
+/**
+ * Soak 7 (C), the lead's order, before the morning leaves with a mob in the bot's cell or in reach
+ * of it through an opening (closeMob): (i) the shelter's open cells hold no body: close them again
+ * (the repair); (ii) a melee mob, armed, and health above what it may hit for (maxHitOf): fight on
+ * from the shelter (self_defense); (iii) burrow away from it, a step down first (once per mob);
+ * (iv) a melee mob and no burrow step: hit back (handFight). A mob that is no melee mob with no seal
+ * or burrow: the leave as before. Returns the tick's result while it holds the bot, else null.
+ */
+function closeQuarters(agent, n, ops) {
+    const bot = agent.bot;
+    const { close, todo } = closeNow(bot, n, ops);
+    if (!close) { n.handFight = false; return null; }
+    const { mob, inCell } = close;
+    const name = mob.name ?? 'hostile mob';
+    const health = Math.round(bot.health ?? 0);
+    const said = (k, text) => { if (n.closeSaid === k) console.log(text); else { n.closeSaid = k; line(agent, text); } };
+    const lead = `[night] morning: ${aMob(name)} ${inCell ? `in the bot's cell at ${at(n.site)}` : `${close.d.toFixed(1)} blocks away, in its reach`}: not leaving past it`;
+    const held = todo.length ? (ops.heldCells?.(bot, n.site, todo) ?? []) : [];
+    // #514 review 1: the re-seal is tried once per mob and opening; a failed one (no blocks, a
+    // placement that fails) falls through to (ii)-(iv), so the repair does not hold the fight off.
+    const sealKey = `${mob.id ?? name}:${todo.map(key3).join(';')}`;
+    if (todo.length && !held.length && !inCell && n.closeSealTried !== sealKey) {
+        n.closeSealTried = sealKey;
+        said(`seal:${todo.map(key3).join(';')}`, `${lead}; closing the shelter again at ${todo.map(at).join('; ')}`);
+        startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody: n.tolerated }), (r) => {
+            if (r?.closed) { bot.rotnSheltered = true; n.handFight = false; console.log(`[night] morning: the shelter at ${at(n.site)} is closed again`); }
+        });
+        return 'night:inside';
+    }
+    const melee = shelterTarget(mob);
+    const armed = (ops.hasWeapon ?? hasWeapon)(bot);
+    const max = maxHitOf(mob);
+    if (melee && armed && Number.isFinite(bot.health) && bot.health > max) {
+        n.handFight = false;
+        if (bot.rotnSheltered !== true) bot.rotnSheltered = 'open';
+        said(`fight:${mob.id}`, `${lead}; armed, health ${health} above the ${max} it may hit for: fighting it from the shelter`);
+        return 'night:inside';
+    }
+    if (ops.burrowAway && n.closeBurrowTried !== (mob.id ?? name)) {
+        n.closeBurrowTried = mob.id ?? name;
+        said(`burrow:${mob.id}`, `${lead}; ${armed ? '' : 'no weapon, '}health ${health}, and it may hit for ${max}: burrowing away from it (a step down first)`);
+        const stopAt = meleeReach(mob) + CLOSE.margin;
+        startJob(agent, n, BURROW_LABEL, () => ops.burrowAway(bot, mob, { maxSteps: CLOSE.burrowSteps, stopAt, prefer: 'down' }), (r) => {
+            const here = burrowedInto(bot, n, ops);
+            const steps = r?.steps ?? 0;
+            n.closeBurrowWhy = r?.why ?? null;
+            const moved = steps ? `burrowed ${steps} step${steps === 1 ? '' : 's'} into ${at(here)}` : `did not burrow (still at ${at(here)})`;
+            const end = r?.stopped === 'far' ? 'out of its reach; sealed behind' : r?.stopped === 'gone' ? `${aMob(name)} is gone` : (r?.why ?? r?.stopped ?? 'no result');
+            line(agent, `[night] morning: ${moved}: ${end}`);
+        });
+        return 'night:inside';
+    }
+    if (melee) {
+        n.handFight = true;
+        if (bot.rotnSheltered !== true) bot.rotnSheltered = 'open';
+        said(`hand:${mob.id}`, `${lead}; ${armed ? '' : 'no weapon, '}health ${health}, and no burrow step${n.closeBurrowWhy ? ` (${n.closeBurrowWhy})` : ''}: ${armed ? 'hitting back' : 'hitting back by hand'}`);
+        return 'night:inside';
+    }
+    n.handFight = false;
+    return null;
+}
 
 /** What the routine does in the world (tests pass their own). */
 export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, onTree: standsOnTree, descend: (bot) => descendFromTree(bot),
@@ -1028,6 +1159,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             // a fixed 3 min handed back with the mob still there); the bound is below. A mob that
             // leaves ends its wait (mobSince): a later one gets its own, said again.
             const mob = ops.hostileNear?.(bot, LEAVE_MOB_RANGE);
+            if (!mob) n.handFight = false; // soak 7 (C): a cornered fight ends with its mob
             if (mob) n.mobGoneAt = null;
             else if (n.mobSince != null && !n.morningLeaving) {
                 // #477 nit: out of range for less than MORNING.goneMs, the wait's start (and the cap) stay.
@@ -1075,6 +1207,14 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     }
                 }
                 if (n.morningAct === 'leave') {
+                    // Soak 7 (C): no leave past a mob in the bot's cell or in reach of it; past the cap,
+                    // one that is not in the cell and has been quiet lets the leave go ahead (#514).
+                    const capped = waited >= MORNING.capMs ? holdPastCap(agent, n, ops) : null;
+                    if (capped === 'release') n.handFight = false;
+                    else {
+                        const holding = closeQuarters(agent, n, ops);
+                        if (holding) return holding;
+                    }
                     n.morningAct = 'leaving';
                     n.morningLeaving = true; // #477 review 2: busy from the first leave decision until the hand-back
                     line(agent, `[night] morning: ${n.morningWhy}: leaving the shelter at ${at(n.site)} by the side away from ${mobText(mob)}`);
@@ -1094,6 +1234,13 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     return 'night:inside';
                 }
                 if (waited >= MORNING.capMs) {
+                    const held = holdPastCap(agent, n, ops);
+                    if (held === 'release') { // the far-side leave, on the next tick
+                        n.morningAct = 'leave';
+                        n.morningWhy = `${MORNING.capMs / 60_000} min are up`;
+                        return 'night:inside';
+                    }
+                    if (held) return held;
                     handBack(`[night] morning: ${mobText(mob)} still near the shelter at ${at(n.site)} after ${MORNING.capMs / 60_000} min; back to work (the agenda and the reflexes decide; the shelter may still be closed)`);
                     return null;
                 }
