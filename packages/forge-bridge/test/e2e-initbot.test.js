@@ -155,7 +155,7 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.equal(mob.name, 'iceandfire:entity_4', 'iceandfire #4 is not in rotn-data\'s table: placeholder name');
     assert.equal(mob.forge.modId, 'iceandfire');
     assert.deepEqual([mob.position.x, mob.position.y, mob.position.z], [10, 65, 10]);
-    assert.equal(mob.type, 'other', 'not "mob" without a table entry, so Mindcraft does not treat it as hostile');
+    assert.equal(mob.type, 'other', 'no table entry and no living metadata (#550 review): not "mob", so Mindcraft does not treat it as hostile');
     // Vanilla packets for the FML entity's id update it through mineflayer's own handlers.
     let mobMoved = once(bot, 'entityMoved');
     server.state.client.write('entity_teleport', { entityId: 77, x: 20, y: 66, z: 21, yaw: 0, pitch: 0, onGround: true });

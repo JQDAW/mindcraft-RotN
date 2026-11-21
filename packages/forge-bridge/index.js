@@ -23,7 +23,7 @@ export { decideAgentExit, readExitReason, writeExitReason, recordAgentExit, crea
 export { extendRegistry, applyProperties } from './src/registry-extension.js';
 export { applyCollisionShapes, dumpShapesByMeta, validateCollisionOverrides, loadCollisionOverrides, hazardBlockIds, partialHazardBlockIds, liquidBlockIds, stateHazard, DYNAMIC_LEAVES_BOX, HAZARD_KINDS } from './src/collision.js';
 export { HORDES_CHANNEL, HORDES_DISC, HORDE_START_KEY, HORDE_END_KEY, decodeHordes, hordeEvent, attachHordeEvents } from './src/hordes.js';
-export { spawnFmlEntity, attachFmlEntities, fmlEntityName, fmlEntityTable } from './src/fml-entities.js';
+export { spawnFmlEntity, attachFmlEntities, fmlEntityName, fmlEntityTable, looksLiving, LIVING_METADATA } from './src/fml-entities.js';
 export { METADATA_SERIALIZER_TYPES, METADATA_SERIALIZER_CLASSES, rotnMetadataSerializers, metadataSerializersFromDump } from './src/reid.js';
 export { buildStateIdRemap, attachStateIdRemap, stateIdRemapStatus } from './src/state-remap.js';
 export { installGracefulQuit, GRACEFUL_STOP_SIGNALS, STOP_SIGNAL_CATEGORY } from './src/graceful-quit.js';
