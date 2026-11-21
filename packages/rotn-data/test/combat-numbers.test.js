@@ -59,6 +59,7 @@ test('vanilla attack packet: Better Combat forces the target into its invulnerab
     const bc = section(jp, 'Better Combat EventHandlers.cancelAttackEntityEvent');
     inOrder(bc, 'func_184614_ca', 'func_190926_b', 'func_184592_cb', 'func_190926_b', 'isBlacklisted', 'getTarget', 'instanceof', 'EntityLivingBase', 'field_70771_an', 'putfield', 'field_70172_ad');
     assert.doesNotMatch(bc, /setCanceled/);
+    inOrder(bc, 'field_70172_ad', 'func_85031_j', 'return');
     inOrder(section(jp, 'Better Combat ConfigurationHandler blacklist checks'), 'isItemClassBlackList', 'isItemBlackList', 'itemClassBlackArray', 'isInstance', 'itemBlacklist', 'getRegistryName');
     // The lists the code reads (category "white/black lists") are empty on this pack.
     assert.ok(configs.includes('config/bettercombat.cfg:803: "white/black lists" {'));
@@ -81,6 +82,7 @@ test('vanilla attack packet: Better Combat forces the target into its invulnerab
     const a = section(jp, 'vp (EntityLivingBase, Forge-patched) attackEntityFrom');
     inOrder(a, 'ForgeHooks.onLivingAttack', 'Field V:I', 'Field aI:I', 'fconst_2', 'fdiv', 'fcmpl', 'ifle', 'Field bc:F', 'fcmpg', 'ifgt', 'iconst_0', 'ireturn', 'Field bc:F', 'fsub', 'Method d:(Lur;F)V', 'putfield      #1170', 'Field aI:I', 'putfield      #568', 'Method d:(Lur;F)V');
     const v = C.playerAttack.vanillaPacket;
+    assert.match(v.lastDamageResets, /only on a later full hit/);
     assert.deepEqual([v.forcedInvulnerability, v.beforeCooldown], [true, 'reduced, not cancelled (down to 0.2 x attackDamage at c = 0)']);
     // So with the vanilla packet only the first hit on a fresh mob counts, then nothing.
     assert.equal(pack.meleeHitDamage({ weapon: 'minecraft:stone_sword', path: 'vanilla', lastDamage: 3.5 }), 0);
@@ -123,7 +125,16 @@ test('Better Hurt Timer leaves player hits alone and lets every mob land a full 
     const gap = Math.trunc(20 * (1.2 - 1.2 / (20 / 4)));
     assert.equal(C.mobsHittingPlayer.minGapTicksUnarmedMob, gap);
     for (const m of Object.values(C.mobs)) if (m.attackIntervalTicks) assert.ok(m.attackIntervalTicks >= gap);
-    assert.ok(C.notSettled.some((s) => /getCoolPeriod/.test(s) && /NullPointerException/.test(s)));
+    // An armed mob takes the same null-safe path: the capability sets ticksSinceLastSwing to -1, canSwing needs >= 0,
+    // and only EntityPlayer advances it, so getCoolPeriod (the mob's missing ATTACK_SPEED) is never reached.
+    inOrder(section(jp, 'Better Hurt Timer HurtCapability$Handler'), 'instanceof', 'EntityLivingBase', 'ticksSinceLastSwingField', 'iconst_m1', 'Field.setInt');
+    inOrder(section(jp, 'Better Hurt Timer BHTAPI'), 'String ticksSinceLastSwing', 'String field_184617_aD', 'ObfuscationReflectionHelper.findField', 'ticksSinceLastSwingField');
+    inOrder(section(jp, 'Better Hurt Timer Events.canSwing'), 'ticksSinceLastSwingField', 'getInt', 'iflt');
+    assert.match(section(jp, 'SRG names'), /FD: vp\/aE net\/minecraft\/entity\/EntityLivingBase\/field_184617_aD/);
+    assert.doesNotMatch(section(jp, 'vp (EntityLivingBase, Forge-patched) attackEntityFrom'), /putfield .*Field aE:I/);
+    inOrder(section(jp, 'aed onUpdate B_()'), 'Field aE:I', 'iadd', 'putfield');
+    assert.ok(!C.notSettled.some((x) => /NullPointerException|getCoolPeriod/.test(x)));
+    assert.match(C.mobsHittingPlayer.summary, /An armed mob takes the same path/);
 });
 
 test('Damage Control: x0.8 on the player\'s hits, before armour; its max health entries are off', () => {

@@ -2856,6 +2856,21 @@ public class arekkuusu.betterhurttimer.api.capability.HurtCapability$Handler {
       14: return
 }
 
+## Better Hurt Timer BHTAPI: ticksSinceLastSwingField
+  public static final java.util.function.Function<net.minecraft.entity.EntityLivingBase, java.util.function.Function<java.lang.CharSequence, arekkuusu.betterhurttimer.api.capability.data.HurtSourceInfo>> HURT_SOURCE_INFO_FUNCTION;
+  public static java.lang.reflect.Field ticksSinceLastSwingField;
+  public static arekkuusu.betterhurttimer.api.capability.data.HurtSourceInfo$HurtSourceData get(net.minecraft.entity.EntityLivingBase, net.minecraft.util.DamageSource);
+  private static java.util.function.Function lambda$static$1(net.minecraft.entity.EntityLivingBase);
+       1: invokedynamic #188,  0            // InvokeDynamic #3:apply:(Lnet/minecraft/entity/EntityLivingBase;)Ljava/util/function/Function;
+  private static arekkuusu.betterhurttimer.api.capability.data.HurtSourceInfo lambda$null$0(net.minecraft.entity.EntityLivingBase, java.lang.CharSequence);
+       7: getfield      #195                // Field net/minecraft/entity/EntityLivingBase.field_70771_an:I
+      54: ldc           #191                // class net/minecraft/entity/EntityLivingBase
+      62: ldc           #232                // String ticksSinceLastSwing
+      67: ldc           #236                // String field_184617_aD
+      69: invokestatic  #244                // Method net/minecraftforge/fml/common/ObfuscationReflectionHelper.findField:(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/reflect/Field;
+      72: putstatic     #246                // Field ticksSinceLastSwingField:Ljava/lang/reflect/Field;
+      75: getstatic     #246                // Field ticksSinceLastSwingField:Ljava/lang/reflect/Field;
+
 ## Damage Control DamageHandler
 Compiled from "DamageHandler.java"
 public class net.darkhax.damagecontrol.handler.DamageHandler {
