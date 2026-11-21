@@ -182,7 +182,15 @@ Forge spawns most mod entities with an FML message (`FML` channel, disc 2), not 
   - **From rotn-data.** `initBot` builds the table with `fmlEntityTable({ modEntityTable, entityByModId })`, from rotn-data's catalog API (never its files). Each entry is `{ name, displayName }`; a living entity (`kinds` has `living`) also gets `type` and `category` from rotn-data's `hostile`: `hostile` / `Hostile mobs`, or `passive` / `Passive mobs`. These are the 1.13+ types Mindcraft's `isHostile` tells apart; `mob` would make every animal hostile. A non-living entity gets no type (rule below).
   - **Placeholder.** An id the dump lacks (or no table, if rotn-data fails to load) gives `<modId>:entity_<n>`, with `entity.forge.nameKnown: false`.
   - A table value can also be an object, `{ name, displayName?, type?, category?, width?, height? }`. **The table must supply `type` explicitly** for an entity to be a `mob` (or anything else): `category` alone only sets `entity.kind`.
-- **Type.** It is never `mob` by default, because Mindcraft's `isHostile` treats every `mob` as hostile, and FML also spawns projectiles, vehicles and decorations. It is the table's `type` when given, else `projectile` for a thrown entity (`throwerId != 0`), else `other`. Hostility belongs to rotn-data's table and skills-rotn.
+- **Type.** A known entity is never `mob` by default, because Mindcraft's `isHostile` treats every `mob` as hostile, and FML also spawns projectiles, vehicles and decorations. The type is, in order:
+  1. the table's `type` when given;
+  2. `projectile` for a thrown entity (`throwerId != 0`);
+  3. `mob` for an entity the table does not know whose spawn metadata looks living (`looksLiving`, below);
+  4. `other`.
+  - Hostility of known entities belongs to rotn-data's table and skills-rotn.
+  - **Unknown but living (#550 review).** Without this, an unknown modded hostile would be `other` and ignored. That happens when rotn-data fails to load, or when the server has an id the dump lacks. As `mob`, `isHostile` (skills-rotn's `threatFor` fallback) sees it. `kind` stays `unknown` and `forge.nameKnown` false.
+  - **`looksLiving(metadata)`** is true when the spawn metadata has 1.12 `EntityLivingBase`'s first own entries (`LIVING_METADATA`): key 6 with serializer 0 (a byte, hand states) and key 7 with serializer 2 (a float, health). The serializer ids are pinned by a test from a captured vanilla zombie spawn. In the BC probe 3 capture it agreed with rotn-data's `living` fact for all 22 FML-spawned entity types (20 living, 2 not). Without metadata (`metadataError`) it is false.
+  - **Logged once.** `attachFmlEntities` logs each unknown `modId#typeId` once, with the placeholder name, whether it looks living, and the type given. Its `unknown` getter lists those keys.
 - **Size.** `width` and `height` come from the table, or from `bot.registry` when rotn-data's properties are in. Without them they are prismarine-entity's defaults, **0 × 0**, which pvp aim and collision checks should treat as unknown.
 - **Debug info.** `entity.forge` has `{ modId, modEntityTypeId, nameKnown, throwerId, metadataError }`.
 - **Safety.** A message that cannot be applied is logged and leaves no half-made entity behind.

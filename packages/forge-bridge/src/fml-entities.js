@@ -16,10 +16,13 @@
 //   Until then the name is the placeholder `<modId>:entity_<modEntityTypeId>` with
 //   forge.nameKnown false.
 //
-// Type: not 'mob' by default, because Mindcraft's isHostile treats every 'mob' as
-// hostile, and FML also spawns projectiles, vehicles and decorations. It is the
+// Type: not 'mob' for a known entity, because Mindcraft's isHostile treats every 'mob'
+// as hostile, and FML also spawns projectiles, vehicles and decorations. It is the
 // table's `type` when given, else 'projectile' for a thrown entity (throwerId != 0),
-// else 'other'. Hostility belongs to rotn-data's table and skills-rotn.
+// else 'mob' for an entity the table does not know whose spawn metadata looks living
+// (looksLiving: an unknown modded hostile must not be ignored, #550 review), else
+// 'other'. Hostility of known entities belongs to rotn-data's table and skills-rotn.
+// attachFmlEntities logs each unknown modId#typeId once.
 // Size: the table's (or bot.registry's) width and height when known; otherwise
 // prismarine-entity's defaults, 0 x 0, which pvp aim and collision checks should
 // treat as unknown.
@@ -27,6 +30,24 @@
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+
+/**
+ * 1.12 EntityLivingBase's first own data entries, after Entity's keys 0-5: key 6 HAND_STATES
+ * (serializer 0, a byte) and key 7 HEALTH (serializer 2, a float). Serializer ids as the
+ * metadata reader returns them (minecraft-data 1.12.2's entityMetadataItem), pinned by the
+ * test from a captured vanilla zombie spawn. Projectiles, boats, carts, item frames and
+ * area-effect clouds have a different type (or none) at key 6 or 7.
+ */
+export const LIVING_METADATA = Object.freeze({ 6: 0, 7: 2 });
+
+/**
+ * True when an FML EntitySpawn's metadata ([{ key, type, value }]) has 1.12
+ * EntityLivingBase's pattern (LIVING_METADATA). False without metadata.
+ */
+export function looksLiving(metadata) {
+    if (!Array.isArray(metadata)) return false;
+    return Object.entries(LIVING_METADATA).every(([key, type]) => metadata.some((m) => m?.key === Number(key) && m?.type === type));
+}
 
 /**
  * The registry name for an FML-spawned entity.
@@ -66,7 +87,9 @@ export function spawnFmlEntity(bot, msg, { modEntityTable = null, Entity = null,
         const info = fmlEntityName(msg, modEntityTable);
         const { name, known } = info;
         const entry = bot.registry?.entitiesByName?.[name] ?? null;
-        entity.type = info.type ?? (msg.throwerId ? 'projectile' : 'other');
+        // An unknown entity that looks living is a 'mob' (isHostile: true), so the bot reacts to
+        // an unknown modded hostile instead of ignoring it. Known entries keep the table's rule.
+        entity.type = info.type ?? (msg.throwerId ? 'projectile' : !known && looksLiving(msg.metadata) ? 'mob' : 'other');
         entity.uuid = msg.uuid;
         entity.name = name;
         entity.displayName = info.displayName ?? entry?.displayName ?? name;
@@ -92,18 +115,30 @@ export function spawnFmlEntity(bot, msg, { modEntityTable = null, Entity = null,
     }
 }
 
-/** Wires a bridge's 'entitySpawn' events to spawnFmlEntity for this bot. */
+/**
+ * Wires a bridge's 'entitySpawn' events to spawnFmlEntity for this bot. Each modId#typeId
+ * the table does not know is logged once: its placeholder name, whether its metadata looks
+ * living, and the type it was given (`unknown` lists those keys).
+ */
 export function attachFmlEntities(bot, bridge, opts = {}) {
     let count = 0;
+    const unknown = new Set();
     bridge.on('entitySpawn', (msg) => {
+        let entity;
         try {
-            spawnFmlEntity(bot, msg, opts);
+            entity = spawnFmlEntity(bot, msg, opts);
             count++;
         } catch (e) {
             opts.log?.(`FML EntitySpawn ${msg.modId}#${msg.modEntityTypeId} (entity ${msg.entityId}) not applied: ${e.message}`);
+            return;
         }
+        const key = `${msg.modId}#${msg.modEntityTypeId}`;
+        if (entity.forge?.nameKnown !== false || unknown.has(key)) return;
+        unknown.add(key);
+        const living = Array.isArray(msg.metadata) ? (looksLiving(msg.metadata) ? 'yes' : 'no') : 'unknown (no metadata)';
+        opts.log?.(`FML entity ${key} is not in the mod entity table: named ${entity.name}, looks living: ${living}, type ${entity.type} (logged once)`);
     });
-    return { get spawned() { return count; } };
+    return { get spawned() { return count; }, get unknown() { return [...unknown]; } };
 }
 
 /**
@@ -115,7 +150,7 @@ export function attachFmlEntities(bot, bridge, opts = {}) {
  * hostile mob, 'passive' for any other living entity. These are the 1.13+ mineflayer
  * types Mindcraft's isHostile distinguishes ('mob' would make every animal hostile).
  * A non-living entity gets no type, so spawnFmlEntity's rule applies ('projectile'
- * when thrown, else 'other').
+ * when thrown, else 'other'; the looks-living 'mob' rule is only for unknown entities).
  *
  * @param {{ modEntityTable: () => object, entityByModId: (modId: string, id: number) => object|null }} api
  */

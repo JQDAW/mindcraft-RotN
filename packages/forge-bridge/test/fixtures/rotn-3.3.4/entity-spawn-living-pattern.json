@@ -1,0 +1,17 @@
+{
+ "description": "net-forge #550 follow-up: entity spawns the RotN 3.3.4 test server sent during BC probe attempt 3 (GO G-BC-PROBE-3-20261121; harness-ops captures/raw/bc-probe-3-20261121/capture.jsonl, git-ignored). Full packet bytes, hex. vanillaZombie: play.spawn_entity_living (id 0x03), entity 2028, type 54 (minecraft:zombie); its metadata starts at byte 53 (id, VarInt entity id of 2 bytes, UUID, VarInt type, 3 doubles, 3 angles, 3 shorts). fmlSpectre: the FML channel payload of an EntitySpawn (disc 2) for charm #2 (charm:spectre, living, hostile). fmlScent: the same for zombieawareness #0 (zombieawareness:entityscent, not living; keys 6 and 7 are VarInts). Only entity UUIDs and test-server coordinates; no player identity in the bytes.",
+ "capturedAt": "2026-11-21",
+ "vanillaZombie": {
+  "hex": "03ec0f1bb493da83004fd0ac74f0ae0445692936c03e80000000000040370000000000003ff8000000000000ca00020000000000000000000101ac02020300030600040600050600060000070241a000000801000906000a01000b00000c06000d01000e0600ff",
+  "sha256": "5e88df97b98c8271cd8634117c3b83c5b88c3453d2632deea1227a15d98ddb81",
+  "metadataOffset": 53
+ },
+ "fmlSpectre": {
+  "hex": "020000136005636861726d000000027bb2e2a3fa8142dcadf4b63ecffaf43ac05b2000000000004031000000000000c0512000000000008900030000000101ac0202030003060004060005060006000007023f0000000801000906000a01000b0000ff00000000",
+  "sha256": "e3ece7394bdc65ef2c7b897fd092607a6b756d7d64c43f584af6f75dcf1dc618"
+ },
+ "fmlScent": {
+  "hex": "0200000ecf0f7a6f6d62696561776172656e65737300000000f1658c377b7245298777cbd5a0b19c4dc0538000000000004052800000000000c04e0000000000000000000000000101ac0202030003060004060005060006013c0701d804ff0000000000000002",
+  "sha256": "4b44c183da5c386606899e3ed7cc63850edb5a137f3c41545eb4c816c0133768"
+ }
+}
