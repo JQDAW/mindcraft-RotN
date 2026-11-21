@@ -47,7 +47,7 @@ import { lastTeleport } from '../../runner/lib/server-log.mjs';
 import { giveVerdict, testforblockVerdict } from '../../runner/lib/g2.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
 import {
-    BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, BC_TRIP_RE, TEST_SERVER_NAME_RE, bcExpected, bcHit, bcLaneCells, bcLaneFills, bcLogProblems, bcReply, guardBcConsole, judgeSeries,
+    BC_DRIVER_ENV, BC_NOT_GATE, BC_PLAN, BC_TRIP_RE, TEST_SERVER_NAME_RE, bcExpected, bcHit, bcLaneCells, bcLaneClear, bcLaneFills, bcLogProblems, bcReply, guardBcConsole, judgeSeries,
 } from '../../runner/lib/probe.mjs';
 
 const MS = 1000;
@@ -81,6 +81,7 @@ export default {
         tpSettleMs: 3 * MS,
         summonSettleMs: 3 * MS,    // the zombies' spawn packets reach the bot
         logTail: 20000,
+        viewDistanceTail: 5000,    // server log lines searched for DynView's latest view distance at each kill
         consoleWaitS: 1,
         lateReplyMs: 5 * MS,
         latePollMs: 1 * MS,
@@ -151,6 +152,32 @@ export default {
             }
             return null;
         };
+        // Each kill @e[type=zombie] with how many it killed and DynView's view distance then (#540 review: DynView raised
+        // it from 5 to 18, so the loaded world, and with it the zombies a kill reaches, grows during a run).
+        const kills = [];
+        const killZombies = async (step) => {
+            const lines = await confirm('kill @e[type=zombie]', (l) => l.some((x) => /\]: (Killed |No entity was found|That entity cannot be found)/.test(x)));
+            const killed = lines.filter((x) => /\]: Killed /.test(x)).length;
+            let viewDistance = null;
+            try {
+                for (const l of server.log(p.viewDistanceTail) ?? []) {
+                    const m = /DynView\]: .*chunk view distance to: (\d+)/.exec(l);
+                    if (m) viewDistance = Number(m[1]);
+                }
+            } catch { /* the log read failed: no view distance */ }
+            kills.push({ step, killed, viewDistance });
+            ctx.note('kills', kills);
+            ctx.log(`kill @e[type=zombie] (${step}): ${killed} killed; view distance ${viewDistance ?? 'unknown'}`);
+        };
+        // The lane clear before each step (rotn-data, after #540): every non-player entity around the lane, with what it killed.
+        const clears = [];
+        const clearLane = async (step) => {
+            const lines = await confirm(bcLaneClear(plan), (l) => l.some((x) => /\]: (Killed |No entity was found|That entity cannot be found)/.test(x)));
+            const killed = lines.map((x) => /\]: Killed (.+)$/.exec(x)?.[1]).filter(Boolean);
+            clears.push({ step, killed });
+            ctx.note('laneClears', clears);
+            ctx.log(`lane clear (${step}): ${killed.length ? `killed ${killed.join(', ')}` : 'nothing'}`);
+        };
         const series = [];
         // item: the Better Combat series' item; its range comes from the zombie's measured start health (#533 review), or the
         // catalogue's 20 when the driver read none. firstHit: say whether hit 1 was a crit (NoAI series: a sneak attack, #528).
@@ -161,11 +188,17 @@ export default {
             ctx.note('series', series);
             const n = r?.hits?.length ?? 0;
             const yes = (x) => (x === true ? 'yes' : x === false ? 'no' : 'unknown');
-            ctx.check(key, v.ok, `${r ? `${n} hit(s), end ${r.end ?? '?'}, health ${r.target?.startHealth ?? '?'} -> ${r.healthEnd ?? '?'}`
+            // A zombie that did not start at the catalogue's health is not measured (the lead, after #540): the check cannot
+            // pass, but it is marked INCONCLUSIVE, listed in notes.inconclusive, and no pass rule is applied to it.
+            if (v.inconclusive) ctx.note('inconclusive', series.filter((x) => x.verdict.inconclusive).map((x) => ({ key: x.key, why: x.verdict.why })));
+            const hurts = r?.botHurts ?? [];
+            const id = r?.target ? `, target ${r.target.name ?? '?'} #${r.target.id}${r.target.noAI === true ? ' NoAI' : r.target.noAI === false ? ' with AI' : ''}` : '';
+            ctx.check(key, v.ok, `${v.inconclusive ? 'INCONCLUSIVE: ' : ''}${r ? `${n} hit(s), end ${r.end ?? '?'}, health ${r.target?.startHealth ?? '?'} -> ${r.healthEnd ?? '?'}${id}`
                 + `${v.projected !== null ? `, ${v.projected} to kill${r.end === 'dead' ? '' : ' (projected)'}` : ''}`
                 + `${expected && !opts.ai ? ` (range ${expected.min}-${expected.max} at ${expected.healthFrom} health ${expected.health})` : ''}`
                 + `${v.crits ? `, crits ${v.crits.crits.length ? `#${v.crits.crits.join(', #')}` : 'none'}` : ''}`
-                + `${firstHit ? `, hit 1 crit: ${yes(v.firstHitCrit)}` : ''}` : aborted ?? `no reply within ${p.replyTimeoutMs / MS}s`}: ${v.why}`);
+                + `${firstHit ? `, hit 1 crit: ${yes(v.firstHitCrit)}` : ''}`
+                + `${hurts.length ? `, bot hurt ${hurts.length}x (${Math.round(hurts.reduce((a, h) => a + h.amount, 0) * 100) / 100})` : ''}` : aborted ?? `no reply within ${p.replyTimeoutMs / MS}s`}: ${v.why}`);
             return v;
         };
 
@@ -181,7 +214,7 @@ export default {
         ctx.note('bcStatus', status);
         con('gamerule doDaylightCycle false');
         con('time set day');
-        con('kill @e[type=zombie]');
+        await killZombies('setup');
         // The enclosed lane in the air (attempt 1, #535): two fills, then every one of its cells checked before anything else.
         for (const f of bcLaneFills(plan.lane)) con(f);
         const lane = [];
@@ -204,9 +237,12 @@ export default {
 
         // 3. each weapon: A on the vanilla path, B on Better Combat's
         for (const w of plan.weapons) {
-            con('kill @e[type=zombie]');
+            await killZombies(`${w.check}: before`);
+            await clearLane(w.check);
             con(`clear ${name}`);
-            const given = w.give ? giveVerdict(await confirm(`give ${name} ${w.item} ${w.give} 0`, (l) => giveVerdict(l, name).ok), name) : { ok: true };
+            // One item per give (attempt 2, #540: a tool's give count is at most 1).
+            let given = { ok: true };
+            for (let k = 0; k < w.give && given.ok; k++) given = giveVerdict(await confirm(`give ${name} ${w.item} 1 0`, (l) => giveVerdict(l, name).ok), name);
             const a = await summon(plan.zombieA, true);
             const b = await summon(plan.zombieB, true);
             await clock.sleep(p.summonSettleMs);
@@ -222,11 +258,12 @@ export default {
             const rb = await ask((t) => bcHit(name, t, 'bc', plan.zombieB, w.item));
             judged(`bc_${w.check}`, rb, { path: 'bc', cooldownTicks: w.cooldownTicks, maxHits: plan.maxHits }, { item: w.item, firstHit: true });
             if (aborted) return;
-            con('kill @e[type=zombie]');
+            await killZombies(`${w.check}: after`);
         }
 
         // 4. one zombie with its AI, Better Combat's path, stone sword
-        con('kill @e[type=zombie]');
+        await killZombies('ai: before');
+        await clearLane('ai');
         con(`clear ${name}`);
         const sword = giveVerdict(await confirm(`give ${name} ${plan.ai.item} 1 0`, (l) => giveVerdict(l, name).ok), name);
         const z = await summon(plan.zombieAi, false);
@@ -237,7 +274,7 @@ export default {
             judged('bc_ai_zombie', r, { path: 'bc', cooldownTicks: plan.ai.cooldownTicks, ai: true }, { item: plan.ai.item });
             if (aborted) return;
         }
-        con('kill @e[type=zombie]');
+        await killZombies('ai: after');
         con(`clear ${name}`);
 
         // 5. the server log since the begin marker
