@@ -167,7 +167,7 @@ test('wrapper: paced at the cooldown; a newer call replaces a waiting one', asyn
     assert.deepEqual(res, { sent: true, path: 'bettercombat', waitedMs: 550 });
     const payloads = r.bot.writes.filter((w) => w.name === 'custom_payload').map((w) => decodeMainhandAttack(w.params.data).entityId);
     assert.deepEqual(payloads, [1234, 2]);
-    assert.deepEqual(r.bc.stats, { bettercombat: 2, vanilla: 0, waits: 2, replaced: 1, gone: 0, misses: 1 }, 'the first hit got no hurt within 500 ms');
+    assert.deepEqual(r.bc.stats, { bettercombat: 2, vanilla: 0, waits: 2, replaced: 1, gone: 0, cancelled: 0, misses: 1 }, 'the first hit got no hurt within 500 ms');
     assert.equal(r.bc.cooldownTicks(), 13);
 });
 
@@ -218,6 +218,37 @@ test('wrapper: a waiting call whose target is gone sends nothing and is not a mi
     g.bot.emit('entityGone', { id: 1234 });
     await g.advance(600);
     assert.equal(g.bc.stats.misses, 0);
+});
+
+test('wrapper: cancel() ends a waiting call at once and sends nothing; a no-op when nothing waits', async () => {
+    const r = rig(); // stone sword: 13 ticks = 650 ms
+    assert.equal(r.bc.cancel('interrupt'), false, 'nothing waits');
+    await r.bot.attack(r.target());
+    r.bot.emit('entityHurt', { id: 1234 });
+    const before = r.bot.writes.length;
+    const p = r.bot.attack(r.target());
+    await r.advance(200);
+    assert.equal(r.bc.cancel('interrupt'), true);
+    assert.deepEqual(await p, { sent: false, path: null, waitedMs: 200, reason: 'interrupt' });
+    await r.advance(5000);
+    assert.equal(r.bot.writes.length, before, 'no swing and no payload, even after the cooldown');
+    assert.equal(r.bc.cancel(), false, 'a second cancel is a no-op');
+    assert.equal(r.bc.stats.cancelled, 1);
+    assert.equal(r.bc.stats.misses, 0, 'not counted in the self-check');
+    assert.equal(r.bc.tripped, false);
+
+    // The default reason, and the next call is paced from the last real swing, not the cancel.
+    const q = r.bot.attack(r.target());
+    assert.deepEqual(await q, { sent: true, path: 'bettercombat', waitedMs: 0 });
+    const w = r.bot.attack(r.target());
+    r.bc.cancel();
+    assert.equal((await w).reason, 'cancelled');
+
+    // Off: vanilla calls never wait, so there is nothing to cancel.
+    const off = rig({ enabled: false });
+    await off.bot.attack(off.target());
+    assert.equal(off.bc.cancel('interrupt'), false);
+    assert.deepEqual(off.names(), ['use_entity', 'arm_animation']);
 });
 
 test('wrapper: a different held item restarts the cooldown; a durability change does not', async () => {

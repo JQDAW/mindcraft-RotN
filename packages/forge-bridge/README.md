@@ -281,13 +281,14 @@ In RotN 3.3.4, `minecraft:crafting_table` is FastWorkbench 1.7.4's block: Run A'
 - **Wire order:** `arm_animation` (main hand) then the `bettercombat` payload, and never `use_entity` as well.
 - **Waiting:** a call before the cooldown is up waits. A newer call replaces a waiting one; the replaced call resolves `{ sent: false, reason: 'replaced' }`.
 - **Gone:** a waiting call whose target is gone when its cooldown is up (`isValid === false`, or no longer in `bot.entities`) sends nothing and resolves `{ sent: false, reason: 'gone' }`. It is not a miss.
+- **Cancel:** `bot.forge.cancelAttack(reason)` ends a call waiting for its cooldown at once: it sends nothing (no swing, no payload) and resolves `{ sent: false, path: null, waitedMs, reason }` (default reason `'cancelled'`). It returns `true` if a call was waiting, and is a no-op (`false`) otherwise. It is not a miss. Skills call it on an interrupt, so no hit goes out up to one cooldown (2.5 s with a stone axe) later.
 - **Falls back to vanilla** for any of these:
   - a target beyond Better Combat's reach: 4.0 for weapons, 3.5 for an empty hand or a non-weapon, eye to the nearest point of the hitbox;
   - a target not in sight (a world raycast);
   - an unknown attack speed.
 - **Self-check:** after 5 hits in a row with no `entityHurt` or `entityDead` for the target within 500 ms, it goes back to vanilla for the connection and logs one line. A hit target that leaves the bot's view (`entityGone`) within the 500 ms is neither a hit nor a miss.
 
-**For skills:** `bot.forge.attackCooldownTicks()` gives the held item's Better Combat cooldown. `bot.forge.bcAttack.stats` has the counts.
+**For skills:** `bot.forge.attackCooldownTicks()` gives the held item's Better Combat cooldown. `bot.forge.cancelAttack(reason)` drops a waiting hit. `bot.forge.bcAttack.stats` has the counts.
 
 ## Other protocol changes
 

@@ -267,6 +267,7 @@ export function initBot(username, { onMsaCode } = {}) {
     if (bc.warning) console.warn(`[initBot] ${bc.warning}`);
     forge.bcAttack = installBetterCombatAttack(bot, { bridge: () => forge.bridge, enabled: bc.on });
     forge.attackCooldownTicks = () => forge.bcAttack.cooldownTicks(); // Better Combat's pacing for the held item, for skills
+    forge.cancelAttack = (reason) => forge.bcAttack.cancel(reason); // skills, on an interrupt: a waiting hit never goes out
     bot.once('spawn', () => { if (forge.bridge) console.log(`[forge-bridge] ${forge.bcAttack.status()}`); });
 
     // Throttle position packets to avoid kicks on Paper/Spigot servers. Inside each
