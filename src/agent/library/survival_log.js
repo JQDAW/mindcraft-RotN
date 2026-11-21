@@ -10,6 +10,8 @@
 //   [survival] hurt-detail drops <amount>@+<s>s,... at <x>,<y>,<z> vy <v> ground|air cause <fall|starving|none> near <mob>@<d>m[/swung-<s>s],...
 //                                                                     soak 5: right after each hurt line
 //   [survival] swing <mob> with <item> +<ms> ms|first: health <before> -> <after>|gone   soak 7: each swing of the shelter fight
+//   [survival] weapon <item>|hand (<where>)              soak 7 (c): what the bot holds at a fight's first hit, after it took its best
+//                                                         weapon in hand; where: shelter | open | attack | cell | hunt
 //
 // Soak 2 (rotn-v0.1.4): the server sends no death messages, and two deaths had no cause in the
 // journal. The hurt line names the likely source: 'starving' (food 0: Hunger Overhaul's
@@ -50,6 +52,10 @@ export const fightEndLine = (mob, outcome, ms) => {
 export const fleeLine = (mob, why) => `${SURVIVAL_TAG} flee ${token(mob)} (${String(why ?? 'unknown').replace(/[()\n\r]/g, ' ').trim() || 'unknown'})`;
 /** Soak 7: one shelter-fight swing: the held item, ms since the swing before it (null: the first), the mob's health before it and at the next look ('gone': no longer in the world; null: unknown). */
 export const swingLine = (mob, item, sinceMs, before, after) => `${SURVIVAL_TAG} swing ${token(mob)} with ${token(item ?? 'hand')} ${Number.isFinite(sinceMs) ? `+${Math.round(sinceMs)} ms` : 'first'}: health ${num(before)} -> ${after === 'gone' ? 'gone' : num(after)}`;
+/** Soak 7 (c): what the bot holds at the first hit of a fight (after equipHighestAttack); 'hand' when nothing. */
+export const weaponLine = (item, where) => `${SURVIVAL_TAG} weapon ${token(item ?? 'hand')} (${where})`;
+/** weaponLine for the bot now. */
+export const logWeapon = (bot, where) => console.log(weaponLine(bot?.heldItem?.name ?? null, where));
 export const hurtLine = (amount, before, after, source) => `${SURVIVAL_TAG} hurt ${num(amount)} health ${num(before)}->${num(after)} (by ${token(source)})`;
 export const HURT = { minDrop: 4, windowMs: 2000, mobRange: 5, swingMs: 1000, fallingRange: 4, detailRange: 16, detailMobs: 3 };
 /** A falling block or a falling Dynamic Trees tree (entity names). */
@@ -178,8 +184,14 @@ const botDead = (bot) => bot.isAlive === false || bot.health === 0;
  * the caller's (gone: no enemy left in range; stopped; capped; interrupted).
  */
 export function fightJournal(bot, where) {
-    let first = null, startedAt = null, ended = false;
+    let first = null, startedAt = null, ended = false, weaponSaid = false;
     return {
+        /** Soak 7 (c): once per fight, what the bot holds (after its equip). */
+        weapon() {
+            if (weaponSaid) return;
+            weaponSaid = true;
+            logWeapon(bot, where);
+        },
         start(enemy) {
             if (first) return;
             first = enemy;

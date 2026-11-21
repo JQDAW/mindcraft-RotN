@@ -171,3 +171,20 @@ test('soak 2: an animal the hunt could not get is left alone for HUNT.skipMs (th
     bot.rotnHuntSkip.set(1, Date.now() - 1);
     assert.equal(huntTarget(bot).id, 1, 'after skipMs, again');
 });
+
+test('soak 7 (c): a hunt takes the best weapon (equipHighestAttack) before its first attack, and logs it', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { equipHighestAttack } = await import('./skills.js');
+    const saved = { ...HUNT };
+    Object.assign(HUNT, { checkMs: 10 });
+    t.after(() => Object.assign(HUNT, saved));
+    const bot = world({ animals: [cow(2)] });
+    Object.assign(bot, { heldItem: null, inventory: { items: () => [{ name: 'pyrotech:crude_axe', count: 1 }, { name: 'stone_axe', count: 1 }], slots: [] } });
+    bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+    const held = [];
+    bot.pvp = { attack: () => { held.push(bot.heldItem?.name ?? 'hand'); setTimeout(() => delete bot.entities[1], 20); }, stop() {} };
+    assert.equal(await huntAnimal(bot, bot.entities[1], { equip: (b) => equipHighestAttack(b), maxMs: 2000 }), 'killed');
+    assert.deepEqual(held, ['stone_axe']);
+    assert.ok(logs.includes('[survival] weapon stone_axe (hunt)'), logs.join('\n'));
+});

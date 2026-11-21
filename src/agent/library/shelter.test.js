@@ -1261,3 +1261,20 @@ test('soak 7 (C): burrowAway stops at stopAt (the mob\'s reach + margin) instead
     assert.ok(f.bot.entity.position.floored().equals(new Vec3(0, 59, 0)), 'two down, out of its reach');
     assert.deepEqual(f.placed, ['0,61,0'], 'sealed above');
 });
+
+test('soak 7 (c): a mob hit out of the opening is hit with the best weapon in hand, and the weapon is logged', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const saved = { ...SHELTER_GAP };
+    Object.assign(SHELTER_GAP, { swingMs: 10 });
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    const { bot } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }), items: [{ name: 'pyrotech:crude_axe', metadata: 0, count: 1 }, { name: 'stone_axe', metadata: 0, count: 1 }] });
+    const zombie = { name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95 };
+    bot.entities = { 1: bot.entity, 7: zombie };
+    const held = [];
+    bot.attack = () => { held.push(bot.heldItem?.name ?? 'hand'); zombie.position = new Vec3(3.5, 64, 0.5); };
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.equal(r.closed, true, bot.output);
+    assert.deepEqual(held, ['stone_axe']);
+    assert.ok(logs.includes('[survival] weapon stone_axe (cell)'), logs.join('\n'));
+});
