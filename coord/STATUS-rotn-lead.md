@@ -1,6 +1,6 @@
 # Status: rotn-lead
 
-Updated: 2026-11-21 17:06 UTC (from `date -u`)
+Updated: 2026-11-22 04:09 UTC (from `date -u`)
 
 
 ## CX23 deploy record (ADR 0011)
@@ -11,6 +11,7 @@ Updated: 2026-11-21 17:06 UTC (from `date -u`)
 | 2026-11-20 06:36 | rotn-v0.1.12 | 29b0ce72212a (29b0ce72212a10f1c11bd4840efd8e126be7115e) | the lead, through the gate (GO G-DEPLOY-v0.1.12-20261120) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.12-29b0ce72212a, previous=rotn-v0.1.11-272ff9b92232; no bot restarted |
 | 2026-11-20 21:39 | rotn-v0.1.13 | 9955b0f48803 (9955b0f48803a4809cea1734a0944031873125e6) | the lead, through the gate (GO G-DEPLOY-v0.1.13-20261120) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.13-9955b0f48803, previous=rotn-v0.1.12-29b0ce72212a; pruned rotn-v0.1.2; no bot restarted |
 | 2026-11-21 17:04 | rotn-v0.1.14 | 92faa83fdd50 (92faa83fdd50b2706d2559450a89ac7d21f1326a) | the lead, through the gate (GO G-DEPLOY-v0.1.14-20261121) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.14-92faa83fdd50, previous=rotn-v0.1.13-9955b0f48803; pruned rotn-v0.1.3; no bot restarted |
+| 2026-11-22 04:07 | rotn-v0.1.15 | c62e3155c8d6 (c62e3155c8d61ac44c763e322fbaae29c883fd25) | the lead, through the gate (GO G-DEPLOY-v0.1.15-20261122) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.15-c62e3155c8d6, previous=rotn-v0.1.14-92faa83fdd50; pruned rotn-v0.1.4; no bot restarted; deploy/cx23 changed only README.md (documentation, not installed) |
 
 ## Snapshot (2026-11-18 17:40 UTC): development resumed; the pause list is done; rotn-v0.1.5 next
 
