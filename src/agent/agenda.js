@@ -232,8 +232,8 @@ export const OPEN_GOAL_PREFIX = 'Open goal while the agenda waits: ';
  * never held a weapon again; bare hands did not hurt the zombies digging into its shelter, and
  * they hit for 6-8 (12 deaths). Like the shelter reserve: due in the same window before night,
  * after the shelter's blocks and before food, with its own budget (spent: not again until the night
- * is past). Done when the bot holds any weapon threats.hasWeapon counts (a sword or an axe; the
- * crude axe too: attack 3 on this pack, as the stone axe).
+ * is past). Done when the bot holds a weapon threats.hasWeapon counts (soak 10: with a kill's worth
+ * of hits left; never the crude axe, a tool that breaks on its 5th hit).
  */
 /**
  * Soak 5 (the lead's Fix H, which updates the soak 3 decision): after a death the bot went hunting
@@ -247,23 +247,38 @@ export const NO_WEAPON_FOOD = 'with no weapon: forage for food (!forage), do not
 const beforeNight = (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN; };
 const foodFirst = (s) => { const f = s.food?.(); return Number.isFinite(f) && f <= WEAPON_FIRST.foodAtMost; };
 
+/**
+ * Soak 10 (the lead's answer 3, rotn-data's soak 10 answers): the weapon is the wooden club
+ * (spartanweaponry:club_wood): 2 logs in the inventory grid, no table; Better Combat damage 4, 131
+ * durability at 1 a hit, about 7 hits to kill a zombie or a zombie player. The crude axe is a tool,
+ * never a weapon (threats.NOT_WEAPONS): it breaks on its 5th hit, before it kills one zombie.
+ * logs: the logs one club takes.
+ */
+export const CLUB = { item: 'spartanweaponry:club_wood', logs: 2 };
+const clubLogs = (s) => (s.countOre?.('logWood') ?? 0) >= CLUB.logs;
+
 export const WEAPON_RESERVE_STEP = {
     id: 'weapon', short: 'hold a weapon for the night', reserve: true, when: 'before night',
     // ctx.foodDue (Fix H): the food reserve is due now; the weapon then comes first by day too.
-    due: (s, ctx = {}) => beforeNight(s) || (!!ctx.foodDue && !foodFirst(s)),
-    whenNow: (s) => (beforeNight(s) ? 'before night' : 'no weapon, before food'),
-    done: (s) => s.hasWeapon?.() !== false,
-    goal: 'Night is near and you hold no weapon. Zombies here hit for 6 to 8 and dig into shelters, and bare hands do not hurt them. '
-        + 'Craft a stone axe at a crafting table with !craftRecipe("stone_axe", 1): 3 rocks and 2 sticks. Rock piles break by hand: !collectBlocks("pyrotech:rock", 3); sticks: !collectBlocks("stick", 2). '
-        + 'With no crafting table near, a crude axe works too (the same attack, but it breaks on its 5th hit, or its 9th block): !craftRecipe("pyrotech:crude_axe", 1) from 1 rock and 2 sticks in your inventory grid. The agenda may use the crude axe up on trees: this reserve then makes a new one (1 rock and 2 sticks) before dusk.',
+    // Soak 10 (W2): with no weapon and the logs for a club held, at any time (the club right after the logs step).
+    due: (s, ctx = {}) => beforeNight(s) || (!!ctx.foodDue && !foodFirst(s)) || clubLogs(s),
+    whenNow: (s) => (beforeNight(s) ? 'before night' : clubLogs(s) ? 'no weapon, logs held' : 'no weapon, before food'),
+    // Soak 10 (W1): a weapon with a kill's worth of hits left (threats.WEAPON.killHits); a crude axe never counts.
+    done: (s) => (typeof s.weaponReady === 'function' ? s.weaponReady() !== false : s.hasWeapon?.() !== false),
+    // Soak 10 (W2): with the logs held, the driver crafts the club itself (no model call; agenda_driver autoCraftTick).
+    autoCraft: { item: CLUB.item, ready: clubLogs },
+    goal: 'Night is near and you hold no weapon. Zombies here hit for 3 each, several at once, and dig into shelters; bare hands do not hurt them. '
+        + `Craft a wooden club from ${CLUB.logs} logs in your inventory grid (no crafting table needed): !craftRecipe("${CLUB.item}", 1). It hits for 4 and lasts 131 hits: about 7 hits kill a zombie. `
+        + 'With fewer logs, get logs first: !collectBlocks("log", 2) (a trunk breaks by hand too, and the crude axe fells a tree). '
+        + 'The crude axe is a tool, not a weapon: it breaks on its 5th hit, before it kills one zombie; keep it for the Crafting Tools.',
     goalNow: (s) => {
-        const rocks = s.count?.('pyrotech:rock') ?? 0;
-        const sticks = s.countOre?.('stickWood') ?? 0;
-        const table = !!(s.near?.('crafting_table') || (s.count?.('crafting_table') ?? 0) > 0);
-        const have = `You hold ${rocks} rock${rocks === 1 ? '' : 's'} and ${sticks} stick${sticks === 1 ? '' : 's'}${table ? ', and a crafting table is at hand' : ', and no crafting table is near'}. `;
+        const logs = s.countOre?.('logWood') ?? 0;
+        const have = `You hold ${logs} log${logs === 1 ? '' : 's'}${logs >= CLUB.logs ? ', enough for a club' : ''}. `;
         const goal = beforeNight(s) ? WEAPON_RESERVE_STEP.goal
-            : WEAPON_RESERVE_STEP.goal.replace('Night is near and you hold no weapon.', 'You hold no weapon and you are short of food: the weapon comes first (hunting needs one, and zombies attack by day too); the agenda goes on to food once you hold one.');
-        return goal.replace('Craft a stone axe', `${have}Craft a stone axe`);
+            : WEAPON_RESERVE_STEP.goal.replace('Night is near and you hold no weapon.', clubLogs(s)
+                ? 'You hold no weapon, and you have the logs for one.'
+                : 'You hold no weapon and you are short of food: the weapon comes first (hunting needs one, and zombies attack by day too); the agenda goes on to food once you hold one.');
+        return goal.replace('Craft a wooden club', `${have}Craft a wooden club`);
     },
 };
 

@@ -388,7 +388,30 @@ test('#574 review 1: abandonMs is over the installed mineflayer\'s WINDOW_TIMEOU
     assert.equal(windowTimeout, 5000, 'mineflayer 4.33.0');
     assert.ok(CRAFT_LIMITS.abandonMs > windowTimeout, `${CRAFT_LIMITS.abandonMs} > ${windowTimeout}`);
     assert.equal(CRAFT_LIMITS.abandonMs, 5_500);
-    // From the stop: its poll, the reset's race, the abandoned craft, the count.
-    const worst = CRAFT_LIMITS.pollMs + CRAFT_LIMITS.pollMs + CRAFT_LIMITS.abandonMs + CRAFT_LIMITS.settleMs;
+    // From the stop: the eat wait's poll (#577 review 1: a stop ends it), the craft's poll, the
+    // reset's race, the abandoned craft, the count; then craftRecipe's finally picks a placed table
+    // up, which a stop ends within STOP_POLL_MS (#577 review 2).
+    const worst = 3 * CRAFT_LIMITS.pollMs + CRAFT_LIMITS.abandonMs + CRAFT_LIMITS.settleMs + STOP_POLL_MS;
     assert.ok(worst < MINDCRAFT_KILL_MS - 2000, `${worst} ms`);
+});
+
+// #577 review 1: the eat wait (up to 3 s) ignored a stop, and bot.craft was started after one.
+test('#577 review 1: a stop ends the wait for an eat, and no craft is started once a stop has come', async (t) => {
+    quiet(t);
+    const autoEat = { disabled: false, isEating: true, disable() { this.disabled = true; }, enable() { this.disabled = false; } };
+    const { bot, calls } = hangBot();
+    bot.autoEat = autoEat; // an eat that never ends
+    setTimeout(() => { bot.interrupt_code = true; }, 100);
+    const start = Date.now();
+    const r = await craftPausingAutoEat(bot, pickRecipe, 1, table);
+    assert.ok(Date.now() - start < 1000, `the eat wait ended on the stop: ${Date.now() - start} ms`);
+    assert.deepEqual(r, { ended: 'interrupted', made: 0 });
+    assert.deepEqual(calls.crafts, [], 'bot.craft never called');
+    assert.match(bot.output, /The craft of stone_pickaxe was stopped before it started; nothing crafted\./);
+    assert.equal(autoEat.disabled, false, 'auto-eat on again');
+    // Stopped already (the command's limit): no craft either.
+    const late = hangBot();
+    late.bot.action_run = { aborted: true };
+    assert.equal((await craftPausingAutoEat(late.bot, pickRecipe, 1, table)).ended, 'interrupted');
+    assert.deepEqual(late.calls.crafts, []);
 });

@@ -228,9 +228,11 @@ test('#227 review 1: the player zombie (by entity type): fight it only with a we
     // A weapon but health at half: avoided.
     ({ bot } = zombieBot({ x: 3, health: 10, items: [item('stone_sword')] }));
     assert.equal(threatPlan(bot)?.action, 'flee');
-    // A weapon (a crude axe counts, a pickaxe does not) and health above half: fought like a zombie.
-    ({ bot } = zombieBot({ x: 3, health: 18, items: [{ name: 'pyrotech:crude_axe', count: 1 }] }));
+    // A weapon (a wooden club; soak 10: not a crude axe, nor a pickaxe) and health above half: fought like a zombie.
+    ({ bot } = zombieBot({ x: 3, health: 18, items: [{ name: 'spartanweaponry:club_wood', count: 1 }] }));
     assert.equal(threatPlan(bot)?.action, 'fight');
+    ({ bot } = zombieBot({ x: 3, health: 18, items: [{ name: 'pyrotech:crude_axe', count: 1 }] }));
+    assert.equal(threatPlan(bot)?.action, 'flee', 'a crude axe is a tool, no weapon');
     ({ bot } = zombieBot({ x: 3, health: 18, items: [item('stone_pickaxe')] }));
     assert.equal(threatPlan(bot)?.action, 'flee', 'a pickaxe is no weapon here');
     // A plain zombie at 15 blocks: nothing.
