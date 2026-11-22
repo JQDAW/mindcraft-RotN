@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { isOre, wetOreRefusal, footingFor, noteDrowning, WET_ORE } from './wet_ore.js';
+import { isOre, wetOreRefusal, footingFor, liquidNear, noteDrowning, WET_ORE } from './wet_ore.js';
 import * as skills from './skills.js';
 
 const reg = minecraftData('1.12.2');
@@ -159,4 +159,60 @@ test('PR 2 (4): the drowning reflex counts the swim-up against the block a colle
     for (let i = 0; i < 50 && mode.active; i++) await new Promise(r => setTimeout(r, 10));
     await mode.update(agent);
     assert.ok(logs.includes('[reflex] the swim-up is number 2 going for -86, 62, -125; that block is left alone now'), logs.join('\n'));
+});
+
+// ---- #564 review 1: the footing rule only with a liquid near ----
+
+test('#564 review 1: a buried ore with no liquid near (24 down in solid stone) is collected, not skipped as "no dry footing"', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [{ name: 'stone_pickaxe', metadata: 0, count: 1, type: reg.itemsByName.stone_pickaxe.id }];
+    const bot = fakeBot({ set: { '2,40,0': 'iron_ore' }, items });
+    const ore = { name: 'iron_ore', position: new Vec3(2, 40, 0) };
+    assert.equal(footingFor(bot, ore.position), null, 'no air cell within reach of it');
+    assert.equal(liquidNear(bot, ore.position), null);
+    assert.equal(wetOreRefusal(bot, ore), null);
+    await skills.collectBlock(bot, 'iron_ore', 1);
+    assert.deepEqual(bot.calls.dug, ['2,40,0'], bot.output);
+    assert.doesNotMatch(bot.output, /Skipped/);
+});
+
+test('#564 review 1: an ore under a river bed is skipped (water within reach, every footing in it)', () => {
+    // A river (water at 64 and 65, x -3..3) over the stone; the ore two below its bed.
+    const set = {};
+    for (let x = -3; x <= 3; x++) for (let z = -10; z <= 10; z++) for (const y of [64, 65]) set[`${x},${y},${z}`] = 'water';
+    set['0,61,0'] = 'iron_ore';
+    const bot = fakeBot({ set, at: new Vec3(0, 64, -8) });
+    const ore = { name: 'iron_ore', position: new Vec3(0, 61, 0) };
+    assert.ok(liquidNear(bot, ore.position));
+    assert.equal(wetOreRefusal(bot, ore), 'no dry footing within reach');
+});
+
+test('#564 review 1: soak 8\'s ore by flowing water under a stone overhang is skipped', () => {
+    // Soak 8 (-86, 62, -125): a channel of flowing water at 60 and 61 beside the ore's wall, stone
+    // over it all to y 78 (the surface at 79); the only open cells near the ore hold water.
+    const set = {};
+    for (let x = -10; x <= 10; x++) for (let z = -10; z <= 10; z++) for (let y = 62; y <= 78; y++) set[`${x},${y},${z}`] = 'stone';
+    for (let x = -4; x <= 1; x++) for (let z = -3; z <= 3; z++) for (const y of [60, 61]) set[`${x},${y},${z}`] = 'flowing_water';
+    set['3,62,0'] = 'osv:simpleores_copper_ore_undergroundbiomes_metamorphic_stone';
+    set['2,61,0'] = 'flowing_water'; // the channel reaches under the ore's corner, not beside it
+    const bot = fakeBot({ set, at: new Vec3(-2, 60, 0) });
+    const ore = { name: 'osv:simpleores_copper_ore_undergroundbiomes_metamorphic_stone', position: new Vec3(3, 62, 0) };
+    assert.ok(liquidNear(bot, ore.position));
+    assert.equal(footingFor(bot, ore.position), null);
+    assert.equal(wetOreRefusal(bot, ore), 'no dry footing within reach');
+});
+
+test('#564 review 3: the skips yield to the event loop (no long block over many ores)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // Twelve ores in a pool's bed, no dry one: each is looked at and skipped.
+    const set = {};
+    for (let x = -6; x <= 19; x++) for (let z = -6; z <= 6; z++) for (const y of [64, 65]) set[`${x},${y},${z}`] = 'water'; // wide: no footing at its edges
+    for (let x = 1; x <= 12; x++) set[`${x},62,0`] = 'iron_ore';
+    const bot = fakeBot({ set, at: new Vec3(6, 64, -8) });
+    let turns = 0;
+    const spin = setInterval(() => { turns++; }, 0);
+    await skills.collectBlock(bot, 'iron_ore', 1);
+    clearInterval(spin);
+    assert.match(bot.output, /Skipped 12 iron_ore that would put you in the water: no dry footing within reach \(12\)/);
+    assert.ok(turns >= 5, `the event loop ran between the skips (${turns} turns)`);
 });

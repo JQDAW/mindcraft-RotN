@@ -3,6 +3,10 @@
 // times, and the bot ended in a flooded pit for 36 min. collectBlock now leaves such an ore alone:
 // one with a liquid beside it, one with no dry footing within reach, and one the drowning reflex
 // fired twice for (within WET_ORE.drownMemoryMs). Said once per collect (collectBlock).
+// #564 review 1: the footing rule applies only with a liquid within reach of the ore; a buried ore
+// in dry rock is collected as before (the pathfinder digs to it).
+// #564 review 2 (accepted): the drowning fires are counted per target across collects, for 30 min:
+// a swim-up interrupts the collect, so "twice in one collect" cannot happen.
 // Only fall_safety here (no shelter or skills import): skills.js imports this.
 
 import { Vec3 } from 'vec3';
@@ -55,13 +59,31 @@ export function noteDrowning(bot, now = Date.now()) {
     return n;
 }
 
-/** Why a block is left alone (an ore by water, or one the drowning reflex fired for twice), or null. */
+/**
+ * A liquid within the reach box around pos (WET_ORE.reach, rounded up, each way), or null; the
+ * first one found ends the scan. #564 review 1: only then can the ore be "by water".
+ */
+export function liquidNear(bot, pos) {
+    const r = Math.ceil(WET_ORE.reach);
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+        const q = pos.offset(dx, dy, dz);
+        if (isLiquid(bot, bot.blockAt(q))) return q;
+    }
+    return null;
+}
+
+/**
+ * Why a block is left alone (an ore by water, or one the drowning reflex fired for twice), or null.
+ * #564 review 1: the footing rule only with a liquid within the reach box (soak 8: the ore by the
+ * river); an ore buried in dry rock, which the pathfinder digs to, has no air cell near and is fine.
+ */
 export function wetOreRefusal(bot, block, now = Date.now()) {
     if (!block?.position) return null;
     const seen = bot?.rotnDrowned?.get(key(block.position));
     if (seen && now - seen.at <= WET_ORE.drownMemoryMs && seen.n >= WET_ORE.drownMax) return 'the drowning reflex fired twice going for it';
     if (!isOre(block)) return null;
     if (SIX.some(d => isLiquid(bot, bot.blockAt(block.position.plus(d))))) return 'a liquid beside it';
+    if (!liquidNear(bot, block.position)) return null;
     if (!footingFor(bot, block.position)) return 'no dry footing within reach';
     return null;
 }

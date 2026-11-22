@@ -1248,6 +1248,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             wetSkips.set(wet, (wetSkips.get(wet) ?? 0) + 1);
             if (++wetLooked >= WET_SKIP_MAX) break;
             i--; // not an attempt
+            await new Promise(resolve => setImmediate(resolve)); // #564 review 3: never one long block over many ores
             continue;
         }
         // A rule's tool decides what drops: below Sturdy stone gives rocks, a Sturdy pickaxe
