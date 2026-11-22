@@ -66,6 +66,22 @@ const isSolid = (b) => !!b && b.boundingBox === 'block';
  * vines) takes the placed block into its own cell instead (1.12 ItemBlock), so it never holds one.
  */
 const holds = (b) => isSolid(b) && dumpState(b)?.replaceable !== true;
+/** How many of the item's kind (name and metadata) the inventory holds. */
+const heldCount = (bot, item) => (item ? (bot.inventory?.items?.() ?? []).filter(i => i.name === item.name && (i.metadata ?? 0) === (item.metadata ?? 0)).reduce((n, i) => n + i.count, 0) : 0);
+/**
+ * Soak 11 (B5): move the stack to another inventory slot by a window click, so the server confirms or
+ * resends the slot's true contents (1.12 answers a click that does not match with the real slot).
+ * Returns whether it moved.
+ */
+export async function resyncStack(bot, item) {
+    if (!item || !Number.isInteger(item.slot) || typeof bot.moveSlotItem !== 'function') return false;
+    const slots = bot.inventory?.slots ?? [];
+    let dest = -1;
+    for (let i = 9; i < 45; i++) if (i !== item.slot && !slots[i]) { dest = i; break; }
+    if (dest < 0) return false;
+    try { await bot.moveSlotItem(item.slot, dest); return true; } catch { return false; }
+}
+
 /** Soak 11 (B2): the bot's own box (0.6 wide, 1.8 high) overlaps the cell: the server refuses a block there. */
 export function botBoxIn(bot, cell) {
     const p = bot?.entity?.position;
@@ -540,9 +556,16 @@ export async function fillCell(bot, target, interior, mode, reasons = null) {
             return false;
         }
         if (!isEmpty(bot.blockAt(target)) && !isLiquid(bot.blockAt(target))) { why(`${bot.blockAt(target)?.name ?? 'something'} is in it`); return false; }
+        const before = heldCount(bot, mode.items(bot)[0]);
         if (await placeOnce(bot, target, interior, mode, why, note)) return true;
         await sleep(LATE_UPDATE_MS);
         if (mode.accept(bot.blockAt(target))) return true;
+        // Soak 11 (B5): the block did not stay and the stack held did not shrink: the server did not
+        // place from it (the main-hand stack Corpse Complex kept through a death was out of step
+        // with the server's at -95, 68, -134 and -48, 80, -140). A window click makes the server send
+        // the slot's true contents; then one more try.
+        note.held = { name: bot.heldItem?.name ?? 'nothing', slot: bot.heldItem?.slot ?? null, before, after: heldCount(bot, bot.heldItem) };
+        if (attempt === 0 && before > 0 && note.held.after >= before && await resyncStack(bot, bot.heldItem)) note.resynced = true;
     }
     // Soak 5: say what is there now and any body over the cell (a troll's wide box stops a placement).
     if (reasons && !reasons.has(key(target))) {
@@ -552,8 +575,10 @@ export async function fillCell(bot, target, interior, mode, reasons = null) {
         const face = note.face ? `against ${note.ref} at ${at(note.at)} (face ${note.face.x}, ${note.face.y}, ${note.face.z})` : 'no face used';
         const feetBlock = bot.blockAt?.(bot.entity.position.floored());
         const where = `the bot at ${exactAt(bot)}${isLiquid(feetBlock) ? ', in water' : ''}${botBoxIn(bot, target) ? ', its own box in the cell' : ''}`;
+        const h = note.held;
+        const held = h ? `; held ${h.name} in slot ${h.slot ?? '?'}: ${h.before} before, ${h.after} after${note.resynced ? ' (the slot was resynced between the tries)' : ''}` : '';
         (reasons.stuck ??= new Set()).add(key(target));
-        why(`the block did not stay (placed twice; now ${now}${over.length ? `; ${over.join(', ')} over the cell` : ''}; ${face}; ${where})`);
+        why(`the block did not stay (placed twice; now ${now}${over.length ? `; ${over.join(', ')} over the cell` : ''}; ${face}; ${where}${held})`);
     }
     return false;
 }

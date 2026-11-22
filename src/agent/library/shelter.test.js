@@ -1566,3 +1566,29 @@ test('soak 11 (C1): out of blocks part-way with dirt piles left: more dirt is cr
     assert.equal(calls.filter(([name]) => /^dirt/.test(name)).length, 2, `up front, then once more part-way: ${JSON.stringify(calls)}`);
     assert.match(bot.output, /The shelter needs 1 more blocks: making 1 dirt/);
 });
+
+// Soak 11 nights 1 to 3 (B5): the failing roofs were placed from the dirt stack Corpse Complex kept
+// through a death; the closing ones from dirt crafted just before. A place that leaves the cell air
+// and the stack unchanged is followed by a window click that resyncs the slot, and one more try.
+test('soak 11 (B5): the block did not stay and the held stack did not shrink: the slot is resynced, and the next try lands', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, items, placed } = fakeBot({ cobble: 0, pickaxe: false, set: dirtShell({ '1,64,0': 'air' }), items: [{ ...DIRT, count: 2, slot: 36 }] });
+    bot.inventory.slots = new Array(46).fill(null);
+    bot.inventory.slots[36] = items[0];
+    const moves = [];
+    let synced = false;
+    bot.moveSlotItem = (from, to) => { moves.push([from, to]); synced = true; items[0].slot = to; return Promise.resolve(); };
+    const place = bot.placeBlock;
+    bot.placeBlock = (ref, face) => (synced ? place(ref, face) : Promise.resolve()); // out of step until resynced
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.equal(r.closed, true, r.line);
+    assert.deepEqual(moves, [[36, 9]]);
+    assert.deepEqual(placed, ['1,64,0']);
+    // Never placed (resynced or not): the reason names the held stack, before and after.
+    const g = fakeBot({ cobble: 0, pickaxe: false, set: dirtShell({ '1,64,0': 'air' }), items: [{ ...DIRT, count: 2, slot: 36 }] });
+    g.bot.inventory.slots = new Array(46).fill(null);
+    g.bot.moveSlotItem = () => Promise.resolve();
+    g.bot.placeBlock = () => Promise.resolve();
+    const r2 = await buildShelter(g.bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.match(r2.line, /held dirt in slot 36: 2 before, 2 after \(the slot was resynced between the tries\)/);
+});
