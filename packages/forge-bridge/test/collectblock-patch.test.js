@@ -231,3 +231,78 @@ test('a goto that fails by itself (NoPath) rejects the collect as before and lea
     assert.deepEqual(listeners(bot), before, 'the pickup wait was cleaned up');
     assert.ok(bot.collectBlock.targets.empty, 'targets cleared on an error, as before');
 });
+
+/**
+ * A pathfinder whose first goto is stuck (stop() cannot end it; `release()` ends it later), and
+ * whose later gotos are rejected by stop() with PathStopped, like mineflayer-pathfinder.
+ */
+function stuckFirstGoto(bot) {
+    const pending = [];
+    const state = { release: null, calls: 0 };
+    bot.pathfinder.goto = () => {
+        state.calls++;
+        if (state.calls === 1) return new Promise((resolve) => { state.release = resolve; });
+        return new Promise((resolve, reject) => { pending.push(reject); });
+    };
+    bot.pathfinder.stop = () => {
+        const err = new Error('stopped');
+        err.name = 'PathStopped';
+        for (const r of pending.splice(0)) r(err);
+    };
+    return state;
+}
+
+test('#570 review: a collect given up by the cancel timeout that resumes later leaves the next collect alone', async () => {
+    const bot = fakeBot();
+    const stuck = stuckFirstGoto(bot);
+    bot.collectBlock.cancelTimeout = 200;
+    bot.collectBlock.pickupTimeout = 60_000;
+    let finished = 0;
+    bot.on('collectBlock_finished', () => finished++);
+    const ended = [];
+    bot.on('collectBlock_pickupEnded', (x) => ended.push(x.reason));
+    const a = item(bot, 1);
+    const collectA = bot.collectBlock.collect(a);
+    await new Promise((r) => setImmediate(r));
+    assert.equal(await bot.collectBlock.cancelTask(), 'timeout', 'A is stuck where a cancel cannot reach');
+    // B: two items; its walk is stopped by a cancel, as usual.
+    const collectB = bot.collectBlock.collect([item(bot, 2), item(bot, 3)]);
+    await new Promise((r) => setImmediate(r));
+    assert.equal(bot.collectBlock.targets.targets.length, 2);
+    // A's stuck walk ends now: A must neither clear B's targets nor say "finished", nor report a pickup.
+    stuck.release();
+    await collectA;
+    assert.equal(bot.collectBlock.targets.targets.length, 2, 'B keeps its targets');
+    assert.equal(finished, 0, 'no stray collectBlock_finished from A');
+    assert.deepEqual(ended, [], 'A reports no pickup');
+    assert.equal(bot.collectBlock.lastPickup, null);
+    // So a cancel still sees B running and stops it.
+    assert.equal(bot.collectBlock.targets.empty, false);
+    assert.equal(await bot.collectBlock.cancelTask(), 'finished');
+    await collectB;
+    assert.equal(finished, 1, 'B finished once');
+    assert.ok(bot.collectBlock.targets.empty);
+});
+
+test('#570 review: a block collect given up by the cancel timeout does not dig when its walk ends later', async () => {
+    const Block = require('prismarine-block')('1.12.2');
+    const bot = fakeBot();
+    const stuck = stuckFirstGoto(bot);
+    bot.collectBlock.cancelTimeout = 200;
+    const table = new Block(58, 1, 0);
+    table.position = new Vec3(2, 64, 0);
+    let digs = 0;
+    bot.blockAt = () => table;
+    bot.dig = () => { digs++; return Promise.resolve(); };
+    bot.tool.equipForBlock = () => Promise.resolve();
+    bot.pathfinder.movements = { safeToBreak: () => true };
+    let finished = 0;
+    bot.on('collectBlock_finished', () => finished++);
+    const collecting = bot.collectBlock.collect(table);
+    await new Promise((r) => setImmediate(r));
+    assert.equal(await bot.collectBlock.cancelTask(), 'timeout');
+    stuck.release();
+    await collecting;
+    assert.equal(digs, 0, 'the abandoned collect does not dig');
+    assert.equal(finished, 0, 'an abandoned run never says finished');
+});
