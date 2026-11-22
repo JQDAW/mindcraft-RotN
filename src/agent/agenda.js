@@ -269,7 +269,8 @@ export const WEAPON_RESERVE_STEP = {
     // ctx.foodDue (Fix H): the food reserve is due now; the weapon then comes first by day too.
     // Soak 10 (W2): with no weapon and the logs for a club held, at any time (the club right after the logs step).
     due: (s, ctx = {}) => beforeNight(s) || (!!ctx.foodDue && !foodFirst(s)) || clubLogs(s),
-    whenNow: (s) => (beforeNight(s) ? 'before night' : clubLogs(s) ? 'no weapon, logs held' : 'no weapon, before food'),
+    // Soak 11 (E1): the logs held come first, before night too: a new window, so a fresh budget (weaponWanted).
+    whenNow: (s) => (clubLogs(s) ? 'no weapon, logs held' : beforeNight(s) ? 'before night' : 'no weapon, before food'),
     // Soak 10 (W1): a weapon with a kill's worth of hits left (threats.WEAPON.killHits); a crude axe never counts.
     done: (s) => (typeof s.weaponReady === 'function' ? s.weaponReady() !== false : s.hasWeapon?.() !== false),
     // Soak 10 (W2): with the logs held, the driver crafts the club itself (no model call; agenda_driver autoCraftTick).
@@ -471,7 +472,7 @@ export class Agenda {
     /** A reserve's budget is spent: the shelter reserve and the weapon until the night is past; food for FOOD_RETRY_MS. */
     reserveStuck(id) {
         if (id === this.food?.id) this.foodOffUntil = this.now() + FOOD_RETRY_MS;
-        else if (id === this.weapon?.id) this.weaponOff = true;
+        else if (id === this.weapon?.id) { this.weaponOff = true; this.weaponOffAt = this.now(); }
         else this.reserveOff = true;
     }
 
@@ -496,8 +497,17 @@ export class Agenda {
         let window = null;
         try { window = r.whenNow?.(state) ?? null; } catch { window = null; }
         if (!readOnly && window) {
-            if (this.weaponWindow && this.weaponWindow !== window && window === 'before night') { this.weaponOff = false; delete this.spent[r.id]; }
+            // Soak 11 (E1): the logs for a club now held (a new window) gives a fresh budget too, before night as
+            // by day: 21:25 the bot held 33 logs and no weapon, its budget spent on the search for logs, and the
+            // reserve stayed off until the night (the driver's auto-craft never ran).
+            if (this.weaponWindow && this.weaponWindow !== window && (window === 'before night' || window === 'no weapon, logs held')) { this.weaponOff = false; delete this.spent[r.id]; }
             if (this.weaponWindow !== window) { this.weaponWindow = window; this.save(); } // #502 nit 4: kept across a restart
+        }
+        // Soak 11 (E2): a death after the budget was spent (a lost weapon) gives a fresh budget.
+        if (this.weaponOff && !readOnly) {
+            let since = Infinity;
+            try { since = state.sinceDeathMs?.() ?? Infinity; } catch { since = Infinity; }
+            if (Number.isFinite(since) && this.now() - since > (this.weaponOffAt ?? Infinity)) { this.weaponOff = false; this.weaponOffAt = null; delete this.spent[r.id]; }
         }
         if (this.weaponOff) return null;
         let done = false;

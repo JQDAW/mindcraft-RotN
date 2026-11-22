@@ -1223,3 +1223,41 @@ test('#579 re-review nit: a finished agenda, the club lost three times: each tim
     }
     assert.equal(agent.self_prompter.prompt, '', 'never the model\'s');
 });
+
+// Soak 11 night 2 (E): 21:16 to 21:24 the weapon reserve ran with 0 logs (its budget spent on the
+// search for logs, reflex interrupts restarting the runs); 21:25 the bot held 33 logs and no weapon,
+// but the spent reserve stayed off until the night, and the club was never crafted.
+test('soak 11 (E1): a spent weapon reserve before night comes back when the logs for a club are held, and the driver crafts it', (t) => {
+    const items = [stack('pyrotech:rock', 0, 6), stack('dirt', 0, SHELTER_HOLD)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    agent.bot.food = 20;
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    agent.agenda.spent.weapon = { attempts: 3, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
+    assert.equal(agent.agenda.weaponOff, true);
+    assert.notEqual(agendaTick(agent, { now: 2 * TICK_MS }), 'weapon', 'spent: off');
+    // The logs come (21:25, 33 logs): the reserve again, and the driver crafts the club.
+    items.push(stack('log', 1, 33));
+    const runs = [];
+    agent.actions = { executing: false, currentActionLabel: '', runAction: (label) => { runs.push(label); return Promise.resolve(); } };
+    assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), 'weapon');
+    assert.deepEqual(runs, ['action:craftRecipe:spartanweaponry:club_wood']);
+});
+
+test('soak 11 (E2): a death after the weapon reserve was spent gives it a fresh budget', (t) => {
+    const items = [stack('pyrotech:rock', 0, 6), stack('dirt', 0, SHELTER_HOLD)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    agent.bot.food = 20;
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    agent.agenda.spent.weapon = { attempts: 3, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
+    assert.notEqual(agendaTick(agent, { now: 2 * TICK_MS }), 'weapon');
+    // A death after it went off (the club lost with it): the reserve again.
+    const deathAt = Date.now() + 1000;
+    agent.bot.rotnLastDeathAt = () => deathAt;
+    agent.agenda.now = () => deathAt + 5000;
+    assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), 'weapon');
+    assert.equal(agent.agenda.weaponOff, false);
+});
