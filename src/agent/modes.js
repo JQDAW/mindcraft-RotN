@@ -1026,7 +1026,7 @@ function maybePromptReplan(controller, now = Date.now()) {
         const r = agent.replan;
         if (held && (r.interrupted || r.due) && !r.heldSaid) {
             r.heldSaid = true;
-            console.log(`[reflex] re-plan prompt held: ${held}; it goes once at full day`);
+            console.log(`[reflex] re-plan prompt held: ${held}; ${/respawn escape/.test(held) ? 'it goes when the escape ends' : 'it goes once at full day'}`);
         }
         return;
     }

@@ -2986,6 +2986,19 @@ export async function viewChest(bot) {
     });
 }
 
+/**
+ * Soak 10 (R6, the lead): the Scroll of New Life (lifescroll:spawnscroll) sets the respawn point where
+ * the bot stands and never teleports (rotn-data). Only the night routine uses it, once, by skill
+ * (bot.rotnScrollBySkill); the model is refused, with why. Returns whether it was refused.
+ */
+export function spawnScrollRefused(bot, item) {
+    const name = typeof item === 'string' ? item : item?.name;
+    if (!/(^|:)spawnscroll$/.test(name ?? '') || bot?.rotnScrollBySkill === true) return false;
+    log(bot, 'Not using the Scroll of New Life (lifescroll:spawnscroll): it sets your respawn point where you stand and does not teleport. '
+        + 'The night routine uses it once, at a closed shelter far from the spawn and every place you died; never use it yourself.');
+    return true;
+}
+
 export async function consume(bot, itemName="") {
     /**
      * Eat/drink the given item.
@@ -3004,6 +3017,7 @@ export async function consume(bot, itemName="") {
         log(bot, `You do not have any ${name} to eat.`);
         return false;
     }
+    if (spawnScrollRefused(bot, item)) return false;
     await bot.equip(item, 'hand');
     const before = bot.food;
     await bot.consume();
@@ -3677,6 +3691,9 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
      **/
     bot.modes.pause('self_preservation'); // prevents damage-on-low-health from interrupting the bot
     let enemy = world.getNearestEntityWhere(bot, isEnemy, distance);
+    // Soak 10 (R5): what the flee got away from, for an honest line at the end ("Moved 32 away" was
+    // said even when the bot was caught).
+    const firstPoint = enemy ? (enemiesPoint(bot, isEnemy, distance) ?? enemy.position) : null;
     let away = null; // the point the walk keeps away from
     let still = 0; // ticks in a row the pathfinder was not moving (reset when the goal is set again)
     let blocked = 0; // the same, never reset by a new goal: the flee is blocked (#497 review 3)
@@ -3695,7 +3712,10 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
         if (!away || away.distanceTo(point) > 1 || still >= 2) {
             away = point;
             still = 0;
-            bot.pathfinder.setMovements(new pf.Movements(bot));
+            // Soak 10 (R5): a flee never digs ("Found destructive path" while fleeing: caught digging).
+            const moves = new pf.Movements(bot);
+            moves.canDig = false;
+            bot.pathfinder.setMovements(moves);
             bot.pathfinder.setGoal(new pf.goals.GoalInvert(new pf.goals.GoalNear(point.x, point.y, point.z, distance + 1)));
         }
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -3708,7 +3728,9 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
         }
     }
     bot.pathfinder.stop();
-    log(bot, `Moved ${distance} away from enemies.`);
+    const got = firstPoint ? Math.round(bot.entity.position.distanceTo(firstPoint)) : distance;
+    log(bot, !firstPoint || got >= distance ? `Moved ${distance} away from enemies.`
+        : `Moved away from enemies, but only to ${got} blocks of the ${distance}${bot.interrupt_code ? ' (stopped)' : ''}.`);
     return true;
 }
 
@@ -4526,6 +4548,7 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
      * @returns {Promise<boolean>} true if action succeeded
      */
     const L = { ...USE_ON_LIMITS, ...limits };
+    if (spawnScrollRefused(bot, toolName)) return false; // soak 10 (R6): never the model's
     const start = Date.now();
     const left = () => L.totalMs - (Date.now() - start);
     if (toolName !== 'hand' && bot.game.gameMode !== 'creative'

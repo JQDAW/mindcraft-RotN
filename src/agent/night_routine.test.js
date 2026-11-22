@@ -3213,3 +3213,66 @@ test('#557 nit: a search for better ground stopped by a reflex ends exposed, say
     assert.equal(agent.chat.at(-1), `[night] no shelter: no place for a shelter or a hole here (${RIVER_REFUSED}), and the search for better ground was interrupted; out of the water at 7, 64, 0; no retry from this spot; staying here until morning`);
     assert.equal(nightState(agent).groundMoves, 0, 'no walk counted');
 });
+
+// Soak 10 (R2, the lead): right after the respawn escape (respawn_escape.js) the night shelter goes
+// where the escape ended, a hole first (the bot lost its dirt), and there is no walk back.
+test('soak 10 (R2): right after the respawn escape, the night shelter is a hole first where the escape ended; no walk back toward the death spots', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    agent._death = deathAt(-60_000);
+    const o = deathOps();
+    o.escapedRecently = () => true;
+    let now = 0;
+    const run = async () => { nightTick(agent, { now: ++now, ops: o }); await settle(agent); };
+    await run();
+    assert.deepEqual(o.calls, ['pit', 'roof'], `a hole first, no walk away: ${agent.chat.join(' | ')}`);
+    assert.ok(agent.chat.includes('[night] after the respawn escape: sheltering here at 0, 64, 0, a hole first'), agent.chat.join('\n'));
+    assert.equal(nightState(agent).pit, true);
+    // No escape: the walk away first, as before.
+    const before = fakeAgent({ t: NIGHT });
+    before._death = deathAt(-60_000);
+    const o2 = deathOps();
+    o2.escapedRecently = () => false;
+    nightTick(before, { now: 1, ops: o2 });
+    await settle(before);
+    assert.deepEqual(o2.calls, ['away']);
+});
+
+// Soak 10 (R6, the lead): the Scroll of New Life, once, by skill, at a closed night shelter far from the
+// spawn and every death spot, with no hostile near (respawn_escape.scrollRefusal / useSpawnScroll).
+test('soak 10 (R6): in a closed night shelter the scroll is used once, as the routine\'s own job; refused: said in the journal only; never by day', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    const uses = [];
+    o.scrollRefusal = () => null;
+    o.useSpawnScroll = () => { uses.push(1); return Promise.resolve({ used: true }); };
+    const labels = [];
+    const run = agent.actions.runAction.bind(agent.actions);
+    agent.actions.runAction = (label, fn) => { labels.push(label); return run(label, fn); };
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'inside');
+    nightTick(agent, { now: 1, ops: o });
+    await settle(agent);
+    assert.deepEqual(uses, [1]);
+    assert.ok(labels.includes('action:spawnScroll'), labels.join(','));
+    assert.ok(agent.chat.includes('[night] setting the respawn point here at 0, 64, 0 with the Scroll of New Life (once): far from the spawn and every death spot, no hostile near'));
+    assert.ok(agent.chat.includes('[night] the respawn point is now 0, 64, 0: a death within 32 blocks of it raises no player zombie'));
+    nightTick(agent, { now: CHECK_MS + 2, ops: o });
+    await settle(agent);
+    assert.deepEqual(uses, [1], 'once a shelter');
+    // Refused: a console line, no chat, no use.
+    const near = fakeAgent({ t: NIGHT });
+    const o2 = ops();
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    o2.scrollRefusal = () => '40 blocks from the spawn (it needs 100)';
+    o2.useSpawnScroll = () => { throw new Error('not here'); };
+    nightTick(near, { now: 0, ops: o2 });
+    await settle(near);
+    nightTick(near, { now: 1, ops: o2 });
+    await settle(near);
+    assert.ok(logs.includes('[night] the Scroll of New Life is not used at 0, 64, 0: 40 blocks from the spawn (it needs 100)'), logs.join('\n'));
+    assert.ok(!near.chat.some(l => /Scroll of New Life/.test(l)));
+});
