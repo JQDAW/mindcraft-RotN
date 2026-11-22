@@ -333,9 +333,9 @@ test('defendSelf with the only sword in the off hand fights with it in the main 
     let heldWhenHitting = null;
     bot.pvp = { attack: () => { heldWhenHitting = bot.heldItem?.name; delete bot.entities[7]; }, stop() {} };
     assert.equal(await skills.defendSelf(bot, 9, () => true), true);
-    assert.deepEqual(held, ['stone_sword@hand']);
+    // Soak 11 (A3): into the main hand for the fight, and back into the off hand after it.
+    assert.deepEqual(held, ['stone_sword@hand', 'stone_sword@off-hand']);
     assert.equal(heldWhenHitting, 'stone_sword');
-    assert.equal(slots[45], null, 'the sword left the off hand');
 });
 
 // #238 nits 2 and 3: a full inventory is logged; a better off-hand weapon beats a worse one in the

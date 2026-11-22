@@ -1029,8 +1029,9 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
         const n = noteFightEnd(bot, fought, outcome);
         if (n) console.log(`[survival] giving up on ${fought.name}: ${n} fights in a row on it were interrupted; leaving it alone for ${UNREACHABLE.skipMs / 60_000} min`);
     }
-    // Soak 11 (A3): the weapon back in the off hand after the fight (Corpse Complex keeps it there).
-    try { await rearmWeapon(bot); } catch { /* best effort */ }
+    // Soak 11 (A3): the weapon back in the off hand after the fight (Corpse Complex keeps it there);
+    // not after an equip the server rejected (G3 round 7 B: no more equip tries this fight).
+    if (!fight.equipFailed) { try { await rearmWeapon(bot); } catch { /* best effort */ } }
     bot.pvp.stop();
     if (attacked)
         log(bot, `Successfully defended self.`);
@@ -1162,8 +1163,8 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
         bot.rotnFightEndedAt = Date.now();
         journal.end(outcome);
     }
-    // Soak 11 (A3): the weapon back in the off hand after the fight in place.
-    try { await rearmWeapon(bot); } catch { /* best effort */ }
+    // Soak 11 (A3): the weapon back in the off hand after the fight in place (not after a rejected equip).
+    if (!fight.equipFailed) { try { await rearmWeapon(bot); } catch { /* best effort */ } }
     log(bot, swings > 0 ? `Fought from inside the shelter: ${swings} swing${swings === 1 ? '' : 's'}, stopped: ${why}.`
         : outcome === 'gone' ? 'Nothing in reach to fight.' : `No swing went out from inside the shelter, stopped: ${why}.`); // #532 review: say why
     return swings > 0;

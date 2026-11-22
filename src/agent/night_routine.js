@@ -15,7 +15,7 @@
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, SCROLL_LABEL, shelterShell, isFullDay, replanHold, placeableDirt } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway, mobInside } from './library/shelter.js';
+import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
 import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon } from './library/skills.js';
 import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
@@ -149,7 +149,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     restoreCowardice(agent, n);
-    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, insideSaidFor: null, ...GROUND_CLEAR, groundSkip: [] });
+    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, ...GROUND_CLEAR, groundSkip: [] });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0, ...MORNING_CLEAR });
@@ -763,6 +763,19 @@ function closeNow(bot, n, ops) {
 }
 
 /**
+ * Soak 11 (G, death 4 at 21:57): a zombie dug the pocket's roof and dropped into the bot's own cell;
+ * the repair closed the shelter around it, the morning wait said "staying in until it leaves", and the
+ * unarmed bot never swung. closeQuarters (soak 7 (C)) was reached only past the morning's wait: now a
+ * hostile in the bot's two cells gets it at night and during the wait too (armed above its hit: the
+ * fight; else a burrow away, once; then hitting back). Returns its result, or null (none in the cell).
+ */
+function mobInCellNow(agent, n, ops, when) {
+    if (!n.site) return null;
+    const close = (ops.closeMob ?? closeMob)(agent.bot, n.site, { exposed: false });
+    return close?.inCell ? closeQuarters(agent, n, ops, { when }) : null;
+}
+
+/**
  * #514 review 2: MORNING.capMs never hands back with a mob in the bot's cell or in reach (closeNow):
  * the bot stays sheltered (handFight kept) and the hand-back waits until the mob is gone.
  * #514 re-review: not without end: a mob that is not in the bot's cell and has not hurt it for
@@ -819,7 +832,7 @@ function capSeal(agent, n, ops) {
     return 'night:inside';
 }
 
-function closeQuarters(agent, n, ops) {
+function closeQuarters(agent, n, ops, { when = 'morning: ' } = {}) {
     const bot = agent.bot;
     const { close, todo } = closeNow(bot, n, ops);
     if (!close) { n.handFight = false; return null; }
@@ -827,7 +840,7 @@ function closeQuarters(agent, n, ops) {
     const name = mob.name ?? 'hostile mob';
     const health = Math.round(bot.health ?? 0);
     const said = (k, text) => { if (n.closeSaid === k) console.log(text); else { n.closeSaid = k; line(agent, text); } };
-    const lead = `[night] morning: ${aMob(name)} ${inCell ? `in the bot's cell at ${at(n.site)}` : `${close.d.toFixed(1)} blocks away, in its reach`}: not leaving past it`;
+    const lead = `[night] ${when}${aMob(name)} ${inCell ? `in the bot's cell at ${at(n.site)}` : `${close.d.toFixed(1)} blocks away, in its reach`}: not leaving past it`;
     const held = todo.length ? (ops.heldCells?.(bot, n.site, todo) ?? []) : [];
     // #514 review 1: the re-seal is tried once per mob and opening; a failed one (no blocks, a
     // placement that fails) falls through to (ii)-(iv), so the repair does not hold the fight off.
@@ -836,7 +849,7 @@ function closeQuarters(agent, n, ops) {
         n.closeSealTried = sealKey;
         said(`seal:${todo.map(key3).join(';')}`, `${lead}; closing the shelter again at ${todo.map(at).join('; ')}`);
         startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody: n.tolerated }), (r) => {
-            if (r?.closed) { bot.rotnSheltered = true; n.handFight = false; console.log(`[night] morning: the shelter at ${at(n.site)} is closed again`); }
+            if (r?.closed) { bot.rotnSheltered = true; n.handFight = false; console.log(`[night] ${when}the shelter at ${at(n.site)} is closed again`); }
         });
         return 'night:inside';
     }
@@ -859,7 +872,7 @@ function closeQuarters(agent, n, ops) {
             n.closeBurrowWhy = r?.why ?? null;
             const moved = steps ? `burrowed ${steps} step${steps === 1 ? '' : 's'} into ${at(here)}` : `did not burrow (still at ${at(here)})`;
             const end = r?.stopped === 'far' ? 'out of its reach; sealed behind' : r?.stopped === 'gone' ? `${aMob(name)} is gone` : (r?.why ?? r?.stopped ?? 'no result');
-            line(agent, `[night] morning: ${moved}: ${end}`);
+            line(agent, `[night] ${when}${moved}: ${end}`);
         });
         return 'night:inside';
     }
@@ -1170,7 +1183,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (spent) n.lastShelter = spent.clone?.() ?? spent;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, insideSaidFor: null, ...GROUND_CLEAR, groundSkip: [] });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, ...GROUND_CLEAR, groundSkip: [] });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -1366,22 +1379,6 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
     }
 
     if (n.state === 'inside') {
-        // Soak 11 (G, death 4 at 21:57): a zombie dug the pocket's roof and dropped into the bot's own
-        // cell; the shelter was whole again, so nothing here saw it, and the fight mode would not swing
-        // unarmed. A hostile in the bot's two cells is cornered (#470 review 2: hitting back beats
-        // standing still): the fight in place swings at it, armed or not, at any health. Before the
-        // morning's checks too (it was morning at 21:57: "staying in until it leaves").
-        const inCell = (ops.mobInside ?? mobInside)(bot, n.site);
-        if (inCell) {
-            if (n.insideSaidFor !== inCell.id) {
-                n.insideSaidFor = inCell.id;
-                line(agent, `[night] ${aMob(inCell.name ?? 'hostile mob')} is inside the shelter at ${at(n.site)}: cornered, hitting back`);
-            }
-            n.handFight = true;
-            bot.rotnSheltered = 'open';
-            return 'night:inside';
-        }
-        if (n.insideSaidFor != null) { n.insideSaidFor = null; n.handFight = false; } // the mob inside is dead or gone
         // Soak 10 (R6, the lead): the Scroll of New Life sets the respawn point where the bot stands; a
         // death within 32 blocks of it then raises no player zombie. Used once, by skill (never the
         // model), at a closed night shelter far from the spawn and every death spot, with no hostile near.
@@ -1454,6 +1451,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 // then fight it through the wall on its side (armed, health, one mob), else leave by the
                 // side away from it; never past MORNING.capMs.
                 if (waited < MORNING.waitMs) {
+                    const inCell = mobInCellNow(agent, n, ops, 'morning: ');
+                    if (inCell) { n.exitAt = now + RETRY_MS; return inCell; }
                     n.exitAt = now + RETRY_MS;
                     const text = `[night] morning: ${mobText(mob)} is within ${LEAVE_MOB_RANGE} blocks of the shelter at ${at(n.site)}; staying in until it leaves (checking every ${RETRY_MS / 1000} s, at most ${MORNING.waitMs / 60_000} min)`;
                     if (n.mobSaid) console.log(text); else { n.mobSaid = true; line(agent, text); }
@@ -1559,6 +1558,12 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             && (n.burrowNoneAt == null || now - n.burrowNoneAt >= CHECK_MS)) {
             const threat = ops.burrowThreat?.(bot) ?? null;
             if (threat) { startBurrow(agent, n, ops, threat); return 'night:inside'; }
+        }
+        // Soak 11 (G): a hostile in the bot's own cells, every tick (not every CHECK_MS): close quarters.
+        if (!isFullDay(t) && bot.entity.position.floored().equals(n.site)) {
+            const inCell = mobInCellNow(agent, n, ops, '');
+            if (inCell) return inCell;
+            if (n.closeSaid != null && !n.closeSaid.startsWith('seal:')) { n.handFight = false; n.closeSaid = null; } // gone
         }
         // #331 review 4: while a wall is known open (a repair did not close it, or a fight in place
         // held it up), every tick checks and repairs, not every CHECK_MS.

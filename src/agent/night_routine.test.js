@@ -3533,33 +3533,35 @@ test('soak 11 (D, A1): unarmed, repairing first, the zombie steps into the openi
 // Soak 11 death 4 (21:57, G): the zombie dug the pocket's roof and dropped into the bot's own cell; the
 // repair closed the shelter around it, the morning check said "staying in until it leaves", and the
 // unarmed bot did not swing ("not fighting from the shelter unless cornered") until it died.
-test('soak 11 (G): a hostile inside the bot\'s own cells is cornered: it hits back, at night and in the morning; the repair that placed every cell around it is not counted closed', async (t) => {
+test('soak 11 (G): a hostile inside the bot\'s own cells gets the close-quarters rule at night and in the morning wait (burrow once, then hit back); the repair that placed every cell around it is not counted closed', async (t) => {
     quiet(t);
-    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(0.5, 64, 0.5) };
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(0.5, 64, 0.5), height: 1.95 };
     const s = heldSetup({ plan: false, held: 'none' });
-    let inside = null;
-    s.o.mobInside = () => inside;
+    s.o.burrows = [];
+    s.o.burrowAway = (bot, m, opts) => { s.o.burrows.push(opts); return Promise.resolve({ steps: 0, site: null, stopped: 'cornered', why: 'down: a body in 0, 64, 0, which the step seals' }); };
     nightTick(s.agent, { now: 0, ops: s.o });
     await settle(s.agent);
     assert.equal(nightState(s.agent).state, 'inside');
-    inside = zombie;
+    s.agent.bot.entities = { ...(s.agent.bot.entities ?? {}), 7: zombie }; // it dropped into the bot's cell
     assert.equal(nightTick(s.agent, { now: CHECK_MS + 1, ops: s.o }), 'night:inside');
-    assert.ok(s.agent.chat.includes('[night] a zombie is inside the shelter at 0, 64, 0: cornered, hitting back'), s.agent.chat.join('\n'));
-    assert.equal(nightState(s.agent).handFight, true);
-    assert.equal(s.agent.bot.rotnSheltered, 'open');
-    // Said once per mob.
-    nightTick(s.agent, { now: 2 * CHECK_MS + 2, ops: s.o });
-    assert.equal(s.agent.chat.filter(l => /is inside the shelter/.test(l)).length, 1);
-    // In the morning too, before "staying in until it leaves".
+    await settle(s.agent);
+    assert.equal(s.o.burrows.length, 1, s.agent.chat.join('\n'));
+    assert.ok(s.agent.chat.includes(`[night] a zombie in the bot's cell at 0, 64, 0: not leaving past it; no weapon, health 20, and it may hit for ${ZOMBIE_HIT}: burrowing away from it (a step down first)`), s.agent.chat.join('\n'));
+    assert.equal(nightTick(s.agent, { now: 2 * CHECK_MS + 2, ops: s.o }), 'night:inside');
+    assert.equal(nightState(s.agent).handFight, true, 'no burrow step: it hits back by hand');
+    assert.equal(s.agent.chat.at(-1), '[night] a zombie in the bot\'s cell at 0, 64, 0: not leaving past it; no weapon, health 20, and no burrow step (down: a body in 0, 64, 0, which the step seals): hitting back by hand');
+    // Killed or gone: the hand fight ends; it comes back (a new burrow try for a new mob).
+    delete s.agent.bot.entities[7];
+    nightTick(s.agent, { now: 2 * CHECK_MS + 3, ops: s.o });
+    assert.equal(nightState(s.agent).handFight, false);
+    s.agent.bot.entities[7] = zombie;
+    // The morning wait (it was morning at 21:57: "staying in until it leaves"): still hitting back.
     s.agent.bot.time.timeOfDay = MORNING;
     s.o.hostileNear = () => zombie;
     assert.equal(nightTick(s.agent, { now: 3 * CHECK_MS + 3, ops: s.o }), 'night:inside');
+    await settle(s.agent);
     assert.equal(nightState(s.agent).handFight, true);
-    assert.ok(!s.agent.chat.some(l => /staying in until it leaves/.test(l)));
-    // Gone: the cornered fight ends.
-    inside = null;
-    nightTick(s.agent, { now: 4 * CHECK_MS + 4, ops: s.o });
-    assert.equal(nightState(s.agent).handFight, false);
+    assert.ok(!s.agent.chat.some(l => /staying in until it leaves/.test(l)), s.agent.chat.join('\n'));
     // The repair that placed every cell with it inside (buildShelter's G1 result): not closed.
     const r = heldSetup({ plan: false, held: 'none' });
     r.o.mobInReach = () => null;
