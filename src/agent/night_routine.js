@@ -14,10 +14,10 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, shelterShell, isFullDay, replanHold } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, shelterShell, isFullDay, replanHold, placeableDirt } from './library/night.js';
+import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
 import { goToGoal, descendFromTree, avoidEnemies, inShelterReach } from './library/skills.js';
-import { stowCarried, toolAllows } from './library/rotn_sources.js';
+import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
@@ -148,7 +148,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     restoreCowardice(agent, n);
-    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, ...GROUND_CLEAR, groundSkip: [] });
+    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, ...GROUND_CLEAR, groundSkip: [] });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0, ...MORNING_CLEAR });
@@ -860,7 +860,13 @@ export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSp
     // #497 review 2: away from every threat; cornered, it may hit a melee mob only, never a troll or a creeper.
     awayFromMobs: (bot) => avoidEnemies(bot, MORNING.awayDist, shelterEnemy, shelterTarget),
     heldCells, retreatPlan, backAway, hasWeapon, mobInReach, dangerInReach: (bot) => mobInReach(bot, notMelee),
-    burrowThreat, burrowAway };
+    burrowThreat, burrowAway,
+    // #580 review 3: the blocks a repair may place now (with a pickaxe sturdy and dirt; without, dirt, its piles, logs and planks).
+    repairBlocks: (bot) => {
+        const items = bot.inventory?.items?.() ?? [];
+        const dirt = countOf(softItems(bot)) + placeableDirt(items);
+        return toolLevels(bot, 'pickaxe').length > 0 ? countOf(shelterItems(bot)) + dirt : dirt + countOf(woodItems(bot));
+    } };
 
 /**
  * Exposed with no weapon (round 9 B, fix h): keep away from mobs rather than fight bare-handed.
@@ -1142,7 +1148,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (spent) n.lastShelter = spent.clone?.() ?? spent;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, ...GROUND_CLEAR, groundSkip: [] });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, ...GROUND_CLEAR, groundSkip: [] });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -1590,13 +1596,41 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     startBackAway(agent, n, ops, plan, tolerateBody, BACK_AWAY_LABEL, 'backed away');
                     return 'night:inside';
                 }
+                // Soak 10 (N1, the lead): cornered by a melee mob with no weapon (or at a health one hit may
+                // take): burrow away from it, a step down first (closeQuarters' rule (iii), at night too),
+                // once per mob, before any hand fight. 15:51: by hand, 0.3 a swing, the bot died 26 s after
+                // the zombie dug in; a step down seals with the dirt it digs when no block is held (burrow.js).
+                const mobKey = reaching.mob.id ?? name;
+                // #580 review 3 (the lead's order): the opening free (no melee mob holds it) and a block to
+                // repair with: the repair first (below); the burrow only when a melee mob holds the opening,
+                // still reaches after that repair, or no block is held.
+                const blocks = ops.repairBlocks ? ops.repairBlocks(bot) : 0;
+                if (!other && !heldMelee && blocks > 0 && n.repairFirstFor !== mobKey) {
+                    n.repairFirstFor = mobKey;
+                    line(agent, `[night] ${why}, and no way to back away: the opening is free and ${blocks} block${blocks === 1 ? '' : 's'} held: repairing first`);
+                } else if (!other && ops.burrowAway && n.nightBurrowTried !== mobKey) {
+                    n.nightBurrowTried = mobKey;
+                    line(agent, `[night] ${why}, and no way to back away: burrowing away from it (a step down first)`);
+                    const stopAt = meleeReach(reaching.mob) + CLOSE.margin;
+                    startJob(agent, n, BURROW_LABEL, () => ops.burrowAway(bot, reaching.mob, { maxSteps: CLOSE.burrowSteps, stopAt, prefer: 'down' }), (r) => {
+                        const here = burrowedInto(bot, n, ops);
+                        const steps = r?.steps ?? 0;
+                        n.burrowSteps = (n.burrowSteps ?? 0) + steps; // #580 nit 7: the night's burrow steps
+                        n.nightBurrowWhy = r?.why ?? null;
+                        const moved = steps ? `burrowed ${steps} step${steps === 1 ? '' : 's'} into ${at(here)}` : `did not burrow (still at ${at(here)})`;
+                        const end = r?.stopped === 'far' ? 'out of its reach; sealed behind' : r?.stopped === 'gone' ? `${aMob(name)} is gone` : (r?.why ?? r?.stopped ?? 'no result');
+                        line(agent, `[night] ${moved}: ${end}`);
+                    });
+                    return 'night:inside';
+                } else {
                 // Cornered: a melee mob is hit back; any other threat never is.
                 n.handFight = !other;
                 const text = other
                     ? `[night] ${why}, and no way to back away${burrowsFrom(other.mob) ? ' or burrow' : ''}: not hitting it`
-                    : `[night] ${armed ? '' : 'no weapon, '}health ${Math.round(bot.health)}, and no way to back away from ${aMob(name)} ${where}: ${armed ? 'hitting back' : 'hitting back by hand'}`;
+                    : `[night] ${armed ? '' : 'no weapon, '}health ${Math.round(bot.health)}, and no way to back away${n.nightBurrowTried === mobKey ? ` or burrow${n.nightBurrowWhy ? ` (${n.nightBurrowWhy})` : ''}` : ''} from ${aMob(name)} ${where}: ${armed ? 'hitting back' : 'hitting back by hand'}`;
                 const said = reaching.cell ? key3(reaching.cell) : `reach:${reaching.mob.id ?? ''}`;
                 if (n.handSaid === said) console.log(text); else { n.handSaid = said; line(agent, text); }
+                }
             }
             // A cell the bot will not clear by hitting (no weapon, or a mob it never hits) is left
             // out of the repair; the other open cells are repaired.

@@ -14,7 +14,7 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { isSturdy, isSoftWall, isWall, handDiggable, dirtPileRecipes, shelterShell, dumpState, placeableDirt } from './night.js';
+import { isSturdy, isSoftWall, isWall, isWoodItem, handDiggable, dirtPileRecipes, shelterShell, dumpState, placeableDirt } from './night.js';
 import { loadRotnData, PACK_VERSION, registryName, botName, getItem, mobDigging, canMobDig } from '../../../packages/rotn-data/index.js';
 import { formatName } from './rotn_names.js';
 import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
@@ -147,6 +147,13 @@ export function shelterItems(bot) {
 export function softItems(bot) {
     return bot.inventory.items()
         .filter(i => isSoftWall({ name: i.name, metadata: i.metadata ?? 0 }))
+        .sort((a, b) => b.count - a.count);
+}
+
+/** Soak 10 (S2): the logs and planks held that make a wall (night.isWoodWall), most first. */
+export function woodItems(bot) {
+    return bot.inventory.items()
+        .filter(i => isWoodItem({ name: i.name, metadata: i.metadata ?? 0 }))
         .sort((a, b) => b.count - a.count);
 }
 
@@ -664,12 +671,20 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
             ?? (pick.ok && !soft.handExit && !toolLevels(bot, 'pickaxe').some(l => l >= exitLevel(bot, soft.feet))
                 ? `Cannot build the shelter at ${at(soft.feet)}: your pickaxe could not dig out of its walls.` : null);
         // Without a pickaxe only dirt goes in: the bot must be able to dig itself out by hand.
-        const items = (b) => (pick.ok ? [...shelterItems(b), ...softItems(b)] : softItems(b));
-        if (!softProblem && countOf(items(bot)) < soft.blocks) await craftMore(bot, 'dirt', soft.blocks - countOf(items(bot)), craft);
+        // Soak 10 (S2, the lead): a repair with no dirt left (and none its piles make) uses logs or
+        // planks, which break by hand in the morning; never stone-type blocks without a pickaxe. A repair
+        // is any call with a site (#580 nit 6): the routine's repairs, the hole's roof, the morning re-seal.
+        const repairWood = !!site && keepSoft && !pick.ok;
+        const items = (b) => (pick.ok ? [...shelterItems(b), ...softItems(b)] : repairWood ? [...softItems(b), ...woodItems(b)] : softItems(b));
+        const dirtHeld = () => countOf(pick.ok ? items(bot) : softItems(bot));
+        if (!softProblem && dirtHeld() < soft.blocks) await craftMore(bot, 'dirt', soft.blocks - dirtHeld(), craft);
         const have = countOf(items(bot));
         if (!softProblem && have >= soft.blocks) {
             plan = soft;
-            mode = { items: (b) => wallItems(b, items(b), diggers), accept: isWall };
+            // Dirt first; logs and planks only once no dirt is left (S2).
+            const wallsFrom = (b) => (repairWood && softItems(b).length === 0 ? woodItems(b) : pick.ok ? items(b) : softItems(b));
+            mode = { items: (b) => wallItems(b, wallsFrom(b), diggers), accept: isWall };
+            if (repairWood && countOf(softItems(bot)) < soft.blocks) log(bot, `No dirt left for all of the repair: ${countOf(softItems(bot))} dirt, then logs or planks (they break by hand in the morning).`);
             log(bot, `Building the shelter with dirt too${pick.ok ? '' : ' (no pickaxe: dirt can be dug out by hand)'}; mobs can dig through dirt.`);
         } else {
             const dirt = countOf(softItems(bot));

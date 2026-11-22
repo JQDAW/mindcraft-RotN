@@ -182,6 +182,8 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     // "agenda done": only the reserves run (G3 round 6 B, G4 #5), and otherwise nothing is touched
     // (the model's own goal, a giver's goal), as before.
     if (!agenda.active && !agenda.anyReserveWanted(tickState(agent))) {
+        // #579 re-review nit: no step is current here, so the next weapon reserve gets fresh craft tries.
+        agent._agenda_auto_step = null;
         if (agenda.isReserveId(agent._agenda_step)) {
             if (sp.isActive() && ownsPrompt(agent)) sp.stop(false);
             agent._agenda_step = null;
@@ -241,6 +243,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         // under the model-goal LLM budget, until a retry is due (agenda.retryDue).
         if (agent._agenda_step && sp.isActive() && ownsPrompt(agent)) sp.stop(false);
         agent._agenda_step = null;
+        agent._agenda_auto_step = null; // #579 re-review nit: as above
         const open = agenda.openGoal(state);
         // #469 review: in open-goal mode the agenda still says that it resumed after a task, or after
         // a restart, in the forms the scenarios read ("agenda resumed: <id>"; the restart suffix).

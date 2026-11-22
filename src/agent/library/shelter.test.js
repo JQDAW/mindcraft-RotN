@@ -1282,8 +1282,8 @@ test('PR 5: burrowStep picks the enclosed side column farthest from the troll; s
         assert.equal(r.to, undefined, JSON.stringify(set));
         assert.match(r.why, why);
     }
-    // Nothing to seal with: no step.
-    assert.deepEqual(burrowStep(withTroll(holeShelter({ dirt: 0 }), t).bot, t), { why: 'no blocks to seal with' });
+    // Nothing to seal with: no step (soak 10, N1: on a stone floor; a dirt floor seals a step down itself).
+    assert.deepEqual(burrowStep(withTroll(holeShelter({ dirt: 0, set: { '0,60,0': 'stone' } }), t).bot, t), { why: 'no blocks to seal with' });
     // #507 review 1: gravel as the floor of the west column (it falls when the bot stands on it over
     // a cave): no; the next best side is not farther, so no step at all.
     const gravelFloor = burrowStep(withTroll(holeShelter({ set: { '-1,60,0': 'gravel' } }), t).bot, t);
@@ -1330,7 +1330,8 @@ test('PR 5: burrowAway tunnels until the troll is ~8 blocks off, sealing behind 
     const g = holeShelter({ dirt: 12 });
     assert.deepEqual(await burrowAway(g.bot, troll(3.5, 61, 0.5)).then(x => [x.stopped, x.steps]), ['gone', 0]);
     // Cornered: the reason, no step.
-    const c = withTroll(holeShelter({ dirt: 0 }), troll(3.5, 61, 0.5));
+    // (soak 10, N1: a dirt floor seals a step down itself, so the floor here is stone.)
+    const c = withTroll(holeShelter({ dirt: 0, set: { '0,60,0': 'stone' } }), troll(3.5, 61, 0.5));
     assert.deepEqual(await burrowAway(c.bot, c.bot.entities[9]), { steps: 0, site: null, stopped: 'cornered', why: 'no blocks to seal with' });
 });
 
@@ -1379,4 +1380,105 @@ test('soak 7 (c): a mob hit out of the opening is hit with the best weapon in ha
     assert.equal(r.closed, true, bot.output);
     assert.deepEqual(held, ['stone_sword']);
     assert.ok(logs.includes('[survival] weapon stone_sword (cell)'), logs.join('\n'));
+});
+
+// Soak 10 (rotn-v0.1.16, 15:51, N1): a zombie dug into the dirt shelter; the bot had no block left and
+// no weapon, hit back by hand and died. With no block held, a step down on dirt or grass seals itself
+// with the dirt it digs (4 piles by hand make 1 dirt).
+test('soak 10 (N1): with no block held, a step down on dirt seals itself with the dirt it digs; on stone, or a step aside, it needs a block', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const f = withGravity(holeShelter({ dirt: 0 }));
+    const zombie = Object.assign(f.bot.entities[7], { position: new Vec3(1.3, 61, 0.5), width: 0.6 });
+    const dig = f.bot.dig;
+    f.bot.dig = async (b) => { const was = f.bot.blockAt(b.position).name; await dig(b); if (was === 'dirt') f.items.push(n(PILE, 4)); };
+    const step = burrowStep(f.bot, zombie, { prefer: 'down' });
+    assert.deepEqual([step.kind, step.selfSeal, key(step.to), step.seal.map(key)], ['down', true, '0,59,0', ['0,61,0']]);
+    assert.equal(burrowStep(f.bot, zombie).kind, 'down', 'without prefer too: no step aside can seal');
+    const { craft, calls } = fakeCraft(f.items);
+    const r = await takeBurrowStep(f.bot, step, { craft });
+    assert.deepEqual(r, { site: new Vec3(0, 59, 0) }, f.bot.output);
+    assert.deepEqual(f.dug, ['0,60,0', '0,59,0']);
+    assert.deepEqual(f.placed, ['0,61,0'], 'sealed above with the dug dirt');
+    assert.ok(calls.some(([name]) => /^dirt/.test(name)), JSON.stringify(calls));
+    // A stone floor (no pickaxe): no step at all.
+    const s = holeShelter({ dirt: 0, set: { '0,60,0': 'stone' } });
+    assert.deepEqual(burrowStep(s.bot, s.bot.entities[7], { prefer: 'down' }), { why: 'no blocks to seal with' });
+    // The dug dirt gave nothing (the piles never came): in the hole, not sealed, and said.
+    const lost = withGravity(holeShelter({ dirt: 0 }));
+    Object.assign(lost.bot.entities[7], { position: new Vec3(1.3, 61, 0.5), width: 0.6 });
+    const r2 = await takeBurrowStep(lost.bot, burrowStep(lost.bot, lost.bot.entities[7], { prefer: 'down' }), { craft: fakeCraft(lost.items).craft });
+    assert.equal(r2.why, 'the dug dirt gave 0 of the 1 blocks to seal with');
+    assert.deepEqual(lost.placed, []);
+});
+
+// Soak 10 (S2, the lead after rotn-data): logs and planks break by hand on RotN (about 3 s) and drop
+// themselves; stone-type blocks never break by hand. With no dirt left, a repair without a pickaxe
+// uses logs or planks; never cobblestone.
+const dirtShell = (changes = {}) => {
+    const set = {};
+    for (const [x, z] of SIDES) { set[`${x},64,${z}`] = 'dirt'; set[`${x},65,${z}`] = 'dirt'; }
+    set['0,66,0'] = 'dirt';
+    return { ...set, ...changes };
+};
+test('soak 10 (S2): a repair with no dirt left places a log (it breaks by hand); dirt first while any is left; never cobblestone without a pickaxe', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { isWoodWall, isWall } = await import('./night.js');
+    assert.equal(isWoodWall({ name: 'log', metadata: 1 }), true);
+    assert.equal(isWoodWall({ name: 'planks', metadata: 0 }), true);
+    assert.equal(isWoodWall({ name: 'cobblestone', metadata: 0 }), false);
+    assert.equal(isWall({ name: 'log', metadata: 1 }), true, 'a log in a wall is a wall');
+    const LOG = { name: 'log', metadata: 1 };
+    // One cell open, no dirt, 3 spruce logs: the log goes in.
+    const one = fakeBot({ cobble: 0, pickaxe: false, set: dirtShell({ '1,64,0': 'air' }), items: [n(LOG, 3)] });
+    const r = await buildShelter(one.bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.equal(r.closed, true, one.bot.output);
+    assert.deepEqual(one.placed, ['1,64,0']);
+    assert.equal(one.world.get('1,64,0').name, 'log');
+    assert.match(one.bot.output, /No dirt left for all of the repair: 0 dirt, then logs or planks \(they break by hand in the morning\)\./);
+    // Two open, 1 dirt and logs: the dirt first, then a log.
+    const two = fakeBot({ cobble: 0, pickaxe: false, set: dirtShell({ '1,64,0': 'air', '1,65,0': 'air' }), items: [n(DIRT, 1), n(LOG, 3)] });
+    const r2 = await buildShelter(two.bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.equal(r2.closed, true, two.bot.output);
+    assert.deepEqual(two.placed.map(c => two.world.get(c).name), ['dirt', 'log']);
+    // No pickaxe, cobblestone and no dirt or logs: nothing placed (never stone-type).
+    const rock = fakeBot({ cobble: 5, pickaxe: false, set: dirtShell({ '1,64,0': 'air' }) });
+    const r3 = await buildShelter(rock.bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.equal(r3.closed, false);
+    assert.deepEqual(rock.placed, []);
+    // Not a repair (a new night shelter) with only logs: still dirt only.
+    const fresh = fakeBot({ cobble: 0, pickaxe: false, items: [n(LOG, 20)] });
+    const r4 = await buildShelter(fresh.bot);
+    assert.equal(r4.closed, false);
+    assert.deepEqual(fresh.placed, []);
+});
+
+// #580 review 1 and 5: the usual open-ground floor is grass (not in the dirt ore), and the soak 10
+// shelter was a single cell on open ground: with no block held, the step down on grass seals itself.
+test('#580 review 1 and 5: the soak 10 single cell on open ground, grass floor, a zombie in the opening, no block held: a step down sealed with the dug dirt', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const set = dirtShell({ '1,64,0': 'air', '0,63,0': 'grass' });
+    const f = withGravity(fakeBot({ cobble: 0, pickaxe: false, set }));
+    const z = { id: 7, type: 'mob', name: 'zombie', position: new Vec3(1.5, 64, 0.5), height: 1.95, width: 0.6 };
+    f.bot.entities = { 7: z };
+    const dig = f.bot.dig;
+    f.bot.dig = async (b) => { const was = f.bot.blockAt(b.position).name; await dig(b); if (was === 'dirt' || was === 'grass') f.items.push(n(PILE, 4)); };
+    const step = burrowStep(f.bot, z, { prefer: 'down' });
+    assert.deepEqual([step.kind, step.selfSeal, key(step.to), step.dig.map(key), step.seal.map(key)], ['down', true, '0,62,0', ['0,63,0', '0,62,0'], ['0,64,0']], JSON.stringify(step));
+    const r = await takeBurrowStep(f.bot, step, { craft: fakeCraft(f.items).craft });
+    assert.deepEqual(r, { site: new Vec3(0, 62, 0) }, f.bot.output);
+    assert.deepEqual(f.placed, ['0,64,0'], 'sealed above, under the zombie\'s reach');
+    // A grass floor in a hole shelter too (#580 review 1: isSoftWall missed grass).
+    const g = holeShelter({ dirt: 0, set: { '0,60,0': 'grass' } });
+    Object.assign(g.bot.entities[7], { position: new Vec3(1.3, 61, 0.5), width: 0.6 });
+    assert.equal(burrowStep(g.bot, g.bot.entities[7], { prefer: 'down' }).selfSeal, true);
+});
+
+// #580 review 2: a modded log placed sideways has axis bits (+4, +8) its ore entry does not list.
+test('#580 review 2: a sideways modded log is a wood wall (so a repair keeps it); a crafting table is a wall but never a repair item', async () => {
+    const { isWoodWall, isWoodItem } = await import('./night.js');
+    for (const meta of [0, 4, 8, 12]) assert.equal(isWoodWall({ name: 'biomesoplenty:log_0', metadata: meta }), true, `log_0:${meta}`);
+    assert.equal(isWoodWall({ name: 'betterwithmods:blood_log', metadata: 5 }), true);
+    assert.equal(isWoodItem({ name: 'biomesoplenty:log_0', metadata: 0 }), true);
+    assert.equal(isWoodItem({ name: 'crafting_table', metadata: 0 }), false, 'never placed in a repair');
+    assert.equal(isWoodWall({ name: 'dirt', metadata: 0 }), false);
 });

@@ -134,6 +134,13 @@ export const ROTN_EARLY_GAME = [
 /** Sturdy blocks kept for the night's shelter (10 on open ground: 8 walls, a roof and its prop). */
 export const SHELTER_RESERVE = 10;
 /**
+ * Soak 10 (S1, the lead: 4): blocks kept over the shelter's for its repairs. The reserve held exactly
+ * 10 dirt, the dusk build used them all, and the repair after a zombie dug a wall placed nothing.
+ */
+export const REPAIR_SPARE = 4;
+/** What the shelter reserve holds: the shelter's blocks and the repair spare. */
+export const SHELTER_HOLD = SHELTER_RESERVE + REPAIR_SPARE;
+/**
  * The reserve is due this many minutes of running time before sunset (the night routine starts at
  * SHELTER_LEAD_MIN). With the measured cycle (night.js) only about 8 min run between the morning
  * freeze (3001) and sunset, and minutesToSunset does not count a freeze the time is already in:
@@ -176,14 +183,14 @@ const reserveNeed = (s) => (noPickaxe(s) ? 'dirt' : 'sturdy');
 const reserveHave = (s) => (noPickaxe(s) ? (s.dirtBlocks?.() ?? 0) : (s.shelterBlocks?.() ?? 0));
 
 export const SHELTER_RESERVE_STEP = {
-    id: 'shelter_blocks', short: `keep ${SHELTER_RESERVE} blocks for the night's shelter`,
+    id: 'shelter_blocks', short: `keep ${SHELTER_HOLD} blocks for the night's shelter and its repairs`,
     reserve: true,
     // Not at night (minutesToSunset is 0 from sunset to sunrise; #284 review 1): the night routine
     // shelters then, and nothing may send the bot out for blocks in the dark.
     due: (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN; },
-    done: (s) => reserveHave(s) >= SHELTER_RESERVE,
+    done: (s) => reserveHave(s) >= SHELTER_HOLD,
     // Only when goalNow fails: both cases, as goalNow tells them apart.
-    goal: `Night is near. At dusk the night routine builds a shelter of ${SHELTER_RESERVE} blocks on open ground. If you have a pickaxe, it is built from sturdy blocks (any cobblestone or stone): make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1), and mine stone with the pickaxe for more rocks. If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks("betterwithmods:dirt_pile", ${4 * SHELTER_RESERVE}) (4 piles make one dirt, which the shelter crafts itself). Keep these blocks for the night: do not place them.`,
+    goal: `Night is near. At dusk the night routine builds a shelter of ${SHELTER_RESERVE} blocks on open ground, and keeps ${REPAIR_SPARE} more to repair it when a zombie digs a wall open. If you have a pickaxe, it is built from sturdy blocks (any cobblestone or stone): make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1), and mine stone with the pickaxe for more rocks. If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks("betterwithmods:dirt_pile", ${4 * SHELTER_HOLD}) (4 piles make one dirt, which the shelter crafts itself). Keep these blocks for the night: do not place them.`,
     goalNow: (s) => {
         const have = reserveHave(s);
         // CX23 soak: what the bot is told counts the morning freeze still to run (sunsetEstimateMin);
@@ -191,14 +198,14 @@ export const SHELTER_RESERVE_STEP = {
         const mins = Math.max(1, Math.round((s.sunsetEstimateMin?.() ?? s.minutesToSunset?.() ?? 0) - SHELTER_LEAD_MIN));
         if (noPickaxe(s)) {
             return `Night is near: in about ${mins} min the night routine builds a shelter. You have no pickaxe yet, so it is built of dirt, which you can dig out of by hand in the morning. `
-                + `It needs ${SHELTER_RESERVE} blocks on open ground, and you have ${have} (dirt, and dirt from your dirt piles). `
-                + `${pileAsk(SHELTER_RESERVE - have)} `
+                + `It needs ${SHELTER_RESERVE} blocks on open ground and ${REPAIR_SPARE} more for repairs (${SHELTER_HOLD}), and you have ${have} (dirt, and dirt from your dirt piles). `
+                + `${pileAsk(SHELTER_HOLD - have)} `
                 + 'Keep these blocks for the night: do not place them.';
         }
-        const head = `Night is near: in about ${mins} min the night routine builds a shelter from sturdy blocks (any cobblestone or stone). It needs ${SHELTER_RESERVE} on open ground, and you have ${have}. `;
+        const head = `Night is near: in about ${mins} min the night routine builds a shelter from sturdy blocks (any cobblestone or stone). It needs ${SHELTER_RESERVE} on open ground and ${REPAIR_SPARE} more for repairs (${SHELTER_HOLD}), and you have ${have}. `;
         const c = s.cobble?.()[0];
         const how = c
-            ? `Your ${c.rock} rocks make ${c.gives}, 4 rocks each: craft it with !craftRecipe("cobblestone", ${Math.min(Math.floor(c.have / 4), SHELTER_RESERVE - have)}). `
+            ? `Your ${c.rock} rocks make ${c.gives}, 4 rocks each: craft it with !craftRecipe("cobblestone", ${Math.min(Math.floor(c.have / 4), SHELTER_HOLD - have)}). `
             : 'Collect rocks with !collectBlocks("pyrotech:rock", 8) (rock piles break by hand; stone mined with a stone pickaxe gives rocks), then make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1). ';
         return head + how + 'Keep these blocks for the night: do not place them.';
     },
@@ -699,7 +706,7 @@ export class Agenda {
         const kind = state && noPickaxe(state) ? 'dirt (no pickaxe yet)' : 'cobblestone first';
         let armed = true;
         try { armed = state?.hasWeapon?.() !== false; } catch { armed = true; }
-        return `${STANDING_GOAL_PREFIX}keep food worth at least ${FOOD_TARGET.day} hunger (you hold ${held}) and ${SHELTER_RESERVE} blocks for the night's shelter (you have ${blocks}; ${kind}); `
+        return `${STANDING_GOAL_PREFIX}keep food worth at least ${FOOD_TARGET.day} hunger (you hold ${held}) and ${SHELTER_HOLD} blocks for the night's shelter and its repairs (you have ${blocks}; ${kind}); `
             + (armed ? '' : `${NO_WEAPON_FOOD}; `)
             + 'keep a weapon and a pickaxe, and make better ones when you can (a stone sword or axe, a spare pickaxe); '
             + `explore by day within ${STANDING.exploreRadius} blocks of ${where}, away from where you died (a zombie rises there and stays); `
@@ -729,7 +736,7 @@ export class Agenda {
         try { unarmed = state?.hasWeapon?.() === false; } catch { unarmed = false; }
         return `${OPEN_GOAL_PREFIX}step ${stuck.id} (${stuck.short}) is stuck: ${e.why}; ${when}. Its goal was: ${stuck.goal} `
             + 'Until then: gather the materials it needs, and explore nearby for them (rock piles, dead bushes, trees, a crafting table you placed), '
-            + `away from where you died. Keep food worth at least ${FOOD_TARGET.day} hunger${unarmed ? ` (${NO_WEAPON_FOOD})` : ''}, and keep ${SHELTER_RESERVE} blocks of ${blocks} for the night's shelter: do not place them.`;
+            + `away from where you died. Keep food worth at least ${FOOD_TARGET.day} hunger${unarmed ? ` (${NO_WEAPON_FOOD})` : ''}, and keep ${SHELTER_HOLD} blocks of ${blocks} for the night's shelter and its repairs: do not place them.`;
     }
 }
 

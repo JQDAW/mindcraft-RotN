@@ -278,7 +278,29 @@ export function placeableDirt(items) {
 }
 
 /** A shelter wall: sturdy, or the dirt fallback. */
-export const isWall = (block) => isSturdy(block) || isSoftWall(block);
+/**
+ * Soak 10 (S2, the lead after rotn-data): logs and planks break by hand on RotN (about 3 s) and drop
+ * themselves, so a wall of them can be got out of by hand in the morning: a repair with no dirt left
+ * uses them (shelter.buildShelter). Whole blocks of the logWood and plankWood ores that need no tool.
+ */
+export const WOOD_ORES = ['logWood', 'plankWood'];
+export function isWoodWall(block) {
+    const st = dumpState(block);
+    // #580 review 2: a log placed sideways has axis bits in its metadata (+4, +8) that the ore lists
+    // do not hold for modded logs (biomesoplenty:log_0:8): the dump's wood material counts too, so a
+    // repair does not dig its own log out again.
+    return wholeBlock(st) && st.toolRequired === false && (st.material === 'wood' || WOOD_ORES.some(ore => inOre(ore, block)));
+}
+
+/** An item a repair may place as a wood wall: a log or plank (an item's metadata has no axis bits); never a crafting table. */
+export function isWoodItem(item) {
+    let name = null;
+    try { name = registryName(item?.name); } catch { name = null; }
+    // By name: the ore lists some modded logs at one meta only (biomesoplenty:log_0 at 4-7).
+    return !!name && isWoodWall(item) && WOOD_ORES.some(ore => oreMembers(ore).some(m => m.name === name));
+}
+
+export const isWall = (block) => isSturdy(block) || isSoftWall(block) || isWoodWall(block);
 
 /** Whether a block can be dug without a tool (the dump's toolRequired is false). */
 export const handDiggable = (block) => dumpState(block)?.toolRequired === false;
