@@ -586,7 +586,7 @@ test('G3 round 6 B: without a pickaxe a site with no side to dig out by hand is 
     const r = await buildShelter(stone.bot, { radius: 0, craft: fakeCraft(stone.items).craft });
     assert.equal(r.closed, false);
     assert.deepEqual(stone.placed, []);
-    assert.match(stone.bot.output, /without a pickaxe you could not dig out of it again\..*the dirt fallback does not fit here either \(Found no place for a shelter within 0 blocks \(.*and a side you can dig out by hand\)\)\./);
+    assert.match(stone.bot.output, /without a pickaxe you could not dig out of it again\..*the dirt fallback does not fit here either \(Found no place for a shelter within 0 blocks \(.*and a side you can dig out by hand\)\. Refused: .*no side to dig out by hand 1; at 0, 64, 0, on dirt\)\./);
 });
 
 // #284 review.
@@ -605,7 +605,7 @@ test('#284 review 3: with no pickaxe, a failed sturdy-site search does not refus
     // With nothing to build from, the refusal names the sturdy problem, the pickaxe and the dirt.
     const none = fakeBot({ cobble: 0, pickaxe: false, set });
     await buildShelter(none.bot, { radius: 0, craft: fakeCraft(none.items).craft });
-    assert.match(none.bot.output, /Not building a shelter: Found no place for a shelter within 0 blocks \(.*\)\. Without a pickaxe only dirt would do \(Pickaxes: .*\), but a shelter with dirt needs \d+ blocks, and you have 0 dirt\./);
+    assert.match(none.bot.output, /Not building a shelter: Found no place for a shelter within 0 blocks \(.*\)\. Refused: .*would fall in 1; at 0, 64, 0, on dirt\. Without a pickaxe only dirt would do \(Pickaxes: .*\), but a shelter with dirt needs \d+ blocks, and you have 0 dirt\./);
 });
 
 test('#284 nit: each kind of dirt pile is crafted by its own recipe (rotn-data): BWM piles make dirt, loamy piles Biomes O\' Plenty dirt', async (t) => {
