@@ -1,0 +1,14 @@
+## test-server.sh log 200000 since-start, fetched before down: every line from 12:01:20 to 12:02:01 (the craft hang to the exit)
+##rotn-test since-start files=latest.log found=1 lines=20760 over=0 nonempty=20752
+[12:01:22] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Step 9: stone pickaxe. I've got rocks and sticks ready. !craftRecipe("stone_pickaxe", 1)
+[12:01:26] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_pickaxe done
+[12:01:26] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step shelter_blocks started: keep 10 blocks for the night's shelter
+[12:01:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> I'm stuck!
+[12:02:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Exiting.
+[12:02:00] [Server thread/INFO] [net.minecraft.network.NetHandlerPlayServer]: <bot> lost connection: Internal Exception: io.netty.channel.unix.Errors$NativeIoException: syscall:read(..) failed: Connection reset by peer
+[12:02:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <bot> left the game
+[12:02:00] [Server thread/INFO] [Music Triggers]: Found leaving player with UUID <uuid-v4>
+[12:02:00] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: All non-excluded players have disconnected. The following modules have been toggled on: Daylight Cycle Module
+[12:02:00] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: Daylight Cycle Module: The daylight cycle has been disabled.
+[12:02:00] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[12:02:00] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.

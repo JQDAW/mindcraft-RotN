@@ -1,0 +1,32 @@
+## test-server.sh up (run from the rotn-v0.1.15 checkout, 2026-11-22)
+[test-server 11:39:43] sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 14.5, 15.2 min, newest 45017680057 8.9 min ago
+[test-server 11:39:43] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 4h, sweeper deletes it) ~5 billed hours, EUR 0.69 plus Primary IPv4
+[test-server 11:39:43] creating mcr-test-20261122-113937: delete-after 2026-11-22T15:39:43Z (TTL 4h)
+Server <server-id> created
+[test-server 11:39:50] server mcr-test-20261122-113937 is at <ip>
+[test-server 11:39:50] waiting for SSH and the build (up to 120 min)
+[test-server 11:40:00] phase: unreachable
+[test-server 11:40:16] phase: booting:running
+[test-server 11:40:32] phase: pack
+[test-server 11:40:47] phase: unpack
+[test-server 11:41:03] phase: starting
+[test-server 11:42:36] phase: ready
+[test-server 11:42:36] mod-director: pinned mods/esmtweaks-1.12.2-0.4.5.jar sha256 b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 OK
+[test-server 11:42:36] mod-director: OK: 1 pinned download(s) match; 337 jars of the pinned zip match; 0 extra mod(s)
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 11:42:37] READY: mcr-test-20261122-113937 at <ip>:25565 (delete-after 2026-11-22T15:39:43Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261122-113937
+
+## test-server.sh starts (11:42:41, right after up)
+starts=1 files=1
+
+## test-server.sh down (2026-11-22, after the run)
+[test-server 12:07:01] deleting batch mcr-test-20261122-113937 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261122-113937)
+[test-server 12:07:12] batch mcr-test-20261122-113937: ran 27 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 12:07:12] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261122-113937
+
+## hcloud counts after the delete (servers and Primary IPs with grep -c .; SSH keys named or labelled mcr-test from the JSON; ssh_keys_total includes the permanent non-test keys)
+counted 2026-11-22T12:07:12Z
+servers 0
+primary_ips 0
+ssh_keys_mcr_test 0
+ssh_keys_total 2
