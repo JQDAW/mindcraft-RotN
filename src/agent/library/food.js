@@ -155,6 +155,7 @@ export async function eatFood(bot, item, { checkMs = CONSUME_CHECK_MS } = {}) {
     const key = foodKey(item);
     const before = bot.food, had = countKey(bot, key);
     let threw = null;
+    bot.rotnAteAt = Date.now(); // soak 11 (F1): the scroll waits for an eat to be over
     try {
         await bot.equip(item, 'hand');
         await bot.consume();
@@ -163,6 +164,7 @@ export async function eatFood(bot, item, { checkMs = CONSUME_CHECK_MS } = {}) {
         await new Promise(resolve => setTimeout(resolve, checkMs));
     }
     // A consume that resolved has eaten; after a throw the food level or the item count tells.
+    bot.rotnAteAt = Date.now();
     const ate = !threw || bot.food > before || countKey(bot, key) < had;
     // G4 #5: "[survival] ate <item> food <before>-><after>" once the food level has changed.
     if (ate) await logAte(bot, key, before);

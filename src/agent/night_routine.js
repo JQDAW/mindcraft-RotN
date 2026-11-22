@@ -1356,7 +1356,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             else {
                 line(agent, `[night] setting the respawn point here at ${at(n.site)} with the Scroll of New Life (once): far from the spawn and every death spot, no hostile near`);
                 startJob(agent, n, SCROLL_LABEL, () => ops.useSpawnScroll(bot), (r) => {
-                    line(agent, r?.used ? `[night] the respawn point is now ${at(n.site)}: a death within 32 blocks of it raises no player zombie`
+                    line(agent, r?.used ? `[night] the respawn point is now ${at(n.site)}: a death within 32 blocks of it raises no player zombie (seen by ${r.by ?? 'the stack'}${r.tries > 1 ? `, on try ${r.tries}` : ''})`
                         : `[night] the Scroll of New Life was not used (${r?.why ?? 'no result'})`);
                 });
                 return 'night:inside';
