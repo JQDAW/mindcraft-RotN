@@ -64,8 +64,9 @@ export async function rearmWeapon(bot) {
     const best = items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0] ?? null;
     const off = bot?.inventory?.slots?.[45] ?? null;
     if (WEAPON_HAND.offHand && (!off || isWeaponItem(off))) {
-        if (off) return true;
-        if (!best || typeof bot.equip !== 'function') return false;
+        // #584 nit 5: a better weapon in the inventory takes the off hand's place.
+        if (off && !(best && weaponOrder(attackPath(bot))(best, off) < 0)) return true;
+        if (!best || typeof bot.equip !== 'function') return !!off;
         await bot.equip(best, 'off-hand');
         return true;
     }
@@ -88,8 +89,22 @@ export async function equipHighestAttack(bot, fight = {}) {
     const inInventory = best(bot.inventory.items());
     if (isWeapon(off) && (!inInventory || order(off, inInventory) < 0)) {
         const full = (bot.inventory.firstEmptyInventorySlot?.() ?? null) === null;
+        if (full) {
+            // #584 review 3: with no free slot stowCarried cannot move it, and the bot fist-fought while
+            // counted armed (hasWeapon counts the off hand). bot.equip swaps it into the main hand (the
+            // held item goes to the off hand); rearmWeapon puts things back after the fight.
+            if (fight.equipFailed) return false;
+            try {
+                await bot.equip(off, 'hand');
+                return true;
+            } catch (err) {
+                fight.equipFailed = true;
+                log(bot, `Could not take the ${off.name} from the off hand into the main hand (${safeError(err)}); fighting with ${bot.heldItem?.name ?? 'bare hands'} for the rest of this fight.`);
+                return false;
+            }
+        }
         const moved = await stowCarried(bot, isWeapon, { resyncMs: 0 });
-        if (!moved.length) log(bot, `Could not take the ${off.name} from the off hand${full ? ': the inventory is full' : ''}.`); // #238 nit 2
+        if (!moved.length) log(bot, `Could not take the ${off.name} from the off hand.`); // #238 nit 2
     }
     let weapon = best(bot.inventory.items());
     if (!weapon)
@@ -1028,11 +1043,12 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
         // Soak 6 (the eel loop): the third fight in a row on one mob that ends interrupted gives it up.
         const n = noteFightEnd(bot, fought, outcome);
         if (n) console.log(`[survival] giving up on ${fought.name}: ${n} fights in a row on it were interrupted; leaving it alone for ${UNREACHABLE.skipMs / 60_000} min`);
+        // Soak 11 (A3), #584 review 4: the weapon back in the off hand however the fight ends (an
+        // interrupt returns from the loop), after pvp stops; not after an equip the server rejected
+        // (G3 round 7 B: no more equip tries this fight).
+        bot.pvp.stop();
+        if (!fight.equipFailed) { try { await rearmWeapon(bot); } catch { /* best effort */ } }
     }
-    // Soak 11 (A3): the weapon back in the off hand after the fight (Corpse Complex keeps it there);
-    // not after an equip the server rejected (G3 round 7 B: no more equip tries this fight).
-    if (!fight.equipFailed) { try { await rearmWeapon(bot); } catch { /* best effort */ } }
-    bot.pvp.stop();
     if (attacked)
         log(bot, `Successfully defended self.`);
     else
@@ -1162,9 +1178,10 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
         bot.rotnFightingInPlace = false;
         bot.rotnFightEndedAt = Date.now();
         journal.end(outcome);
+        // Soak 11 (A3): the weapon back in the off hand however the fight in place ends (#584 review 4),
+        // not after a rejected equip.
+        if (!fight.equipFailed) { try { await rearmWeapon(bot); } catch { /* best effort */ } }
     }
-    // Soak 11 (A3): the weapon back in the off hand after the fight in place (not after a rejected equip).
-    if (!fight.equipFailed) { try { await rearmWeapon(bot); } catch { /* best effort */ } }
     log(bot, swings > 0 ? `Fought from inside the shelter: ${swings} swing${swings === 1 ? '' : 's'}, stopped: ${why}.`
         : outcome === 'gone' ? 'Nothing in reach to fight.' : `No swing went out from inside the shelter, stopped: ${why}.`); // #532 review: say why
     return swings > 0;

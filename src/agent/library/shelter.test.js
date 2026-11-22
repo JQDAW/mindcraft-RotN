@@ -1527,3 +1527,15 @@ test('soak 11 (G1): a shelter with a hostile body in the bot\'s two cells is nev
     p.bot.entities = { 1: p.bot.entity, 8: { name: 'chicken', type: 'mob', position: new Vec3(0.8, 64, 0.2), height: 0.7 } };
     assert.equal((await buildShelter(p.bot)).closed, true);
 });
+
+// #584 nit 8: a stop fillCell saw between its tries ended that cell only; the loop went on (its own check
+// clear again) and could close the shelter while the result still said "aborted".
+test('#584 nit 8: a stop seen inside a cell ends the build there; no later cell is placed', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, placed } = fakeBot({ cobble: 10, set: shellAt({ '1,64,0': 'air', '1,65,0': 'air', '-1,64,0': 'air' }) });
+    let calls = 0;
+    const abort = () => (++calls === 2 ? 'hit by a zombie' : null); // only fillCell's check sees it
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true, abort });
+    assert.equal(r.aborted, 'hit by a zombie');
+    assert.deepEqual(placed, [], `no later cell: ${placed.join(' ')}`);
+});

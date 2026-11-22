@@ -372,8 +372,42 @@ test('#238 nits: the better weapon is held, from the off hand or not; a full inv
     assert.equal(worse.bot.hitWith, 'stone_sword');
     assert.equal(worse.slots[45]?.name, 'pyrotech:crude_axe', 'a worse one stays in the off hand');
 
+    // #584 review 3: with a full inventory the off-hand sword is swapped straight into the main hand
+    // (it fist-fought before, counted armed); the pickaxe goes to the off hand.
     const full = weaponBot({ inventory: [{ name: 'stone_pickaxe' }], offHand: { name: 'stone_sword' }, full: true });
+    const equips = [];
+    const equip = full.bot.equip;
+    full.bot.equip = (item, where) => { equips.push(`${item.name}>${where}`); return equip(item, where); };
     await skills.defendSelf(full.bot, 9, () => true);
-    assert.match(full.bot.output, /Could not take the stone_sword from the off hand: the inventory is full\./);
-    assert.equal(full.bot.hitWith, 'stone_pickaxe', 'it fights with what it can hold');
+    assert.equal(equips[0], 'stone_sword>hand', 'equipped from the off hand, no stow (no free slot)');
+    assert.doesNotMatch(full.bot.output, /Could not take/);
+    assert.equal(full.bot.hitWith, 'stone_sword', 'the off-hand sword, swapped into the main hand');
+});
+
+// #584 review 4: an interrupted defendSelf returned before the rearm, so the club stayed in the main
+// hand (a build then put dirt there, and a death dropped the club).
+test('#584 review 4: defendSelf puts the weapon back in the off hand when it is interrupted, after pvp stops', T, async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, slots } = weaponBot({ inventory: [{ name: 'stone_sword' }] });
+    const seen = [];
+    bot.equip = (item, where) => { seen.push(`${item.name}>${where}`); if (where === 'off-hand') { slots[45] = item; slots[item.slot ?? 36] = null; } else bot.heldItem = item; return Promise.resolve(); };
+    let stopped = false;
+    bot.pvp = { attack: () => { bot.interrupt_code = true; }, stop() { stopped = true; seen.push('pvp.stop'); } };
+    assert.equal(await skills.defendSelf(bot, 9, () => true), false, 'interrupted');
+    assert.ok(stopped);
+    assert.deepEqual(seen.slice(-2), ['pvp.stop', 'stone_sword>off-hand'], seen.join(', '));
+});
+
+test('#584 nit 5: rearmWeapon swaps a worse weapon in the off hand for a better one in the inventory', T, async () => {
+    const { bot, slots } = weaponBot({ inventory: [{ name: 'iron_sword' }], offHand: { name: 'spartanweaponry:club_wood' } });
+    const seen = [];
+    bot.equip = (item, where) => { seen.push(`${item.name}>${where}`); return Promise.resolve(); };
+    assert.equal(await skills.rearmWeapon(bot), true);
+    assert.deepEqual(seen, ['iron_sword>off-hand']);
+    // The better one already there: nothing.
+    slots[45] = { name: 'iron_sword', count: 1, metadata: 0 };
+    slots[36] = { name: 'spartanweaponry:club_wood', count: 1, metadata: 0 };
+    seen.length = 0;
+    assert.equal(await skills.rearmWeapon(bot), true);
+    assert.deepEqual(seen, []);
 });

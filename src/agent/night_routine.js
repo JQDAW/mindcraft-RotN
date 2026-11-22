@@ -149,7 +149,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     restoreCowardice(agent, n);
-    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, ...GROUND_CLEAR, groundSkip: [] });
+    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, ...GROUND_CLEAR, groundSkip: [] });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0, ...MORNING_CLEAR });
@@ -1183,7 +1183,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (spent) n.lastShelter = spent.clone?.() ?? spent;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, ...GROUND_CLEAR, groundSkip: [] });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, ...GROUND_CLEAR, groundSkip: [] });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -1612,7 +1612,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         }
         // closed again: the shelter's rules are back. #580 re-review nit 1: and the next breach is a new one
         // (the repair first again when the opening is free and a block is held).
-        if (need.todo.length === 0 && open) { bot.rotnSheltered = true; n.repairStall = null; n.repairFirstFor = null; n.nightBurrowTried = null; n.nightBurrowWhy = null; }
+        if (need.todo.length === 0 && open) { bot.rotnSheltered = true; n.repairStall = null; n.repairFirstFor = null; n.nightBurrowTried = null; n.nightBurrowWhy = null; n.abortSaid = null; }
         // Soak 3, the lead's (a): a hole shelter, closed: once, into a side pocket at its bottom, with
         // the shaft under the roof sealed behind (shelter.wallItems: blocks the diggers cannot break
         // first, cobblestone first). A zombie that digs the roof then finds a sealed column, not the bot.
@@ -1652,15 +1652,27 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             const heldOther = held.find(h => !shelterTarget(h.mob));
             const other = heldOther ? { mob: heldOther.mob, cell: heldOther.cell } : (() => { const m = ops.dangerInReach?.(bot) ?? null; return m ? { mob: m } : null; })();
             const heldMelee = held.find(h => shelterTarget(h.mob));
+            const inReach = ops.mobInReach?.(bot) ?? null;
+            const meleeNear = (ops.meleeNear ?? meleeMobsNear)(bot, FIGHT_FIRST.crowd);
+            // #584 review 1: armed with 2 or more melee mobs near (rotn-data: the club wins against one),
+            // as at a health one hit may take: the #580 order, as unarmed (a repair under a held opening
+            // aborted at once and started again every tick).
+            const outmatched = (mob) => !armed || low(mob) || meleeNear.length >= 2;
+            // Unarmed, the mob in the opening first; armed, the one in reach first (as before), then one
+            // holding an opening.
             const melee = heldMelee && !armed ? { mob: heldMelee.mob, cell: heldMelee.cell }
-                : (() => { const m = ops.mobInReach?.(bot) ?? null; return m && (!armed || low(m)) ? { mob: m } : null; })();
+                : inReach && outmatched(inReach) ? { mob: inReach }
+                : heldMelee && outmatched(heldMelee.mob) ? { mob: heldMelee.mob, cell: heldMelee.cell } : null;
             const reaching = other ?? melee;
             // Soak 11 (A2, the lead): armed above its hit with ONE melee mob at the breach (rotn-data: the
             // club wins against one, not two or more): fight it first from the shelter (self_defense's
             // fight in place), and repair once it is dead or gone. Two or more: the #580 order below.
-            const meleeNear = (ops.meleeNear ?? meleeMobsNear)(bot, FIGHT_FIRST.crowd);
+            // #584 review 2: only a mob the fight in place can reach (in shelter reach, or holding or over
+            // an opening cell); one behind a wall or above a hole shelter does not hold the repair off.
             const one = meleeNear.length === 1 ? meleeNear[0] : null;
-            if (armed && !other && one && !low(one) && one.position && bot.entity.position.distanceTo(one.position) <= FIGHT_FIRST.range) {
+            const same = (a, b) => !!a && !!b && (a === b || (a.id != null && a.id === b.id));
+            const fightable = !!one && (same(inReach, one) || held.some(h => same(h.mob, one)));
+            if (armed && !other && one && !low(one) && fightable && one.position && bot.entity.position.distanceTo(one.position) <= FIGHT_FIRST.range) {
                 bot.rotnSheltered = 'open';
                 n.handFight = false;
                 const text = `[night] armed, health ${Math.round(bot.health)} above the ${maxHitOf(one)} ${aMob(one.name ?? 'hostile mob')} may hit for, and the only melee mob near: fighting it from the shelter first, then the repair`;
@@ -1718,8 +1730,10 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 }
             }
             // A cell the bot will not clear by hitting (no weapon, or a mob it never hits) is left
-            // out of the repair; the other open cells are repaired.
-            const leave = held.filter(h => !armed || !shelterTarget(h.mob));
+            // out of the repair; the other open cells are repaired. #584 review 1: armed, a melee mob
+            // holding a cell here is not being fought first (A2 returned above): left out too (a repair
+            // under it aborts at once).
+            const leave = held;
             if (leave.length) {
                 skip = leave.map(h => h.cell);
                 const text = `[night] ${armed ? '' : 'no weapon and '}${aMob(leave[0].mob.name ?? 'hostile mob')} in the opening at ${leave.map(h => at(h.cell)).join('; ')}: not repairing under it; repairing the other open cells`;
@@ -1745,8 +1759,13 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 const held = (ops.heldCells?.(bot, n.site, need.todo) ?? []).find(h => shelterTarget(h.mob) && !skipKeys.has(key3(h.cell)));
                 return held ? `${aMob(held.mob.name ?? 'hostile mob')} in the opening at ${at(held.cell)}` : null;
             };
+            // #584 review 1: one said line per reason, then logged (it was said about 3 times a second).
+            const sayAbort = (text, why) => { if (n.abortSaid === why) console.log(text); else { n.abortSaid = why; line(agent, text); } };
+            // #584 review 1: a repair that would stop at once is not started.
+            const already = abort();
+            if (already) { sayAbort(`[night] not repairing now: ${already}; deciding again`, `now:${already}`); return 'night:inside'; }
             startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody, abort, ...(skip.length ? { skip } : {}) }), (r) => {
-                if (r?.aborted) { line(agent, `[night] the repair stopped: ${r.aborted}; deciding again`); n.repairStall = null; return; }
+                if (r?.aborted) { sayAbort(`[night] the repair stopped: ${r.aborted}; deciding again`, r.aborted); n.repairStall = null; return; }
                 // Soak 11 (G1): every cell placed, but a hostile is inside: not closed; the next tick sees it.
                 if (r?.inside) { line(agent, `[night] the repair placed every cell, but ${aMob(r.inside.name ?? 'hostile mob')} is inside the shelter: not closed; deciding again`); n.repairStall = null; return; }
                 // Soak 5 (00:31:47): a repair that closed the shelter said nothing; the journal could not

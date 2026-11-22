@@ -408,12 +408,6 @@ const BODY_TYPES = ['player', 'mob', 'hostile', 'animal', 'passive', 'ambient', 
  * Dropped items, XP orbs and arrows do not count (#204 re-review 2).
  */
 /** Soak 5: entities (not the bot) whose box overlaps the cell (width from entity.width, else 0.6). */
-/** Soak 11 (G): a hostile body in the shelter's two cells (feet and head), or null. */
-export function mobInside(bot, feet) {
-    if (!feet) return null;
-    return [feet, feet.offset(0, 1, 0)].flatMap(c => overlapping(bot, c)).find(e => shelterEnemy(e)) ?? null;
-}
-
 export function overlapping(bot, cell) {
     return Object.values(bot.entities ?? {}).filter(e => {
         // #502 nit 2: bodies only (as mobIn's BODY_TYPES): never an item, an XP orb or an arrow.
@@ -422,6 +416,12 @@ export function overlapping(bot, cell) {
         return e.position.x + w > cell.x && e.position.x - w < cell.x + 1 && e.position.z + w > cell.z && e.position.z - w < cell.z + 1
             && e.position.y + h > cell.y && e.position.y < cell.y + 1;
     });
+}
+
+/** Soak 11 (G): a hostile body in the shelter's two cells (feet and head), or null. */
+export function mobInside(bot, feet) {
+    if (!feet) return null;
+    return [feet, feet.offset(0, 1, 0)].flatMap(c => overlapping(bot, c)).find(e => shelterEnemy(e)) ?? null;
 }
 
 export function mobIn(bot, cell) {
@@ -753,6 +753,9 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
         for (const pos of wallsAndRoof(feet)) {
             if (bot.interrupt_code) { reasons.stopped = true; break; }
             // Soak 11 (A1): the caller's stop (a melee mob hit the bot, or holds an opening it repairs).
+            // #584 nit 8: also one fillCell saw between its tries: the build ends there (it could close
+            // the shelter at a later cell and still say "the repair stopped").
+            if (reasons.aborted) { reasons.stopped = true; break; }
             const why = abort?.() ?? null;
             if (why) { reasons.stopped = true; reasons.aborted = why; break; }
             const b = bot.blockAt(pos);
