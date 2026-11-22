@@ -291,11 +291,19 @@ test('#570 review: a block collect given up by the cancel timeout does not dig w
     bot.collectBlock.cancelTimeout = 200;
     const table = new Block(58, 1, 0);
     table.position = new Vec3(2, 64, 0);
+    // Everything mineBlock needs, so a collect that does dig (#570's patch) gets as far as the dig and
+    // its drop wait, and this test fails at digs === 0, not on a missing stub (#573 review nit 1).
     let digs = 0;
-    bot.blockAt = () => table;
-    bot.dig = () => { digs++; return Promise.resolve(); };
+    let dug = false;
+    bot.heldItem = null;
+    bot.blockAt = () => (dug ? new Block(0, 1, 0) : table);
+    bot.dig = () => { digs++; dug = true; return Promise.resolve(); };
     bot.tool.equipForBlock = () => Promise.resolve();
     bot.pathfinder.movements = { safeToBreak: () => true };
+    // The drop wait counts 10 physicsTicks.
+    bot.on('newListener', (name) => {
+        if (name === 'physicsTick') setImmediate(() => { for (let i = 0; i < 12; i++) bot.emit('physicsTick'); });
+    });
     let finished = 0;
     bot.on('collectBlock_finished', () => finished++);
     const collecting = bot.collectBlock.collect(table);
