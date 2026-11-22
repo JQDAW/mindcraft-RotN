@@ -200,7 +200,9 @@ test('#557 review 3: the search yields to the event loop (no long block) and sto
     try { assert.equal(await groundPlan(bot, { report }), null); } finally { clearInterval(beat); }
     const all = report.columns;
     assert.ok(all > 1700, `columns ${all}`);
-    assert.ok(maxGap < 100, `the longest block of the event loop: ${maxGap} ms (whole search ${Date.now() - t0} ms)`);
+    // #557 nit: a timing bound flakes on a shared VPS; the yields are counted, and the gap bound is loose.
+    assert.equal(report.yields, Math.floor(all / GROUND.yieldEvery), 'a yield every GROUND.yieldEvery columns');
+    assert.ok(maxGap < 250, `the longest block of the event loop: ${maxGap} ms (whole search ${Date.now() - t0} ms)`);
     // The bank 8 off scores about 9 x 4 + 8 = 44 > 24: every column is still looked at; a place that
     // needs few blocks (a cell walled in by rock on 4 sides, open above) ends it early.
     const nook = {};

@@ -21,7 +21,8 @@ import { stowCarried, toolAllows } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
-import { groundPlan, walkToGround, stepToDry, planText, GROUND } from './library/shelter_ground.js';
+import { groundPlan, walkToGround, stepToDry, planText, inWater, GROUND } from './library/shelter_ground.js';
+import { escape } from './library/escape.js';
 import { hasWeapon, shelterEnemy, shelterTarget, threatFor, isPlayerZombie, canFightHard, maxHitOf, inMeleeReach, meleeReach, fightNumbers, fightOdds, hurtingInReach } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
@@ -131,8 +132,11 @@ export function nightState(agent) {
  * found no place (#557 review 7); noPlaceCell: where the night was found
  * to have no place, and no better ground was found or left (no retry from there); sameCellSaid: that was said.
  */
-const GROUND_CLEAR = { groundMoves: 0, buildNoPlace: false, buildRefused: null, pitNoPlace: false, noPlaceCell: null, sameCellSaid: false };
+const GROUND_CLEAR = { groundMoves: 0, buildNoPlace: false, buildRefused: null, pitNoPlace: false, pitNoPlaceAt: null, noPlaceCell: null, sameCellSaid: false, escapes: 0 };
 const GROUND_LABEL = 'action:walkToGround';
+const ESCAPE_LABEL = 'action:escape';
+/** Soak 8, the flooded pit (the lead's escape plan): escapes a night (library/escape.js), when a walk to better ground or out of the water finds no way. */
+export const NIGHT_ESCAPES = 2;
 const DRY_LABEL = 'action:stepToDry';
 
 /**
@@ -851,6 +855,7 @@ function closeQuarters(agent, n, ops) {
 /** What the routine does in the world (tests pass their own). */
 export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, onTree: standsOnTree, descend: (bot) => descendFromTree(bot),
     groundPlan, walkToGround, stepToDry, // soak 8: better ground when there is no place
+    escape: (bot) => escape(bot), // soak 8: out of a flooded pit first
     nightRelocation: nightRelocationPlan, walkAwayAtNight, morningChoice, openToward,
     // #497 review 2: away from every threat; cornered, it may hit a melee mob only, never a troll or a creeper.
     awayFromMobs: (bot) => avoidEnemies(bot, MORNING.awayDist, shelterEnemy, shelterTarget),
@@ -889,10 +894,15 @@ async function pitShelter(bot, ops, progress) {
     return ops.buildShelter(bot, { site: feet, keepSoft: true });
 }
 
+/** The bot is at (or next to) cell c. */
+function nearCell(bot, c) {
+    const p = bot.entity?.position?.floored?.();
+    return !!p && !!c && Math.abs(p.x - c.x) <= 1 && Math.abs(p.y - c.y) <= 1 && Math.abs(p.z - c.z) <= 1;
+}
+
 /** The bot is at (or next to) the cell where no place was found (soak 8: no retry from there). */
 function atNoPlaceCell(bot, n) {
-    const p = bot.entity?.position?.floored?.(), c = n.noPlaceCell;
-    return !!p && !!c && Math.abs(p.x - c.x) <= 1 && Math.abs(p.y - c.y) <= 1 && Math.abs(p.z - c.z) <= 1;
+    return nearCell(bot, n.noPlaceCell);
 }
 
 /**
@@ -926,9 +936,10 @@ function moveToGround(agent, n, ops, phase, refused, onNone) {
     // #557 review 4: a walk planned at dusk (24 blocks) stops at 12 once night falls and there is no weapon.
     const shortNow = () => { const tn = n.clock.timeOfDay(Date.now()); return tn !== null && nightPhase(tn) === 'night' && !(ops.hasWeapon ?? hasWeapon)(bot); };
     const report = {};
-    let plan = null;
+    let plan = null, from = null;
     startJob(agent, n, GROUND_LABEL, async () => {
         plan = await ops.groundPlan(bot, { radius, lastShelter: n.lastShelter ?? null, skip: n.groundSkip ?? [], report });
+        from = bot.entity?.position?.clone?.() ?? null;
         if (!plan) return null;
         n.groundMoves = (n.groundMoves ?? 0) + 1;
         line(agent, `[night] no place for a shelter or a hole here${refused ? ` (${refused})` : ''}; walking to ${at(plan.feet)}: ${planText(plan)}, ${Math.round(plan.d)} blocks away (walk ${n.groundMoves} of ${GROUND.maxMoves})`);
@@ -942,9 +953,10 @@ function moveToGround(agent, n, ops, phase, refused, onNone) {
             return;
         }
         const here = bot.entity?.position?.floored?.();
-        // #557 review 5: a place is not chosen again only once reached (if no shelter fits there after
-        // all, the next search looks elsewhere); one a mob, the night or the time limit cut short may be.
-        if (r?.arrived) n.groundSkip = [...(n.groundSkip ?? []), plan.feet];
+        // #557 review 5: a place is not chosen again once reached (if no shelter fits there after all,
+        // the next search looks elsewhere), nor (#557 nit) after a walk that failed with no stop reason
+        // (no way there); one a mob, the night, the time limit or a reflex cut short may be.
+        if (r?.arrived || (!ret?.interrupted && !r?.stopped)) n.groundSkip = [...(n.groundSkip ?? []), plan.feet];
         const how = r?.arrived ? 'got there'
             : ret?.interrupted ? 'was interrupted'
                 : r?.stopped === 'hostile' ? `stopped: ${aMob(r.mob ?? 'hostile mob')} came within ${GROUND.stopRange} blocks`
@@ -952,11 +964,36 @@ function moveToGround(agent, n, ops, phase, refused, onNone) {
                         : r?.stopped === 'time' ? `ran out of time (${GROUND.walkMs / 1000} s)`
                             : `did not get there${r?.why ? ` (${r.why})` : ''}`;
         console.log(`[night] the walk to better ground ${how}; sheltering from ${here ? at(here) : 'here'}`);
-        // The tries (and a hole) start again from where the walk ended.
-        startBuilding(n, 0);
-        Object.assign(n, { pitTried: false, pitNext: false, pitProgress: {}, buildNoPlace: false, buildRefused: null, pitNoPlace: false, noPlaceCell: null, sameCellSaid: false });
+        // Soak 8, the flooded pit: a walk that found no way (it ended where it began, or in the
+        // water; not one a mob, the night or a reflex stopped) gets the escape first.
+        const noWay = !r?.arrived && !ret?.interrupted && !['hostile', 'night'].includes(r?.stopped)
+            && (inWater(bot) || (!!from && !!bot.entity?.position && from.distanceTo(bot.entity.position) < 1.5));
+        if (noWay && tryEscape(agent, n, ops, 'the walk to better ground found no way out', () => buildAgain(n))) return;
+        buildAgain(n);
     });
     return 'started';
+}
+
+/** The tries (and a hole) start again from where the bot is now (after a walk or an escape). */
+function buildAgain(n) {
+    startBuilding(n, 0);
+    Object.assign(n, { pitTried: false, pitNext: false, pitProgress: {}, buildNoPlace: false, buildRefused: null, pitNoPlace: false, noPlaceCell: null, sameCellSaid: false });
+}
+
+/**
+ * Soak 8 (the flooded pit), the lead's escape plan: out of a pit or the water first (library/
+ * escape.js), at most NIGHT_ESCAPES a night. then(result) runs after it. False when none is left.
+ */
+function tryEscape(agent, n, ops, why, then) {
+    if (!ops.escape || (n.escapes ?? 0) >= NIGHT_ESCAPES) return false;
+    n.escapes = (n.escapes ?? 0) + 1;
+    const bot = agent.bot;
+    line(agent, `[night] ${why}: getting out first (escape ${n.escapes} of ${NIGHT_ESCAPES})`);
+    startJob(agent, n, ESCAPE_LABEL, () => ops.escape(bot), (r) => {
+        console.log(`[night] the escape ${r?.out ? `got out at ${at(r.at)}` : `failed (${r?.why ?? 'no result'})`}`);
+        then(r);
+    });
+    return true;
 }
 
 /**
@@ -973,7 +1010,11 @@ function exposeOnDryGround(agent, n, ops, why) {
         goExposed(agent, n, `no shelter: ${why}; ${where}no retry from this spot`);
     };
     if (!ops.stepToDry) { finish(null); return; }
-    startJob(agent, n, DRY_LABEL, () => ops.stepToDry(bot), (r) => finish(r));
+    startJob(agent, n, DRY_LABEL, () => ops.stepToDry(bot), (r) => {
+        // Soak 8, the flooded pit: still in the water: the escape first; out, the tries start again there.
+        if (r && !r.dry && tryEscape(agent, n, ops, `could not get out of the water (${r.why})`, (e) => (e?.out ? buildAgain(n) : finish(r)))) return;
+        finish(r);
+    });
 }
 
 function line(agent, text) {
@@ -1241,6 +1282,12 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             if (!pit) n.attempts++;
             // Soak 8: the build found no place at all (not too few blocks, not stopped), and what refused the sites.
             if (!pit) Object.assign(n, { buildNoPlace: !ret?.interrupted && !!r?.noPlace, buildRefused: r?.refused ?? null });
+            // #557 nit: a hole's "no place" holds only where it was found. Once the bot has moved since
+            // (a fight, a flee), it no longer counts, and the hole may be tried again from here.
+            if (!pit && n.pitNoPlace && !nearCell(bot, n.pitNoPlaceAt)) {
+                Object.assign(n, { pitNoPlace: false, pitTried: false });
+                console.log(`[night] the bot has moved since the hole found no place (at ${at(n.pitNoPlaceAt)}): a hole may be dug here`);
+            }
             // Round 9 B (fix h): a shelter that could not be built is followed by a hole; it needs
             // nothing in the inventory.
             if (!pit && !n.pitTried && ops.digPit) {
@@ -1257,7 +1304,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             // reflex, counted once past FREE_INTERRUPTS) never searched, so a hole that finds no place
             // after it is not enough: the tries go on, and the next build that finds no place walks
             // (pitNoPlace). An interrupted hole never counts as no place either.
-            if (pit) n.pitNoPlace = !ret?.interrupted && !!r?.noPlace;
+            if (pit) Object.assign(n, { pitNoPlace: !ret?.interrupted && !!r?.noPlace, pitNoPlaceAt: bot.entity?.position?.floored?.() ?? null });
             if (!ret?.interrupted && r?.noPlace && (pit ? n.buildNoPlace : (!ops.digPit || n.pitNoPlace))) {
                 if (pit) console.warn(`[night] the hole shelter failed (${why})`);
                 const refused = n.buildRefused ?? r?.refused ?? null;

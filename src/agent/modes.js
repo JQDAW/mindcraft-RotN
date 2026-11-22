@@ -14,6 +14,7 @@ import { forageTarget } from './library/foraging.js';
 import { actionProgress } from './library/progress.js';
 import { isFalling, centerIn, stepTo, wallHitters, farSpot, WALL_HITTERS } from './library/shelter.js';
 import { fallingTreeNear } from './library/felling.js';
+import { escape } from './library/escape.js';
 
 /**
  * A falling block at the head in the night shelter (#346 review 1): dig it out by hand and stay, but
@@ -478,10 +479,25 @@ const modes_list = [
         free_timeout_ms: 10_000,
         prev_dig_block: null,
         progress_memo: {}, // what actionProgress saw (library/progress.js)
+        // Soak 8 (the flooded pit; the lead's escape plan): where and when it last fired (per bot:
+        // bot.rotnUnstuck.lastFire); a repeat within repeat_cells of it within repeat_ms runs the escape
+        // (library/escape.js) instead of the walk away; an escape that fails holds this reflex off for
+        // hold_ms (bot.rotnUnstuck.holdUntil). #562 review 1: per cell (bot.rotnUnstuck.cells, within
+        // repeat_cells), at most max_escapes that fail, the failure said once; then the walk away again
+        // there, no more escapes. Review 5: an escape something else stopped is no failure (no hold, no
+        // line); at most max_interrupted of those per cell.
+        repeat_cells: 1,
+        repeat_ms: 10 * 60_000,
+        hold_ms: 5 * 60_000,
+        max_escapes: 2,
+        max_interrupted: 3,
+        max_cells: 8,
+        escape: (bot) => escape(bot), // library/escape.js (tests pass their own)
         update: async function (agent) {
             // A skill that keeps the bot in place on purpose sets bot.rotnStationary while it does
-            // (D2b: the shelter build, once at the site; not the walk there, #195 review 6).
-            if (agent.isIdle() || agent.bot?.rotnStationary === true) {
+            // (D2b: the shelter build, once at the site; not the walk there, #195 review 6); the
+            // escape (bot.rotnEscaping) is this reflex's own way out, never cut by it.
+            if (agent.isIdle() || agent.bot?.rotnStationary === true || agent.bot?.rotnEscaping === true || Date.now() < (agent.bot?.rotnUnstuck?.holdUntil ?? 0)) {
                 this.prev_location = null;
                 this.stuck_time = 0;
                 return; // don't get stuck when idle
@@ -518,8 +534,49 @@ const modes_list = [
             }
             const max_stuck_time = cur_dig_block?.name === 'obsidian' ? this.max_stuck_time * 2 : this.max_stuck_time;
             if (this.stuck_time > max_stuck_time) {
-                say(agent, 'I\'m stuck!');
                 this.stuck_time = 0;
+                const cell = bot.entity.position.floored();
+                const now = Date.now();
+                const memo = bot.rotnUnstuck ??= { lastFire: null, holdUntil: 0, cells: [] };
+                memo.cells ??= [];
+                const near = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z)) <= this.repeat_cells;
+                const last = memo.lastFire;
+                const repeat = !!last && now - last.at <= this.repeat_ms && near(cell, last.cell);
+                memo.lastFire = { cell, at: now };
+                let spot = repeat ? memo.cells.find(c => near(c.cell, cell)) : null;
+                if (repeat && !spot) {
+                    spot = { cell, escapes: 0, interrupted: 0, said: false, spentSaid: false };
+                    memo.cells.push(spot);
+                    if (memo.cells.length > this.max_cells) memo.cells.shift();
+                }
+                if (spot && spot.escapes < this.max_escapes && spot.interrupted < this.max_interrupted) {
+                    // The walk away did not free it last time, here: dig or climb out instead.
+                    await say(agent, 'I\'m stuck here again: digging or climbing out.');
+                    const mode = this;
+                    execute(this, agent, async () => {
+                        const r = await mode.escape(bot);
+                        if (r.out) { await say(agent, 'I\'m out.'); memo.lastFire = null; return; }
+                        if (r.interrupted) {
+                            spot.interrupted++;
+                            console.log(`[reflex] unstuck: the escape was stopped by something else (${r.why}); not a failure`);
+                            return;
+                        }
+                        spot.escapes++;
+                        memo.holdUntil = Date.now() + mode.hold_ms;
+                        console.warn(`[reflex] unstuck: the escape failed (${r.why}), ${spot.escapes} of ${mode.max_escapes} here; holding off for ${mode.hold_ms / 60_000} min`);
+                        if (!spot.said) {
+                            spot.said = true;
+                            await say(agent, `I'm stuck at ${cell.x}, ${cell.y}, ${cell.z} and could not dig or climb out (${r.why}).`);
+                        }
+                    }).catch(err => reportModeError('unstuck', err));
+                    this.last_time = Date.now();
+                    return;
+                }
+                if (spot && !spot.spentSaid) {
+                    spot.spentSaid = true;
+                    console.log(`[reflex] unstuck: no escape left at ${spot.cell.x}, ${spot.cell.y}, ${spot.cell.z} (${spot.escapes} failed, ${spot.interrupted} stopped); the walk away instead`);
+                }
+                say(agent, 'I\'m stuck!');
                 const free_timeout_ms = this.free_timeout_ms;
                 execute(this, agent, async () => {
                     // Upstream killed the process if this took over 10 s; on RotN terrain
