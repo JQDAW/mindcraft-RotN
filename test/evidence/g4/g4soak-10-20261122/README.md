@@ -53,14 +53,14 @@ Every address is redacted (`<ip>`): the CX23's, the dev server's and the test se
 The survival notes show 2 eats, 5 fights, 215 flees and 121 food lines.
 
 ## The LLM spend and the reasoning tokens (per window)
-The windows come from the journal: the night routine's `sunset is near` lines and the `[respawn]` relocate. The memory summary logged at 15:37:43 (`driver.log:986`) comes before `self prompt loop stopped` and `[night] sunset is near` (`driver.log:990`–`991`), so it counts in day 1.
+The windows come from the journal: the night routine's `sunset is near` lines and the `[respawn]` relocate. The memory summary logged at 15:37:43 (`driver.log:986`) comes before `self prompt loop stopped` and `[night] sunset is near` (`driver.log:991`–`992`), so it counts in day 1.
 - All 108 completions were answered by provider `Wafer`.
 - **The rule for a memory summary:** a call whose prompt is under 2,000 tokens. All 30 are also the call right before a `Memory updated to:` line.
 
 | Window | Min | Completions | USD | USD/h | Completion tokens | Reasoning tokens | Memory summaries (USD) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Day 1: join to `sunset is near` (15:20:08–15:37:43, up to `driver.log:990`); the self-prompting window | 17.6 | 57 | 0.023157 | 0.079 | 84,273 | 81,116 | 14 (0.009471) |
-| Sunset 1 to the relocate (15:37:43 from `driver.log:991`, to 16:50:41): night 1, morning and the death loop; no self-prompting | 73.0 | 41 | 0.022343 | 0.018 | 86,542 | 83,405 | 13 (0.010014) |
+| Day 1: join to `sunset is near` (15:20:08–15:37:43, up to `driver.log:991`); the self-prompting window | 17.6 | 57 | 0.023157 | 0.079 | 84,273 | 81,116 | 14 (0.009471) |
+| Sunset 1 to the relocate (15:37:43 from `driver.log:992`, to 16:50:41): night 1, morning and the death loop; no self-prompting | 73.0 | 41 | 0.022343 | 0.018 | 86,542 | 83,405 | 13 (0.010014) |
 | The relocate to `sunset is near` (16:50:41–16:54:39); the self-prompting window from 16:50:44 | 4.0 | 9 | 0.005168 | 0.078 | 19,963 | 19,412 | 2 (0.001756) |
 | Night 2 (16:54:39–17:20:20) | 25.7 | 1 | 0.000611 | – | 3,024 | 2,858 | 1 (0.000611) |
 | **The run** | **120.1** | **108** | **0.051280** | **0.0256** | **193,802** | **186,791 (96%)** | **30 (0.021853, 43%)** |
