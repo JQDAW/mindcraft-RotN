@@ -325,6 +325,12 @@ In RotN 3.3.4, `minecraft:crafting_table` is FastWorkbench 1.7.4's block: Run A'
   - It wakes the running collect, whose pickup wait ends at once, and stops the pathfinder once per cancel.
   - It waits at most `cancelTimeout` ms (default 5000; `bot.collectBlock.cancelTimeout`). Then it clears the targets, emits `collectBlock_cancelTimeout`, and resolves `'timeout'`, so a following `collect` is not blocked by a stuck one. Otherwise it resolves `'finished'`.
 - **Also fixed:** a walk that fails (NoPath, PathStopped) no longer leaves the pickup's `entityGone` listener behind.
+- **A collect given up by the cancel timeout stays out of the way (#570 review).** Its stuck walk can end later. Such an abandoned run:
+  - does not dig;
+  - reports no pickup;
+  - neither clears the targets nor emits `collectBlock_finished`.
+
+  Before, it cleared the next collect's targets, so a cancel saw nothing to stop. Only the current, not abandoned run clears the targets and says it finished.
 - **Unchanged:** a block's dig and the drop wait; a collect with nothing to cancel; the callback form of `cancelTask`.
 
 ## Other protocol changes
@@ -551,7 +557,7 @@ What different setups do:
   - A spawn whose metadata uses AquaAcrobatics' unknown serializer 14 (`entity-metadata-aqua-pose.json`) is applied with `forge.metadataError`.
   - `e2e-initbot` checks through `initBot` that the fake server's FML spawn reaches `bot.entities` as `other`, that vanilla `entity_teleport` and `rel_entity_move` update it, and that `entity_destroy` removes it.
 - `exit-contract.test.js`: the agent side (`recordAgentExit`): kicks with and without a bridge, `cleanKill` before and after a kick, startup errors, and no reason file.
-- `collectblock-patch.test.js`: the installed, patched collectblock with a fake bot. It covers an item picked up, never picked up (timeout), turned invalid, gone from `bot.entities` or replaced, and gone during the walk; a cancel during the pickup wait, and a new collect after it; 15 stop-loop cancels sharing one wait, with no new `error` listener, no MaxListeners warning, one `pathfinder.stop` and one timeout; and no listener left after a stopped or failed walk. Against stock 1.6.0, all 9 fail or hang (cancelled by the test timeout).
+- `collectblock-patch.test.js`: the installed, patched collectblock with a fake bot. It covers an item picked up, never picked up (timeout), turned invalid, gone from `bot.entities` or replaced, and gone during the walk; a cancel during the pickup wait, and a new collect after it; 15 stop-loop cancels sharing one wait, with no new `error` listener, no MaxListeners warning, one `pathfinder.stop` and one timeout; and no listener left after a stopped or failed walk. Against stock 1.6.0, the first 9 fail or hang (cancelled by the test timeout). The two #570-review tests cover an abandoned collect whose walk ends later: during the next collect it keeps that collect's targets, sends no `collectBlock_finished` and reports no pickup, and a cancel still stops the next collect; and an abandoned block collect does not dig. Both fail against #570's version.
 - `prismarine-auth-patch.test.js`: the real patched methods, with stubbed fetch, caches and MSAL, and fake tokens. Each reduced output is checked exactly and has nothing token-like. All 7 tests fail against stock 3.1.1.
 - `auth-diagnostics.test.js`: the real `fetchProfile` with a stubbed fetch (429, a network error, a 2xx with `error`). The line has the status and class, and nothing token-like, no body text and no address; the error is rethrown unchanged.
 - `driver-exit.test.js`: the exit decision and the logging before join.
