@@ -123,6 +123,16 @@ export function burrowDiggable(bot, b) {
 const sealBlocks = (bot) => countOf(shelterItems(bot)) + placeableDirt(bot.inventory.items());
 
 /**
+ * Soak 10 (N1): dirt or grass, which dug by hand drops 4 dirt piles (rotn-data #288), enough for the
+ * one dirt that seals a step down. pickupMs: how long the piles may take to reach the inventory.
+ */
+export const SELF_SEAL = { pickupMs: 1500 };
+// #580 review 1: by name and variant (dirt 0 and 1, grass), dug by hand; minecraft:grass is not in the
+// dirt ore, so isSoftWall missed the usual open-ground floor (rotn-data: both drop 4 piles by hand).
+const pilesByHand = (b) => !!b && handDiggable(b)
+    && (/^(minecraft:)?grass$/.test(b.name ?? '') || (/^(minecraft:)?dirt$/.test(b.name ?? '') && [0, 1].includes(b.metadata ?? 0)));
+
+/**
  * Soak 7 (C): whether a body (not the bot) overlaps the cell, so nothing can be placed there (a
  * zombie that walked into the bot's own cell); its hitbox, not just its feet's block.
  */
@@ -155,7 +165,11 @@ function bodyOverlaps(bot, c) {
 export function burrowStep(bot, mob, { prefer = null } = {}) {
     const here = bot.entity.position, p = here.floored();
     const now = here.distanceTo(mob.position);
-    if (sealBlocks(bot) < 1) return { why: 'no blocks to seal with' };
+    // Soak 10 (N1): no block held, a step down still works when the floor it digs is dirt or grass:
+    // its piles make the dirt that seals it (selfSeal). Every other step needs a block held.
+    const noneHeld = sealBlocks(bot) < 1;
+    const selfSeal = noneHeld && pilesByHand(bot.blockAt(p.offset(0, -1, 0)));
+    if (noneHeld && !selfSeal) return { why: 'no blocks to seal with' };
     const steps = [];
     for (const d of HORIZONTAL) {
         const r0 = p.plus(d), r1 = r0.offset(0, 1, 0);
@@ -183,13 +197,16 @@ export function burrowStep(bot, mob, { prefer = null } = {}) {
         const loose = s.around.find(c => isFalling(bot.blockAt(c))
             && (digKeys.has(key(c.offset(0, -1, 0))) || !solid(bot.blockAt(c.offset(0, -1, 0)))));
         if (loose) { why.set(name, `${bot.blockAt(loose).name} at ${at(loose)} has nothing solid under it and would fall in`); continue; }
-        if (sealBlocks(bot) < s.seal.length) { why.set(name, `${s.seal.length} blocks to seal with, ${sealBlocks(bot)} held`); continue; }
+        const sealsItself = selfSeal && s.kind === 'down';
+        if (noneHeld && !sealsItself) { why.set(name, 'no blocks to seal with'); continue; }
+        if (!sealsItself && sealBlocks(bot) < s.seal.length) { why.set(name, `${s.seal.length} blocks to seal with, ${sealBlocks(bot)} held`); continue; }
         const held = s.seal.find(c => bodyOverlaps(bot, c));
         if (held) { why.set(name, `a body in ${at(held)}, which the step seals`); continue; }
         const d = s.to.offset(0.5, 0, 0.5).distanceTo(mob.position);
         if (d < now + BURROW.minGain) { why.set(name, `not farther from it (${d.toFixed(1)})`); continue; }
-        if (prefer && s.kind === prefer) return { ...s, d }; // soak 7 (C): the step down first when it is allowed
-        if (!best || d > best.d) best = { ...s, d };
+        const step = sealsItself ? { ...s, d, selfSeal: true } : { ...s, d };
+        if (prefer && s.kind === prefer) return step; // soak 7 (C): the step down first when it is allowed
+        if (!best || d > best.d) best = step;
     }
     if (best) return best;
     return { why: [...why].map(([k, v]) => `${k}: ${v}`).join('; ') || 'no step' };
@@ -212,8 +229,11 @@ async function settleIn(bot, cell, ms) {
  */
 export async function takeBurrowStep(bot, step, { craft = craftRecipe } = {}) {
     const have = () => countOf(shelterItems(bot)) + countOf(softItems(bot));
-    if (have() < step.seal.length) await craftMore(bot, 'dirt', step.seal.length - have(), craft);
-    if (have() < step.seal.length) return { why: `only ${have()} of the ${step.seal.length} blocks to seal with` };
+    // Soak 10 (N1): a self-sealing step down crafts its dirt after the dig (from the piles it dug).
+    if (!step.selfSeal) {
+        if (have() < step.seal.length) await craftMore(bot, 'dirt', step.seal.length - have(), craft);
+        if (have() < step.seal.length) return { why: `only ${have()} of the ${step.seal.length} blocks to seal with` };
+    }
     for (const c of step.dig) {
         const block = bot.blockAt(c);
         if (isEmpty(block)) continue;
@@ -224,6 +244,12 @@ export async function takeBurrowStep(bot, step, { craft = craftRecipe } = {}) {
     }
     if (step.kind === 'side') await centerIn(bot, step.to);
     if (!await settleIn(bot, step.to, step.kind === 'down' ? BURROW.fallMs : 0)) return { why: `could not get into ${at(step.to)}` };
+    if (step.selfSeal) {
+        for (let waited = 0; have() + placeableDirt(bot.inventory.items()) < step.seal.length && waited < SELF_SEAL.pickupMs; waited += 50)
+            await new Promise(resolve => setTimeout(resolve, 50));
+        if (have() < step.seal.length) await craftMore(bot, 'dirt', step.seal.length - have(), craft);
+        if (have() < step.seal.length) return { site: step.to, why: `the dug dirt gave ${have()} of the ${step.seal.length} blocks to seal with` };
+    }
     const interior = new Set([key(step.to), key(step.to.offset(0, 1, 0))]);
     const mode = { items: (b) => wallItems(b, [...shelterItems(b), ...softItems(b)], nearbyDiggers(b)), accept: isWall };
     for (const c of step.seal) {
