@@ -7,23 +7,25 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { isOre, wetOreRefusal, wetOreSkip, footingFor, liquidNear, noteDrowning, WET_ORE } from './wet_ore.js';
+import { isOre, wetOreRefusal, wetOreSkip, liquidKind, footingFor, liquidNear, noteDrowning, WET_ORE } from './wet_ore.js';
 import * as skills from './skills.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
 const key = (p) => `${p.x},${p.y},${p.z}`;
 
-function fakeBot({ set = {}, at = new Vec3(0, 64, 0), items = [] } = {}) {
+// modded: extra blocks by name ({ id, name, boundingBox, liquid }), in the bot's registry only.
+function fakeBot({ set = {}, at = new Vec3(0, 64, 0), items = [], modded = {} } = {}) {
     const world = new Map(Object.entries(set));
     const calls = { dug: [] };
+    const registry = Object.keys(modded).length ? Object.assign(Object.create(reg), { blocks: { ...reg.blocks, ...Object.fromEntries(Object.values(modded).map(m => [m.id, m])) } }) : reg;
     const blockOf = (q) => {
         const v = world.get(key(q)) ?? (q.y < 64 ? 'stone' : 'air');
-        const b = reg.blocksByName[v];
+        const b = reg.blocksByName[v] ?? modded[v];
         return { name: v, metadata: 0, type: b?.id ?? 1, position: q, boundingBox: b?.boundingBox ?? 'block', transparent: false, shapes: [[0, 0, 0, 1, 1, 1]], canHarvest: () => true };
     };
     const bot = {
-        calls, registry: reg, version: '1.12.2', output: '', interrupt_code: false,
+        calls, registry, version: '1.12.2', output: '', interrupt_code: false,
         game: { gameMode: 'survival', dimension: 'overworld' },
         entity: { position: at.offset(0.5, 0, 0.5), height: 1.8 }, entities: {}, heldItem: null,
         modes: { isOn: () => false, pause() {}, unpause() {} },
@@ -246,4 +248,19 @@ test('#564 nit: collectBlock says "in the lava" for an ore under a lava pool, an
     assert.deepEqual(both.calls.dug, []);
     assert.match(both.output, /Skipped 2 iron_ore that would put you in the water or the lava: no dry footing within reach \(2\)\. Look for some on dry ground away from the lava\./);
     assert.equal((both.output.match(/Skipped \d+ iron_ore/g) ?? []).length, 1);
+});
+
+// #567 nit 4: a modded fluid that is neither water nor lava (registry liquid, no lava hazard) is "a liquid".
+test('#567 nit: a modded fluid (not water, not lava) is the generic liquid, named "a liquid" in the skip line', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const modded = { 'rotn:test_fluid': { id: 4000, name: 'rotn:test_fluid', boundingBox: 'empty', liquid: true } };
+    const fluid = fakeBot({ set: { '3,64,0': 'iron_ore', '4,64,0': 'rotn:test_fluid' }, modded });
+    assert.equal(liquidKind(fluid, fluid.blockAt(new Vec3(4, 64, 0))), 'liquid');
+    assert.equal(liquidKind(fluid, fluid.blockAt(new Vec3(0, 70, 0))), null, 'air is no liquid');
+    assert.deepEqual(wetOreSkip(fluid, { name: 'iron_ore', position: new Vec3(3, 64, 0) }), { why: 'a liquid beside it', liquids: ['liquid'] });
+    const items = [{ name: 'stone_pickaxe', metadata: 0, count: 1, type: reg.itemsByName.stone_pickaxe.id }];
+    const bot = fakeBot({ set: pool({ '5,62,0': 'iron_ore', '-6,64,-9': 'iron_ore' }, 'rotn:test_fluid'), at: new Vec3(5, 64, -7), items, modded });
+    await skills.collectBlock(bot, 'iron_ore', 1);
+    assert.deepEqual(bot.calls.dug, ['-6,64,-9'], bot.output);
+    assert.match(bot.output, /Skipped 1 iron_ore that would put you in a liquid: no dry footing within reach \(1\)\. Look for some on dry ground\./);
 });

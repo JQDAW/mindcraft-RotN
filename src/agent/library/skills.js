@@ -1127,9 +1127,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         if (wetSkips.size && !wetSaid) {
             wetSaid = true;
             const n = [...wetSkips.values()].reduce((a, b) => a + b, 0);
-            const lava = wetLiquids.has('lava'), wetter = wetLiquids.has('water') || wetLiquids.has('liquid');
+            const lava = wetLiquids.has('lava'), nonLava = wetLiquids.has('water') || wetLiquids.has('liquid');
             const into = ['water', 'lava', 'liquid'].filter(k => wetLiquids.has(k)).map(k => (k === 'liquid' ? 'a liquid' : `the ${k}`)).join(' or ') || 'the water';
-            const where = lava ? (wetter ? 'on dry ground away from the lava' : 'away from the lava') : 'on dry ground';
+            const where = lava ? (nonLava ? 'on dry ground away from the lava' : 'away from the lava') : 'on dry ground';
             log(bot, `Skipped ${n} ${blockType} that would put you in ${into}: ${[...wetSkips].map(([why, k]) => `${why} (${k})`).join(', ')}. Look for some ${where}.`);
         }
         if (deathSkips === 0 || deathSkipsSaid) return;
