@@ -26,7 +26,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { SHELTER_LEAD_MIN, dirtPileRecipes, isFullDay } from './library/night.js';
-import { foodShortfall, FOOD_TARGET, EMERGENCY_FOOD, EAT_AT, emergencyFoodText, NEVER_EAT_TEXT } from './library/food.js';
+import { foodShortfall, FOOD_TARGET, EMERGENCY_FOOD, EAT_AT, EAT_NOW_AT, emergencyFoodText, NEVER_EAT_TEXT } from './library/food.js';
 import { HUNT_MIN_FOOD } from './library/hunting.js';
 
 /**
@@ -305,6 +305,24 @@ export function foodFirstAfterDeath(s) {
     return Number.isFinite(since) && since <= FOOD_AFTER_DEATH.windowMs && Number.isFinite(food) && food <= EAT_AT && held <= 0;
 }
 
+/**
+ * Soak 11 (H3, the lead): 22:03:42, 9 min before sunset, the before-night shelter blocks came before
+ * food at food 7-8 with no food held (the 4 min after the 21:57 death had gone on the club); food came
+ * back at 22:06 at food 6, and the night began at food 4 with nothing to eat (food 0 kills at once).
+ * Before night, with no food held, when food would reach EAT_NOW_AT by sunset at the working rate
+ * (minPerHunger: about 1 every 2 min with walks, digging and sprints), the food reserve comes before
+ * the shelter blocks; the weapon stays ahead of both (2 logs). The last shelterMin minutes before
+ * sunset are the shelter blocks' again (the hole shelter needs a roof).
+ */
+export const FOOD_BEFORE_NIGHT = { minPerHunger: 2, shelterMin: 4 };
+/** Whether food comes before the shelter blocks now (FOOD_BEFORE_NIGHT). */
+export function foodRunsOutBeforeNight(s) {
+    let m = Infinity, food = null, held = 0;
+    try { m = s.minutesToSunset?.() ?? Infinity; food = s.food?.(); held = s.foodHeld?.() ?? 0; } catch { return false; }
+    if (!Number.isFinite(m) || m <= FOOD_BEFORE_NIGHT.shelterMin || !Number.isFinite(food) || held > 0) return false;
+    return food - m / FOOD_BEFORE_NIGHT.minPerHunger <= EAT_NOW_AT;
+}
+
 /** After the food reserve's budget is spent, it is not asked again for this long (G4 #5). */
 export const FOOD_RETRY_MS = 10 * 60_000;
 /**
@@ -466,7 +484,10 @@ export class Agenda {
     anyReserveWanted(state) {
         // Soak 7 (d): after a death, hungry with nothing to eat: food first (FOOD_AFTER_DEATH).
         const first = foodFirstAfterDeath(state) ? this.foodWanted(state) : null;
-        return first ?? this.reserveWanted(state) ?? this.weaponWanted(state, { foodDue: this.foodDue(state) }) ?? this.foodWanted(state);
+        if (first) return first;
+        // Soak 11 (H3): food would run low by sunset with none held: the weapon, then food, then the blocks.
+        if (foodRunsOutBeforeNight(state)) return this.weaponWanted(state, { foodDue: this.foodDue(state) }) ?? this.foodWanted(state) ?? this.reserveWanted(state);
+        return this.reserveWanted(state) ?? this.weaponWanted(state, { foodDue: this.foodDue(state) }) ?? this.foodWanted(state);
     }
     /** A reserve's budget is spent: the shelter reserve and the weapon until the night is past; food for FOOD_RETRY_MS. */
     reserveStuck(id) {
@@ -686,8 +707,11 @@ export class Agenda {
         const foodDue = this.foodDue(state, { standing: blocked });
         // Soak 7 (d): after a death, hungry with nothing to eat: food before the other reserves.
         const first = foodFirstAfterDeath(state) ? this.foodWanted(state, { standing: blocked, readOnly }) : null;
-        const pick = first ?? this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly, foodDue })
-            ?? this.foodWanted(state, { standing: blocked, readOnly }) ?? step;
+        // Soak 11 (H3): food would run low by sunset with none held: the weapon, then food, then the blocks.
+        const pick = first ?? (foodRunsOutBeforeNight(state)
+            ? this.weaponWanted(state, { readOnly, foodDue }) ?? this.foodWanted(state, { standing: blocked, readOnly }) ?? this.reserveWanted(state, { readOnly })
+            : this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly, foodDue }) ?? this.foodWanted(state, { standing: blocked, readOnly }))
+            ?? step;
         return { step: pick, newlyDone, waiting: blocked };
     }
 

@@ -10,7 +10,7 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, SHELTER_HOLD, REPAIR_SPARE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD, FOOD_AFTER_DEATH, CLUB } from './agenda.js';
+import { FOOD_BEFORE_NIGHT, foodRunsOutBeforeNight, Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, SHELTER_HOLD, REPAIR_SPARE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD, FOOD_AFTER_DEATH, CLUB } from './agenda.js';
 import { Vec3 } from 'vec3';
 import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
@@ -1222,4 +1222,32 @@ test('#579 re-review nit: a finished agenda, the club lost three times: each tim
         items.find(i => i.name === 'log').count = 2;
     }
     assert.equal(agent.self_prompter.prompt, '', 'never the model\'s');
+});
+
+// Soak 11 (H3): 22:03:42 (about 8 min before sunset) the shelter blocks came before food at food 7-8
+// with nothing to eat; food came back at food 6, and night 4 began at food 4 with no food.
+test('soak 11 (H3): before night with no food held, when food would reach 6 by sunset, food comes before the shelter blocks; the weapon stays first; the last 4 min are the blocks\'', (t) => {
+    assert.deepEqual(FOOD_BEFORE_NIGHT, { minPerHunger: 2, shelterMin: 4 });
+    const club = () => stack('spartanweaponry:club_wood', 0, 1);
+    const at = (food, min, items = [club()]) => hFixAgent(t, items, { food, timeOfDay: dayAt(min) });
+    // 7 min before sunset, armed, food 9 (9 - 3.5 = 5.5): food first.
+    const hungry = at(9, 7);
+    assert.equal(agendaTick(hungry, { now: 0 }), 'food');
+    // !agenda (readOnly) shows the same step.
+    assert.equal(hungry.agenda.judge(agendaState(hungry.bot), { readOnly: true }).step.id, 'food');
+    // Food 12 (12 - 3.5 = 8.5): the shelter blocks first, as before.
+    assert.equal(agendaTick(at(12, 7), { now: 0 }), 'shelter_blocks');
+    // Food held: as before.
+    assert.equal(agendaTick(at(9, 7, [club(), stack('bread', 0, 1)]), { now: 0 }), 'shelter_blocks');
+    // The last FOOD_BEFORE_NIGHT.shelterMin minutes: the blocks.
+    assert.equal(agendaTick(at(9, 3), { now: 0 }), 'shelter_blocks');
+    // Unarmed: the weapon stays ahead (2 logs), food after it, the blocks last.
+    assert.equal(agendaTick(at(9, 7, []), { now: 0 }), 'weapon');
+    // The rule itself.
+    const s = (food, m, held = 0) => ({ food: () => food, minutesToSunset: () => m, foodHeld: () => held });
+    assert.equal(foodRunsOutBeforeNight(s(9, 7)), true);
+    assert.equal(foodRunsOutBeforeNight(s(10, 7)), false, '10 - 3.5 = 6.5');
+    assert.equal(foodRunsOutBeforeNight(s(9, 4)), false, 'the last 4 min');
+    assert.equal(foodRunsOutBeforeNight(s(9, 7, 2)), false, 'food held');
+    assert.equal(foodRunsOutBeforeNight(s(9, 0)), false, 'night');
 });

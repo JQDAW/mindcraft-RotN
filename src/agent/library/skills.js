@@ -2132,6 +2132,48 @@ export async function pickupNearbyItems(bot, { allow = null } = {}) {
 }
 
 
+/**
+ * Soak 11 (H1, the lead): 22:08:51 the hunt killed a doe cottontail and ended at once; the model's next
+ * command started, and nothing showed whether the meat was picked up (the night began with 0 food).
+ * After a kill: wait up to maxMs for the drop within radius of where the animal died, pick up what
+ * lies there (the pickup refusals hold: a death spot, a hostile near), and say what came in.
+ * Returns { picked: [{name, count}], seen, refused } (seen: drops within radius; refused: a reason).
+ */
+export const KILL_DROPS = { radius: 4, maxMs: 3000, settleMs: 300, step: 100 };
+export async function pickupKillDrops(bot, at, { radius = KILL_DROPS.radius, maxMs = KILL_DROPS.maxMs, settleMs = KILL_DROPS.settleMs, step = KILL_DROPS.step, pickup = pickupNearbyItems } = {}) {
+    const near = (e) => e?.name === 'item' && !!e.position && !!at && e.position.distanceTo(at) <= radius;
+    const drops = () => Object.values(bot.entities ?? {}).filter(near);
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    for (let waited = 0; waited < maxMs && !drops().length && !bot.interrupt_code; waited += step) await sleep(step);
+    if (!drops().length) return { picked: [], seen: 0, refused: null };
+    await sleep(settleMs); // the rest of the drop
+    const seen = drops().length;
+    let refused = null;
+    const allow = (e) => {
+        if (!near(e)) return false;
+        const why = itemPickupRefusal(bot, e);
+        if (why) refused ??= why;
+        return !why;
+    };
+    const counts = () => {
+        const m = new Map();
+        for (const i of bot.inventory?.items?.() ?? []) m.set(i.name, (m.get(i.name) ?? 0) + i.count);
+        return m;
+    };
+    const before = counts();
+    try { await pickup(bot, { allow }); } catch { /* the line says what came in */ }
+    const after = counts();
+    const picked = [...after].filter(([name, n]) => n > (before.get(name) ?? 0)).map(([name, n]) => ({ name, count: n - (before.get(name) ?? 0) }));
+    return { picked, seen, refused };
+}
+/** H1: the hunt's line after a kill: what was picked up, or why nothing was. */
+export function killDropsText(r, radius = KILL_DROPS.radius, maxMs = KILL_DROPS.maxMs) {
+    if (!r) return 'the drop not checked';
+    if (r.picked.length) return `picked up ${r.picked.map(p => `${p.count} ${p.name}`).join(', ')}`;
+    if (!r.seen) return `no drop seen within ${radius} blocks in ${(maxMs / 1000).toFixed(0)} s`;
+    return `${r.seen} drop${r.seen === 1 ? '' : 's'} left: ${r.refused ?? 'not picked up'}`;
+}
+
 /** Bounds for climbing down from a tree and for breaking leaves from the ground (G3 round 4 B). */
 export const TREE_SAFETY = { descendMs: 20_000, leafWalkMs: 20_000, leafReach: 4 };
 

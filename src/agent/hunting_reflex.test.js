@@ -12,7 +12,7 @@ import { __modeForTest, __resetThreatLease } from './modes.js';
 import { executeCommand } from './commands/index.js';
 import { NIGHT_START, NightClock } from './library/night.js';
 import { HUNT } from './library/hunting.js';
-import { ATTACK_PROGRESS, isUnreachable, markUnreachable } from './library/skills.js';
+import { ATTACK_PROGRESS, isUnreachable, markUnreachable, KILL_DROPS, pickupKillDrops, killDropsText } from './library/skills.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -536,4 +536,46 @@ test('#502 nit 3: rotnUnreachable drops expired entries when one is marked or lo
     assert.deepEqual([...bot.rotnUnreachable.keys()], [2], 'and gone from the map');
     markUnreachable(bot, { id: 3 }, 1000 + ATTACK_PROGRESS.skipMs);
     assert.deepEqual([...bot.rotnUnreachable.keys()], [3], 'marking prunes the expired ones');
+});
+
+// Soak 11 (H1): 22:08:51 "hunting animania:doe_cottontail: killed", then the model's next command at
+// once, and the night began with 0 food held: nothing said whether the meat was picked up.
+test('soak 11 (H1): after a kill the hunt waits for the drop where the animal died and says what it picked up, or that none was seen', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (l) => lines.push(String(l)));
+    const saved = { ...KILL_DROPS }, savedHunt = { ...HUNT };
+    Object.assign(KILL_DROPS, { maxMs: 50, step: 10, settleMs: 10 });
+    Object.assign(HUNT, { checkMs: 10 });
+    t.after(() => { Object.assign(KILL_DROPS, saved); Object.assign(HUNT, savedHunt); });
+    const agent = huntAgent({ animals: [cow(1, 3)] });
+    agent.bot.pvp = { attack: () => { delete agent.bot.entities[1]; }, stop() {} };
+    agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: false }; };
+    await hunt(agent);
+    for (let i = 0; i < 100 && !lines.some(l => /^\[reflex\] hunting animania:cow_holstein: /.test(l)); i++) await new Promise(r => setTimeout(r, 20));
+    assert.ok(lines.includes('[reflex] hunting animania:cow_holstein: killed; no drop seen within 4 blocks in 0 s'), lines.join('\n'));
+});
+
+test('soak 11 (H1): pickupKillDrops picks up only drops near the kill spot, through the pickup refusals, and counts what came in', async () => {
+    const at = new Vec3(3.5, 64, 0.5);
+    const items = [];
+    const drop = (id, x, extra = {}) => ({ id, name: 'item', type: 'object', position: new Vec3(x, 64, 0.5), ...extra });
+    const bot = { entity: { position: new Vec3(0.5, 64, 0.5) }, entities: { 5: drop(5, 4), 6: drop(6, 20) }, inventory: { items: () => items } };
+    const allowed = [];
+    const pickup = (b, { allow }) => { for (const e of Object.values(b.entities)) if (allow(e)) { allowed.push(e.id); items.push({ name: 'rabbit', count: 1 }); } return Promise.resolve(); };
+    const r = await pickupKillDrops(bot, at, { maxMs: 50, step: 10, settleMs: 0, pickup });
+    assert.deepEqual(allowed, [5], 'not the drop 16 blocks away');
+    assert.deepEqual(r, { picked: [{ name: 'rabbit', count: 1 }], seen: 1, refused: null });
+    assert.equal(killDropsText(r), 'picked up 1 rabbit');
+    // None within reach in the wait: nothing tried.
+    const empty = { entity: bot.entity, entities: {}, inventory: { items: () => [] } };
+    const none = await pickupKillDrops(empty, at, { maxMs: 30, step: 10, pickup: () => { throw new Error('no pickup'); } });
+    assert.deepEqual(none, { picked: [], seen: 0, refused: null });
+    assert.equal(killDropsText(none, 4, 3000), 'no drop seen within 4 blocks in 3 s');
+    // A drop the refusals keep (a zombie near it): left, and said why.
+    const zombie = { id: 9, name: 'zombie', type: 'mob', position: new Vec3(5, 64, 0.5), height: 1.95 };
+    const kept = { entity: bot.entity, entities: { 5: drop(5, 4), 9: zombie }, inventory: { items: () => [] } };
+    const k = await pickupKillDrops(kept, at, { maxMs: 30, step: 10, settleMs: 0, pickup: (b, { allow }) => { Object.values(b.entities).forEach(allow); return Promise.resolve(); } });
+    assert.equal(k.seen, 1);
+    assert.ok(k.refused, 'a refusal named');
+    assert.match(killDropsText(k), /^1 drop left: /);
 });
