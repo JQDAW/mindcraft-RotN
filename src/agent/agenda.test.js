@@ -1196,3 +1196,30 @@ test('soak 10 (S1): the shelter reserve keeps the shelter\'s 10 blocks and a rep
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks');
     assert.match(SHELTER_RESERVE_STEP.goal, /keeps 4 more to repair it when a zombie digs a wall open/);
 });
+
+// #579 re-review nit: agendaTick returned early ("agenda done, no reserve wanted", "nothing runnable")
+// before autoCraftTick, so the craft tries never reset there: with a finished agenda and the club lost
+// again and again, the crafts went 1, 2, 2, 2 and then the model got it.
+test('#579 re-review nit: a finished agenda, the club lost three times: each time the weapon reserve crafts a new one itself', (t) => {
+    const items = [stack('log', 1, 2)];
+    const agent = fakeAgent(t, items);
+    agent.agenda = new Agenda('FRCFLD', { dir: tempDir(t), weapon: WEAPON_RESERVE_STEP, food: null, reserve: null });
+    agent.agenda.start();
+    agent.agenda.finish();
+    agent.bot.time = { timeOfDay: 1000 };
+    agent.bot.food = 20;
+    const runs = [];
+    const club = () => stack('spartanweaponry:club_wood', 0, 1);
+    agent.actions = { executing: false, currentActionLabel: '', runAction: (label) => { runs.push(label); items.push(club()); return Promise.resolve(); } };
+    let now = 0;
+    const tick = () => { now += TICK_MS; return agendaTick(agent, { now }); };
+    for (let round = 1; round <= 3; round++) {
+        assert.equal(tick(), 'weapon', `round ${round}: the club is lost, the logs held`);
+        assert.equal(runs.length, round, `round ${round}: crafted by the driver`);
+        assert.equal(tick(), null, `round ${round}: a club held, no reserve wanted`);
+        // Lost (a death, worn out): the logs for another one.
+        items.splice(items.findIndex(i => i.name === 'spartanweaponry:club_wood'), 1);
+        items.find(i => i.name === 'log').count = 2;
+    }
+    assert.equal(agent.self_prompter.prompt, '', 'never the model\'s');
+});
