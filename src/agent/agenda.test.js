@@ -1251,3 +1251,19 @@ test('soak 11 (H3): before night with no food held, when food would reach 6 by s
     assert.equal(foodRunsOutBeforeNight(s(9, 7, 2)), false, 'food held');
     assert.equal(foodRunsOutBeforeNight(s(9, 0)), false, 'night');
 });
+
+// Soak 11 night 4, replayed (H3): after the 21:57 death the club was made (21:58-22:03); at 22:03:42,
+// about 8 min before the 22:12 sunset, food 8 with no food held, the agenda chose the shelter blocks;
+// food came back at 22:06 at food 6, and the bot sealed in at food 4 with nothing to eat (death 5:
+// starved in the sealed side pocket).
+test('soak 11 night 4 replay (H3): club held, no food, food 8, 7.5 min before sunset: food, not the shelter blocks; food 4: still food (foraging, too weak to hunt); 3 min before sunset: the blocks', (t) => {
+    const club = () => stack('spartanweaponry:club_wood', 0, 1);
+    const at = (food, min) => hFixAgent(t, [club()], { food, timeOfDay: dayAt(min) });
+    const s22_03 = at(8, 7.5);
+    assert.equal(agendaTick(s22_03, { now: 0 }), 'food');
+    const s22_08 = at(4, 7.5);
+    assert.equal(agendaTick(s22_08, { now: 0 }), 'food');
+    assert.match(s22_08.self_prompter.prompt, /At food 4 you are too weak to hunt \(weakness\): eat the food you hold, and !forage nearby/);
+    // The last minutes before sunset: the shelter blocks (a hole needs a roof); the night seals in.
+    assert.equal(agendaTick(at(4, 3), { now: 0 }), 'shelter_blocks');
+});

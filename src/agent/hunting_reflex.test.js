@@ -603,6 +603,13 @@ test('soak 11 (H2): a pig, cow or sheep in range is hunted before a nearer rabbi
         assert.equal(avoidReason(item), null, `${name} is safe raw`);
     }
     assert.ok(avoidReason({ name: 'minecraft:chicken', metadata: 0 }), 'raw chicken: Hunger 30% of the time');
+    // Raw chicken only when starving (food 5 or lower, EMERGENCY_FOOD), and never before safe meat.
+    const { chooseFood } = await import('./library/food.js');
+    const inv = (...names) => ({ inventory: { items: () => names.map(name => ({ name, metadata: 0, count: 1 })) } });
+    assert.equal(chooseFood(inv('minecraft:chicken')), null, 'not hungry enough');
+    assert.equal(chooseFood(inv('minecraft:chicken'), { emergency: true })?.name, 'minecraft:chicken', 'starving: eaten');
+    assert.equal(chooseFood(inv('minecraft:chicken', 'minecraft:porkchop'), { emergency: true })?.name, 'minecraft:porkchop', 'safe raw meat first');
+    assert.equal(chooseFood(inv('minecraft:beef'))?.name, 'minecraft:beef', 'raw beef eaten as it is');
     // The night's "food worth N hunger held" counts them.
     const held = { inventory: { items: () => [{ name: 'minecraft:porkchop', metadata: 0, count: 5 }, { name: 'animania:raw_prime_beef', metadata: 0, count: 2 }] } };
     assert.equal(heldFoodHunger(held), 7);
