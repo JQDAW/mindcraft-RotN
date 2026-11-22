@@ -23,6 +23,8 @@ const pickRecipe = { result: { id: PICK, count: 1, metadata: 0 }, requiresTable:
 const table = { name: 'crafting_table', position: new Vec3(1, 64, 0) };
 const FAST = { ...CRAFT_LIMITS, tableMs: 400, handMs: 300, pollMs: 20, abandonMs: 200, settleMs: 300 };
 const quiet = (t) => { t.mock.method(console, 'log', () => {}); };
+/** action_manager.js stop(): an action that outlives its stop by 10 s gets the process killed (soak 9). */
+const MINDCRAFT_KILL_MS = 10_000;
 
 /**
  * A bot whose bot.craft never resolves (each call recorded with what bot.rotnStationary was); the
@@ -64,6 +66,7 @@ test('soak 9 (1): nothing made: "not crafted"; the table limit is CRAFT_LIMITS.t
     quiet(t);
     assert.equal(CRAFT_LIMITS.tableMs, 15_000);
     assert.equal(CRAFT_LIMITS.perCraftMs, 2_000, '#571 review 2: 2 s for each further use');
+    assert.equal(CRAFT_LIMITS.abandonMs, 5_500, '#574 review 1: over mineflayer\'s WINDOW_TIMEOUT (5 s)');
     const { bot } = hangBot();
     const r = await craftPausingAutoEat(bot, pickRecipe, 3, table, 3000, { ...FAST, tableMs: 300, perCraftMs: 100 });
     assert.deepEqual(r, { ended: 'timeout', made: 0 });
@@ -73,13 +76,14 @@ test('soak 9 (1): nothing made: "not crafted"; the table limit is CRAFT_LIMITS.t
 test('soak 9 (1): a stop ends a craft that never resolves at once (the default 15 s limit), long before Mindcraft\'s 10 s kill', async (t) => {
     quiet(t);
     const { bot, calls } = hangBot();
-    setTimeout(() => { bot.interrupt_code = true; }, 100);
-    const start = Date.now();
+    let stoppedAt = null;
+    setTimeout(() => { stoppedAt = Date.now(); bot.interrupt_code = true; }, 100);
     const r = await craftPausingAutoEat(bot, pickRecipe, 1, table);
-    const ms = Date.now() - start;
-    // #571 review 1: plus up to abandonMs for the abandoned craft and settleMs for the count; still
-    // well inside Mindcraft's 10 s.
+    const ms = Date.now() - stoppedAt;
+    // #571 review 1: plus up to abandonMs for the abandoned craft and settleMs for the count; the
+    // worst case (a craft that never settles, nothing made). #574 review 1: under Mindcraft's kill.
     assert.ok(ms < CRAFT_LIMITS.abandonMs + CRAFT_LIMITS.settleMs + 1500, `ended on the stop: ${ms} ms`);
+    assert.ok(ms < MINDCRAFT_KILL_MS - 1500, `${ms} ms from the stop, under the ${MINDCRAFT_KILL_MS} ms kill with room to spare`);
     assert.deepEqual(r, { ended: 'interrupted', made: 0 });
     assert.equal(calls.closed, 1);
     assert.match(bot.output, /The craft of stone_pickaxe was stopped before it finished; closed the crafting table; not crafted: you have 0 stone_pickaxe\./);
@@ -372,4 +376,19 @@ test('#571 review 3: a stop during useToolOn says it was stopped, not the time l
     assert.ok(Date.now() - start < 1000, `${Date.now() - start} ms`);
     assert.match(bot.output, /useOn stopped \(interrupted\)\./);
     assert.doesNotMatch(bot.output, /time limit/);
+});
+
+// #574 review 1: abandonMs 3 s was shorter than mineflayer's WINDOW_TIMEOUT (5 s), so a craft stuck
+// on an unconfirmed click could still close the next craft's window about 2 s later.
+test('#574 review 1: abandonMs is over the installed mineflayer\'s WINDOW_TIMEOUT, and a stop\'s worst case stays under the 10 s kill', async () => {
+    const fs = await import('node:fs');
+    const require = createRequire(import.meta.url);
+    const src = fs.readFileSync(require.resolve('mineflayer/lib/plugins/inventory.js'), 'utf8');
+    const windowTimeout = Number(/const WINDOW_TIMEOUT = (\d+)/.exec(src)?.[1]);
+    assert.equal(windowTimeout, 5000, 'mineflayer 4.33.0');
+    assert.ok(CRAFT_LIMITS.abandonMs > windowTimeout, `${CRAFT_LIMITS.abandonMs} > ${windowTimeout}`);
+    assert.equal(CRAFT_LIMITS.abandonMs, 5_500);
+    // From the stop: its poll, the reset's race, the abandoned craft, the count.
+    const worst = CRAFT_LIMITS.pollMs + CRAFT_LIMITS.pollMs + CRAFT_LIMITS.abandonMs + CRAFT_LIMITS.settleMs;
+    assert.ok(worst < MINDCRAFT_KILL_MS - 2000, `${worst} ms`);
 });
