@@ -240,23 +240,28 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
  * server had made it. The unstuck reflex (20 s at the table) tried to stop the craft, which ignored
  * the stop, and Mindcraft killed the process 10 s later. So a craft is bounded:
  * tableMs at a table, handMs in the inventory's 2x2 grid, plus perCraftMs for each further use of
- * the recipe; pollMs: how often the stop is checked; settleMs: how long the inventory may take to
- * show what the server made after the window is closed.
+ * the recipe (#571 review: 2 s, one shaped use is 8 to 12 confirmed clicks on a laggy Forge server);
+ * pollMs: how often the stop is checked; abandonMs: how long a craft given up on may take to settle
+ * (it can still click, or close the next craft's window); settleMs: how long the inventory may take
+ * to show what the server made after the window is closed.
  */
-export const CRAFT_LIMITS = { tableMs: 15_000, handMs: 10_000, perCraftMs: 1_000, pollMs: 100, settleMs: 1_000 };
+export const CRAFT_LIMITS = { tableMs: 15_000, handMs: 10_000, perCraftMs: 2_000, pollMs: 100, abandonMs: 3_000, settleMs: 1_000 };
 
 /**
  * Soak 9: in-place window work (a craft, a chest) is no being stuck: the unstuck reflex leaves the
  * bot alone while fn runs (bot.rotnStationary), only for the window part, never the walk there.
- * The flag is set back as it was, so a skill that set it already keeps it.
+ * The flag is set back as it was, so a skill that set it already keeps it. #571 review 4: the flag
+ * is a token of this call (truthy; unstuck reads it so), and it is set back only while it is still
+ * that token: a late end never overwrites a flag a newer action set.
  */
 export async function stationaryWhile(bot, fn) {
     const was = bot.rotnStationary;
-    bot.rotnStationary = true;
+    const mine = { stationaryWhile: true };
+    bot.rotnStationary = mine;
     try {
         return await fn();
     } finally {
-        bot.rotnStationary = was ?? false;
+        if (bot.rotnStationary === mine) bot.rotnStationary = was ?? false;
     }
 }
 
@@ -293,10 +298,16 @@ async function boundedCraft(bot, recipe, count, table, limits) {
     const before = have();
     const run = currentRun(bot);
     const ms = (table ? limits.tableMs : limits.handMs) + limits.perCraftMs * Math.max(0, (count ?? 1) - 1);
-    let settled = false, failure = null;
-    // Handled here, so a craft that settles after it was given up never rejects unhandled.
+    let settled = false, failure = null, abandonedAt = null;
+    // Handled here, so a craft that settles after it was given up never rejects unhandled; once given
+    // up, its settling is logged (#571 review 1), however late.
+    const done = (err) => {
+        settled = true;
+        failure = err;
+        if (abandonedAt !== null) console.log(`[craft] the abandoned craft settled after ${Date.now() - abandonedAt} ms${err ? ` (it threw: ${safeError(err)})` : ''}`);
+    };
     const craft = Promise.resolve().then(() => bot.craft(recipe, count, table))
-        .then(() => { settled = true; }, (err) => { settled = true; failure = err ?? new Error('the craft failed'); });
+        .then(() => done(null), (err) => done(err ?? new Error('the craft failed')));
     const start = Date.now();
     let ended = null;
     for (;;) {
@@ -315,12 +326,18 @@ async function boundedCraft(bot, recipe, count, table, limits) {
     // Given up. mineflayer's craft keeps the table's window between its crafts (windowCraftingTable)
     // and lets it go only when a craft ends, so the next table craft would click in this one; a craft
     // of 0 runs no craft, then closes that window and lets it go (mineflayer 4.33.0 craft.js).
+    abandonedAt = Date.now();
     if (table) {
         const reset = Promise.resolve().then(() => bot.craft(recipe, 0, table)).catch(() => {});
         await Promise.race([reset, new Promise(resolve => setTimeout(resolve, limits.pollMs))]);
     }
-    // Then whatever is still open (a window that opened late), and count.
+    // Then whatever is still open (a window that opened late).
     try { if (bot.currentWindow) bot.closeWindow(bot.currentWindow); } catch { /* best effort */ }
+    // #571 review 1: the craft given up on still runs, and can click, or close the next craft's window
+    // when it ends (mineflayer closes windowCraftingTable then): with its window closed, it gets
+    // abandonMs to settle before this returns. Then the count.
+    await Promise.race([craft, new Promise(resolve => setTimeout(resolve, limits.abandonMs))]);
+    if (!settled) console.log(`[craft] the abandoned craft did not settle within ${limits.abandonMs} ms; going on`);
     for (let waited = 0; before !== null && have() <= before && waited < limits.settleMs; waited += limits.pollMs)
         await new Promise(resolve => setTimeout(resolve, limits.pollMs));
     const now = have();
@@ -1855,7 +1872,7 @@ export async function sticksByAxe(bot, need, run = currentRun(bot), ops = AXE_CH
         if (rest && rest.name !== 'air' && rest.boundingBox !== 'empty') {
             try {
                 const res = await within(bot, O.takeBack(bot, rest), L.cleanupMs, () => { try { bot.stopDigging?.(); } catch { /* best effort */ } });
-                if (res === TIMED_OUT) log(bot, `Could not break the placed ${rest.name} back within ${secsText(L.cleanupMs)}.`);
+                if (res === TIMED_OUT) log(bot, bot.interrupt_code ? `Stopped before the placed ${rest.name} was broken back.` : `Could not break the placed ${rest.name} back within ${secsText(L.cleanupMs)}.`);
             } catch (err) {
                 log(bot, `Could not break the placed ${rest.name} back (${safeError(err)}).`);
             }
@@ -3118,7 +3135,11 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
         const limitMs = GO_TO_LIMITS.totalMs;
         const walked = await within(bot, bot.pathfinder.goto(goal), limitMs, () => stopWalking(bot));
         clearInterval(doorCheckInterval);
-        if (walked === TIMED_OUT) throw new Error(`time limit of ${secsText(limitMs)} reached`);
+        if (walked === TIMED_OUT) {
+            // #571 review 3: within() ends on a stop too; that is a stopped walk, not the time limit.
+            if (bot.interrupt_code) { log(bot, 'Walk stopped (interrupted).'); return false; }
+            throw new Error(`time limit of ${secsText(limitMs)} reached`);
+        }
         return true;
     } catch (err) {
         clearInterval(doorCheckInterval);
@@ -4504,7 +4525,8 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
     }
 
     targetName = targetName.toLowerCase();
-    const timeUp = () => { log(bot, `useOn failed: time limit of ${secsText(L.totalMs)} reached.`); return false; };
+    // #571 review 3: within() ends on a stop too; then it was stopped, not the time limit.
+    const timeUp = () => { log(bot, bot.interrupt_code ? 'useOn stopped (interrupted).' : `useOn failed: time limit of ${secsText(L.totalMs)} reached.`); return false; };
     if (targetName === 'nothing') {
         const equipped = await within(bot, equip(bot, toolName), left());
         if (equipped === TIMED_OUT) return timeUp();
@@ -4564,6 +4586,7 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
             if (r === 'used') return true;
             if (r === 'interrupted') return false;
             if (r === 'unreachable' || r === 'blocked') { unreachable.push(posText(block.position)); continue; }
+            if (r === 'timeout' && bot.interrupt_code) { log(bot, 'useOn stopped (interrupted).'); return false; } // #571 review 3
             if (r === 'timeout') { timeUp = true; break; }
             return false; // no_effect, no_tool: another block of the same kind would do the same
         }

@@ -186,6 +186,23 @@ test('escape plan (2): goToGoal searches again for up to 5 s (planPath) when bot
     assert.match(bot.output, /Found destructive path \(after a longer search\)\./);
 });
 
+// #571 review 3: within() ends on a stop with TIMED_OUT; goToGoal said "time limit of 3 min reached".
+test('#571 review 3: a stop during goToGoal\'s walk is a stopped walk (false, said), not the time limit', async (t) => {
+    quiet(t);
+    const pathfinder = {
+        setMovements() {}, stop() {}, setGoal() {}, isMoving: () => true,
+        getPathTo: () => ({ status: 'success', path: [] }),
+        goto: () => new Promise(() => {}), // never ends; the stop does not reject it
+    };
+    const { bot } = fakeBot({ world: (q) => (q.y < 64 ? 'stone' : 'air'), at: new Vec3(0, 64, 0), pathfinder });
+    setTimeout(() => { bot.interrupt_code = true; }, 150);
+    const start = Date.now();
+    assert.equal(await goToGoal(bot, new pf.goals.GoalBlock(5, 64, 0)), false);
+    assert.ok(Date.now() - start < 1500, `${Date.now() - start} ms`);
+    assert.match(bot.output, /Walk stopped \(interrupted\)\./);
+    assert.doesNotMatch(bot.output, /time limit/);
+});
+
 function unstuckAgent() {
     const agent = {
         name: 'FRCFLD', bot: {}, task: null, prompter: { getInitModes: () => ({}) },
