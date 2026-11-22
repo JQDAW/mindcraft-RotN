@@ -43,7 +43,7 @@ import { placesToLeave } from './respawn_relocate.js';
  * stallMs turns the aim 90 degrees for detourMs (#581 nit 8: water, a cliff, a wall).
  */
 export const ESCAPE_RUN = { away: 64, spawnRadius: 10, trigger: 48, afterDeathMs: 3 * 60_000, hostileRange: 32, aimMs: 1000, turnDeg: 30, ahead: 16,
-    checkMs: 250, maxMs: 60_000, walkFood: 6, tries: 3, pitWithinMs: 3 * 60_000, stallMs: 5000, detourMs: 3000, minGain: 2 };
+    checkMs: 250, maxMs: 60_000, walkFood: 6, tries: 3, pitWithinMs: 3 * 60_000, stallMs: 5000, detourMs: 3000, minGain: 2, dueFreshMs: 2000 };
 /** The modes the escape pauses while it runs (self_preservation stays on). */
 export const ESCAPE_PAUSES = ['cowardice', 'self_defense', 'unstuck', 'item_collecting', 'hunting', 'eating', 'torch_placing', 'elbow_room'];
 /** The escape's action label. */
@@ -223,8 +223,16 @@ export function escapeWindow(agent, now = Date.now()) {
     if (agent?._escape?.job) return true;
     try { return !!escapeReason(agent, now); } catch { return false; }
 }
-/** The flag commands read (actions.js runAsAction): set on each tick from escapeWindow. */
-const noteWindow = (agent, now) => { if (agent?._escape) agent._escape.due = escapeWindow(agent, now); };
+/**
+ * The flag commands read (actions.js runAsAction): set on each tick from escapeWindow, and good for
+ * ESCAPE_RUN.dueFreshMs of wall time (dueUntil). #581 follow-up 1: a control hold (a giver's !stop or
+ * !pause) returns before this tick runs, and a flag left true refused every typed command for hours.
+ */
+const noteWindow = (agent, now) => {
+    if (!agent?._escape) return;
+    agent._escape.due = escapeWindow(agent, now);
+    agent._escape.dueUntil = agent._escape.due ? Date.now() + ESCAPE_RUN.dueFreshMs : 0;
+};
 
 /**
  * One check, from the priority stack before the night routine: 'escaping' while the escape runs (the
@@ -300,6 +308,8 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
             if ((ret?.interrupted || result?.stopped === 'interrupted') && by === 'self_preservation') r.tries = Math.max(0, r.tries - 1);
             const how = ret?.interrupted || result?.stopped === 'interrupted' ? `was interrupted${by ? ` by ${by}` : ''}` : result?.stopped === 'time' ? `ran out of its ${ESCAPE_RUN.maxMs / 1000} s` : 'ended';
             if (result?.stopped === 'time') r.done = true;
+            // #581 follow-up 3: between tries, commands stay held until the next tick starts the next run.
+            noteWindow(agent, Date.now());
             log(`[respawn] the escape ${how} at ${far} blocks from ${what}${here ? ` (at ${at(here)})` : ''}${r.done || r.tries >= ESCAPE_RUN.tries ? '' : '; running it again'}`);
         });
     return 'escaping';
