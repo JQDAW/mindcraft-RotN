@@ -482,10 +482,16 @@ const modes_list = [
         // Soak 8 (the flooded pit; the lead's escape plan): where and when it last fired (per bot:
         // bot.rotnUnstuck.lastFire); a repeat within repeat_cells of it within repeat_ms runs the escape
         // (library/escape.js) instead of the walk away; an escape that fails holds this reflex off for
-        // hold_ms (bot.rotnUnstuck.holdUntil), said once.
+        // hold_ms (bot.rotnUnstuck.holdUntil). #562 review 1: per cell (bot.rotnUnstuck.cells, within
+        // repeat_cells), at most max_escapes that fail, the failure said once; then the walk away again
+        // there, no more escapes. Review 5: an escape something else stopped is no failure (no hold, no
+        // line); at most max_interrupted of those per cell.
         repeat_cells: 1,
         repeat_ms: 10 * 60_000,
         hold_ms: 5 * 60_000,
+        max_escapes: 2,
+        max_interrupted: 3,
+        max_cells: 8,
         escape: (bot) => escape(bot), // library/escape.js (tests pass their own)
         update: async function (agent) {
             // A skill that keeps the bot in place on purpose sets bot.rotnStationary while it does
@@ -531,24 +537,44 @@ const modes_list = [
                 this.stuck_time = 0;
                 const cell = bot.entity.position.floored();
                 const now = Date.now();
-                const memo = bot.rotnUnstuck ??= { lastFire: null, holdUntil: 0 };
+                const memo = bot.rotnUnstuck ??= { lastFire: null, holdUntil: 0, cells: [] };
+                memo.cells ??= [];
+                const near = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z)) <= this.repeat_cells;
                 const last = memo.lastFire;
-                const repeat = !!last && now - last.at <= this.repeat_ms
-                    && Math.max(Math.abs(cell.x - last.cell.x), Math.abs(cell.y - last.cell.y), Math.abs(cell.z - last.cell.z)) <= this.repeat_cells;
+                const repeat = !!last && now - last.at <= this.repeat_ms && near(cell, last.cell);
                 memo.lastFire = { cell, at: now };
-                if (repeat) {
+                let spot = repeat ? memo.cells.find(c => near(c.cell, cell)) : null;
+                if (repeat && !spot) {
+                    spot = { cell, escapes: 0, interrupted: 0, said: false, spentSaid: false };
+                    memo.cells.push(spot);
+                    if (memo.cells.length > this.max_cells) memo.cells.shift();
+                }
+                if (spot && spot.escapes < this.max_escapes && spot.interrupted < this.max_interrupted) {
                     // The walk away did not free it last time, here: dig or climb out instead.
                     await say(agent, 'I\'m stuck here again: digging or climbing out.');
                     const mode = this;
                     execute(this, agent, async () => {
                         const r = await mode.escape(bot);
                         if (r.out) { await say(agent, 'I\'m out.'); memo.lastFire = null; return; }
+                        if (r.interrupted) {
+                            spot.interrupted++;
+                            console.log(`[reflex] unstuck: the escape was stopped by something else (${r.why}); not a failure`);
+                            return;
+                        }
+                        spot.escapes++;
                         memo.holdUntil = Date.now() + mode.hold_ms;
-                        console.warn(`[reflex] unstuck: the escape failed (${r.why}); holding off for ${mode.hold_ms / 60_000} min`);
-                        await say(agent, `I'm stuck at ${cell.x}, ${cell.y}, ${cell.z} and could not dig or climb out (${r.why}).`);
+                        console.warn(`[reflex] unstuck: the escape failed (${r.why}), ${spot.escapes} of ${mode.max_escapes} here; holding off for ${mode.hold_ms / 60_000} min`);
+                        if (!spot.said) {
+                            spot.said = true;
+                            await say(agent, `I'm stuck at ${cell.x}, ${cell.y}, ${cell.z} and could not dig or climb out (${r.why}).`);
+                        }
                     }).catch(err => reportModeError('unstuck', err));
                     this.last_time = Date.now();
                     return;
+                }
+                if (spot && !spot.spentSaid) {
+                    spot.spentSaid = true;
+                    console.log(`[reflex] unstuck: no escape left at ${spot.cell.x}, ${spot.cell.y}, ${spot.cell.z} (${spot.escapes} failed, ${spot.interrupted} stopped); the walk away instead`);
                 }
                 say(agent, 'I\'m stuck!');
                 const free_timeout_ms = this.free_timeout_ms;

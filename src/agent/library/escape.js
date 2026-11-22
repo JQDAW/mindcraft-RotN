@@ -27,9 +27,10 @@ import { planPath } from './skills.js';
  * planMs: the pathfinder's search; walkMs: its walk; totalMs: the whole escape; maxPlaced: blocks
  * placed (towers and pillars); maxSteps: stair and pillar steps by hand; targetRadius: how far dry
  * ground is looked for; skyCheck: how high above the bot the sky is looked for; moveMs: the move
- * into a stair step; jumpMs/landMs: a pillar's jump and landing.
+ * into a stair step; jumpMs/landMs: a pillar's jump and landing; countMs: how often the held blocks
+ * are counted during the pathfinder's walk (each drop is a placement).
  */
-export const ESCAPE = { planMs: 5000, walkMs: 60_000, totalMs: 90_000, maxPlaced: 8, maxSteps: 24, targetRadius: 8, skyCheck: 40, moveMs: 3000, jumpMs: 1000, landMs: 1500 };
+export const ESCAPE = { planMs: 5000, walkMs: 60_000, totalMs: 90_000, maxPlaced: 8, maxSteps: 24, targetRadius: 8, skyCheck: 40, moveMs: 3000, jumpMs: 1000, landMs: 1500, countMs: 50 };
 
 const UP = new Vec3(0, 1, 0);
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -85,9 +86,15 @@ export function skyY(bot) {
 const buildStacks = (bot) => [...shelterItems(bot), ...softItems(bot)];
 const buildCount = (bot) => countOf(buildStacks(bot));
 
-/** The pathfinder's movements for the escape: fall-safe; digging and 1x1 towers with the held blocks; digging preferred; no flow, no parkour, no sprint. */
-export function escapeMovements(bot) {
+/**
+ * The pathfinder's movements for the escape: fall-safe; digging and 1x1 towers with the held blocks;
+ * digging preferred; no flow, no parkour, no sprint. #562 review 2: the planner sees at most the
+ * blocks left in the budget (ESCAPE.maxPlaced - state.placed), whatever the bot holds.
+ */
+export function escapeMovements(bot, state = { placed: 0 }) {
     const m = fallSafe(new pf.Movements(bot));
+    const held = typeof m.countScaffoldingItems === 'function' ? m.countScaffoldingItems.bind(m) : () => buildCount(bot);
+    m.countScaffoldingItems = () => Math.max(0, Math.min(held(), ESCAPE.maxPlaced - state.placed));
     m.canDig = true;
     m.allow1by1towers = true;
     m.allowParkour = false;
@@ -135,6 +142,9 @@ export function nextStep(bot, target, state) {
         const cells = [head2, to, to.offset(0, 1, 0)];
         const ours = new Set([key(p), key(p.offset(0, 1, 0)), ...cells.map(key)]);
         if (!solid(bot.blockAt(p.plus(d)))) continue; // the step stood on
+        // #562 review 6: the new feet and head cells must not touch one of the bot's own cells that
+        // holds a liquid (its head under water): dug, they would let that water through.
+        if ([to, to.offset(0, 1, 0)].some(c => SIX.some(e => { const q = c.plus(e); return (q.equals(p) || q.equals(p.offset(0, 1, 0))) && isLiquid(bot.blockAt(q)); }))) continue;
         if (!cells.every(c => safeToDig(bot, c, ours))) continue;
         stairs.push({ kind: 'stair', d, to, dig: cells.filter(c => !isEmpty(bot.blockAt(c))) });
         break;
@@ -149,12 +159,18 @@ export function nextStep(bot, target, state) {
     return { kind: 'pillar', dig: [head2, head2.offset(0, 1, 0)].filter(c => !isEmpty(bot.blockAt(c))) };
 }
 
-/** Dig a cell within its budget (pit.digWithin, burrow.digEquip): true when it is empty after. */
-async function digCell(bot, c) {
+/**
+ * Dig a cell within its budget (pit.digWithin, burrow.digEquip), and never past the deadline
+ * (#562 review 3): true when it is empty after; 'time' when no time is left for it.
+ */
+async function digCell(bot, c, deadline) {
     const block = bot.blockAt(c);
     if (isEmpty(block)) return true;
+    const left = deadline - Date.now();
+    if (left <= 0) return 'time';
     const equip = digEquip(bot, block);
-    const r = await digWithin(bot, block, digBudget(bot, block).limitMs, equip ? { equip } : {});
+    const r = await digWithin(bot, block, Math.min(digBudget(bot, block).limitMs, left), equip ? { equip } : {});
+    if (r === 'timeout' && Date.now() >= deadline) return 'time';
     return r === true && isEmpty(bot.blockAt(c));
 }
 
@@ -187,6 +203,8 @@ export async function pillarUp(bot, item) {
         await bot.look(bot.entity.yaw ?? 0, -Math.PI / 2, true);
         bot.setControlState('jump', true);
         for (let waited = 0; bot.entity.position.y < p.y + 1 && waited < ESCAPE.jumpMs; waited += 25) await sleep(25);
+        // #562 review 7: a jump that did not get the feet out of the cell: no block into the bot's own cell.
+        if (bot.entity.position.y < p.y + 1) return false;
         try { await bot.placeBlock(floor, UP); } catch { /* checked below: the server may confirm late */ }
     } finally {
         bot.setControlState('jump', false);
@@ -198,16 +216,29 @@ export async function pillarUp(bot, item) {
 /** Stage 1: the pathfinder (escapeMovements), a search of planMs, a walk of walkMs, within the block budget. */
 async function byPathfinder(bot, target, state, deadline, say) {
     if (typeof bot.pathfinder?.goto !== 'function') return { why: 'no pathfinder' };
-    const m = escapeMovements(bot);
+    const m = escapeMovements(bot, state);
     const goal = target ? new pf.goals.GoalBlock(target.x, target.y, target.z) : new pf.goals.GoalY(skyY(bot));
     const plan = await planPath(bot, m, goal, ESCAPE.planMs);
     if (plan?.status !== 'success') return { why: `the pathfinder found no way (${plan?.status ?? 'no result'})` };
     say(`[escape] the pathfinder found a way (${plan.path?.length ?? '?'} moves): walking it`);
-    const before = buildCount(bot);
+    // #562 review 2: placements are the drops in the held count (a dug block adds to it): each
+    // drop is counted as it happens, never netted against a dig.
+    let last = buildCount(bot);
+    const count = () => { const now = buildCount(bot); if (now < last) state.placed += last - now; last = now; };
+    const counter = setInterval(count, ESCAPE.countMs);
+    // #562 review 4: the movements before the escape come back after it (a raw setGoal, such as
+    // useDoor's, would otherwise walk with towers and digging).
+    const before = bot.pathfinder.movements ?? null;
     bot.pathfinder.setMovements(m);
-    const r = await boundedWalk(bot, () => bot.pathfinder.goto(goal), Math.min(ESCAPE.walkMs, Math.max(0, deadline - Date.now())),
-        () => (before - buildCount(bot) >= ESCAPE.maxPlaced - state.placed ? 'blocks' : bot.interrupt_code ? 'interrupted' : null));
-    state.placed += Math.max(0, before - buildCount(bot));
+    let r;
+    try {
+        r = await boundedWalk(bot, () => bot.pathfinder.goto(goal), Math.min(ESCAPE.walkMs, Math.max(0, deadline - Date.now())),
+            () => { count(); return state.placed >= ESCAPE.maxPlaced ? 'blocks' : bot.interrupt_code ? 'interrupted' : null; });
+    } finally {
+        clearInterval(counter);
+        count();
+        if (before) { try { bot.pathfinder.setMovements(before); } catch { /* best effort */ } }
+    }
     return isOut(bot, target) ? { out: true } : { why: r.stopped === 'blocks' ? `the pathfinder used the ${ESCAPE.maxPlaced} blocks` : r.stopped ? `the pathfinder's walk stopped (${r.stopped})` : `the pathfinder's walk did not get out${r.why ? ` (${r.why})` : ''}` };
 }
 
@@ -219,10 +250,15 @@ async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
         if (Date.now() >= deadline) return { why: `the ${ESCAPE.totalMs / 1000} s ran out` };
         const step = nextStep(bot, target, state);
         if (step.why) return { why: step.why };
+        const late = { why: `the ${ESCAPE.totalMs / 1000} s ran out` };
         for (const c of step.dig) {
-            if (!await digCell(bot, c)) return { why: `could not dig ${bot.blockAt(c)?.name ?? 'the block'} at ${at(c)}` };
+            if (bot.interrupt_code) return { why: 'interrupted' };
+            const dug = await digCell(bot, c, deadline);
+            if (dug === 'time') return late;
+            if (!dug) return { why: `could not dig ${bot.blockAt(c)?.name ?? 'the block'} at ${at(c)}` };
             state.dug++;
         }
+        if (Date.now() >= deadline) return late; // #562 review 3: and before the step
         if (step.kind === 'stair') {
             if (!await moveTo(bot, step.to)) return { why: `could not step up into ${at(step.to)}` };
             state.stairs++;
@@ -238,13 +274,14 @@ async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
 
 /**
  * Get out of a pit or the water (the lead's escape plan). Returns {out, how: 'already'|'pathfinder'|
- * 'by hand'|null, dug, placed, stairs, pillars, at, why, ms}. Never throws.
+ * 'by hand'|null, dug, placed, stairs, pillars, at, why, interrupted, ms}. Never throws.
  * moveTo, pillar, say: the tests' own.
  */
 export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = (l) => console.log(l) } = {}) {
     const t0 = Date.now(), deadline = t0 + ESCAPE.totalMs;
     const state = { dug: 0, placed: 0, stairs: 0, pillars: 0 };
-    const done = (out, how, why = null) => ({ out, how, why, ...state, at: feetOf(bot), ms: Date.now() - t0 });
+    // #562 review 5: interrupted: stopped by something else (a reflex, a command), not a failure.
+    const done = (out, how, why = null) => ({ out, how, why, interrupted: !out && (why === 'interrupted' || !!bot.interrupt_code), ...state, at: feetOf(bot), ms: Date.now() - t0 });
     try {
         if (isOut(bot)) return done(true, 'already');
         const target = escapeTarget(bot);

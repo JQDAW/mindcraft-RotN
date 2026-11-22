@@ -17,8 +17,10 @@ __setRegistryForTest(reg);
 const key = (p) => `${p.x},${p.y},${p.z}`;
 const quiet = (t) => { t.mock.method(console, 'log', () => {}); t.mock.method(console, 'warn', () => {}); };
 
-/** The flooded pit: stone up to y 70 (the overhang), air above; the bot's two cells at 0, 60/61, 0 water. */
-const pit = (q) => (q.y > 70 ? 'air' : q.x === 0 && q.z === 0 && (q.y === 60 || q.y === 61) ? 'water' : 'stone');
+/** The flooded pit: stone up to y 70 (the overhang), air above; the bot's legs in water (0, 60, 0), its head cell (0, 61, 0) air, as in soak 8. */
+const pit = (q) => (q.y > 70 ? 'air' : q.x === 0 && q.z === 0 && q.y === 60 ? 'water' : q.x === 0 && q.z === 0 && q.y === 61 ? 'air' : 'stone');
+/** The same with the head under water too. */
+const deepPit = (q) => (q.x === 0 && q.z === 0 && q.y === 61 ? 'water' : pit(q));
 /** A well: stone up to 70 except the 0, 0 column: water at 64 and 65, air from 66 up (open sky). */
 const well = (q) => (q.x === 0 && q.z === 0 ? (q.y < 64 ? 'stone' : q.y <= 65 ? 'water' : 'air') : q.y > 70 ? 'air' : 'stone');
 
@@ -184,10 +186,7 @@ test('escape plan (2): goToGoal searches again for up to 5 s (planPath) when bot
     assert.match(bot.output, /Found destructive path \(after a longer search\)\./);
 });
 
-test('escape plan (2): unstuck firing again in the same cell within 10 min runs the escape; a failed escape holds it off 5 min, said once', async (t) => {
-    const warns = [];
-    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
-    t.mock.method(console, 'log', () => {});
+function unstuckAgent() {
     const agent = {
         name: 'FRCFLD', bot: {}, task: null, prompter: { getInitModes: () => ({}) },
         actions: { currentActionLabel: 'action:goToSurface', resume_func: null, runAction: async (label, fn) => { await fn(); return { message: 'ok', interrupted: false }; } },
@@ -202,34 +201,72 @@ test('escape plan (2): unstuck firing again in the same cell within 10 min runs 
         pathfinder: { setMovements() {}, getPathTo: () => ({ status: 'success', path: [] }), goto: () => new Promise((res, rej) => { rejectGoto = rej; }), stop: () => rejectGoto?.(new Error('PathStopped')) },
     });
     const mode = __modeForTest('unstuck');
-    const escapes = [];
-    mode.escape = (bot) => { escapes.push(bot.entity.position.floored()); return Promise.resolve({ out: false, why: 'no stair step, and no block to pillar up with' }); };
     mode.free_timeout_ms = 30;
     const fire = async () => {
-        mode.prev_location = position.clone();
+        mode.prev_location = agent.bot.entity.position.clone();
         mode.stuck_time = mode.max_stuck_time + 1;
         mode.last_time = Date.now();
         await mode.update(agent);
         for (let i = 0; i < 100 && mode.active; i++) await new Promise(r => setTimeout(r, 10));
     };
+    /** The 5-min hold ends (as if 5 min passed; the last fire is still within 10 min). */
+    const holdEnds = () => { agent.bot.rotnUnstuck.holdUntil = 0; };
+    return { agent, mode, fire, holdEnds, position };
+}
+
+test('escape plan (2), #562 review 1: unstuck again in the same cell runs the escape; failed, it holds 5 min; after the hold a second escape (the failure not said again); then the walk away there, no third', async (t) => {
+    const warns = [], logs = [];
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { agent, mode, fire, holdEnds, position } = unstuckAgent();
+    agent.bot.modes.behavior_log = '';
+    const escapes = [];
+    mode.escape = (bot) => { escapes.push(bot.entity.position.floored()); return Promise.resolve({ out: false, interrupted: false, why: 'no stair step, and no block to pillar up with' }); };
     await fire();
     assert.equal(escapes.length, 0, 'the first time: the walk away, as before');
     await fire();
     assert.equal(escapes.length, 1, 'again in the same cell: the escape');
-    assert.ok(warns.some(w => w === '[reflex] unstuck: the escape failed (no stair step, and no block to pillar up with); holding off for 5 min'), warns.join('\n'));
+    assert.ok(warns.includes('[reflex] unstuck: the escape failed (no stair step, and no block to pillar up with), 1 of 2 here; holding off for 5 min'), warns.join('\n'));
     assert.ok(agent.bot.rotnUnstuck.holdUntil > Date.now() + 4 * 60_000);
     await fire();
     assert.equal(escapes.length, 1, 'held off');
-    assert.equal(mode.stuck_time, 0);
-    // Past the hold, in another cell 5 blocks off: the walk away first again.
-    agent.bot.rotnUnstuck.holdUntil = 0;
-    agent.bot.rotnUnstuck.lastFire = { cell: new Vec3(-95, 61, -127), at: Date.now() };
+    // After the hold, still within 10 min of the last fire: the second escape.
+    holdEnds();
     await fire();
-    assert.equal(escapes.length, 1, 'not a repeat: another cell');
-    // A repeat more than 10 min after the last: the walk away.
-    agent.bot.rotnUnstuck.lastFire = { cell: position.floored(), at: Date.now() - 11 * 60_000 };
+    assert.equal(escapes.length, 2);
+    assert.ok(warns.includes('[reflex] unstuck: the escape failed (no stair step, and no block to pillar up with), 2 of 2 here; holding off for 5 min'));
+    const failLines = agent.bot.modes.behavior_log.split('\n').filter(l => l.startsWith("I'm stuck at -90, 61, -127 and could not dig or climb out"));
+    assert.equal(failLines.length, 1, 'the failure said once for this cell');
+    // After the second hold: no escape left here: the walk away, said once.
+    holdEnds();
     await fire();
-    assert.equal(escapes.length, 1, 'not a repeat: too long ago');
+    await fire();
+    assert.equal(escapes.length, 2, 'no third escape in this cell');
+    assert.equal(logs.filter(l => l === '[reflex] unstuck: no escape left at -90, 61, -127 (2 failed, 0 stopped); the walk away instead').length, 1, logs.join('\n'));
+    // Another cell 5 blocks off, a repeat there: an escape again (its own count).
+    agent.bot.entity.position = position.offset(-5, 0, 0);
+    await fire();
+    await fire();
+    assert.equal(escapes.length, 3);
+});
+
+test('#562 review 5: an escape something else stopped (the swim-up) is no failure: no hold, no failure line; bounded per cell', async (t) => {
+    const warns = [], logs = [];
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { agent, mode, fire } = unstuckAgent();
+    agent.bot.modes.behavior_log = '';
+    let escapes = 0;
+    mode.escape = () => { escapes++; return Promise.resolve({ out: false, interrupted: true, why: 'interrupted' }); };
+    await fire();
+    await fire();
+    assert.equal(escapes, 1);
+    assert.equal(agent.bot.rotnUnstuck.holdUntil, 0, 'no hold');
+    assert.ok(!warns.some(w => w.includes('the escape failed')));
+    assert.ok(!agent.bot.modes.behavior_log.includes('could not dig or climb out'));
+    assert.ok(logs.includes('[reflex] unstuck: the escape was stopped by something else (interrupted); not a failure'));
+    for (let i = 0; i < 4; i++) await fire();
+    assert.equal(escapes, mode.max_interrupted, 'at most max_interrupted stopped escapes here');
 });
 
 test('escape: the unstuck reflex is held off while it runs (bot.rotnEscaping)', async (t) => {
@@ -246,3 +283,87 @@ test('escape: the unstuck reflex is held off while it runs (bot.rotnEscaping)', 
     assert.equal(mode.stuck_time, 0, 'reset, nothing fired');
 });
 
+
+test('#562 review 2: the placements are the drops in the held blocks, not netted against digs; the planner sees only the budget left', async (t) => {
+    quiet(t);
+    // A walk that digs 3 dirt and places 2, by turns: net +1, placed 2.
+    let goal = null;
+    const pathfinder = {
+        movements: null, setMovements(m) { this.movements = m; }, stop() {}, setGoal() {}, isMoving: () => false,
+        getPathTo: () => ({ status: 'success', path: [1] }),
+        goto: async (g) => {
+            goal = g;
+            const dirt = inv.find(i => i.name === 'dirt');
+            for (const d of [+1, -1, +1, -1, +1]) { dirt.count += d; await new Promise(r => setTimeout(r, 3 * ESCAPE.countMs)); }
+            bot.entity.position = new Vec3(5.5, 71, 0.5);
+        },
+    };
+    const { bot, inv } = fakeBot({ pathfinder, items: [['stone_pickaxe', 1], ['dirt', 10]] });
+    const r = await escape(bot, { say: () => {} });
+    assert.ok(goal);
+    assert.deepEqual([r.out, r.placed], [true, 2], `placed ${r.placed}`);
+    const state = { placed: 6 };
+    const m = escapeMovements(bot, state);
+    assert.equal(m.countScaffoldingItems(), 2, 'the planner: 8 - 6 left, though 11 dirt are held');
+    state.placed = 8;
+    assert.equal(m.countScaffoldingItems(), 0);
+});
+
+test('#562 review 3: the 90 s is hard: each dig gets at most the time left, and none starts past it', async (t) => {
+    quiet(t);
+    const saved = { ...ESCAPE };
+    t.after(() => Object.assign(ESCAPE, saved));
+    Object.assign(ESCAPE, { totalMs: 1500 });
+    const { bot } = fakeBot({ pathfinder: noPath(), items: [['stone_pickaxe', 1]] });
+    // Warm (rotn-data's dump loaded), so the time goes to the dig, not to the first checks.
+    nextStep(bot, null, { placed: 0 });
+    escapeTarget(bot);
+    // Digs that never end on their own (a dig is stopped by digWithin at its limit: 2 min here).
+    let digs = 0;
+    bot.dig = () => { digs++; return new Promise(() => {}); };
+    bot.digTime = () => 60_000;
+    const t0 = Date.now();
+    const r = await escape(bot, { moveTo: teleport, say: () => {} });
+    assert.ok(digs >= 1, 'a dig was started');
+    assert.equal(r.out, false);
+    assert.match(r.why, /the 1.5 s ran out/);
+    assert.ok(Date.now() - t0 < 3000, `ended in ${Date.now() - t0} ms, not at the dig's 2 min`);
+});
+
+test('#562 review 4: the movements the pathfinder had before the escape come back after it', async (t) => {
+    quiet(t);
+    const before = { mine: true };
+    const sets = [];
+    const pathfinder = {
+        movements: before, setMovements(m) { sets.push(m); this.movements = m; }, stop() {}, setGoal() {}, isMoving: () => false,
+        getPathTo: () => ({ status: 'success', path: [1] }),
+        goto: () => Promise.reject(new Error('stuck')),
+    };
+    const { bot } = fakeBot({ pathfinder, items: [['stone_pickaxe', 1]] });
+    await escape(bot, { moveTo: teleport, say: () => {} });
+    assert.equal(sets[0].canDig, true, 'the escape movements first');
+    assert.equal(pathfinder.movements, before, 'then the ones from before');
+});
+
+test('#562 review 6: with the head under water, no stair (its cells would let the water through): a pillar instead', (t) => {
+    quiet(t);
+    const { bot } = fakeBot({ world: deepPit, items: [['stone_pickaxe', 1], ['dirt', 4]] });
+    assert.equal(nextStep(bot, null, { placed: 0 }).kind, 'pillar');
+    assert.equal(nextStep(fakeBot({ world: deepPit, items: [['stone_pickaxe', 1]] }).bot, null, { placed: 0 }).why, 'no stair step, and no block to pillar up with');
+    assert.equal(nextStep(fakeBot({ items: [['stone_pickaxe', 1]] }).bot, null, { placed: 0 }).kind, 'stair', 'only the legs in water: stairs');
+});
+
+test('#562 review 7: a jump that does not get the feet out of the cell places nothing', async (t) => {
+    quiet(t);
+    const { bot, calls, inv } = fakeBot({ world: well, at: new Vec3(0, 64, 0), items: [['dirt', 4]] });
+    let tries = 0;
+    const place = bot.placeBlock;
+    bot.placeBlock = (...a) => { tries++; return place(...a); };
+    bot.setControlState = (c, on) => { if (c === 'jump' && on) bot.entity.position = bot.entity.position.offset(0, 0.4, 0); if (c === 'jump' && !on) bot.entity.position = new Vec3(0.5, 64, 0.5); };
+    const saved = ESCAPE.jumpMs;
+    t.after(() => { ESCAPE.jumpMs = saved; });
+    ESCAPE.jumpMs = 100;
+    assert.equal(await pillarUp(bot, inv[0]), false);
+    assert.equal(tries, 0, 'not even tried: the cell is the bot\'s own');
+    assert.deepEqual(calls.placed, []);
+});
