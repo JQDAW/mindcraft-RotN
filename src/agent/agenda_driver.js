@@ -22,7 +22,7 @@ import { safeError } from './safe_error.js';
 import { heldFoodHunger } from './library/food.js';
 import { nearbyHuntable } from './library/hunting.js';
 import { nearbyForage } from './library/foraging.js';
-import { hasWeapon } from './library/threats.js';
+import { hasWeapon, WEAPON } from './library/threats.js';
 import { FOOD_RETRY_MS, STUCK_RETRY } from './agenda.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
@@ -37,6 +37,8 @@ const MAX_TICK_GAP_MS = 10_000; // a stalled update loop does not count as LLM t
 // LLM time is saved this often (#164 nit: was 60 s); runs are saved as they start, so a
 // crash loop is bounded by the run budget anyway.
 export const SAVE_EVERY_MS = 10_000;
+/** Soak 10 (W2): a step's autoCraft is run as a skill at most this many times while it stays current. */
+export const AUTO_CRAFT = { tries: 2 };
 
 /** A step's budget; settings.agenda_step_attempts and agenda_step_llm_ms override it. */
 export function stepBudget() {
@@ -79,6 +81,8 @@ export function agendaState(bot, clock = null) {
         // #284 review 2: any pickaxe held; the dirt blocks held or made from the dirt piles held.
         hasPickaxe: () => toolLevels(bot, 'pickaxe').length > 0,
         hasWeapon: () => hasWeapon(bot), // the before-night weapon reserve (soak 3)
+        // Soak 10 (W1): a weapon with a kill's worth of hits left (the weapon reserve's done).
+        weaponReady: () => hasWeapon(bot, { minHits: WEAPON.killHits }),
         dirtBlocks: () => placeableDirt(bot.inventory?.items?.() ?? []),
         // G4 #5: the food level, the hunger value of the safe food held, and the wild animals and
         // ripe wild food near that the bot may take (never what may belong to a player).
@@ -261,6 +265,11 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         return 'done';
     }
 
+    // Soak 10 (W2): a step that can craft what it asks for now (the weapon reserve's club from 2 logs)
+    // crafts it as a skill: no model call. A craft that did not end the step leaves it to the model.
+    const auto = autoCraftTick(agent, step, state);
+    if (auto) return auto;
+
     const goal = agendaGoal(agenda, step, state);
     if (agent._agenda_step !== step.id) {
         const prev = agent._agenda_step;
@@ -340,5 +349,32 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
             driveTo(agent, goal, { start: true });
         }
     }
+    return step.id;
+}
+
+/**
+ * Soak 10 (W2): step.autoCraft ({item, ready(state)}) crafts its item as a skill (skills.craftRecipe)
+ * when ready, at most AUTO_CRAFT.tries times while the step stays current, never over an action
+ * that is running (the next tick tries). Returns the step id while its craft runs, else null (the
+ * step goes on as usual: the model gets its goal). `craft` is for tests.
+ */
+export function autoCraftTick(agent, step, state, { craft = null } = {}) {
+    const a = step?.autoCraft;
+    const tries = agent._agenda_auto ??= {};
+    if (!a) return null;
+    if (agent._agenda_auto_step !== step.id) { agent._agenda_auto_step = step.id; tries[step.id] = 0; }
+    const label = `action:craftRecipe:${a.item}`;
+    if (agent.actions?.executing) return agent.actions.currentActionLabel === label ? step.id : null;
+    let ready = false;
+    try { ready = !!a.ready(state); } catch { ready = false; }
+    if (!ready || (tries[step.id] ?? 0) >= AUTO_CRAFT.tries || typeof agent.actions?.runAction !== 'function') return null;
+    tries[step.id] = (tries[step.id] ?? 0) + 1;
+    const sp = agent.self_prompter;
+    if (sp?.isActive?.() && ownsPrompt(agent)) sp.stop(false);
+    // agent._agenda_step is left as it is: a craft that did not end the step hands it to the model as usual.
+    say(agent, `agenda step ${step.id}: crafting ${formatName(a.item)} (try ${tries[step.id]} of ${AUTO_CRAFT.tries})`);
+    const run = craft ?? (async (bot, item) => (await import('./library/skills.js')).craftRecipe(bot, item, 1));
+    Promise.resolve(agent.actions.runAction(label, () => run(agent.bot, a.item)))
+        .catch(err => console.warn(`[agenda] crafting ${a.item}: ${safeError(err)}`));
     return step.id;
 }

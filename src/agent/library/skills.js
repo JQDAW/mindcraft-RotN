@@ -14,7 +14,7 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
-import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath } from "./threats.js";
+import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath, isWeaponItem } from "./threats.js";
 import { logAte, fightJournal, swingLine, logWeapon } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -50,7 +50,8 @@ export { weaponRank };
  * an unanswered click and its retry, while the bot does not attack).
  */
 export async function equipHighestAttack(bot, fight = {}) {
-    const isWeapon = (item) => !!item && (item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe')));
+    // Soak 10 (W1): threats.isWeaponItem, the one weapon rule (never the crude axe or a Hit With Axe bark).
+    const isWeapon = (item) => !!item && isWeaponItem(item);
     // Soak 7 (e): the best by damage per tick of cooldown on the path bot.attack takes (threats.weaponOrder).
     const order = weaponOrder(attackPath(bot));
     const best = (items) => items.filter(isWeapon).sort(order)[0] ?? null;
@@ -1482,6 +1483,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 }
                 // Leaves from the ground (G3 round 4 B), not with collectBlock's walk into the tree.
                 if (isLeafBlock(block)) {
+                    // Soak 10 (W4): never with a tool that wears in hand (15:28-15:30: the stick collect broke
+                    // leaves holding the crude axe, which then had no use left). A full hotbar of tools: as it is.
+                    await stopHoldingWhere(bot, wearsOnBreak).catch(() => false);
                     const r = await breakLeafFromGround(bot, block, run);
                     if (!r) givenUp.push(block.position.clone ? block.position.clone() : block.position);
                     // Round 9 B: out of reach after the walk is remembered, and uses no attempt (below).
@@ -1698,6 +1702,9 @@ export async function stopHoldingWhere(bot, isUnwanted) {
     }
     return false;
 }
+
+/** Soak 10 (W4): an item that loses durability when it breaks a block (rotn-data knows its maxDamage). */
+export const wearsOnBreak = (item) => !!item && toolUsesLeft(item) !== null;
 
 /** Shears of any mod, by name: no shears in the dump has a "shears" tool class (rotn-data #312). */
 export const isShears = (item) => !!item && typeof item.name === 'string' && /shears/.test(item.name);

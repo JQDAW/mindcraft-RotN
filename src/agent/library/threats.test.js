@@ -305,16 +305,18 @@ test('soak 2: a big slime is kept away from without a weapon or below health 14;
     assert.equal(plan(slime(1, 1)).action, 'flee', 'soak 5: a tiny one is not fought bare-handed either');
 });
 
-test('#434 review: a crude axe or a stone sword is no real weapon for a big slime (attack 4 or more); a creeper or a crowd still decides first; magma cubes too', async () => {
+test('#434 review: a crude axe or a stone sword is no real weapon for a big slime (attack 4 or more); a creeper or a crowd still decides first; magma cubes too (soak 10: the crude axe is no weapon at all; the wooden club has 4)', async () => {
     const { bestAttack, isBigSlime } = await import('./threats.js');
     const slime = (id, x = 3) => ({ id, name: 'slime', type: 'mob', position: new Vec3(x, 64, 0), metadata: { 12: 4 } });
     const plan = (es, items, health = 20) => threatPlan(fakeBot(es, { health, inventory: { items: () => items, slots: [] } }));
-    for (const [item, attack] of [['pyrotech:crude_axe', 3], ['stone_sword', 3.5], ['stone_axe', 3]]) {
+    for (const [item, attack] of [['pyrotech:crude_axe', 0], ['stone_sword', 3.5], ['stone_axe', 3]]) {
         assert.equal(bestAttack({ inventory: { items: () => [{ name: item }], slots: [] } }), attack, item);
         assert.equal(plan([slime(1)], [{ name: item }]).action, 'flee', `${item}: kept away from`);
     }
     assert.equal(plan([slime(1)], [{ name: 'iron_sword' }]).action, 'fight', 'an iron sword (6): fought');
-    assert.equal(plan([slime(1)], [{ name: 'pyrotech:flint_axe' }]).action, 'flee', 'a weapon of unknown attack: not counted');
+    assert.equal(plan([slime(1)], [{ name: 'somemod:obsidian_sword' }]).action, 'flee', 'a weapon of unknown attack: not counted');
+    assert.equal(bestAttack({ inventory: { items: () => [{ name: 'spartanweaponry:club_wood' }], slots: [] } }), 4);
+    assert.equal(plan([slime(1)], [{ name: 'spartanweaponry:club_wood' }]).action, 'fight', 'a wooden club (4): fought');
     // A creeper near as well: the plan is the creeper's.
     const creeper = { id: 9, name: 'creeper', type: 'mob', position: new Vec3(4, 64, 0) };
     const both = plan([slime(1), creeper], []);
@@ -517,7 +519,9 @@ test('PR 5: in the open a melee mob is fled from with no weapon or at a health i
     }
     assert.equal(maxHitOf(mob('ancientbeasts:sandy', 3)), 18, 'an avoid mob with no melee entry');
     assert.equal(maxHitOf(null), 18, 'no mob: unknown');
-    assert.equal(plan({ items: [{ name: 'pyrotech:crude_axe', count: 1 }] }).action, 'fight', 'a crude axe is a weapon');
+    // Soak 10 (W1): a crude axe is a tool, no weapon (it breaks on its 5th hit); a wooden club is one.
+    assert.deepEqual([plan({ items: [{ name: 'pyrotech:crude_axe', count: 1 }] }).action, plan({ items: [{ name: 'pyrotech:crude_axe', count: 1 }] }).why], ['flee', 'melee, and no weapon'], 'a crude axe is no weapon');
+    assert.equal(plan({ items: [{ name: 'spartanweaponry:club_wood', count: 1 }] }).action, 'fight', 'a wooden club is a weapon');
     assert.equal(plan({ items: [{ name: 'stone_pickaxe', count: 1 }] }).action, 'flee', 'a pickaxe is not');
     assert.equal(fightRefusal({ health: 20, inventory: { items: () => [sword], slots: [] } }), null, 'above UNKNOWN_MELEE');
     assert.equal(fightRefusal({ health: 20, inventory: { items: () => [sword], slots: [] } }, zombie), null);

@@ -457,7 +457,7 @@ test('#500 follow-up 2: the model\'s !attack on a food animal with no weapon is 
     };
     let r = await run([cow(1, 3)]);
     assert.deepEqual(r.hit, [], 'the model, unarmed: refused');
-    assert.match(r.out, /Not hunting animania:cow_holstein: you hold no weapon\. Forage for food first \(!forage\); make a weapon \(a crude axe from 1 rock and 2 sticks, or a stone axe\) before you hunt\./);
+    assert.match(r.out, /Not hunting animania:cow_holstein: you hold no weapon\. Forage for food first \(!forage\); make a weapon \(a wooden club from 2 logs, no table: !craftRecipe\("spartanweaponry:club_wood", 1\)\) before you hunt\./);
     r = await run([cow(1, 3)], { sender: 'JQDAW' });
     assert.deepEqual(r.hit, [1], 'a giver typed it: hunted');
     assert.match(r.out, /Warning: JQDAW asked for it, so hunting animania:cow_holstein with no weapon\./);

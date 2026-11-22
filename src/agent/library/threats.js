@@ -22,7 +22,7 @@
 // rotn-data's sources (documented, vanilla, verified, inferred class rules) are treated the
 // same: the inferred rules lean cautious (every creeper variant keeps its distance, skeleton
 // variants take cover), so acting on them never makes the bot bolder (#186 review nit).
-import { threatOf, nightThreats, UNKNOWN_MELEE, weaponStats } from '../../../packages/rotn-data/index.js';
+import { threatOf, nightThreats, UNKNOWN_MELEE, weaponStats, getItem, registryName } from '../../../packages/rotn-data/index.js';
 import * as mc from '../../utils/mcdata.js';
 import { mayBelongToPlayer } from './ownership.js';
 
@@ -175,15 +175,73 @@ const SLIMES = /(^|:)([a-z_]*slime|magma_cube)$/;
  * counts as no real weapon (fail safe). To move to rotn-data as a cited table.
  */
 export const WEAPON_ATTACK = {
-    'pyrotech:crude_axe': 3, 'minecraft:stone_axe': 3, 'minecraft:stone_sword': 3.5, 'minecraft:wooden_sword': 4, 'minecraft:wooden_axe': 7,
+    'pyrotech:crude_axe': 3, 'spartanweaponry:club_wood': 4, 'minecraft:stone_axe': 3, 'minecraft:stone_sword': 3.5, 'minecraft:wooden_sword': 4, 'minecraft:wooden_axe': 7,
     'minecraft:iron_sword': 6, 'minecraft:iron_axe': 9, 'minecraft:golden_sword': 4, 'minecraft:golden_axe': 7,
     'minecraft:diamond_sword': 8, 'minecraft:diamond_axe': 7, 'pyrotech:redstone_sword': 7, 'mod_lavacow:bonesword': 4,
 };
 const fullItemName = (n) => (n.includes(':') ? n : `minecraft:${n}`);
-/** The bot's best attack damage among the weapons it carries (WEAPON_ATTACK), or 0. */
+const baseName = (n) => fullItemName(String(n).replace(/:\d+$/, ''));
+
+/**
+ * Soak 10 (the lead, after rotn-data's soak 10 answers): what counts as a weapon. minAttack: the
+ * least attack of one (rotn-data's Better Combat damage, else its vanilla damage, else WEAPON_ATTACK);
+ * killHits: the hits a weapon must have left for the before-night reserve (the wooden club kills a
+ * zombie or a zombie player in 7 Better Combat hits).
+ */
+export const WEAPON = { minAttack: 3, killHits: 7 };
+/**
+ * Soak 10: never a weapon. The crude axe is a tool (2 durability a hit of its 8: it breaks on its 5th
+ * hit, before it kills one zombie, rotn-data #551); it is kept for the Crafting Tools and Hit With Axe.
+ */
+export const NOT_WEAPONS = new Set(['pyrotech:crude_axe']);
+// Tools that rotn-data lists as melee items too; the bark and debarked logs of Hit With Axe (soak 10:
+// "[survival] weapon hitwithaxe:bark" matched "axe" in its name).
+const NOT_A_WEAPON_NAME = /^hitwithaxe:|pickaxe|shovel|spade|(^|[:_])hoe($|_)|mattock|paxel/;
+const WEAPON_NAME = /sword|(^|[:_])axe$|(^|[:_])club_/;
+
+/** An item's attack damage on this pack: rotn-data (Better Combat's, else vanilla's), else WEAPON_ATTACK; null when unknown. */
+export function weaponAttack(name) {
+    const full = baseName(name);
+    let w = null;
+    try { w = weaponStats(full); } catch { w = null; }
+    const d = Number.isFinite(w?.bcAttackDamage) ? w.bcAttackDamage : w?.attackDamage;
+    if (Number.isFinite(d)) return d;
+    return Number.isFinite(WEAPON_ATTACK[full]) ? WEAPON_ATTACK[full] : null;
+}
+
+/**
+ * Soak 10 (W1): a weapon is a melee item of attack WEAPON.minAttack or more (weaponAttack), never one of
+ * NOT_WEAPONS, a Hit With Axe item or a digging tool. An item rotn-data has no attack for counts by its
+ * name (a sword, an axe, a club), as before.
+ */
+export function isWeaponItem(item) {
+    if (typeof item?.name !== 'string') return false;
+    const full = baseName(item.name);
+    if (NOT_WEAPONS.has(full) || NOT_A_WEAPON_NAME.test(full)) return false;
+    const attack = weaponAttack(full);
+    return attack === null ? WEAPON_NAME.test(full) : attack >= WEAPON.minAttack;
+}
+
+/**
+ * The hits a weapon has left (its durability left over rotn-data's durability a hit, 1 when not
+ * listed), or Infinity when its durability is unknown.
+ */
+export function weaponHitsLeft(item) {
+    if (typeof item?.name !== 'string') return 0;
+    let max = null;
+    try { max = getItem(registryName(baseName(item.name)))?.maxDamage ?? null; } catch { max = null; }
+    if (!(max > 0)) return Infinity;
+    let perHit = 1;
+    try { perHit = weaponStats(baseName(item.name))?.durabilityPerHit ?? 1; } catch { perHit = 1; }
+    const used = item.durabilityUsed ?? item.metadata ?? 0;
+    // An item breaks when its damage goes above its max (rotn-data #551): left / perHit hits, plus the one that breaks it.
+    return Math.max(0, Math.floor((max - used) / Math.max(1, perHit)) + 1);
+}
+
+/** The bot's best attack damage among the weapons it carries (isWeaponItem, weaponAttack), or 0. */
 export function bestAttack(bot) {
     const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]];
-    return Math.max(0, ...items.map(i => (typeof i?.name === 'string' ? WEAPON_ATTACK[fullItemName(i.name)] ?? 0 : 0)));
+    return Math.max(0, ...items.map(i => (isWeaponItem(i) ? weaponAttack(i.name) ?? 0 : 0)));
 }
 /** A slime's size (1.12 EntitySlime metadata index 12), or null when it cannot be read. */
 export const slimeSize = (e) => (Number.isInteger(e?.metadata?.[SLIME.sizeIndex]) ? e.metadata[SLIME.sizeIndex] : null);
@@ -191,10 +249,13 @@ export const slimeSize = (e) => (Number.isInteger(e?.metadata?.[SLIME.sizeIndex]
 export const isBigSlime = (e) => typeof e?.name === 'string' && SLIMES.test(e.name) && !(slimeSize(e) !== null && slimeSize(e) < SLIME.bigSize);
 export const canFightSlime = (bot) => bestAttack(bot) >= SLIME.minAttack && bot?.health >= SLIME.minHealth;
 
-/** A sword or an axe (not a pickaxe) in the inventory or the off hand (slot 45; #227 nit). */
-export function hasWeapon(bot) {
+/**
+ * A weapon (isWeaponItem) in the inventory or the off hand (slot 45; #227 nit). minHits: only one
+ * with at least that many hits left (weaponHitsLeft; soak 10: the before-night reserve asks for a kill's worth).
+ */
+export function hasWeapon(bot, { minHits = 0 } = {}) {
     const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]];
-    return items.some(i => typeof i?.name === 'string' && /sword|(^|[:_])axe$/.test(i.name));
+    return items.some(i => isWeaponItem(i) && (minHits <= 0 || weaponHitsLeft(i) >= minHits));
 }
 
 /**
