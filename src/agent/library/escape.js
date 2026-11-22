@@ -21,7 +21,9 @@ import { burrowDiggable, digEquip } from './burrow.js';
 import { digWithin, digBudget } from './pit.js';
 import { goodFloor, inWater, boundedWalk } from './shelter_ground.js';
 import { fallSafe } from './fall_safety.js';
-import { planPath } from './skills.js';
+import { planPath, placeBlock, log } from './skills.js';
+import { findItem } from './rotn_names.js';
+import { dumpState } from './night.js';
 
 /**
  * planMs: the pathfinder's search; walkMs: its walk; totalMs: the whole escape; maxPlaced: blocks
@@ -174,14 +176,20 @@ async function digCell(bot, c, deadline) {
     return r === true && isEmpty(bot.blockAt(c));
 }
 
-/** Into the stair step at `to`: look at it, forward and jump until the feet are in it (at most moveMs). */
-export async function stepInto(bot, to) {
+/** The time to wait: ms, but no more than is left before the deadline (#562 nit: the 90 s is exact). */
+const within = (ms, deadline) => Math.max(0, Math.min(ms, deadline - Date.now()));
+/** A promise, or 'time' once ms have passed. */
+const orTime = (promise, ms) => { let timer; return Promise.race([promise, new Promise(resolve => { timer = setTimeout(() => resolve('time'), ms); })]).finally(() => clearTimeout(timer)); };
+
+/** Into the stair step at `to`: look at it, forward and jump until the feet are in it (at most moveMs, and never past the deadline). */
+export async function stepInto(bot, to, deadline = Infinity) {
     const c = to.offset(0.5, 0, 0.5);
     try {
         await bot.lookAt(new Vec3(c.x, to.y + 1.6, c.z), true);
         bot.setControlState('forward', true);
         bot.setControlState('jump', true);
-        for (let waited = 0; !feetOf(bot).equals(to) && waited < ESCAPE.moveMs; waited += 50) await sleep(50);
+        const limit = within(ESCAPE.moveMs, deadline);
+        for (let waited = 0; !feetOf(bot).equals(to) && waited < limit; waited += 50) await sleep(50);
     } finally {
         bot.setControlState('forward', false);
         bot.setControlState('jump', false);
@@ -192,9 +200,10 @@ export async function stepInto(bot, to) {
 /**
  * One pillar step (also !placeHere in the bot's own cell, PR 2): with a block in hand, look down,
  * jump, and at the top of the jump place it on the block under the feet; then land on it. True when
- * the feet are one up and the old feet cell is solid. item: the stack to place.
+ * the feet are one up and the old feet cell is solid. item: the stack to place. deadline (#562 nit):
+ * the jump, the place and the landing never wait past it.
  */
-export async function pillarUp(bot, item) {
+export async function pillarUp(bot, item, deadline = Infinity) {
     const p = feetOf(bot);
     const floor = bot.blockAt(p.offset(0, -1, 0));
     if (!item || !solid(floor)) return false;
@@ -202,15 +211,60 @@ export async function pillarUp(bot, item) {
         await bot.equip(item, 'hand');
         await bot.look(bot.entity.yaw ?? 0, -Math.PI / 2, true);
         bot.setControlState('jump', true);
-        for (let waited = 0; bot.entity.position.y < p.y + 1 && waited < ESCAPE.jumpMs; waited += 25) await sleep(25);
+        const jump = within(ESCAPE.jumpMs, deadline);
+        for (let waited = 0; bot.entity.position.y < p.y + 1 && waited < jump; waited += 25) await sleep(25);
         // #562 review 7: a jump that did not get the feet out of the cell: no block into the bot's own cell.
         if (bot.entity.position.y < p.y + 1) return false;
-        try { await bot.placeBlock(floor, UP); } catch { /* checked below: the server may confirm late */ }
+        const left = within(ESCAPE.jumpMs, deadline);
+        if (left <= 0) return false;
+        try { await orTime(Promise.resolve(bot.placeBlock(floor, UP)), left); } catch { /* checked below: the server may confirm late */ }
     } finally {
         bot.setControlState('jump', false);
     }
-    for (let waited = 0; feetOf(bot).y !== p.y + 1 && waited < ESCAPE.landMs; waited += 50) await sleep(50);
+    const land = within(ESCAPE.landMs, deadline);
+    for (let waited = 0; feetOf(bot).y !== p.y + 1 && waited < land; waited += 50) await sleep(50);
     return solid(bot.blockAt(p)) && feetOf(bot).y === p.y + 1;
+}
+
+/** Items !placeHere puts where the bot stands, as upstream (after a step aside): never pillared on. */
+const NOT_PILLARED = /torch|redstone|lever|button|rail|tripwire|bucket|string|carpet|sign|ladder|sapling|flower|seed|pressure_plate|snow_layer/;
+
+/** A full solid block (the dump's fullCube, else the registry's bounding box), the kind a pillar stands on. */
+function fullBlockItem(bot, item) {
+    if (!item || NOT_PILLARED.test(item.name)) return false;
+    const st = dumpState({ name: item.name, metadata: item.metadata ?? 0 });
+    if (st) return st.fullCube === true && st.solid !== false;
+    const base = item.name.includes(':') ? item.name.split(':').pop() : item.name;
+    return bot.registry?.blocksByName?.[base]?.boundingBox === 'block';
+}
+
+/**
+ * !placeHere (the lead's escape plan PR 2 (3)). Soak 8: "Failed to place … at (-90, 61, -127)" three
+ * times: the spot is the bot's own cell, the step aside first had no path, and the server refuses a
+ * block inside the bot. A full block now goes in by a jump (pillarUp): the bot ends standing on it,
+ * one up. Torches and the like (NOT_PILLARED), and items that are no full block: upstream's
+ * placeBlock (a step aside first). Returns whether it was placed. pillar, place: the tests' own.
+ */
+export async function placeHere(bot, type, { pillar = pillarUp, place = placeBlock } = {}) {
+    const p = feetOf(bot);
+    const item = findItem(bot, type);
+    if (!item || !fullBlockItem(bot, item)) return place(bot, type, p.x, p.y, p.z);
+    const floor = bot.blockAt(p.offset(0, -1, 0));
+    const head2 = bot.blockAt(p.offset(0, 2, 0));
+    if (!solid(floor)) {
+        log(bot, `Cannot place ${type} where you stand at ${at(p)}: you are in that cell, and there is nothing solid under your feet to jump off and put it on.`);
+        return false;
+    }
+    if (!isEmpty(head2) && !isLiquid(head2)) {
+        log(bot, `Cannot place ${type} where you stand at ${at(p)}: you are in that cell, and the ${head2?.name ?? 'block'} above your head leaves no room to jump and put it under you.`);
+        return false;
+    }
+    if (await pillar(bot, item)) {
+        log(bot, `Placed ${type} at ${at(p)} by jumping and putting it under you: you now stand on it at ${at(feetOf(bot))}.`);
+        return true;
+    }
+    log(bot, `Could not place ${type} at ${at(p)}: you are in that cell, and the jump-and-place did not take (still at ${at(feetOf(bot))}).`);
+    return false;
 }
 
 /** Stage 1: the pathfinder (escapeMovements), a search of planMs, a walk of walkMs, within the block budget. */
@@ -260,11 +314,11 @@ async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
         }
         if (Date.now() >= deadline) return late; // #562 review 3: and before the step
         if (step.kind === 'stair') {
-            if (!await moveTo(bot, step.to)) return { why: `could not step up into ${at(step.to)}` };
+            if (!await moveTo(bot, step.to, deadline)) return Date.now() >= deadline ? late : { why: `could not step up into ${at(step.to)}` };
             state.stairs++;
         } else {
             const item = buildStacks(bot)[0];
-            if (!await pillar(bot, item)) return { why: `could not pillar up from ${at(feetOf(bot))}` };
+            if (!await pillar(bot, item, deadline)) return Date.now() >= deadline ? late : { why: `could not pillar up from ${at(feetOf(bot))}` };
             state.placed++;
             state.pillars++;
         }
