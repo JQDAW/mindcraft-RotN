@@ -231,8 +231,9 @@ export function weaponHitsLeft(item) {
     let max = null;
     try { max = getItem(registryName(baseName(item.name)))?.maxDamage ?? null; } catch { max = null; }
     if (!(max > 0)) return Infinity;
+    // #579 nit 4: rotn-data's durability a hit; else 2 for a tool (vanilla ItemTool.hitEntity: an axe), 1 for a sword or club.
     let perHit = 1;
-    try { perHit = weaponStats(baseName(item.name))?.durabilityPerHit ?? 1; } catch { perHit = 1; }
+    try { const w = weaponStats(baseName(item.name)); perHit = w?.durabilityPerHit ?? (w?.bcWeaponClass === 'ItemTool' ? 2 : 1); } catch { perHit = 1; }
     const used = item.durabilityUsed ?? item.metadata ?? 0;
     // An item breaks when its damage goes above its max (rotn-data #551): left / perHit hits, plus the one that breaks it.
     return Math.max(0, Math.floor((max - used) / Math.max(1, perHit)) + 1);

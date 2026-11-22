@@ -914,3 +914,18 @@ test('(g) 4: attackCooldownMs uses bot.forge.attackCooldownTicks() only while bc
     assert.equal(attackCooldownMs({ heldItem: sword, forge: { bcAttack: { enabled: true }, attackCooldownTicks: () => null } }, sword), 625, 'no ticks: the vanilla class cooldown');
     assert.deepEqual(Object.keys(BLOCKED_REASONS), ['reach', 'sight']);
 });
+
+// #579 nit 3 and 4: the weapon rule and the hits a weapon has left, directly.
+test('#579 nits 3 and 4: isWeaponItem and weaponHitsLeft: the club and swords count, the crude axe, bark and pickaxes do not; an axe wears 2 a hit', async () => {
+    const { isWeaponItem, weaponHitsLeft, WEAPON } = await import('./threats.js');
+    assert.deepEqual(WEAPON, { minAttack: 3, killHits: 7 });
+    for (const n of ['spartanweaponry:club_wood', 'stone_sword', 'stone_axe', 'iron_axe', 'somemod:obsidian_sword']) assert.equal(isWeaponItem({ name: n }), true, n);
+    for (const n of ['pyrotech:crude_axe', 'hitwithaxe:bark:20', 'hitwithaxe:bark', 'stone_pickaxe', 'stone_shovel', 'stick']) assert.equal(isWeaponItem({ name: n }), false, n);
+    assert.equal(weaponHitsLeft({ name: 'pyrotech:crude_axe', metadata: 0 }), 5, 'breaks on its 5th hit (8 durability, 2 a hit)');
+    assert.equal(weaponHitsLeft({ name: 'spartanweaponry:club_wood', metadata: 0 }), 132, '131 durability, 1 a hit');
+    assert.equal(weaponHitsLeft({ name: 'spartanweaponry:club_wood', metadata: 130 }), 2);
+    const { getItem } = await import('../../../packages/rotn-data/index.js');
+    const ironMax = getItem('minecraft:iron_axe').maxDamage;
+    assert.equal(weaponHitsLeft({ name: 'iron_axe', metadata: 0 }), Math.floor(ironMax / 2) + 1, `an ItemTool axe: 2 a hit (${ironMax} durability on this pack)`);
+    assert.equal(weaponHitsLeft({ name: 'somemod:obsidian_sword' }), Infinity, 'unknown durability');
+});

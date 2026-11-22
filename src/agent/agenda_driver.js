@@ -361,8 +361,10 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
 export function autoCraftTick(agent, step, state, { craft = null } = {}) {
     const a = step?.autoCraft;
     const tries = agent._agenda_auto ??= {};
+    // #579 review 1: the step is tracked before anything else, so another step in between gives the
+    // next weapon reserve fresh tries (it was per process: after 2 crafts, never again until a restart).
+    if (agent._agenda_auto_step !== step?.id) { agent._agenda_auto_step = step?.id ?? null; if (step?.id != null) tries[step.id] = 0; }
     if (!a) return null;
-    if (agent._agenda_auto_step !== step.id) { agent._agenda_auto_step = step.id; tries[step.id] = 0; }
     const label = `action:craftRecipe:${a.item}`;
     if (agent.actions?.executing) return agent.actions.currentActionLabel === label ? step.id : null;
     let ready = false;
@@ -370,7 +372,9 @@ export function autoCraftTick(agent, step, state, { craft = null } = {}) {
     if (!ready || (tries[step.id] ?? 0) >= AUTO_CRAFT.tries || typeof agent.actions?.runAction !== 'function') return null;
     tries[step.id] = (tries[step.id] ?? 0) + 1;
     const sp = agent.self_prompter;
-    if (sp?.isActive?.() && ownsPrompt(agent)) sp.stop(false);
+    // #579 nit 2: the run this stops is no run of the step it served: it resumes after the craft as
+    // after any pause (no recordAttempt, no backoff).
+    if (sp?.isActive?.() && ownsPrompt(agent)) { sp.stop(false); agent._agenda_paused = true; }
     // agent._agenda_step is left as it is: a craft that did not end the step hands it to the model as usual.
     say(agent, `agenda step ${step.id}: crafting ${formatName(a.item)} (try ${tries[step.id]} of ${AUTO_CRAFT.tries})`);
     const run = craft ?? (async (bot, item) => (await import('./library/skills.js')).craftRecipe(bot, item, 1));

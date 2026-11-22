@@ -545,3 +545,14 @@ test('(g): defendSelf ends a fight in which the mob takes no hurt and the bot ge
     assert.ok(hurts >= 6, `fought on past stallMs while it was hurt: ${hurts}`);
     assert.doesNotMatch(hitting.output, /Stopped fighting/);
 });
+
+// #579 nit 3: soak 10 held hitwithaxe:bark at night ("[survival] weapon hitwithaxe:bark"): bark alone is no weapon.
+test('#579 nit 3: equipHighestAttack with only bark and a crude axe takes neither (no weapon)', async (t) => {
+    capture(t);
+    const bot = openFight([]);
+    bot.inventory = { items: () => [{ name: 'hitwithaxe:bark', metadata: 20, count: 1, slot: 36 }, { name: 'pyrotech:crude_axe', metadata: 6, count: 1, slot: 37 }], slots: [] };
+    let equipped = null;
+    bot.equip = (item) => { equipped = item; return Promise.resolve(); };
+    assert.equal(await skills.equipHighestAttack(bot), false);
+    assert.equal(equipped, null);
+});

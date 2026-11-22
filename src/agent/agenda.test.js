@@ -1144,7 +1144,40 @@ test('soak 10 (W2): the driver crafts the club itself when the logs are held (no
     driven.bot.time = { timeOfDay: 1000 };
     driven.bot.food = 20;
     driven.actions = { executing: true, currentActionLabel: 'action:craftRecipe:spartanweaponry:club_wood', runAction: () => Promise.resolve() };
-    driven.agenda._agenda_auto = undefined;
     assert.equal(agendaTick(driven, { now: 0 }), 'weapon');
     assert.equal(driven.self_prompter.prompt, '', 'no model prompt while the craft runs');
+});
+
+// #579 review 1: the try counter was per process (the early return came before the step tracking):
+// after 2 club crafts the reserve never auto-crafted again until a restart.
+test('#579 review 1: weapon, other, weapon, other, weapon: each time the weapon reserve is current again it gets fresh craft tries', async (t) => {
+    const agent = fakeAgent(t, [stack('log', 1, 2)], { weapon: WEAPON_RESERVE_STEP });
+    agent.actions = { executing: false, currentActionLabel: '', runAction: (label, fn) => Promise.resolve(fn()) };
+    const crafted = [];
+    const craft = (bot, item) => { crafted.push(item); return Promise.resolve(false); };
+    const state = agendaState(agent.bot);
+    const other = { id: 'logs' };
+    for (let round = 0; round < 3; round++) {
+        assert.equal(autoCraftTick(agent, WEAPON_RESERVE_STEP, state, { craft }), 'weapon', `round ${round}: first try`);
+        assert.equal(autoCraftTick(agent, WEAPON_RESERVE_STEP, state, { craft }), 'weapon', `round ${round}: second try`);
+        assert.equal(autoCraftTick(agent, WEAPON_RESERVE_STEP, state, { craft }), null, `round ${round}: the model's`);
+        assert.equal(autoCraftTick(agent, other, state, { craft }), null, 'another step in between');
+    }
+    await new Promise(r => setTimeout(r, 0));
+    assert.equal(crafted.length, 6);
+});
+
+// #579 nit 3: the exact soak 10 inventory at 15:30 (40 spruce logs, 1 stick, the crude axe worn to meta 6):
+// the reserve is due by day for the logs, and the driver crafts the club with no model prompt.
+test('#579 nit 3: the soak 10 inventory (40 logs, 1 stick, a worn crude axe): the club, crafted by the driver, no model prompt', (t) => {
+    const items = [stack('log', 1, 40), stack('stick', 0, 1), stack('pyrotech:crude_axe', 6, 1), stack('pyrotech_compat:rock_metamorphic', 6, 3), stack('betterwithmods:dirt_pile', 0, 56)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: 1000 };
+    agent.bot.food = 20;
+    const runs = [];
+    agent.actions = { executing: false, currentActionLabel: '', runAction: (label) => { runs.push(label); return Promise.resolve(); } };
+    agent.agenda.done_at = { rocks: 1, sticks: 1, crude_axe: 1, logs: 1, first_plank: 1 };
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    assert.deepEqual(runs, ['action:craftRecipe:spartanweaponry:club_wood']);
+    assert.equal(agent.self_prompter.prompt, '', 'no model prompt');
 });
