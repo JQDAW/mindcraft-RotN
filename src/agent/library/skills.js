@@ -9,6 +9,7 @@ import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } fro
 import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTrunkShell, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
 import { oreMemberNames } from "../agenda_driver.js";
 import { fallSafe, treeSafe, standsOnTree, supportBlock, isFirmGround, isUnsafeBlock, isLeafBlock, isTreePart, leafFromGround, itemOnGround, firstBelow, MAX_SAFE_DROP } from "./fall_safety.js";
+import { wetOreRefusal } from "./wet_ore.js";
 import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
@@ -1111,11 +1112,21 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     let deathSkips = 0, deathSkipsSaid = false;
     const forageRefusals = new Set(); // G4 #5: wild food blocks left alone, said once at the end
     let forageSaid = false;
+    // Soak 8 (#558; the lead's escape plan PR 2): ores by water and targets the drowning reflex
+    // fired twice for (wet_ore.js), by reason; said once (one line), at most WET_SKIP_MAX looked at.
+    const wetSkips = new Map();
+    let wetSaid = false, wetLooked = 0;
+    const WET_SKIP_MAX = 32;
     const sayDeathSkips = () => {
         // G4 #5: the wild food blocks left alone (breakRefusal), at most 2 reasons, once.
         if (forageRefusals.size && !forageSaid) {
             forageSaid = true;
             log(bot, `Left alone: ${[...forageRefusals].slice(0, 2).join('; ')}.`);
+        }
+        if (wetSkips.size && !wetSaid) {
+            wetSaid = true;
+            const n = [...wetSkips.values()].reduce((a, b) => a + b, 0);
+            log(bot, `Skipped ${n} ${blockType} that would put you in the water: ${[...wetSkips].map(([why, k]) => `${why} (${k})`).join(', ')}. Look for some on dry ground.`);
         }
         if (deathSkips === 0 || deathSkipsSaid) return;
         deathSkipsSaid = true;
@@ -1229,6 +1240,16 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             break;
         }
         const block = blocks[0];
+        // Soak 8: an ore with a liquid beside it or no dry footing within reach, or a target the
+        // drowning reflex fired twice for, is given up for this collect; the next one is looked at.
+        const wet = wetOreRefusal(bot, block);
+        if (wet) {
+            givenUp.push(block.position.clone ? block.position.clone() : block.position);
+            wetSkips.set(wet, (wetSkips.get(wet) ?? 0) + 1);
+            if (++wetLooked >= WET_SKIP_MAX) break;
+            i--; // not an attempt
+            continue;
+        }
         // A rule's tool decides what drops: below Sturdy stone gives rocks, a Sturdy pickaxe
         // cobblestone. So equip a tool the rule accepts, not the fastest (#141 review).
         const ruleTool = ruleToolFor(block);
@@ -1280,6 +1301,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             log(bot, `Don't have right tools to harvest ${blockType}.`);
             return false;
         }
+        // The drowning reflex counts against this target while it is being collected (wet_ore.noteDrowning).
+        bot.rotnCollectTarget = block.position;
         try {
             let success = false, unreachable = false, missed = false;
             let cancelled = false; // #356 review 1: the block's time limit passed; a fell still running ends
@@ -1418,6 +1441,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 }
                 continue;
             }
+        }
+        finally {
+            bot.rotnCollectTarget = null;
         }
         
         if (bot.interrupt_code)

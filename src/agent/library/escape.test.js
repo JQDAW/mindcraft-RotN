@@ -8,7 +8,7 @@ import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { escape, nextStep, isOut, openSky, skyY, escapeTarget, escapeMovements, pillarUp, ESCAPE } from './escape.js';
+import { escape, nextStep, isOut, openSky, skyY, escapeTarget, escapeMovements, pillarUp, stepInto, placeHere, ESCAPE } from './escape.js';
 import { planPath, goToGoal } from './skills.js';
 import { initModes, __modeForTest } from '../modes.js';
 
@@ -366,4 +366,71 @@ test('#562 review 7: a jump that does not get the feet out of the cell places no
     assert.equal(await pillarUp(bot, inv[0]), false);
     assert.equal(tries, 0, 'not even tried: the cell is the bot\'s own');
     assert.deepEqual(calls.placed, []);
+});
+
+// ---- Escape plan PR 2 (3): !placeHere in the bot's own cell; #562 nits ----
+
+const flat = (q) => (q.y < 64 ? 'stone' : 'air');
+
+test('PR 2 (3): !placeHere with a full block jumps and puts it under the bot (soak 8: "Failed to place … at the bot\'s own cell")', async (t) => {
+    quiet(t);
+    const { bot, calls } = fakeBot({ world: flat, at: new Vec3(0, 64, 0), items: [['dirt', 3]] });
+    assert.equal(await placeHere(bot, 'dirt'), true);
+    assert.deepEqual(calls.placed, ['0,64,0']);
+    assert.equal(bot.entity.position.floored().y, 65, 'standing on it');
+    assert.match(bot.output, /Placed dirt at 0, 64, 0 by jumping and putting it under you: you now stand on it at 0, 65, 0\./);
+    // In the flooded well: into the water cell, out of it one step.
+    const w = fakeBot({ world: well, at: new Vec3(0, 64, 0), items: [['cobblestone', 2]] });
+    assert.equal(await placeHere(w.bot, 'cobblestone'), true);
+    assert.deepEqual(w.calls.placed, ['0,64,0']);
+});
+
+test('PR 2 (3): !placeHere refuses with the reason when there is no floor or no room above; a torch goes the upstream way', async (t) => {
+    quiet(t);
+    const roofed = fakeBot({ world: (q) => (q.y === 66 ? 'stone' : flat(q)), at: new Vec3(0, 64, 0), items: [['dirt', 3]] });
+    assert.equal(await placeHere(roofed.bot, 'dirt'), false);
+    assert.deepEqual(roofed.calls.placed, []);
+    assert.match(roofed.bot.output, /Cannot place dirt where you stand at 0, 64, 0: you are in that cell, and the stone above your head leaves no room/);
+    const air = fakeBot({ world: (q) => (q.y === 60 ? 'stone' : 'air'), at: new Vec3(0, 64, 0), items: [['dirt', 3]] });
+    assert.equal(await placeHere(air.bot, 'dirt'), false);
+    assert.match(air.bot.output, /nothing solid under your feet/);
+    const torches = [];
+    const lit = fakeBot({ world: flat, at: new Vec3(0, 64, 0), items: [['torch', 3]] });
+    await placeHere(lit.bot, 'torch', { place: (bot, type, x, y, z) => { torches.push([type, x, y, z]); return Promise.resolve(true); } });
+    assert.deepEqual(torches, [['torch', 0, 64, 0]], 'placeBlock, as upstream');
+    assert.deepEqual(lit.calls.placed, []);
+});
+
+test('PR 2 (3): the !placeHere command uses placeHere', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../commands/actions.js', import.meta.url), 'utf8');
+    const cmd = src.slice(src.indexOf("name: '!placeHere'"), src.indexOf("name: '!buildShelter'"));
+    assert.match(cmd, /await placeHere\(agent\.bot, type\);/);
+    assert.match(cmd, /goes under you by a jump/);
+});
+
+test('#562 nit: the stair step and the pillar never wait past the deadline', async (t) => {
+    quiet(t);
+    const { bot, inv } = fakeBot({ world: flat, at: new Vec3(0, 64, 0), items: [['dirt', 3]] });
+    bot.setControlState = () => {}; // the jump never lifts the bot
+    let t0 = Date.now();
+    assert.equal(await pillarUp(bot, inv[0], Date.now() + 80), false);
+    assert.ok(Date.now() - t0 < 400, `pillarUp waited ${Date.now() - t0} ms (its jump wait is ${ESCAPE.jumpMs})`);
+    t0 = Date.now();
+    assert.equal(await stepInto(bot, new Vec3(1, 65, 0), Date.now() + 80), false);
+    assert.ok(Date.now() - t0 < 400, `stepInto waited ${Date.now() - t0} ms (its wait is ${ESCAPE.moveMs})`);
+});
+
+test('#562 nit: "stuck here again: digging or climbing out" is said once per cell, not on every escape', async (t) => {
+    t.mock.method(console, 'warn', () => {});
+    t.mock.method(console, 'log', () => {});
+    const { agent, mode, fire, holdEnds } = unstuckAgent();
+    agent.bot.modes.behavior_log = '';
+    mode.escape = () => Promise.resolve({ out: false, interrupted: false, why: 'no stair step, and no block to pillar up with' });
+    await fire();
+    await fire();
+    holdEnds();
+    await fire();
+    const starts = agent.bot.modes.behavior_log.split('\n').filter(l => l === "I'm stuck here again: digging or climbing out.");
+    assert.equal(starts.length, 1, agent.bot.modes.behavior_log);
 });

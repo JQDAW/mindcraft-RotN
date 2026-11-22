@@ -15,6 +15,7 @@ import { actionProgress } from './library/progress.js';
 import { isFalling, centerIn, stepTo, wallHitters, farSpot, WALL_HITTERS } from './library/shelter.js';
 import { fallingTreeNear } from './library/felling.js';
 import { escape } from './library/escape.js';
+import { noteDrowning } from './library/wet_ore.js';
 
 /**
  * A falling block at the head in the night shelter (#346 review 1): dig it out by hand and stay, but
@@ -307,6 +308,10 @@ const modes_list = [
                 const air = bot.oxygenLevel;
                 if (bot.pathfinder.goal && Number.isFinite(air) && air <= DROWNING.surfaceAt) {
                     console.log(`[reflex] under water with ${air} of 20 air: stopping and swimming up`);
+                    // Soak 8 (the escape plan PR 2): counted against the block a collect was going for;
+                    // twice, and the collect leaves it alone (wet_ore.wetOreRefusal).
+                    const n = noteDrowning(bot);
+                    if (n) console.log(`[reflex] the swim-up is ${n === 1 ? 'the first' : `number ${n}`} going for ${bot.rotnCollectTarget.x}, ${bot.rotnCollectTarget.y}, ${bot.rotnCollectTarget.z}${n >= 2 ? '; that block is left alone now' : ''}`);
                     execute(this, agent, async () => { await skills.swimUp(bot, DROWNING.swimMs); }).catch(err => reportModeError(this.name, err));
                 }
                 // does not call execute so does not interrupt other actions
@@ -545,13 +550,16 @@ const modes_list = [
                 memo.lastFire = { cell, at: now };
                 let spot = repeat ? memo.cells.find(c => near(c.cell, cell)) : null;
                 if (repeat && !spot) {
-                    spot = { cell, escapes: 0, interrupted: 0, said: false, spentSaid: false };
+                    spot = { cell, escapes: 0, interrupted: 0, said: false, startSaid: false, spentSaid: false };
                     memo.cells.push(spot);
                     if (memo.cells.length > this.max_cells) memo.cells.shift();
                 }
                 if (spot && spot.escapes < this.max_escapes && spot.interrupted < this.max_interrupted) {
-                    // The walk away did not free it last time, here: dig or climb out instead.
-                    await say(agent, 'I\'m stuck here again: digging or climbing out.');
+                    // The walk away did not free it last time, here: dig or climb out instead (#562 nit: said once per cell).
+                    if (!spot.startSaid) {
+                        spot.startSaid = true;
+                        await say(agent, 'I\'m stuck here again: digging or climbing out.');
+                    }
                     const mode = this;
                     execute(this, agent, async () => {
                         const r = await mode.escape(bot);

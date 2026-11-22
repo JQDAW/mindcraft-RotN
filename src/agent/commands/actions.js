@@ -14,6 +14,7 @@ import { threatFor, hurtBy, hasWeapon } from '../library/threats.js';
 import { mayBelongToPlayer, retaliationRisk, knownBases, isHuntableAnimal, tooWeakToHunt, HUNT_MIN_FOOD } from '../library/hunting.js';
 import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
+import { placeHere } from '../library/escape.js';
 
 /** The model's !stay is at most this many seconds; longer (or -1, forever) needs a giver's typed command. */
 export const STAY_LIMITS = { modelMaxS: 120 };
@@ -538,11 +539,11 @@ export const actionsList = [
     },
         {
         name: '!placeHere',
-        description: 'Place a given block in the current location. Do NOT use to build structures, only use for single blocks/torches.',
+        description: 'Place a given block in the current location. A full block (dirt, cobblestone) goes under you by a jump, so you end up standing one block higher on it (a way up out of a pit or water); a torch or the like goes where you stand. Do NOT use to build structures, only use for single blocks/torches.',
         params: {'type': { type: 'BlockOrItemName', description: 'The block type to place.' }},
         perform: runAsAction(async (agent, type) => {
-            let pos = agent.bot.entity.position;
-            await skills.placeBlock(agent.bot, type, pos.x, pos.y, pos.z);
+            // Soak 8 (the escape plan PR 2): the bot's own cell; a full block by a jump (escape.placeHere).
+            await placeHere(agent.bot, type);
         })
     },
     {
