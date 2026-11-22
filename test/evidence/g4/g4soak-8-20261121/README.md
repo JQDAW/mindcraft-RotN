@@ -9,7 +9,7 @@
 - **No death and no damage:** health was 20 at every food line.
 - **The agenda was done 10.5 min after the join**, the fastest so far (soak 7: 12.4 min).
 - **Why food failed:**
-  - At about 00:00 the bot got stuck in a flooded pit after mining copper under water, around -88, 60, -125.
+  - At about 00:00 the bot got stuck in a flooded pit after mining copper under water. Its `!stats` position was -89.5, 61, -126.7 at 00:32:11, 00:32:34 and 00:37:56 (`driver.log:3301`, `3437`, `3830`).
   - It stayed there, as far as its journal positions show, for nights 2 and 3 with no shelter: no place for one within 4 blocks.
   - Day 3's food step got `stuck` too. The standing goal's 5-min budget then ran out, 4 min before sunset.
   - It went into night 3 with no food (`food worth 0 hunger held, food 15`). Food fell from 12 to 5 by the end, and the reflex had nothing to eat.
@@ -129,8 +129,9 @@ There are 216 of each: all from provider `Wafer`, no unknown cost, USD 0.087575 
 - **Parasite and Zombie Awareness sightings:**
   - **No parasite:** neither log names `mod_lavacow:parasite`. The only `mod_lavacow` name is the item `mod_lavacow:intestine` from the sow, in inventory listings.
   - **One Zombie Awareness scent marker:** `!entities` at 23:56:49 answered `1 zombieawareness:entityscent(s)`. The LLM took it for the cause of its reflex interruptions (`That's just a zombie-scent marker — it draws zombies, which is why my reflexes keep flinching. Backing off from it: !moveAway(12)`), and moved away twice. Its next `!entities` (23:59:50) answered `none`.
-    - The interruptions were in fact `self_preservation`: `under water with 15 of 20 air` at 23:55:46, 23:56:41 and 23:59:07, then `unstuck`.
+    - The interruptions were in fact `self_preservation`: `under water with 15 of 20 air` at 23:55:46, 23:56:41, 23:59:07 and 00:00:52, then `unstuck`.
   - **Other mobs:** a zombie by the night-1 shelter at morning (23:48:04, `-74, 64, -110`), then a freshwater eel at -77, 60, -112 (23:48:34 to 23:50:04). `server.log` has no other mob line about the bot.
+  - **`server.log`'s `[Skeleton: Object successfully summoned]` lines** (10, from 23:48:08 to 00:50:11) are a command sender named `Skeleton` in the pack summoning something, not the bot (it has no op) and not a line about the bot. Soak 7 had 13 and soak 6 had 2. Nothing is judged from them.
 
 ## What happened
 Sources: the bot's `[survival]`, `[night]`, `[reflex]` and `[agenda]` lines in `driver.log`, and agenda lines from `server.log`.
@@ -150,8 +151,9 @@ Sources: the bot's `[survival]`, `[night]`, `[reflex]` and `[agenda]` lines in `
 - **Day 2 (23:50–00:02):**
   - The agenda re-opened food (23:50:17) and shelter_blocks (23:50:34). The standing goal (day 1) started at 23:51:24.
   - At 23:56:24 the budget was spent (`[agenda] standing goal budget spent: 5 min of self-prompting for day 1 …`). The turn in flight ended at 23:56:41.
-  - The bot was mining copper ore under water (`!collectBlocks("osv:simpleores_copper_ore_undergroundbiomes_metamorphic_stone", 3)`). `self_preservation` made it swim up three times (23:55:46, 23:56:41, 23:59:07), then `Still under water after swimming up` (00:00:52).
-  - It got stuck in flowing water at -86, 62, -125 (00:01:16–00:01:40). The LLM tried to path to sand (00:01:48). At 00:02:10 the bot was at -88, 59, -123.
+  - The bot was mining copper ore under water (`!collectBlocks("osv:simpleores_copper_ore_undergroundbiomes_metamorphic_stone", 3)`). `self_preservation` made it swim up four times (23:55:46, 23:56:41, 23:59:07, 00:00:52); after the fourth: `Still under water after swimming up`.
+  - It got stuck in flowing water under an overhang. `You have reached at -86, 62, -125` (00:01:16) is the copper ore, the goal of a `goToCoordinates` with range 2, not the bot's cell. The LLM's own estimate at 00:01:40 was `x=-89.7, y=61, z=-126.7`, the cell `!stats` showed from 00:32 on (-89.5, 61, -126.7). It then tried to path to sand (found at -88, 59, -123, 00:02:10).
+  - **Code writing stayed off.** At 00:01:40 the LLM asked for `!newAction("You are stuck in flowing water …")`, and got `newAction not allowed! Code writing is disabled in settings. Notify the user.` The same happened at 00:42:19. `allow_insecure_coding=false` held, as the start line said.
   - **Nobody was self-prompting after 23:56:41.** The re-plan prompts still called the LLM (13 calls; see the spend).
 - **Night 2 (00:02–00:28): no shelter, in the open.**
   - 00:02:31: `food worth 10 hunger held, food 15; enough`.
@@ -163,7 +165,7 @@ Sources: the bot's `[survival]`, `[night]`, `[reflex]` and `[agenda]` lines in `
   - `unstuck` interrupted `moveAway`, `goToSurface`, `goToCoordinates` and `searchForBlock` 11 times (00:28:27 to 00:41:36). Each time: `still stuck after 10 s; re-planning instead of a restart`.
   - At 00:33:04: `agenda step food stuck: 5 min of self-prompting; going on without it for 10 min`, which runs to 00:43:04, after the sunset at 00:42:40.
   - The standing goal (day 2) ran 00:33:09 to its budget stop (00:38:09/00:38:20).
-  - At 00:39:09 the LLM said `I'm stuck in a water-filled hole again. Per my notes, I'll pillar up with cobble`. `!placeHere` then failed at -90, 61, -127.
+  - **Three `!placeHere` pillar tries failed**, each with `Failed to place undergroundbiomes:metamorphic_cobble at (-90, 61, -127)`: 00:36:23; 00:39:27, after `I'm stuck in a water-filled hole again. Per my notes, I'll pillar up with cobble` (00:39:09); and 00:42:40, after the `!newAction` refusal (`Code writing's off for me. Trying a direct pillar placement instead`, 00:42:21).
   - The last food eaten was bread at 00:38:37 (food 12→15). The LLM ate a turnip with `!consume` at 00:32:07 (13→14).
 - **Night 3 (00:42 to the end): no food and no shelter.**
   - 00:42:40: `food for the night: food worth 0 hunger held, food 15; less than 6: staying sealed anyway (never out for food at night)`. The bot was not sealed: the same shelter failures as night 2 (00:42:40 to 00:51:50, 4 retries), then `staying here until morning`.
@@ -189,9 +191,10 @@ Sources: the bot's `[survival]`, `[night]`, `[reflex]` and `[agenda]` lines in `
   - The memory summaries are half the spend (USD 0.0455 of 0.0876): about 4,000 reasoning tokens to write one summary.
   - No repo change can show this; the preset `glm-5-3-flash-cheap-reliable` lives on OpenRouter. Turning reasoning off, or capping it, for the summary calls at least would cut most of it.
 - **skills-rotn: a flooded pit held the bot for its last 68 min.**
-  - **Entry:** after mining copper under water (23:55–00:00), it was stuck at about -86..-90, 59..62, -123..-127.
+  - **Entry:** after mining copper under water (23:55–00:00), it was stuck at -89.5, 61, -126.7 (`!stats` at 00:32:11, 00:32:34, 00:37:56).
   - **Day-3 moves:** `unstuck` ended 11 moves with `still stuck after 10 s; re-planning`, and the restart path was never taken.
-  - **Pillaring:** `!placeHere` of cobble failed (00:39:27).
+  - **Pillaring:** `!placeHere` of cobble failed three times (00:36:23, 00:39:27, 00:42:40), all at -90, 61, -127.
+  - **`!newAction`:** asked for twice (00:01:40, 00:42:19) and refused both times, since code writing is off.
   - **Shelters:** night 2 and night 3 both found `no place for a shelter within 4 blocks` and `no place to dig a hole shelter`.
 - **skills-rotn: the food step's `stuck` back-off and the standing goal's budget together left the bot with no food at sunset.**
   - The food step went stuck at 00:33:04, with a 10-min back-off. The standing goal ran and spent its budget (00:38:20). Nothing worked on food until the sunset (00:42:40).
@@ -211,5 +214,5 @@ Each file was made with `test/tools/redact-evidence.mjs … --bot FRCFLD`; the l
 - `run.log`: the runner's stdout (`run-stdout.log` in the raw folder).
 - `server.log`: the test server's log for the run, as the runner fetched it (from `2026-11-21-1.log.gz` and `latest.log`).
 - `driver.log`: the CX23 journal of `mindcraft-rotn@frcfld` from the unit's start to its stop, read through the gate.
-- `step7-starts.txt`: `test-server.sh starts` right after `up`.
+- `step7-starts.txt`: `test-server.sh starts` right after `up`, under a header line naming the command, the time and the server.
 - `server-lifecycle.txt`: the `test-server.sh up` log, `starts`, the `test-server.sh down` log (ending `verified gone: server, Primary IPv4 and SSH key`), and the hcloud counts saved at the delete (`servers=0 ips=0 keys=0` at 01:08:46Z).
