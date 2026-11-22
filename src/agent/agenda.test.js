@@ -10,7 +10,7 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD, FOOD_AFTER_DEATH } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, SHELTER_HOLD, REPAIR_SPARE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD, FOOD_AFTER_DEATH } from './agenda.js';
 import { Vec3 } from 'vec3';
 import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
@@ -356,7 +356,7 @@ test('G3 round 6 B: near dusk the shelter reserve comes before the current step;
 
     agent.bot.time.timeOfDay = dayAt(7);
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'shelter_blocks');
-    assert.equal(agent.said.at(-1), `agenda step shelter_blocks started: keep ${SHELTER_RESERVE} blocks for the night's shelter`);
+    assert.equal(agent.said.at(-1), `agenda step shelter_blocks started: keep ${SHELTER_HOLD} blocks for the night's shelter and its repairs`);
     assert.match(agent.self_prompter.prompt, /^RotN agenda, step shelter_blocks \(before night\): Night is near: in about \d+ min the night routine builds a shelter\. You have no pickaxe yet, so it is built of dirt/);
 
     // #284 review 3: with no pickaxe the shelter places only dirt, so 10 sturdy blocks are no reserve.
@@ -364,14 +364,14 @@ test('G3 round 6 B: near dusk the shelter reserve comes before the current step;
     assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'shelter_blocks', '10 cobblestone and no dirt: still due');
     assert.match(agent.self_prompter.prompt, /you have 0 \(dirt, and dirt from your dirt piles\)\./);
     assert.doesNotMatch(agent.self_prompter.prompt, /cobblestone/);
-    items.push(stack('dirt', 0, 10));
+    items.push(stack('dirt', 0, SHELTER_HOLD)); // soak 10 (S1): the shelter's 10 and the repair spare
     assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), 'sticks');
     assert.equal(agent.said.at(-1), 'agenda resumed: sticks');
     assert.equal(agent.agenda.active, true);
 });
 
 test('G3 round 6 B: after "agenda done" the reserve still runs before dusk, and then leaves the self-prompter alone', (t) => {
-    const items = [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('cobblestone', 0, 10)];
+    const items = [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('cobblestone', 0, SHELTER_HOLD)];
     const agent = fakeAgent(t, items, { tableNear: true });
     agent.bot.time = { timeOfDay: 1000 };
     assert.equal(agendaTick(agent, { now: 0 }), 'done');
@@ -385,7 +385,7 @@ test('G3 round 6 B: after "agenda done" the reserve still runs before dusk, and 
     assert.equal(agent.self_prompter.isActive(), true);
     assert.match(agent.self_prompter.prompt, /you have 3\./);
 
-    items[2].count = 10;
+    items[2].count = SHELTER_HOLD;
     assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), null);
     assert.equal(agent.self_prompter.isActive(), false, 'its own run stopped');
     assert.equal(agent.said.filter(l => l === 'agenda done').length, 1, '"agenda done" once');
@@ -481,13 +481,13 @@ test('#284 review 2: with no pickaxe the reserve counts dirt and dirt piles and 
     const prompt = agent.self_prompter.prompt;
     // rotn-data #288: dirt dug by hand drops 4 betterwithmods:dirt_pile, so the ask is piles, 4 per
     // dirt block still missing; !collectBlocks("dirt") would count 0.
-    assert.match(prompt, /you have 4 \(dirt, and dirt from your dirt piles\)\. Dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 24\): dug by hand \(or with a shovel below level 1\) it drops 4 piles of dirt, not a dirt block/);
+    assert.match(prompt, /you have 4 \(dirt, and dirt from your dirt piles\)\. Dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 40\): dug by hand \(or with a shovel below level 1\) it drops 4 piles of dirt, not a dirt block/);
     assert.doesNotMatch(prompt, /collectBlocks\("dirt"/);
     assert.doesNotMatch(prompt, /rock/i, 'no rock run before the pickaxe step');
     // The static goal (used only when goalNow fails) tells the two cases apart the same way.
-    assert.match(SHELTER_RESERVE_STEP.goal, /If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 40\)/);
+    assert.match(SHELTER_RESERVE_STEP.goal, /If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 56\)/);
 
-    items[1].count = 32; // 8 dirt from piles + 2 dirt = 10
+    items[1].count = 48; // 12 dirt from piles + 2 dirt = 14 (soak 10, S1: the shelter's 10 and the repair spare)
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks', 'enough dirt: the tool steps go on');
 
     // With a pickaxe, dirt does not count: it asks for sturdy blocks.
@@ -496,7 +496,7 @@ test('#284 review 2: with no pickaxe the reserve counts dirt and dirt piles and 
     b.bot.time = { timeOfDay: dayAt(7) };
     b.agenda.done_at.cobblestone = 1; // the cobblestone step was done once; the cobblestone was used since
     assert.equal(agendaTick(b, { now: 0 }), 'shelter_blocks');
-    assert.match(b.self_prompter.prompt, /builds a shelter from sturdy blocks \(any cobblestone or stone\)\. It needs 10 on open ground, and you have 3\./);
+    assert.match(b.self_prompter.prompt, /builds a shelter from sturdy blocks \(any cobblestone or stone\)\. It needs 10 on open ground and 4 more for repairs \(14\), and you have 3\./);
 });
 
 test('#291 nit: the pile the reserve asks for keeps its recipe variant (meta); on 3.3.4 it is betterwithmods:dirt_pile, 4 per dirt', () => {
@@ -600,9 +600,9 @@ test('G4 #5: during the agenda only an urgent need; before night 8 held, after t
     const pick = stack('stone_pickaxe', 0, 1);
     const dusk = foodAgent(t, [pick, stack('bread', 0, 1)], { food: 18, finished: true, timeOfDay: dayAt(7) });
     assert.equal(agendaTick(dusk, { now: 0 }), 'shelter_blocks');
-    const ready = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_RESERVE), stack('bread', 0, 1)], { food: 18, finished: true, timeOfDay: dayAt(7) });
+    const ready = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 1)], { food: 18, finished: true, timeOfDay: dayAt(7) });
     assert.equal(agendaTick(ready, { now: 0 }), 'food', 'blocks held, 3 food held: food');
-    const fed = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_RESERVE), stack('bread', 0, 3)], { food: 18, finished: true, timeOfDay: dayAt(7) });
+    const fed = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 3)], { food: 18, finished: true, timeOfDay: dayAt(7) });
     assert.equal(agendaTick(fed, { now: 0 }), null, '9 held: nothing to do');
     // Night: never out for food, starving or not.
     const night = foodAgent(t, [], { food: 2, finished: true, timeOfDay: NIGHT_START + 500 });
@@ -794,7 +794,7 @@ test('#468 review 1: every step left waits on the stuck one: food first (a stand
     agent.bot.inventory = { items: () => [stack('bread', 0, 4), stack('iron_sword', 0, 1)], slots: [] };
     assert.equal(tick(), null, 'nothing runnable');
     assert.match(agent._agenda_open_goal, /^Open goal while the agenda waits: step rocks \(collect 6 rocks\) is stuck: 5 min of self-prompting; it is retried with a fresh budget in about 20 min or at the next full day\. Its goal was: Collect at least 6 rocks/);
-    assert.match(agent._agenda_open_goal, /Until then: gather the materials it needs, and explore nearby for them .*Keep food worth at least \d+ hunger, and keep 10 blocks of dirt \(no pickaxe yet\) for the night's shelter: do not place them\.$/);
+    assert.match(agent._agenda_open_goal, /Until then: gather the materials it needs, and explore nearby for them .*Keep food worth at least \d+ hunger, and keep 14 blocks of dirt \(no pickaxe yet\) for the night's shelter and its repairs: do not place them\.$/);
     assert.equal(agent.said.filter(l => l === 'agenda open goal: step rocks waits; self-prompting on gathering for it').length, 1);
     clock.now += 5 * 60_000;
     assert.equal(tick(), null);
@@ -843,7 +843,7 @@ test('#468 review 4: an agenda.json from before (one stuck step, the agenda paus
 // hurt the zombies digging into its shelter, which hit for 6-8 (12 deaths). The lead's decision: a
 // weapon in the before-night reserve.
 test('soak 3: before night, after the shelter\'s blocks and before food, the weapon reserve asks for a stone axe (or a crude axe with no table); a weapon held: done', (t) => {
-    const blocks = [stack('pyrotech:rock', 0, 6), stack('dirt', 0, SHELTER_RESERVE), stack('stick', 0, 1)];
+    const blocks = [stack('pyrotech:rock', 0, 6), stack('dirt', 0, SHELTER_HOLD), stack('stick', 0, 1)];
     const agent = fakeAgent(t, blocks, { weapon: WEAPON_RESERVE_STEP });
     agent.bot.time = { timeOfDay: dayAt(7) };
     assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
@@ -869,7 +869,7 @@ test('soak 3: before night, after the shelter\'s blocks and before food, the wea
 });
 
 test('soak 3: the weapon reserve\'s own budget: spent, not again until the night is past; then fresh', (t) => {
-    const agent = fakeAgent(t, [stack('pyrotech:rock', 0, 6), stack('dirt', 0, SHELTER_RESERVE)], { weapon: WEAPON_RESERVE_STEP });
+    const agent = fakeAgent(t, [stack('pyrotech:rock', 0, 6), stack('dirt', 0, SHELTER_HOLD)], { weapon: WEAPON_RESERVE_STEP });
     agent.bot.time = { timeOfDay: dayAt(7) };
     assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
     agent.agenda.spent.weapon = { attempts: 1, llm_ms: STEP_LLM_MS };
@@ -944,7 +944,7 @@ test('soak 5 (Fix H): unarmed at food 6 or lower, food first; the food step says
     const seven = hFixAgent(t, [], { food: 7 });
     assert.equal(agendaTick(seven, { now: 0 }), 'weapon');
     // Before night: the soak 3 label and text.
-    const dusk = hFixAgent(t, [stack('dirt', 0, SHELTER_RESERVE), stack('bread', 0, 4)], { food: 18, timeOfDay: dayAt(7) });
+    const dusk = hFixAgent(t, [stack('dirt', 0, SHELTER_HOLD), stack('bread', 0, 4)], { food: 18, timeOfDay: dayAt(7) });
     assert.equal(agendaTick(dusk, { now: 0 }), 'weapon');
     assert.match(dusk.self_prompter.prompt, /^RotN agenda, step weapon \(before night\): Night is near and you hold no weapon\./);
 });
@@ -965,7 +965,7 @@ test('soak 5 (Fix H): the weapon\'s budget spent by day: food then, not the weap
 // #500 follow-up 3: the weapon asked by day (before food) and spent gets a fresh budget once its
 // window turns to before night (#470's dusk weapon).
 test('#500 follow-up 3: a weapon spent by day (before food) is asked again with a fresh budget once it is before night', (t) => {
-    const agent = hFixAgent(t, [stack('dirt', 0, SHELTER_RESERVE)]);
+    const agent = hFixAgent(t, [stack('dirt', 0, SHELTER_HOLD)]);
     assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
     agent.agenda.spent.weapon = { attempts: 1, llm_ms: STEP_LLM_MS };
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
@@ -994,7 +994,7 @@ test('#500 follow-ups 4 and 5: unarmed, the standing and open goals say forage, 
     const a = new Agenda('FRCFLD', { dir: tempDir(t) });
     const unarmed = agendaState(fakeBot([]));
     const armed = agendaState(fakeBot([stack('stone_axe', 0, 1)]));
-    assert.match(a.standingGoal(unarmed), /for the night's shelter \(you have 0; dirt \(no pickaxe yet\)\); with no weapon: forage for food \(!forage\), do not hunt; make a weapon first; keep a weapon/);
+    assert.match(a.standingGoal(unarmed), /for the night's shelter and its repairs \(you have 0; dirt \(no pickaxe yet\)\); with no weapon: forage for food \(!forage\), do not hunt; make a weapon first; keep a weapon/);
     assert.doesNotMatch(a.standingGoal(armed), /with no weapon/);
     a.start();
     a.markStuck('rocks', '5 min of self-prompting');
@@ -1008,7 +1008,7 @@ test('#500 follow-ups 4 and 5: unarmed, the standing and open goals say forage, 
 // fresh dusk budget after a restart (weaponOff itself is rebuilt from the saved spent budget).
 test('#502 nit 4: after a restart, a weapon spent by day still gets a fresh budget at dusk', (t) => {
     const dir = tempDir(t);
-    const agent = hFixAgent(t, [stack('dirt', 0, SHELTER_RESERVE)]);
+    const agent = hFixAgent(t, [stack('dirt', 0, SHELTER_HOLD)]);
     agent.agenda = new Agenda('FRCFLD', { dir, weapon: WEAPON_RESERVE_STEP });
     agent.agenda.finish();
     assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
@@ -1016,7 +1016,7 @@ test('#502 nit 4: after a restart, a weapon spent by day still gets a fresh budg
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
     agent.agenda.save();
     // The restart: a new Agenda from the same file, at dusk.
-    const after = hFixAgent(t, [stack('dirt', 0, SHELTER_RESERVE)], { timeOfDay: dayAt(7) });
+    const after = hFixAgent(t, [stack('dirt', 0, SHELTER_HOLD)], { timeOfDay: dayAt(7) });
     after.agenda = new Agenda('FRCFLD', { dir, weapon: WEAPON_RESERVE_STEP });
     assert.equal(after.agenda.weaponWindow, 'no weapon, before food', 'the window came back');
     assert.ok(after.agenda.spentOn('weapon').llm_ms >= STEP_LLM_MS, 'and the spent budget');
@@ -1075,4 +1075,19 @@ test('#552 nit (rotn-data #551): the crude axe text says when it breaks, from it
     assert.ok(step.goal.includes(`breaks on its ${block} block`) && step.goal.includes(`breaks on the ${hit} hit`), step.goal);
     assert.ok(WEAPON_RESERVE_STEP.goal.includes(`breaks on its ${hit} hit, or its ${block} block`), WEAPON_RESERVE_STEP.goal);
     for (const g of [step.goal, WEAPON_RESERVE_STEP.goal]) assert.doesNotMatch(g, /about 8 uses/);
+});
+
+// Soak 10 (S1, the lead: 4): the reserve held exactly the shelter's 10 dirt; the dusk build used them
+// all and the repair after a zombie dug a wall placed nothing. It now keeps a repair spare.
+test('soak 10 (S1): the shelter reserve keeps the shelter\'s 10 blocks and a repair spare of 4: done at 14, not at 10; the ask says so', (t) => {
+    assert.deepEqual([SHELTER_RESERVE, REPAIR_SPARE, SHELTER_HOLD], [10, 4, 14]);
+    const items = [stack('pyrotech:rock', 0, 6), stack('dirt', 0, 10)];
+    const agent = fakeAgent(t, items);
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    assert.equal(agendaTick(agent, { now: 0 }), 'shelter_blocks', '10 dirt: the shelter only, no spare');
+    assert.match(agent.self_prompter.prompt, /It needs 10 blocks on open ground and 4 more for repairs \(14\), and you have 10 \(dirt, and dirt from your dirt piles\)\. Dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 16\)/);
+    assert.equal(agent.said.at(-1), 'agenda step shelter_blocks started: keep 14 blocks for the night\'s shelter and its repairs');
+    items.push(stack('betterwithmods:dirt_pile', 0, 16)); // 4 more dirt
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks');
+    assert.match(SHELTER_RESERVE_STEP.goal, /keeps 4 more to repair it when a zombie digs a wall open/);
 });

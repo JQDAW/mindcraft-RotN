@@ -3213,3 +3213,33 @@ test('#557 nit: a search for better ground stopped by a reflex ends exposed, say
     assert.equal(agent.chat.at(-1), `[night] no shelter: no place for a shelter or a hole here (${RIVER_REFUSED}), and the search for better ground was interrupted; out of the water at 7, 64, 0; no retry from this spot; staying here until morning`);
     assert.equal(nightState(agent).groundMoves, 0, 'no walk counted');
 });
+
+// Soak 10 (rotn-v0.1.16, 15:51, N1, the lead): a zombie dug into the single-cell dirt shelter; no
+// weapon, no way to back away, and the bot hit back by hand (0.3 a swing) until it died 26 s later.
+// Now it burrows away first, a step down (closeQuarters' rule (iii), at night too).
+test('soak 10 (N1): unarmed and cornered at night by a melee mob in the opening: a burrow (a step down first) before any hand fight; no burrow step: the hand fight, with why', async (t) => {
+    quiet(t);
+    const s = heldSetup({ plan: false });
+    const burrows = [];
+    s.o.burrowAway = (bot, mob, opts) => { burrows.push({ name: mob.name, ...opts }); bot.entity.position = new Vec3(0.5, 62, 0.5); return Promise.resolve({ steps: 1, site: new Vec3(0, 62, 0), stopped: 'far' }); };
+    await breachAt(s);
+    assert.equal(burrows.length, 1, s.agent.chat.join('\n'));
+    assert.deepEqual([burrows[0].name, burrows[0].prefer, burrows[0].maxSteps], ['zombie', 'down', 3]);
+    assert.ok(Number.isFinite(burrows[0].stopAt));
+    assert.ok(s.labels.includes('action:burrowAway'), s.labels.join(','));
+    assert.ok(s.agent.chat.includes('[night] no weapon, health 20, and a zombie in the opening at 1, 64, 0, and no way to back away: burrowing away from it (a step down first)'), s.agent.chat.join('\n'));
+    assert.ok(s.agent.chat.includes('[night] burrowed 1 step into 0, 62, 0: out of its reach; sealed behind'), s.agent.chat.join('\n'));
+    assert.ok(!s.agent.chat.some(l => /hitting back by hand/.test(l)), 'no hand fight');
+    // No burrow step: the next check hits back by hand, and says why.
+    const c = heldSetup({ plan: false });
+    c.o.burrowAway = () => Promise.resolve({ steps: 0, site: null, stopped: 'cornered', why: 'no blocks to seal with' });
+    await breachAt(c);
+    nightTick(c.agent, { now: 3 * CHECK_MS, ops: c.o });
+    await settle(c.agent);
+    assert.ok(c.agent.chat.includes('[night] no weapon, health 20, and no way to back away or burrow (no blocks to seal with) from a zombie in the opening at 1, 64, 0: hitting back by hand'), c.agent.chat.join('\n'));
+    assert.equal(nightState(c.agent).handFight, true);
+    // Armed above its hit: no burrow (the fight in place, as before).
+    const armed = heldSetup({ weapon: true, plan: false });
+    armed.o.burrowAway = () => { throw new Error('no burrow when armed'); };
+    await breachAt(armed);
+});

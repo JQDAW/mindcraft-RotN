@@ -278,7 +278,18 @@ export function placeableDirt(items) {
 }
 
 /** A shelter wall: sturdy, or the dirt fallback. */
-export const isWall = (block) => isSturdy(block) || isSoftWall(block);
+/**
+ * Soak 10 (S2, the lead after rotn-data): logs and planks break by hand on RotN (about 3 s) and drop
+ * themselves, so a wall of them can be got out of by hand in the morning: a repair with no dirt left
+ * uses them (shelter.buildShelter). Whole blocks of the logWood and plankWood ores that need no tool.
+ */
+export const WOOD_ORES = ['logWood', 'plankWood'];
+export function isWoodWall(block) {
+    const st = dumpState(block);
+    return wholeBlock(st) && st.toolRequired === false && WOOD_ORES.some(ore => inOre(ore, block));
+}
+
+export const isWall = (block) => isSturdy(block) || isSoftWall(block) || isWoodWall(block);
 
 /** Whether a block can be dug without a tool (the dump's toolRequired is false). */
 export const handDiggable = (block) => dumpState(block)?.toolRequired === false;
