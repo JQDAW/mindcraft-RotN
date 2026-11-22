@@ -234,17 +234,19 @@ export function siteNeeds(bot, feet, { accept = isSturdy, occupied = false, tole
     const solidAt = (q) => (sim.has(key(q)) ? sim.get(key(q)) === 'solid' : isSolid(bot.blockAt(q)));
     const emptyAt = (q) => (sim.has(key(q)) ? sim.get(key(q)) === 'empty' : isEmpty(bot.blockAt(q)));
     const todo = [], unsupported = [];
-    let blocks = 0, unsafe = null;
+    let blocks = 0, unsafe = null, unsafeKind = null;
     for (const pos of order) {
         const b = bot.blockAt(pos);
         if (accept(b)) continue;
         todo.push(pos);
         if (!isEmpty(b) && !isLiquid(b)) { // dug first
             const above = bot.blockAt(pos.offset(0, 1, 0));
-            if (!unsafe && isFalling(above))
+            if (!unsafe && isFalling(above)) {
                 unsafe = `${above.name} above ${at(pos)} would fall in`;
+                unsafeKind = 'would fall in';
+            }
             const wet = SIX.map(d => pos.plus(d)).find(q => !interior.has(key(q)) && !shell.has(key(q)) && isLiquid(bot.blockAt(q)));
-            if (!unsafe && wet) unsafe = `${bot.blockAt(wet).name} next to ${at(pos)} would flow in`;
+            if (!unsafe && wet) { unsafe = `${bot.blockAt(wet).name} next to ${at(pos)} would flow in`; unsafeKind = 'would flow in'; }
             sim.set(key(pos), 'empty');
         }
         if (!supportFor(pos, interior, solidAt) && pos.equals(p.offset(0, 2, 0))) {
@@ -260,21 +262,64 @@ export function siteNeeds(bot, feet, { accept = isSturdy, occupied = false, tole
     const filled = new Set(todo.map(key));
     const byHand = (q) => filled.has(key(q)) || handDiggable(bot.blockAt(q));
     const handExit = HORIZONTAL.some(d => byHand(p.plus(d)) && byHand(p.plus(d).offset(0, 1, 0)));
-    return { feet: p, todo, blocks, unsupported, unsafe, handExit };
+    return { feet: p, todo, blocks, unsupported, unsafe, unsafeKind, handExit };
+}
+
+/**
+ * Soak 8 (night 2, 00:02:31): every site near the bot was refused, and the line said only "no
+ * place". What refused a site, in a few words (the refusals are counted by chooseSite).
+ */
+export function siteRefusal(bot, feet, need, { handExit = false } = {}) {
+    if (!need) {
+        // Water in the 1x2 space first: siteProblem looks at the floor first, and in a river that is water too.
+        const p = new Vec3(Math.floor(feet.x), Math.floor(feet.y), Math.floor(feet.z));
+        if ([p, p.offset(0, 1, 0)].some(q => isLiquid(bot.blockAt(q)) && !hazardOf(bot.blockAt(q)))) return 'water in the space';
+        const problem = siteProblem(bot, feet);
+        if (!problem) return 'no site';
+        if (problem.kind === 'hazard') return 'fire or lava';
+        if (problem.kind === 'unloaded') return 'not loaded';
+        if (problem.pos.y < Math.floor(feet.y)) return 'no firm floor';
+        return isLiquid(bot.blockAt(problem.pos)) ? `${/lava/.test(problem.block) ? 'lava' : 'water'} in the space` : 'space not free';
+    }
+    if (need.unsafe) return need.unsafeKind ?? 'unsafe digging';
+    if (need.unsupported.length > 0) return 'nothing to place against';
+    if (handExit && !need.handExit) return 'no side to dig out by hand';
+    return null;
+}
+
+/** "water in the space 61, would flow in 40, would fall in 12": the refusals, most first (ties by name), at most `top`. */
+export function tallyText(tally, top = 3) {
+    return [...(tally ?? new Map())].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, top).map(([why, n]) => `${why} ${n}`).join(', ');
+}
+
+/** Where the bot is and what it is in or on: "at -88, 59, -123, feet in water" (soak 8: it was in a river). */
+export function standsIn(bot) {
+    const pos = bot?.entity?.position;
+    if (!pos) return 'at an unknown place';
+    const p = pos.floored();
+    const name = (q) => bot.blockAt(q)?.name ?? 'an unloaded block';
+    const feetB = bot.blockAt(p), headB = bot.blockAt(p.offset(0, 1, 0));
+    const what = isLiquid(headB) ? `head in ${name(p.offset(0, 1, 0))}` : isLiquid(feetB) ? `feet in ${name(p)}` : `on ${name(p.offset(0, -1, 0))}`;
+    return `at ${at(p)}, ${what}`;
 }
 
 /**
  * The site within `radius` (and 2 up or down) that needs the fewest blocks, then the nearest. Only
  * sites where digging is safe and every cell has a support face count (#195 review 1 and 3).
  */
-export function chooseSite(bot, radius = 4, { accept = isSturdy, handExit = false } = {}) {
+export function chooseSite(bot, radius = 4, { accept = isSturdy, handExit = false, tally = null } = {}) {
     const base = bot.entity.position.floored();
     let best = null;
     for (let dy = -2; dy <= 2; dy++)
         for (let dx = -radius; dx <= radius; dx++)
             for (let dz = -radius; dz <= radius; dz++) {
-                const need = siteNeeds(bot, base.offset(dx, dy, dz), { accept });
-                if (!need || need.unsafe || need.unsupported.length > 0 || (handExit && !need.handExit)) continue;
+                const feet = base.offset(dx, dy, dz);
+                const need = siteNeeds(bot, feet, { accept });
+                if (!need || need.unsafe || need.unsupported.length > 0 || (handExit && !need.handExit)) {
+                    // Soak 8: tally: what refused each site (siteRefusal), for the line.
+                    if (tally) { const why = siteRefusal(bot, feet, need, { handExit }); tally.set(why, (tally.get(why) ?? 0) + 1); }
+                    continue;
+                }
                 const score = need.blocks * 4 + Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
                 if (!best || score < best.score) best = { ...need, score };
             }
@@ -498,11 +543,12 @@ export async function clearSpace(bot, pos) {
     }
 }
 
-/** The refusal for a plan that cannot be built, or null. */
-function planProblem(plan, site, radius, handExit, bot = null) {
+/** The refusal for a plan that cannot be built, or null. tally: chooseSite's refusals (soak 8), said after "no place". */
+function planProblem(plan, site, radius, handExit, bot = null, tally = null) {
     if (!plan)
         return site ? `Cannot repair the shelter at ${at(site.floored())}: ${siteProblem(bot, site, { occupied: true })?.text ?? 'the space is not usable'}.`
-            : `Found no place for a shelter within ${radius} blocks (needs a solid floor, a free 1x2 space, safe digging and a face for every block${handExit ? ', and a side you can dig out by hand' : ''}).`;
+            : `Found no place for a shelter within ${radius} blocks (needs a solid floor, a free 1x2 space, safe digging and a face for every block${handExit ? ', and a side you can dig out by hand' : ''}).`
+                + (tally?.size ? ` Refused: ${tallyText(tally)}; ${standsIn(bot)}.` : '');
     if (plan.unsafe) return `Cannot build the shelter at ${at(plan.feet)}: ${plan.unsafe}.`;
     // chooseSite never returns such a site; a site the caller names is checked too (#195 nit).
     if (plan.unsupported.length > 0)
@@ -583,11 +629,16 @@ async function pickaxeFor(bot, level) {
 export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [] } = {}) {
     // #470 review 2: skip: cells a mob holds, left out of a repair (the bot has no weapon to hit it out).
     const skipKeys = new Set(skip.map(key));
-    const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, soft: 0, line }; };
+    // Soak 8 (night 2): noPlace: the search found no site at all (not a site short of blocks or a
+    // pickaxe); the night routine then looks for better ground. refused: what refused the sites, and where the bot is.
+    const sturdyTally = new Map(), softTally = new Map();
+    const searched = { noPlace: false, refused: null };
+    const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, soft: 0, line, ...searched }; };
     // 1. A sturdy shelter (rock walls); a repair keeps the dirt walls it has.
     // A repair is of the shelter the bot is in: only fire, lava or a solid block there stops it (G3 round 7 B).
-    let plan = site ? siteNeeds(bot, site, { accept: keepSoft ? isWall : isSturdy, occupied: true, tolerateBody }) : chooseSite(bot, radius);
-    const problem = planProblem(plan, site, radius, false, bot);
+    let plan = site ? siteNeeds(bot, site, { accept: keepSoft ? isWall : isSturdy, occupied: true, tolerateBody }) : chooseSite(bot, radius, { tally: sturdyTally });
+    const problem = planProblem(plan, site, radius, false, bot, sturdyTally);
+    if (!site && !plan) Object.assign(searched, { noPlace: true, refused: `${tallyText(sturdyTally)}; ${standsIn(bot)}` });
     const level = problem ? 0 : exitLevel(bot, plan.feet);
     const pick = await pickaxeFor(bot, level);
     // Without a pickaxe the dirt-wall search is tried before any refusal (#284 review 3): dirt walls
@@ -604,9 +655,12 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     // 2. The dirt fallback: too few sturdy blocks, or no pickaxe to dig out of rock.
     if (!pick.ok || sturdy() < plan.blocks) {
         const handExit = !pick.ok;
-        const soft = site ? siteNeeds(bot, site, { accept: isWall, occupied: true, tolerateBody }) : chooseSite(bot, radius, { accept: isWall, handExit });
+        const soft = site ? siteNeeds(bot, site, { accept: isWall, occupied: true, tolerateBody }) : chooseSite(bot, radius, { accept: isWall, handExit, tally: softTally });
+        // No site for dirt walls either: still no place (a sturdy site short of blocks is a place).
+        if (!site && soft) searched.noPlace = false;
+        else if (!site && !plan) searched.refused = `${tallyText(softTally)}; ${standsIn(bot)}`;
         // With a pickaxe, the fallback site (it may be another one) must still be one to get out of.
-        const softProblem = planProblem(soft, site, radius, handExit, bot)
+        const softProblem = planProblem(soft, site, radius, handExit, bot, softTally)
             ?? (pick.ok && !soft.handExit && !toolLevels(bot, 'pickaxe').some(l => l >= exitLevel(bot, soft.feet))
                 ? `Cannot build the shelter at ${at(soft.feet)}: your pickaxe could not dig out of its walls.` : null);
         // Without a pickaxe only dirt goes in: the bot must be able to dig itself out by hand.
