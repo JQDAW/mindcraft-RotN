@@ -75,7 +75,10 @@ export function liquidNear(bot, pos) {
     return null;
 }
 
-/** Which liquid a block is: 'lava' (vanilla or a modded lava state), 'water', 'liquid' (another), or null. */
+/**
+ * Which liquid a block is: 'lava' (lava or a molten metal: fall_safety.isLethal, which also takes a
+ * modded fluid state the dump reports as hazard lava), 'water', 'liquid' (any other), or null.
+ */
 export function liquidKind(bot, b) {
     if (!isLiquid(bot, b)) return null;
     if (isLethal(bot, b)) return 'lava';
@@ -99,7 +102,8 @@ export function liquidsNear(bot, pos) {
  * which liquids caused it ('water', 'lava', 'liquid'), or null.
  * #564 review 1: the footing rule only with a liquid within the reach box (soak 8: the ore by the
  * river); an ore buried in dry rock, which the pathfinder digs to, has no air cell near and is fine.
- * The drowning reflex is water's; a liquid beside the ore names the ones beside it; no dry footing
+ * The drowning reflex is water's (#567 nit 2: modes.js self_preservation fires it only with water at
+ * the head, names112.isWater); a liquid beside the ore names the ones beside it; no dry footing
  * names the ones within the reach box.
  */
 export function wetOreSkip(bot, block, now = Date.now()) {
