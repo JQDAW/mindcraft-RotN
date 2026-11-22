@@ -64,6 +64,7 @@ test('soak 9 (1): nothing made: "not crafted"; the table limit is CRAFT_LIMITS.t
     quiet(t);
     assert.equal(CRAFT_LIMITS.tableMs, 15_000);
     assert.equal(CRAFT_LIMITS.perCraftMs, 2_000, '#571 review 2: 2 s for each further use');
+    assert.equal(CRAFT_LIMITS.abandonMs, 5_500, '#574 review 1: over mineflayer\'s WINDOW_TIMEOUT (5 s)');
     const { bot } = hangBot();
     const r = await craftPausingAutoEat(bot, pickRecipe, 3, table, 3000, { ...FAST, tableMs: 300, perCraftMs: 100 });
     assert.deepEqual(r, { ended: 'timeout', made: 0 });

@@ -242,10 +242,14 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
  * tableMs at a table, handMs in the inventory's 2x2 grid, plus perCraftMs for each further use of
  * the recipe (#571 review: 2 s, one shaped use is 8 to 12 confirmed clicks on a laggy Forge server);
  * pollMs: how often the stop is checked; abandonMs: how long a craft given up on may take to settle
- * (it can still click, or close the next craft's window); settleMs: how long the inventory may take
- * to show what the server made after the window is closed.
+ * (it can still click, or close the next craft's window); #574 review 1: over mineflayer's
+ * WINDOW_TIMEOUT (5 s, inventory.js), so a craft stuck on an unconfirmed click has thrown by then
+ * (a stop then returns within about 6.7 s, under Mindcraft's 10 s kill). A craft stuck in
+ * once(windowOpen) (20 s, promise_utils) or a put-away's wait (20 s) is only logged when it settles,
+ * not waited out. settleMs: how long the inventory may take to show what the server made after
+ * the window is closed.
  */
-export const CRAFT_LIMITS = { tableMs: 15_000, handMs: 10_000, perCraftMs: 2_000, pollMs: 100, abandonMs: 3_000, settleMs: 1_000 };
+export const CRAFT_LIMITS = { tableMs: 15_000, handMs: 10_000, perCraftMs: 2_000, pollMs: 100, abandonMs: 5_500, settleMs: 1_000 };
 
 /**
  * Soak 9: in-place window work (a craft, a chest) is no being stuck: the unstuck reflex leaves the
@@ -253,6 +257,11 @@ export const CRAFT_LIMITS = { tableMs: 15_000, handMs: 10_000, perCraftMs: 2_000
  * The flag is set back as it was, so a skill that set it already keeps it. #571 review 4: the flag
  * is a token of this call (truthy; unstuck reads it so), and it is set back only while it is still
  * that token: a late end never overwrites a flag a newer action set.
+ * #574 review 2, known gaps: two calls that overlap without nesting (the first ends while the second
+ * runs: the first leaves the second's token alone) end with the second setting back what it saved,
+ * the first's token; and a skill that saves the flag while a token is set (pit.js, the tree fall in
+ * collectBlock: wasStationary) puts that token back. Either can leave a stale truthy flag, which holds the unstuck reflex off until the
+ * shelter writes false. A shared release helper (a count, or tokens all round) would close both.
  */
 export async function stationaryWhile(bot, fn) {
     const was = bot.rotnStationary;
@@ -335,7 +344,8 @@ async function boundedCraft(bot, recipe, count, table, limits) {
     try { if (bot.currentWindow) bot.closeWindow(bot.currentWindow); } catch { /* best effort */ }
     // #571 review 1: the craft given up on still runs, and can click, or close the next craft's window
     // when it ends (mineflayer closes windowCraftingTable then): with its window closed, it gets
-    // abandonMs to settle before this returns. Then the count.
+    // abandonMs to settle before this returns. Then the count. #574 review 1: one stuck in
+    // once(windowOpen) (20 s) can still end later; that is logged from its handler, not prevented.
     await Promise.race([craft, new Promise(resolve => setTimeout(resolve, limits.abandonMs))]);
     if (!settled) console.log(`[craft] the abandoned craft did not settle within ${limits.abandonMs} ms; going on`);
     for (let waited = 0; before !== null && have() <= before && waited < limits.settleMs; waited += limits.pollMs)
