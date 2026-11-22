@@ -579,3 +579,37 @@ test('soak 11 (H1): pickupKillDrops picks up only drops near the kill spot, thro
     assert.ok(k.refused, 'a refusal named');
     assert.match(killDropsText(k), /^1 drop left: /);
 });
+
+// Soak 11 (H2, rotn-data's soak 11 Animania food answer): a cottontail drops 0-2 rabbit (none in a
+// quarter of kills); a regular pig, cow or sheep 2-8 vanilla meat, a prime one 1-4 prime meat. Raw
+// meat is safe (only raw chicken gives Hunger); the prime meats are 1 hunger, the rabbit 2.
+test('soak 11 (H2): a pig, cow or sheep in range is hunted before a nearer rabbit, and named first; the meats every breed drops count as safe food', async () => {
+    const { huntTarget, nearbyHuntable, meatRank } = await import('./library/hunting.js');
+    const { foodValue, avoidReason, heldFoodHunger } = await import('./library/food.js');
+    const doe = { id: 3, name: 'animania:doe_cottontail', type: 'mob', position: new Vec3(3.5, 64, 0.5), height: 0.5, metadata: { 7: 3 } };
+    const sow = { id: 4, name: 'animania:sow_large_white', type: 'mob', position: new Vec3(12.5, 64, 0.5), height: 0.9, metadata: { 7: 10 } };
+    assert.deepEqual([meatRank(doe), meatRank(sow), meatRank({ name: 'rabbit' }), meatRank(cow(1, 1))], [1, 0, 1, 0]);
+    const both = huntAgent({ animals: [doe, sow] });
+    assert.equal(huntTarget(both.bot)?.id, 4, 'the sow, though the rabbit is nearer');
+    assert.deepEqual(nearbyHuntable(both.bot), ['animania:sow_large_white', 'animania:doe_cottontail']);
+    const rabbitOnly = huntAgent({ animals: [doe] });
+    assert.equal(huntTarget(rabbitOnly.bot)?.id, 3, 'a rabbit when there is nothing else');
+    // What each breed drops (vanilla meat from regular breeds, prime meat from prime ones): safe food.
+    const meats = { 'minecraft:rabbit': 2, 'minecraft:porkchop': 1, 'minecraft:beef': 1, 'minecraft:mutton': 1,
+        'animania:raw_prime_pork': 1, 'animania:raw_prime_beef': 1, 'animania:raw_prime_mutton': 1, 'animania:raw_prime_rabbit': 1, 'animania:raw_prime_chicken': 1 };
+    for (const [name, hunger] of Object.entries(meats)) {
+        const item = { name, metadata: 0, count: 1 };
+        assert.equal(foodValue(item)?.hunger, hunger, name);
+        assert.equal(avoidReason(item), null, `${name} is safe raw`);
+    }
+    assert.ok(avoidReason({ name: 'minecraft:chicken', metadata: 0 }), 'raw chicken: Hunger 30% of the time');
+    // The night's "food worth N hunger held" counts them.
+    const held = { inventory: { items: () => [{ name: 'minecraft:porkchop', metadata: 0, count: 5 }, { name: 'animania:raw_prime_beef', metadata: 0, count: 2 }] } };
+    assert.equal(heldFoodHunger(held), 7);
+    // The food step's texts say so.
+    const { FOOD_RESERVE_STEP } = await import('./agenda.js');
+    assert.match(FOOD_RESERVE_STEP.goal, /hunt a wild pig, cow or sheep near you \(2 to 8 meat each; a rabbit drops 0 to 2, a young animal nothing\)/);
+    const prompt = FOOD_RESERVE_STEP.goalNow({ food: () => 9, foodHeld: () => 0, huntable: () => ['animania:sow_large_white'], forageable: () => [], hasWeapon: () => true }, {});
+    assert.match(prompt, /a kill is food only once its meat is in your inventory/);
+    assert.match(prompt, /Raw meat is safe \(1 hunger each, a rabbit 2; never raw chicken\)/);
+});

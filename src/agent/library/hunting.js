@@ -74,12 +74,21 @@ export function retaliationRisk(bot, target, { radius = HUNT.retaliationRadius }
 }
 
 /** The nearest animal the bot may hunt (within radius, not a baby, not maybe a player's, no retaliation risk), or null; `skipped` gets the reasons. */
+/**
+ * Soak 11 (H2, rotn-data's soak 11 Animania food answer): a regular pig, cow or sheep drops 2-8 meat
+ * (prime breeds 1-4); a rabbit 0-2 (none in a quarter of kills, half if unfed), at 2 hunger raw; the
+ * soak 11 cottontail kill left no food. A pig, cow or sheep in range comes before a rabbit; then the
+ * nearest. 0: worth a hunt first; 1: a rabbit.
+ */
+export const meatRank = (e) => (/^(animania:doe_|rabbit$)/.test(e?.name ?? '') ? 1 : 0);
+const huntOrder = (here) => (a, b) => (meatRank(a) - meatRank(b)) || (a.position.distanceTo(here) - b.position.distanceTo(here));
+
 export function huntTarget(bot, { bases = [], radius = HUNT.radius, skipped = [] } = {}) {
     const here = bot?.entity?.position;
     if (!here) return null;
     const animals = Object.values(bot.entities ?? {})
         .filter(e => e && e !== bot.entity && e.position && isHuntableAnimal(e) && e.position.distanceTo(here) <= radius && !skippedNow(bot, e))
-        .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here));
+        .sort(huntOrder(here));
     for (const e of animals) {
         const why = mayBelongToPlayer(bot, e, { bases }) ?? retaliationRisk(bot, e);
         if (!why) return e;
@@ -88,13 +97,13 @@ export function huntTarget(bot, { bases = [], radius = HUNT.radius, skipped = []
     return null;
 }
 
-/** The names of the wild animals near (within radius) the bot may hunt, nearest first (for the food reserve's prompt). */
+/** The names of the wild animals near (within radius) the bot may hunt, a pig, cow or sheep before a rabbit, then nearest first (for the food reserve's prompt). */
 export function nearbyHuntable(bot, { bases = [], radius = 32 } = {}) {
     const here = bot?.entity?.position;
     if (!here) return [];
     return Object.values(bot.entities ?? {})
         .filter(e => e && e !== bot.entity && e.position && isHuntableAnimal(e) && e.position.distanceTo(here) <= radius && !skippedNow(bot, e))
-        .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here))
+        .sort(huntOrder(here))
         .filter(e => !mayBelongToPlayer(bot, e, { bases }) && !retaliationRisk(bot, e))
         .map(e => e.name);
 }
