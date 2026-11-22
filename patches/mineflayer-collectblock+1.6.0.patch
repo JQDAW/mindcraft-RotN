@@ -1,0 +1,206 @@
+diff --git a/node_modules/mineflayer-collectblock/lib/CollectBlock.js b/node_modules/mineflayer-collectblock/lib/CollectBlock.js
+index 445df38..0ebf0c9 100644
+--- a/node_modules/mineflayer-collectblock/lib/CollectBlock.js
++++ b/node_modules/mineflayer-collectblock/lib/CollectBlock.js
+@@ -18,9 +18,70 @@ const BlockVeins_1 = require("./BlockVeins");
+ const Targets_1 = require("./Targets");
+ const events_1 = require("events");
+ const util_1 = require("util");
++// mindcraft-RotN patch (net-forge, soak 9): waitForPickup waited for the dropped item's entityGone
++// with no limit, and pathfinder.stop() could not end it, so a stop never finished. It now also ends
++// when the item is invalid or no longer in bot.entities, after pickupTimeout ms once the walk to it
++// is over, or on cancelTask. Each end has a reason: bot.collectBlock.lastPickup and the
++// 'collectBlock_pickupEnded' event ({ entity, reason: 'gone' | 'invalid' | 'timeout' | 'cancelled', ms }).
++const DEFAULT_PICKUP_TIMEOUT = 5000;
++// How long cancelTask waits for the running collect to finish before it gives up on it (and clears the targets).
++const DEFAULT_CANCEL_TIMEOUT = 5000;
++const PICKUP_POLL_MS = 250;
++function cancelledError() {
++    const err = new Error('Collect cancelled');
++    err.name = 'CollectCancelled';
++    return err;
++}
++function waitForItemGone(bot, entity, run) {
++    const started = Date.now();
++    let settle = null;
++    let timer = null;
++    let poll = null;
++    const onGone = (e) => { if (e === entity) finish('gone'); };
++    const onCancel = () => finish('cancelled');
++    const promise = new Promise(resolve => { settle = resolve; });
++    function finish(reason) {
++        if (settle === null) return;
++        const resolve = settle;
++        settle = null;
++        cleanup();
++        resolve(reason);
++    }
++    function cleanup() {
++        bot.removeListener('entityGone', onGone);
++        if (run != null) run.wake.delete(onCancel);
++        if (timer !== null) clearTimeout(timer);
++        if (poll !== null) clearInterval(poll);
++        timer = poll = null;
++    }
++    function check() {
++        if (entity.isValid === false) finish('invalid');
++        else if (bot.entities != null && bot.entities[entity.id] !== entity) finish('gone');
++    }
++    bot.on('entityGone', onGone);
++    if (run != null) {
++        if (run.requested) finish('cancelled');
++        else run.wake.add(onCancel);
++    }
++    return {
++        promise,
++        cleanup: () => finish('cancelled'),
++        /** Starts the limit and the validity checks: the walk to the item is over. */
++        arm(timeoutMs) {
++            if (settle === null) return;
++            check();
++            if (settle === null) return;
++            poll = setInterval(check, PICKUP_POLL_MS);
++            timer = setTimeout(() => finish('timeout'), timeoutMs);
++        },
++        ms: () => Date.now() - started,
++    };
++}
+ function collectAll(bot, options) {
+     return __awaiter(this, void 0, void 0, function* () {
+         while (!options.targets.empty) {
++            if (options.run != null && options.run.requested)
++                throw cancelledError();
+             yield (0, Inventory_1.emptyInventoryIfFull)(bot, options.chestLocations, options.itemFilter);
+             const closest = options.targets.getClosest();
+             if (closest == null)
+@@ -37,17 +98,23 @@ function collectAll(bot, options) {
+                     // Don't collect any entities that are marked as 'invalid'
+                     if (!closest.isValid)
+                         break;
+-                    const tempEvents = new TemporarySubscriber_1.TemporarySubscriber(bot);
+-                    const waitForPickup = new Promise(resolve => {
+-                        tempEvents.subscribeTo('entityGone', (entity) => {
+-                            if (entity === closest) {
+-                                tempEvents.cleanup();
+-                                resolve();
+-                            }
+-                        });
+-                    });
+-                    yield bot.pathfinder.goto(new mineflayer_pathfinder_1.goals.GoalFollow(closest, 0));
+-                    yield waitForPickup;
++                    const waitForPickup = waitForItemGone(bot, closest, options.run);
++                    let reason;
++                    try {
++                        yield bot.pathfinder.goto(new mineflayer_pathfinder_1.goals.GoalFollow(closest, 0));
++                        waitForPickup.arm(options.pickupTimeout);
++                        reason = yield waitForPickup.promise;
++                    }
++                    finally {
++                        waitForPickup.cleanup();
++                    }
++                    const ended = { entity: closest, reason, ms: waitForPickup.ms() };
++                    if (bot.collectBlock != null)
++                        bot.collectBlock.lastPickup = { entityId: closest.id, reason, ms: ended.ms };
++                    // @ts-expect-error
++                    bot.emit('collectBlock_pickupEnded', ended);
++                    if (reason === 'cancelled')
++                        throw cancelledError();
+                     break;
+                 }
+                 default: {
+@@ -151,6 +218,14 @@ class CollectBlock {
+         this.bot = bot;
+         this.targets = new Targets_1.Targets(bot);
+         this.movements = new mineflayer_pathfinder_1.Movements(bot);
++        /** ms to wait for a dropped item to be picked up once the bot stands on it (mindcraft-RotN patch). */
++        this.pickupTimeout = DEFAULT_PICKUP_TIMEOUT;
++        /** ms cancelTask waits for the running collect to finish (mindcraft-RotN patch). */
++        this.cancelTimeout = DEFAULT_CANCEL_TIMEOUT;
++        /** The last pickup wait's end: { entityId, reason, ms } (mindcraft-RotN patch). */
++        this.lastPickup = null;
++        this.run = null;
++        this.cancelling = null;
+     }
+     /**
+        * If target is a block:
+@@ -181,7 +256,9 @@ class CollectBlock {
+                 ignoreNoPath: (_b = options.ignoreNoPath) !== null && _b !== void 0 ? _b : false,
+                 chestLocations: (_c = options.chestLocations) !== null && _c !== void 0 ? _c : this.chestLocations,
+                 itemFilter: (_d = options.itemFilter) !== null && _d !== void 0 ? _d : this.itemFilter,
+-                targets: this.targets
++                targets: this.targets,
++                pickupTimeout: typeof options.pickupTimeout === 'number' && options.pickupTimeout > 0 ? options.pickupTimeout : this.pickupTimeout,
++                run: null
+             };
+             if (this.bot.pathfinder == null) {
+                 throw (0, Util_1.error)('UnresolvedDependency', 'The mineflayer-collectblock plugin relies on the mineflayer-pathfinder plugin to run!');
+@@ -196,6 +273,10 @@ class CollectBlock {
+             }
+             if (!optionsFull.append)
+                 yield this.cancelTask();
++            // A cancelTask during this run ends its pickup wait and its loop (mindcraft-RotN patch).
++            if (!optionsFull.append || this.run == null || this.run.requested)
++                this.run = { requested: false, wake: new Set() };
++            optionsFull.run = this.run;
+             if (Array.isArray(target)) {
+                 this.targets.appendTargets(target);
+             }
+@@ -208,8 +289,9 @@ class CollectBlock {
+             catch (err) {
+                 this.targets.clear();
+                 // Ignore path stopped error for cancelTask to work properly (imo we shouldn't throw any pathing errors)
++                // A cancelled run (CollectCancelled, mindcraft-RotN patch) ends quietly too.
+                 // @ts-expect-error
+-                if (err.name !== 'PathStopped')
++                if (err.name !== 'PathStopped' && err.name !== 'CollectCancelled')
+                     throw err;
+             }
+             finally {
+@@ -242,12 +324,42 @@ class CollectBlock {
+                     cb();
+                 return yield Promise.resolve();
+             }
+-            this.bot.pathfinder.stop();
+-            if (cb != null) {
+-                // @ts-expect-error
+-                this.bot.once('collectBlock_finished', cb);
++            // mindcraft-RotN patch: every call while a cancel is pending shares one wait (Mindcraft's stop
++            // loop calls this every 300 ms; events.once added a 'collectBlock_finished' and an 'error'
++            // listener each time), the running collect is woken (its pickup wait ends at once), and the
++            // wait is bounded by cancelTimeout: then the targets are cleared and the collect given up.
++            if (this.cancelling == null) {
++                if (this.run != null) {
++                    this.run.requested = true;
++                    for (const wake of [...this.run.wake])
++                        wake();
++                }
++                this.bot.pathfinder.stop();
++                this.cancelling = new Promise(resolve => {
++                    let timer = null;
++                    const done = (reason) => {
++                        // @ts-expect-error
++                        this.bot.removeListener('collectBlock_finished', onFinished);
++                        if (timer !== null)
++                            clearTimeout(timer);
++                        this.cancelling = null;
++                        resolve(reason);
++                    };
++                    const onFinished = () => done('finished');
++                    // @ts-expect-error
++                    this.bot.on('collectBlock_finished', onFinished);
++                    timer = setTimeout(() => {
++                        this.targets.clear();
++                        // @ts-expect-error
++                        this.bot.emit('collectBlock_cancelTimeout', { ms: this.cancelTimeout });
++                        done('timeout');
++                    }, this.cancelTimeout);
++                });
+             }
+-            yield (0, events_1.once)(this.bot, 'collectBlock_finished');
++            const reason = yield this.cancelling;
++            if (cb != null)
++                cb();
++            return reason;
+         });
+     }
+ }

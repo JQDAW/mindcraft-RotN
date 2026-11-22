@@ -308,6 +308,25 @@ In RotN 3.3.4, `minecraft:crafting_table` is FastWorkbench 1.7.4's block: Run A'
 
 **For skills:** `bot.forge.attackCooldownTicks()` gives the ticks the held item is paced at (Better Combat's, or 50 when the speed is unknown; never null). `bot.forge.cancelAttack(reason)` drops a waiting hit. `bot.forge.bcAttack.stats` has the counts.
 
+## mineflayer-collectblock: bounded pickup and cancel (soak 9)
+
+`patches/mineflayer-collectblock+1.6.0.patch` (lead-assigned to net-forge) changes `lib/CollectBlock.js`. In soak 9 a `!craftRecipe` never ended: the craft had finished, but the table pickup in its `finally` sat in collectblock's wait for the dropped item, and Mindcraft's stop could not end it.
+
+- **The pickup wait is bounded.** After a dig, collectblock walks to the dropped item and waits for it to go. That wait used to end only on the item's `entityGone`, with no limit, and `pathfinder.stop()` could not end it. It now also ends when:
+  - the item turns invalid (`isValid === false`);
+  - the item is no longer in `bot.entities` (or another object holds its id);
+  - `pickupTimeout` ms have passed since the walk ended (default 5000; `bot.collectBlock.pickupTimeout`, or `collect(target, { pickupTimeout })`);
+  - `cancelTask()` is called.
+- **Each end has a reason:** `gone`, `invalid`, `timeout` or `cancelled`.
+  - It goes in `bot.collectBlock.lastPickup` (`{ entityId, reason, ms }`) and in a `collectBlock_pickupEnded` event (`{ entity, reason, ms }`).
+  - After a timeout, the item is given up and the collect goes on. After a cancel, the collect ends quietly, as a PathStopped did before.
+- **`cancelTask()` is bounded and shares one wait.**
+  - Calls made while a cancel is pending share one wait. Mindcraft's stop loop calls it every 300 ms, and `events.once` used to add a `collectBlock_finished` and an `error` listener on each call: the soak 9 MaxListenersExceededWarning lines.
+  - It wakes the running collect, whose pickup wait ends at once, and stops the pathfinder once per cancel.
+  - It waits at most `cancelTimeout` ms (default 5000; `bot.collectBlock.cancelTimeout`). Then it clears the targets, emits `collectBlock_cancelTimeout`, and resolves `'timeout'`, so a following `collect` is not blocked by a stuck one. Otherwise it resolves `'finished'`.
+- **Also fixed:** a walk that fails (NoPath, PathStopped) no longer leaves the pickup's `entityGone` listener behind.
+- **Unchanged:** a block's dig and the drop wait; a collect with nothing to cancel; the callback form of `cancelTask`.
+
 ## Other protocol changes
 
 - **Triumph advancements (G1 Batch B+C).** Triumph 3.19.2 (mod id `triumph`) writes `ExtendedDisplayInfo` into `play.advancements`. Flag bit 8 is set, and colours, line options, extra connections and a position are appended (`javap`, details in `reid.js` `triumphTypes`). minecraft-data's vanilla layout fails on it, and the parse error ended the packet stream.
@@ -532,6 +551,7 @@ What different setups do:
   - A spawn whose metadata uses AquaAcrobatics' unknown serializer 14 (`entity-metadata-aqua-pose.json`) is applied with `forge.metadataError`.
   - `e2e-initbot` checks through `initBot` that the fake server's FML spawn reaches `bot.entities` as `other`, that vanilla `entity_teleport` and `rel_entity_move` update it, and that `entity_destroy` removes it.
 - `exit-contract.test.js`: the agent side (`recordAgentExit`): kicks with and without a bridge, `cleanKill` before and after a kick, startup errors, and no reason file.
+- `collectblock-patch.test.js`: the installed, patched collectblock with a fake bot. It covers an item picked up, never picked up (timeout), turned invalid, gone from `bot.entities` or replaced, and gone during the walk; a cancel during the pickup wait, and a new collect after it; 15 stop-loop cancels sharing one wait, with no new `error` listener, no MaxListeners warning, one `pathfinder.stop` and one timeout; and no listener left after a stopped or failed walk. Against stock 1.6.0, all 9 fail or hang (cancelled by the test timeout).
 - `prismarine-auth-patch.test.js`: the real patched methods, with stubbed fetch, caches and MSAL, and fake tokens. Each reduced output is checked exactly and has nothing token-like. All 7 tests fail against stock 3.1.1.
 - `auth-diagnostics.test.js`: the real `fetchProfile` with a stubbed fetch (429, a network error, a 2xx with `error`). The line has the status and class, and nothing token-like, no body text and no address; the error is rethrown unchanged.
 - `driver-exit.test.js`: the exit decision and the logging before join.
