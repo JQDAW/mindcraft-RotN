@@ -592,7 +592,7 @@ export const actionsList = [
             // from it); a giver may still override.
             if (mob && isHuntableAnimal(mob) && !hasWeapon(agent.bot)) {
                 if (!giver) {
-                    skills.log(agent.bot, `Not hunting ${type}: you hold no weapon. Forage for food first (!forage); make a weapon (a crude axe from 1 rock and 2 sticks, or a stone axe) before you hunt.`);
+                    skills.log(agent.bot, `Not hunting ${type}: you hold no weapon. Forage for food first (!forage); make a weapon (a wooden club from 2 logs, no table: !craftRecipe("spartanweaponry:club_wood", 1)) before you hunt.`);
                     return;
                 }
                 skills.log(agent.bot, `Warning: ${giver} asked for it, so hunting ${type} with no weapon.`);
