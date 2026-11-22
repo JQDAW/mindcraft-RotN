@@ -3489,3 +3489,35 @@ test('soak 11 (A3): after a repair the weapon is back in the main hand (Corpse C
     // No weapon: nothing to do.
     assert.equal(await rearmWeapon({ inventory: { items: () => [dirt], slots: [] }, heldItem: dirt, equip: () => { throw new Error('no'); } }), false);
 });
+
+// Soak 11 death 2 (21:38:42, D): unarmed, "the opening is free and 49 blocks held: repairing first";
+// the zombie stepped into the opening during the repair, which went on to the death. Now it stops.
+test('soak 11 (D, A1): unarmed, repairing first, the zombie steps into the opening: the repair stops; the next tick burrows', async (t) => {
+    quiet(t);
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5) };
+    const s = heldSetup({ plan: false, held: 'none' });
+    s.o.mobInReach = () => zombie;
+    s.o.repairBlocks = () => 49;
+    let stepIn = false;
+    const heldNone = s.o.heldCells;
+    s.o.heldCells = (bot, site, open) => (stepIn ? open.filter(c => c.equals(s.opening[0])).map(cell => ({ cell, mob: zombie })) : heldNone(bot, site, open));
+    const aborts = [];
+    s.o.buildShelter = (bot, opts = {}) => {
+        s.o.builds.push(opts.site ?? null);
+        if (!opts.site) return Promise.resolve({ closed: true, feet: SITE, placed: 10, line: 'Shelter closed' });
+        s.o.repairs.push({ site: opts.site, skip: [] });
+        stepIn = true; // it steps into the opening during the repair
+        const why = opts.abort();
+        aborts.push(why);
+        return Promise.resolve({ closed: false, feet: opts.site, placed: 0, line: 'Shelter is not closed', ...(why ? { aborted: why } : {}) });
+    };
+    const burrows = [];
+    s.o.burrowAway = (bot, mob, opts) => { burrows.push(opts); return Promise.resolve({ steps: 1, site: SITE.offset(0, -2, 0), stopped: 'far' }); };
+    await breachAt(s);
+    assert.ok(s.agent.chat.some(l => /the opening is free and 49 blocks held: repairing first$/.test(l)), s.agent.chat.join('\n'));
+    assert.deepEqual(aborts, ['a zombie in the opening at 1, 64, 0']);
+    assert.ok(s.agent.chat.includes('[night] the repair stopped: a zombie in the opening at 1, 64, 0; deciding again'));
+    nightTick(s.agent, { now: 3 * CHECK_MS, ops: s.o });
+    await settle(s.agent);
+    assert.equal(burrows.length, 1, s.agent.chat.join('\n'));
+});
