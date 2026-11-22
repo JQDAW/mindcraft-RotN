@@ -216,6 +216,17 @@ export function escapeFellShort(agent, now = Date.now()) {
 }
 
 /**
+ * #581 re-review nit 5: the escape's whole window: it runs, or it is due (waiting for self_preservation,
+ * or between tries). Commands wait for all of it (commands/actions.js runAsAction).
+ */
+export function escapeWindow(agent, now = Date.now()) {
+    if (agent?._escape?.job) return true;
+    try { return !!escapeReason(agent, now); } catch { return false; }
+}
+/** The flag commands read (actions.js runAsAction): set on each tick from escapeWindow. */
+const noteWindow = (agent, now) => { if (agent?._escape) agent._escape.due = escapeWindow(agent, now); };
+
+/**
  * One check, from the priority stack before the night routine: 'escaping' while the escape runs (the
  * night routine, tasks, the agenda and the model's goal wait), 'escaping:wait' while self_preservation
  * acts (#581 review 1: a swim-up or a low-health move away is never cut), else null. A task giver's
@@ -226,6 +237,7 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
     if (r.job) return 'escaping';
     let why = null;
     try { why = escapeReason(agent, now); } catch (err) { log(`[respawn] escape check: ${safeError(err)}`); why = null; }
+    noteWindow(agent, now);
     if (!why) return null;
     const bot = agent.bot;
     if (bot.modes?.isActive?.('self_preservation')) return 'escaping:wait';
@@ -249,13 +261,20 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
     }
     agent._agenda_paused = true;
     const modes = bot.modes;
-    for (const m of ESCAPE_PAUSES) { try { modes?.pause?.(m); } catch { /* not every mode exists */ } }
     const wasSprint = bot.rotnSprint;
-    bot.rotnSprint = sprint;
-    bot.rotnEscaping = true; // unstuck holds off (modes.js)
+    // #581 re-review nit 3: a stale record of an earlier escape's stopper is not this one's.
+    if (agent.rotnLastInterrupt?.of === ESCAPE_LABEL) agent.rotnLastInterrupt = null;
     let result = null;
     r.job = Promise.resolve()
-        .then(() => agent.actions.runAction(ESCAPE_LABEL, async () => { result = await run(bot, why.places); }, { keepReplan: true }))
+        .then(() => agent.actions.runAction(ESCAPE_LABEL, async () => {
+            // #581 re-review 1: the pauses inside the action, once it runs. runAction first waits for the
+            // running action (a cowardice flee) to stop, and modes.update() unpauses every mode while the
+            // agent is idle in between: paused before, cowardice was live again when the run began.
+            for (const m of ESCAPE_PAUSES) { try { modes?.pause?.(m); } catch { /* not every mode exists */ } }
+            bot.rotnSprint = sprint;
+            bot.rotnEscaping = true; // unstuck holds off (modes.js)
+            result = await run(bot, why.places);
+        }, { keepReplan: true }))
         .catch(err => { log(`[respawn] the escape failed: ${safeError(err)}`); return null; })
         .then((ret) => {
             r.job = null;

@@ -304,6 +304,9 @@ export function isWoodItem(item) {
     return !!name && isWoodWall(item) && WOOD_ORES.some(ore => oreMembers(ore).some(m => m.name === name));
 }
 
+// #580 re-review nit 2: so every shelter check (the site choice in shelter.js, pit.js, shelter_ground.js
+// and the repairs) takes a wood-material full cube that needs no tool as a wall too: a log, a plank, a
+// crafting table. Wanted: the bot gets out of one by hand in the morning.
 export const isWall = (block) => isSturdy(block) || isSoftWall(block) || isWoodWall(block);
 
 /** Whether a block can be dug without a tool (the dump's toolRequired is false). */

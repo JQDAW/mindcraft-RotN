@@ -375,3 +375,16 @@ test('soak 5: up on a tree, the walk away climbs down first; a failed climb down
     await flush(); await flush();
     assert.match(logs2.at(-1), /^\[respawn\] now \d+ blocks from/);
 });
+
+// #581 re-review nit 4: after a short escape (full: true) with no place 64 blocks away, the short walk,
+// not sheltering on the spot.
+test('#581 re-review nit 4: full asked but no full target: the short walk instead of none', () => {
+    const now = 1_000_000;
+    const ringed = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now });
+    const centre = new Vec3(-50, 0, -65);
+    ringed.bot.blockAt = (p) => (hdist(p, centre) >= 44 ? { name: 'water', boundingBox: 'empty' } : { name: 'air', boundingBox: 'empty' });
+    const plan = nightRelocationPlan(ringed, now, { night: true, armed: false, full: true });
+    assert.equal(plan?.mode, 'short');
+    const open = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now });
+    assert.equal(nightRelocationPlan(open, now, { night: true, armed: false, full: true }).mode, 'full', 'a full target: the full walk');
+});

@@ -133,11 +133,12 @@ test('soak 10 (R1): the tick: one job owns the bot (cowardice, self_defense, uns
     const run = (bot, places) => new Promise(res => { release = () => { bot.entity.position = new Vec3(SPAWN.x + 90, 64, SPAWN.z); res({ arrived: true, far: 70, ms: 12_000 }); }; });
     assert.equal(respawnEscapeTick(a, { now, run, log: (l) => logs.push(l) }), 'escaping');
     assert.match(logs[0], /^\[respawn\] escape \(try 1 of 3\): sprinting at least 64 blocks from the spawn and 6 recent death spots, 6 player zombies near; no digging, no pickups, no fights$/);
+    await flush();
+    assert.deepEqual(a.actions.runs, ['action:respawnEscape']);
+    // #581 re-review 1: paused once the escape action runs (not before runAction).
     for (const m of ['cowardice', 'self_defense', 'unstuck', 'item_collecting', 'hunting', 'eating']) assert.ok(a.paused.has(m), m);
     assert.ok(!ESCAPE_PAUSES.includes('self_preservation'));
     assert.deepEqual([a.bot.rotnSprint, a.bot.rotnEscaping, a.self_prompter.active, a._agenda_paused], [true, true, false, true]);
-    await flush();
-    assert.deepEqual(a.actions.runs, ['action:respawnEscape']);
     assert.equal(respawnEscapeTick(a, { now: now + 500, run, log: (l) => logs.push(l) }), 'escaping', 'while it runs');
     assert.equal(replanHold(a, now + 500), 'the respawn escape is running', 'the model\'s re-plan waits');
     release();
@@ -150,7 +151,9 @@ test('soak 10 (R1): the tick: one job owns the bot (cowardice, self_defense, uns
     // Food 6: at a walk.
     const hungry = agentAt(SPAWN.offset(2, 0, 3), { now, food: 6 });
     const hl = [];
+    hungry.bot.rotnSprint = true; // set by an earlier reflex
     respawnEscapeTick(hungry, { now, run: () => new Promise(() => {}), log: (l) => hl.push(l) });
+    await flush();
     assert.equal(hungry.bot.rotnSprint, false);
     assert.match(hl[0], /walking \(food 6\)/);
 });
@@ -314,6 +317,12 @@ test('#581 review 4: a task giver\'s goal is paused (kept) for the escape and re
     release();
     await flush(); await flush();
     assert.deepEqual(sp.starts, ['build a hut'], 'the giver\'s goal again');
+    // #581 re-review nit 5: also while the escape is due but waiting (self_preservation acting).
+    const due = agentAt(SPAWN.offset(2, 0, 3), { now: Date.now() });
+    due.bot.modes.isActive = (m) => m === 'self_preservation';
+    assert.equal(respawnEscapeTick(due, { now: Date.now(), log: () => {} }), 'escaping:wait');
+    assert.equal(due._escape.due, true);
+    assert.match(await getCommand('!moveAway').perform(due, 10), /^Not now: the respawn escape is running/);
 });
 
 // #581 review 5: animals (mcdata's isHostile counted every 'mob') neither steer the aim nor block the scroll.
@@ -352,4 +361,89 @@ test('#581 nit 11: after a timed-out escape, autonomyTick runs the relocate walk
     a.tasks = { current: () => null, get: () => null };
     a.actions.runAction = () => new Promise(() => {});
     assert.equal(autonomyTick(a, { now }), 'relocating');
+});
+
+/**
+ * #581 re-review 1 and 2: the real ActionManager, ModeController and update loop (the reviewer's
+ * race.mjs). An agent whose bot respawned near the spawn, with a running cowardice flee that notices
+ * an interrupt within 500 ms (avoidEnemies polls every 500 ms).
+ */
+async function realAgent() {
+    const { ActionManager } = await import('./action_manager.js');
+    const { initModes } = await import('./modes.js');
+    const now = Date.now();
+    const d = new DeathReporter();
+    d.died({ pos: new Vec3(-50, 64, -60), dimension: 'overworld', now: now - 10_000 }); d.pending = null;
+    const self = { id: 0, type: 'player', position: new Vec3(-56, 64, -60) };
+    const bot = { entity: self, entities: { 0: self }, spawnPoint: SPAWN.clone(), game: { dimension: 'overworld' }, health: 20, food: 20, oxygenLevel: 20,
+        interrupt_code: false, output: '', inventory: { items: () => [], slots: [] }, blockAt: () => ({ name: 'air' }),
+        pathfinder: { goal: null, stop() {}, setGoal() {} }, clearControlStates() {}, setControlState() {}, emit() {} };
+    const agent = { bot, _death: d, task: null, prompter: { getInitModes: () => ({}) }, self_prompter: { isActive: () => false },
+        requestInterrupt() { bot.interrupt_code = true; }, clearBotLogs() { bot.output = ''; bot.interrupt_code = false; },
+        isIdle() { return !this.actions.executing; }, cleanKill() {}, handleMessage: () => Promise.resolve(true) };
+    agent.actions = new ActionManager(agent);
+    initModes(agent);
+    return agent;
+}
+
+test('#581 re-review 1: over a running cowardice flee, with the real action manager and modes, every pause holds when the escape run begins', { timeout: 60_000 }, async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const { __modeForTest } = await import('./modes.js');
+    const { runUpdateLoop } = await import('./update_loop.js');
+    for (const offset of [0, 150, 300, 450]) {
+        const agent = await realAgent();
+        const bot = agent.bot;
+        const flee = agent.actions.runAction('mode:cowardice', async () => { while (!bot.interrupt_code) await new Promise(r => setTimeout(r, 500)); });
+        let pausedAtStart = null, stop = false, ticked = false;
+        const t0 = Date.now();
+        const loop = runUpdateLoop(async () => {
+            await bot.modes.update();
+            await new Promise(r => setTimeout(r, 2));
+            if (!ticked && Date.now() - t0 >= 100 + offset) {
+                ticked = true;
+                respawnEscapeTick(agent, { run: () => { pausedAtStart = ['cowardice', 'self_defense', 'unstuck', 'eating'].map(m => __modeForTest(m).paused); return Promise.resolve({ arrived: true, ms: 1 }); }, log: () => {} });
+            }
+        }, { interval: 300, shouldStop: () => stop });
+        await flee;
+        await new Promise(r => setTimeout(r, 1200));
+        stop = true;
+        await loop;
+        assert.deepEqual(pausedAtStart, [true, true, true, true], `offset ${offset} ms`);
+    }
+});
+
+test('#581 re-review 2: a real self_preservation swim-up over a running escape is no try; a zombie and a hit during the run do not cut it', { timeout: 60_000 }, async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const agent = await realAgent();
+    const bot = agent.bot;
+    const logs = [];
+    let release = null;
+    // The run: until released or stopped.
+    const run = () => new Promise(res => {
+        release = () => res({ arrived: true, ms: 5000 });
+        const poll = setInterval(() => { if (bot.interrupt_code) { clearInterval(poll); res({ arrived: false, ms: 2000, stopped: 'interrupted' }); } }, 50);
+    });
+    assert.equal(respawnEscapeTick(agent, { run, log: (l) => logs.push(l) }), 'escaping');
+    await new Promise(r => setTimeout(r, 50));
+    assert.equal(agent.actions.currentActionLabel, 'action:respawnEscape');
+    // A zombie at 2 blocks and a hit (20 to 14): cowardice and self_defense are paused; nothing cuts the run.
+    bot.entities[5] = { id: 5, type: 'mob', name: 'zombie', position: bot.entity.position.offset(2, 0, 0), height: 1.95 };
+    bot.health = 14;
+    await bot.modes.update();
+    await new Promise(r => setTimeout(r, 100));
+    assert.equal(agent.actions.currentActionLabel, 'action:respawnEscape', 'still escaping after the hit');
+    // Under water, out of air, a walk going: the real self_preservation swims up (it interrupts the escape).
+    let wet = true;
+    bot.blockAt = () => ({ name: wet ? 'water' : 'air' });
+    bot.oxygenLevel = 4;
+    bot.pathfinder.goal = {};
+    setTimeout(() => { wet = false; }, 300);
+    await bot.modes.update();
+    for (let i = 0; i < 60 && agent._escape.job; i++) await new Promise(r => setTimeout(r, 50));
+    assert.equal(agent._escape.job, null, logs.join('\n'));
+    assert.equal(agent._escape.tries, 0, `a self_preservation interrupt is no try: ${logs.join(' | ')}`);
+    assert.match(logs.at(-1), /was interrupted by self_preservation/);
+    void release;
 });

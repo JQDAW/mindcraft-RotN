@@ -1569,7 +1569,9 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             startBuilding(n, now);
             return 'night:building';
         }
-        if (need.todo.length === 0 && open) { bot.rotnSheltered = true; n.repairStall = null; } // closed again: the shelter's rules are back
+        // closed again: the shelter's rules are back. #580 re-review nit 1: and the next breach is a new one
+        // (the repair first again when the opening is free and a block is held).
+        if (need.todo.length === 0 && open) { bot.rotnSheltered = true; n.repairStall = null; n.repairFirstFor = null; n.nightBurrowTried = null; n.nightBurrowWhy = null; }
         // Soak 3, the lead's (a): a hole shelter, closed: once, into a side pocket at its bottom, with
         // the shaft under the roof sealed behind (shelter.wallItems: blocks the diggers cannot break
         // first, cobblestone first). A zombie that digs the roof then finds a sealed column, not the bot.
@@ -1652,13 +1654,13 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     });
                     return 'night:inside';
                 } else {
-                // Cornered: a melee mob is hit back; any other threat never is.
-                n.handFight = !other;
-                const text = other
-                    ? `[night] ${why}, and no way to back away${burrowsFrom(other.mob) ? ' or burrow' : ''}: not hitting it`
-                    : `[night] ${armed ? '' : 'no weapon, '}health ${Math.round(bot.health)}, and no way to back away${n.nightBurrowTried === mobKey ? ` or burrow${n.nightBurrowWhy ? ` (${n.nightBurrowWhy})` : ''}` : ''} from ${aMob(name)} ${where}: ${armed ? 'hitting back' : 'hitting back by hand'}`;
-                const said = reaching.cell ? key3(reaching.cell) : `reach:${reaching.mob.id ?? ''}`;
-                if (n.handSaid === said) console.log(text); else { n.handSaid = said; line(agent, text); }
+                    // Cornered: a melee mob is hit back; any other threat never is.
+                    n.handFight = !other;
+                    const text = other
+                        ? `[night] ${why}, and no way to back away${burrowsFrom(other.mob) ? ' or burrow' : ''}: not hitting it`
+                        : `[night] ${armed ? '' : 'no weapon, '}health ${Math.round(bot.health)}, and no way to back away${n.nightBurrowTried === mobKey ? ` or burrow${n.nightBurrowWhy ? ` (${n.nightBurrowWhy})` : ''}` : ''} from ${aMob(name)} ${where}: ${armed ? 'hitting back' : 'hitting back by hand'}`;
+                    const said = reaching.cell ? key3(reaching.cell) : `reach:${reaching.mob.id ?? ''}`;
+                    if (n.handSaid === said) console.log(text); else { n.handSaid = said; line(agent, text); }
                 }
             }
             // A cell the bot will not clear by hitting (no weapon, or a mob it never hits) is left
@@ -1681,7 +1683,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody, ...(skip.length ? { skip } : {}) }), (r) => {
                 // Soak 5 (00:31:47): a repair that closed the shelter said nothing; the journal could not
                 // show the roof was closed before the troll came.
-                if (r?.closed) { bot.rotnSheltered = true; n.repairStall = null; n.handFight = false; console.log(`[night] the repair closed the shelter at ${at(n.site)}`); return; } // #470 nit: no hand fight once closed
+                if (r?.closed) { bot.rotnSheltered = true; Object.assign(n, { repairStall: null, handFight: false, repairFirstFor: null, nightBurrowTried: null, nightBurrowWhy: null }); console.log(`[night] the repair closed the shelter at ${at(n.site)}`); return; } // #470 nit: no hand fight once closed; #580 re-review nit 1: a new breach is a new one
                 // CX23 soak: why cells stay open, in the journal (r.line names each cell and its reason).
                 if ((r?.placed ?? 0) > 0) { console.log(`[night] the repair placed ${r.placed} but left some open (${r.line})`); n.repairStall = null; return; } // progress: the next tick tries again
                 // Nothing placed: back to every CHECK_MS until a fight in place ends (#331 re-review).

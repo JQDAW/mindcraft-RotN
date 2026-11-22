@@ -3367,3 +3367,30 @@ test('#580 review 3: a zombie in reach, the opening free, a block held: the repa
     assert.equal(none.burrows.length, 1);
     assert.ok(!none.agent.chat.some(l => /repairing first/.test(l)));
 });
+
+// #580 re-review nit 1 (the lead): repair first on every breach while the opening is free and a block is
+// held: a second breach by the same zombie after the repair closed the shelter is repaired first again.
+test('#580 re-review nit 1: the same zombie breaches again after the repair closed the shelter: the repair first again, no burrow', async (t) => {
+    quiet(t);
+    const zombie = { id: 7, name: 'zombie', position: new Vec3(1.5, 64, 0.5) };
+    const s = heldSetup({ plan: false, held: 'none' });
+    s.o.mobInReach = () => zombie;
+    s.o.repairBlocks = () => 4;
+    const burrows = [];
+    s.o.burrowAway = () => { burrows.push(1); return Promise.resolve({ steps: 0, site: null, stopped: 'cornered' }); };
+    s.o.buildShelter = (bot, opts = {}) => {
+        s.o.builds.push(opts.site ?? null);
+        if (opts.site) { s.o.repairs.push({ site: opts.site, skip: [] }); s.o.open = []; }
+        return Promise.resolve({ closed: true, feet: opts.site ?? SITE, placed: 1, line: 'Shelter closed' });
+    };
+    await breachAt(s);
+    assert.equal(s.o.repairs.length, 1);
+    // Closed: a check sees it closed again. Then the zombie digs the same wall again.
+    nightTick(s.agent, { now: 3 * CHECK_MS, ops: s.o });
+    await settle(s.agent);
+    s.o.open = s.opening;
+    nightTick(s.agent, { now: 5 * CHECK_MS, ops: s.o });
+    await settle(s.agent);
+    assert.equal(s.o.repairs.length, 2, s.agent.chat.join('\n'));
+    assert.deepEqual(burrows, [], 'repaired first again, no burrow');
+});
