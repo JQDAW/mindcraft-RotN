@@ -447,3 +447,60 @@ test('#581 re-review 2: a real self_preservation swim-up over a running escape i
     assert.match(logs.at(-1), /was interrupted by self_preservation/);
     void release;
 });
+
+// #581 follow-up 1: autonomyTick returns held:<kind> before respawnEscapeTick, so a giver's !stop or
+// !pause during the escape window left agent._escape.due true, and every typed command under the hold
+// was refused for hours. The flag holds commands only while fresh (dueUntil).
+test('#581 follow-up 1: a due flag no tick refreshed (a control hold) stops holding commands after ESCAPE_RUN.dueFreshMs; under a hold, typed commands run', async () => {
+    const { getCommand } = await import('./commands/index.js');
+    const { autonomyTick } = await import('./priority.js');
+    assert.equal(ESCAPE_RUN.dueFreshMs, 2000);
+    const now = Date.now();
+    const a = agentAt(SPAWN.offset(2, 0, 3), { now });
+    a.bot.modes.isActive = (m) => m === 'self_preservation';
+    assert.equal(respawnEscapeTick(a, { now, log: () => {} }), 'escaping:wait');
+    assert.ok(a._escape.due && a._escape.dueUntil > Date.now(), 'fresh: due');
+    a.actions.runAction = () => Promise.resolve({ message: 'ran', interrupted: false });
+    assert.match(await getCommand('!moveAway').perform(a, 10), /^Not now: the respawn escape is running/);
+    // A giver's !stop: the priority stack holds, no escape tick refreshes the flag.
+    a.control = { blocking: () => 'stop', typed: 0 };
+    a.agenda = { get active() { return true; } };
+    a.tasks = { current: () => null, get: () => null };
+    assert.equal(autonomyTick(a, { now }), 'held:stop');
+    a._escape.dueUntil = Date.now() - 1; // ESCAPE_RUN.dueFreshMs later
+    assert.equal(a._escape.due, true, 'the flag itself is still set');
+    assert.equal(await getCommand('!moveAway').perform(a, 10), 'ran', 'a typed command under the hold runs');
+});
+
+// #581 follow-up 2 (re-review nit 3): a stale record of an earlier escape's stopper is cleared at the
+// job's start, so a later run a !stop ends is a try again.
+test('#581 follow-up 2: a stale self_preservation record from an earlier escape does not make the next interrupted run free', async () => {
+    const now = 1_000_000;
+    const a = agentAt(SPAWN.offset(2, 0, 3), { now });
+    a.rotnLastInterrupt = { by: 'self_preservation', of: 'action:respawnEscape', at: now - 60_000 };
+    const logs = [];
+    respawnEscapeTick(a, { now, run: () => Promise.resolve({ arrived: false, far: 10, ms: 1000, stopped: 'interrupted' }), log: (l) => logs.push(l) });
+    assert.equal(a.rotnLastInterrupt, null, 'cleared at the start');
+    await flush(); await flush();
+    assert.equal(a._escape.tries, 1, 'counted');
+    assert.match(logs.at(-1), /was interrupted at \d+ blocks/);
+    assert.doesNotMatch(logs.at(-1), /by self_preservation/);
+});
+
+// #581 follow-up 3 (re-review nit 5): between tries (the run cut short, the next not started yet),
+// commands are still held.
+test('#581 follow-up 3: in the gap between tries, before the next tick, a command is refused', async () => {
+    const { getCommand } = await import('./commands/index.js');
+    const now = Date.now();
+    const a = agentAt(SPAWN.offset(2, 0, 3), { now });
+    let ran = 0;
+    // A run longer than ESCAPE_RUN.dueFreshMs: the flag the starting tick set has expired when it ends.
+    const run = () => new Promise(res => setTimeout(() => { a._escape.dueUntil = Date.now() - 1; res({ arrived: false, far: 10, ms: 2500, stopped: 'interrupted' }); }, 20));
+    respawnEscapeTick(a, { now, run, log: () => {} });
+    for (let i = 0; i < 40 && a._escape.job; i++) await new Promise(r => setTimeout(r, 10));
+    assert.equal(a._escape.job, null, 'the run ended');
+    assert.equal(a._escape.tries, 1);
+    a.actions.runAction = () => { ran++; return Promise.resolve({ message: 'ran', interrupted: false }); };
+    assert.match(await getCommand('!moveAway').perform(a, 10), /^Not now: the respawn escape is running/);
+    assert.equal(ran, 0);
+});
