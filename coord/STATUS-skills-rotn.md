@@ -1,6 +1,50 @@
 # Status: skills-rotn
 
-Updated: 2026-11-20T06:42Z (from `date -u`)
+Updated: 2026-11-22T01:34Z (from `date -u`)
+
+## 2026-11-22: soak 6 to 8 fixes, Better Combat prerequisites, soak 8's flooded pit (summary, 2026-11-22T01:34Z by `date -u`)
+
+Soak 8 (rotn-v0.1.14, `bc_attack` on, #558) failed 7 of 9. The bot was stuck in a flooded pit under a stone overhang from 00:00: two nights with no shelter, and no food by night 3. There were no deaths and no hurts.
+
+### Merged since the 2026-11-20 06:42 summary
+| PR | What |
+| --- | --- |
+| #504 | The #502 nits (falling source above the bot only; bodies only; `rotnUnreachable` pruned; `weaponWindow` saved) |
+| #507 | Soak 5 PR 5 (Fix B): burrow away from a troll, standing on the far side of the cell, the per-mob low-health rule, the overhang start cell |
+| #508 | Soak 6: the eel loop (water mobs; give up after 3 interrupted fights); eating between fights |
+| #509 | Timing tests tolerate timer jitter |
+| #512 | The threats test's unlisted-mob example after rotn-data #511 |
+| #514, #517, #520 | Soak 7 death 1: no morning fight unless winnable; the shelter fight is not capped while the bot is being hit; the past-cap rules; the weapon line in every fight path |
+| #522 | Tests read the zombie's `maxDamage` from rotn-data (#518) |
+| #523 | Soak 7 (d): food first after a respawn at food 12 or lower with nothing to eat (4 min) |
+| #530 | Soak 7 (e): weapons ranked by rotn-data `weaponStats` on the attack path; the weapon line only when the held item changes; the food window from the death times |
+| #532 | (f): the Better Combat path ranks by the `bc*` numbers; `bot.attack` awaited in the shelter fight and the cell hit-out, counting only swings that went out |
+| #538 | rotn-data #534: the weapon tests take their numbers from `weaponStats` |
+| #539 | The shelter fight and the cell hit-out cancel a hit still waiting for Better Combat's cooldown (`bot.forge.cancelAttack`) on an interrupt or at `maxMs` |
+| #544 | (g), before `bc_attack` goes on: `attackEntity` walks to within 2 blocks and again on reach or sight; the `defendSelf` stall guard; reach and sight in the shelter mean wait (3 s), not a swing that wasn't sent; Better Combat pacing only while `bc_attack` is on; `hurtingInReach` live |
+| #552, #554 | The naming report keys an unknown entity by its type whatever its entity type (net-forge's unknown living FML entity becomes `mob`); "unknown N" counts every entity keyed that way; the crude axe text (9th block, 5th hit) |
+
+### Open
+- **#557** (`ed01fadd`, in re-review): soak 8 night 2. The "no place" lines count what refused each site and say where the bot is. On no place for a shelter or a hole, a walk to better ground: the last shelter within 48, else the best place within 24 (12 at night with no weapon). The walk is fall-safe with no digging or towering, at most 45 s, stops for a mob ahead, at most 2 a night. Otherwise out of the water, exposed, and no retry from that spot. The hole log fix.
+
+### Next (approved by the lead)
+- **PR 1, after #557 merges:**
+  - an escape from a pit or water: the digging pathfinder with towers (5 s to plan, 60 s to walk), else a staircase dug by hand toward dry ground or the sky (24 steps), and a one-step pillar;
+  - unstuck runs the escape when it fires again in the same cell within 10 min (says so once and holds 5 min if it fails);
+  - `goToGoal` gets a second 5 s plan;
+  - the night routine tries the escape when #557's walk or step out of the water fails with no path.
+- **PR 2:** `!placeHere` in the bot's own cell pillars up; ore with a liquid beside it, or with no dry footing within reach, is skipped; a target is given up after the drowning reflex fires twice.
+
+### To check in the next soak (all tested offline only; each item only in a tag that has it)
+- **Night (#557):**
+  - `Refused: <counts>; at x, y, z, <feet|head> in water` on "no place";
+  - `walking to x, y, z: … (walk N of 2)`, then `the walk to better ground got there`;
+  - `the hole shelter failed (…)`;
+  - `no shelter: … ; out of the water at …; no retry from this spot`.
+- **Fights with `bc_attack` on (#544):**
+  - no `stopped: the attack was not sent (sight)` after 3 tries;
+  - `in reach but out of sight … for 3 s`;
+  - `Stopped fighting the X: no hit landed and no closer for 10 s`.
 
 ## 2026-11-20: soak 5 fixes (summary, 2026-11-20T06:42Z by `date -u`)
 
