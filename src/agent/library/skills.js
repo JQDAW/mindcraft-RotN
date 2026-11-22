@@ -9,7 +9,7 @@ import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } fro
 import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTrunkShell, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
 import { oreMemberNames } from "../agenda_driver.js";
 import { fallSafe, treeSafe, standsOnTree, supportBlock, isFirmGround, isUnsafeBlock, isLeafBlock, isTreePart, leafFromGround, itemOnGround, firstBelow, MAX_SAFE_DROP } from "./fall_safety.js";
-import { wetOreRefusal } from "./wet_ore.js";
+import { wetOreSkip } from "./wet_ore.js";
 import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
@@ -1114,7 +1114,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     let forageSaid = false;
     // Soak 8 (#558; the lead's escape plan PR 2): ores by water and targets the drowning reflex
     // fired twice for (wet_ore.js), by reason; said once (one line), at most WET_SKIP_MAX looked at.
-    const wetSkips = new Map();
+    // #564 review nit: the liquids that caused them are named (water, lava, or both).
+    const wetSkips = new Map(), wetLiquids = new Set();
     let wetSaid = false, wetLooked = 0;
     const WET_SKIP_MAX = 32;
     const sayDeathSkips = () => {
@@ -1126,7 +1127,10 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         if (wetSkips.size && !wetSaid) {
             wetSaid = true;
             const n = [...wetSkips.values()].reduce((a, b) => a + b, 0);
-            log(bot, `Skipped ${n} ${blockType} that would put you in the water: ${[...wetSkips].map(([why, k]) => `${why} (${k})`).join(', ')}. Look for some on dry ground.`);
+            const lava = wetLiquids.has('lava'), wetter = wetLiquids.has('water') || wetLiquids.has('liquid');
+            const into = ['water', 'lava', 'liquid'].filter(k => wetLiquids.has(k)).map(k => (k === 'liquid' ? 'a liquid' : `the ${k}`)).join(' or ') || 'the water';
+            const where = lava ? (wetter ? 'on dry ground away from the lava' : 'away from the lava') : 'on dry ground';
+            log(bot, `Skipped ${n} ${blockType} that would put you in ${into}: ${[...wetSkips].map(([why, k]) => `${why} (${k})`).join(', ')}. Look for some ${where}.`);
         }
         if (deathSkips === 0 || deathSkipsSaid) return;
         deathSkipsSaid = true;
@@ -1242,10 +1246,11 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         const block = blocks[0];
         // Soak 8: an ore with a liquid beside it or no dry footing within reach, or a target the
         // drowning reflex fired twice for, is given up for this collect; the next one is looked at.
-        const wet = wetOreRefusal(bot, block);
+        const wet = wetOreSkip(bot, block);
         if (wet) {
             givenUp.push(block.position.clone ? block.position.clone() : block.position);
-            wetSkips.set(wet, (wetSkips.get(wet) ?? 0) + 1);
+            wetSkips.set(wet.why, (wetSkips.get(wet.why) ?? 0) + 1);
+            for (const k of wet.liquids) wetLiquids.add(k);
             if (++wetLooked >= WET_SKIP_MAX) break;
             i--; // not an attempt
             await new Promise(resolve => setImmediate(resolve)); // #564 review 3: never one long block over many ores
