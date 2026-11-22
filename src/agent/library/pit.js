@@ -20,7 +20,7 @@
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { isWall, handDiggable, dumpState } from './night.js';
-import { isLiquid, isEmpty, isFalling } from './shelter.js';
+import { isLiquid, isEmpty, isFalling, tallyText, standsIn } from './shelter.js';
 import { log, breakBlockAt, goToGoal } from './skills.js';
 import { worldSources } from './rotn_sources.js';
 import { blockMatcher } from './rotn_names.js';
@@ -90,41 +90,51 @@ function stairsPlan(bot, P, d) {
  */
 export function pitProblem(bot, P) {
     const b = (q) => bot.blockAt(q);
-    if (!isEmpty(b(P)) || !isEmpty(b(P.offset(0, 1, 0)))) return { why: 'the space is not free' };
+    // Soak 8: kind: the refusal in a few words, counted by choosePit for the line.
+    if (!isEmpty(b(P)) || !isEmpty(b(P.offset(0, 1, 0))))
+        return { why: 'the space is not free', kind: [P, P.offset(0, 1, 0)].some(q => isLiquid(b(q))) ? 'water in the space' : 'space not free' };
     const column = [1, 2, 3].map(k => P.offset(0, -k, 0));
     const bad = column.find(q => !diggable(b(q)));
-    if (bad) return { why: `${b(bad)?.name ?? 'nothing'} at ${at(bad)} cannot be dug by hand` };
-    if (!column.some(q => givesPiles(b(q)))) return { why: `nothing at ${at(column[0])} to ${at(column[2])} gives dirt piles for the roof` };
+    if (bad) return { why: `${b(bad)?.name ?? 'nothing'} at ${at(bad)} cannot be dug by hand`, kind: isFalling(b(bad)) ? 'falling ground' : 'not quick to dig by hand' };
+    if (!column.some(q => givesPiles(b(q)))) return { why: `nothing at ${at(column[0])} to ${at(column[2])} gives dirt piles for the roof`, kind: 'no dirt piles' };
     const floor = P.offset(0, -4, 0);
     // #337 review 4: not a floor that falls (gravel over a cave).
-    if (!solid(b(floor)) || isFalling(b(floor))) return { why: `no firm floor at ${at(floor)}` };
+    if (!solid(b(floor)) || isFalling(b(floor))) return { why: `no firm floor at ${at(floor)}`, kind: 'no firm floor' };
     for (const d of HORIZONTAL) {
         for (const dy of [-1, -2, -3]) {
             const q = P.plus(d).offset(0, dy, 0);
             // What the shelter's check counts as a wall (rock or dirt), or every check finds it open.
-            if (dy !== -1 && !isWall(b(q))) return { why: `${b(q)?.name ?? 'nothing'} at ${at(q)} is no wall` };
-            if (dy === -1 && !solid(b(q))) return { why: `nothing to hold the roof at ${at(q)}` };
+            if (dy !== -1 && !isWall(b(q))) return { why: `${b(q)?.name ?? 'nothing'} at ${at(q)} is no wall`, kind: 'no wall' };
+            if (dy === -1 && !solid(b(q))) return { why: `nothing to hold the roof at ${at(q)}`, kind: 'no wall' };
         }
     }
     const near = [];
     for (const d of HORIZONTAL) for (const dy of [-1, -2, -3, -4]) near.push(P.plus(d).offset(0, dy, 0), P.plus(d).plus(d).offset(0, dy, 0));
     const wet = near.find(q => isLiquid(b(q)) || isFalling(b(q)));
-    if (wet) return { why: `${b(wet).name} at ${at(wet)} would flow or fall in` };
+    if (wet) return { why: `${b(wet).name} at ${at(wet)} would flow or fall in`, kind: isLiquid(b(wet)) ? 'would flow in' : 'would fall in' };
     // #337 review 1: without a pickaxe the shelter's roofing needs a side whose two cells (beside the
     // bot's feet and head) are dug by hand, or it refuses the roof and the hole stays open.
     if (!HORIZONTAL.some(d => [-3, -2].every(dy => handDiggable(b(P.plus(d).offset(0, dy, 0))))))
-        return { why: 'no side beside the bottom of the hole could be dug out by hand' };
-    if (!HORIZONTAL.some(d => stairsPlan(bot, P, d))) return { why: 'no side to dig stairs out of by hand' };
+        return { why: 'no side beside the bottom of the hole could be dug out by hand', kind: 'no side to dig out by hand' };
+    if (!HORIZONTAL.some(d => stairsPlan(bot, P, d))) return { why: 'no side to dig stairs out of by hand', kind: 'no stairs out' };
     return null;
 }
 
-/** The nearest surface cell within PIT.radius (and 1 up or down) where a hole can be dug, or null. */
-export function choosePit(bot, radius = PIT.radius, bad = new Set()) {
+/**
+ * The nearest surface cell within PIT.radius (and 1 up or down) where a hole can be dug, or null.
+ * tally (soak 8): a Map counting what refused each cell (pitProblem's kind).
+ */
+export function choosePit(bot, radius = PIT.radius, bad = new Set(), tally = null) {
     const base = bot.entity.position.floored();
     let best = null;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) {
         const P = base.offset(dx, dy, dz);
-        if (bad.has(at(P)) || pitProblem(bot, P)) continue;
+        if (bad.has(at(P))) continue;
+        const problem = pitProblem(bot, P);
+        if (problem) {
+            if (tally) tally.set(problem.kind ?? 'other', (tally.get(problem.kind ?? 'other') ?? 0) + 1);
+            continue;
+        }
         const d = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
         if (!best || d < best.d) best = { P, d };
     }
@@ -161,10 +171,15 @@ export async function digPit(bot, { radius = PIT.radius, progress = {} } = {}) {
     const resume = !!progress.P && here.x === progress.P.x && here.z === progress.P.z
         && here.y <= progress.P.y && here.y >= progress.P.y - PIT.depth;
     progress.bad ??= new Set(); // spots whose block took too long to dig (left alone this night)
-    const P = resume ? progress.P : choosePit(bot, radius, progress.bad);
+    const tally = new Map();
+    const P = resume ? progress.P : choosePit(bot, radius, progress.bad, tally);
     progress.P = P;
     if (!P) {
-        log(bot, `No place for a hole shelter within ${radius} blocks (needs ground you can dig by hand 3 deep, no water or sand around, and a side to dig stairs out of).`);
+        // Soak 8 (night 2): what refused the cells, and where the bot is; noPlace: the night routine looks for better ground.
+        const refused = tally.size ? `${tallyText(tally)}; ${standsIn(bot)}` : standsIn(bot);
+        progress.noPlace = true;
+        progress.why = `found no place to dig a hole shelter within ${radius} blocks (refused: ${refused})`;
+        log(bot, `No place for a hole shelter within ${radius} blocks (needs ground you can dig by hand 3 deep, no water or sand around, and a side to dig stairs out of). Refused: ${refused}.`);
         return null;
     }
     if (!resume && !bot.entity.position.floored().equals(P)) {

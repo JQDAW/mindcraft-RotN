@@ -2898,14 +2898,16 @@ export async function giveToPlayer(bot, itemType, username, num=1) {
     return false;
 }
 
-export async function goToGoal(bot, goal, { canDig = true, offTrees = false } = {}) {
+export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noBuild = false } = {}) {
     /**
      * Navigate to the given goal. Use doors and attempt minimally destructive movements.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {pf.goals.Goal} goal, the goal to navigate to.
-     * @param {{canDig?: boolean, offTrees?: boolean}} options, canDig false: never dig (no
+     * @param {{canDig?: boolean, offTrees?: boolean, noBuild?: boolean}} options, canDig false: never dig (no
      *   destructive fallback). offTrees (soak 5, the unstuck walk): never a step onto a place above
-     *   a tree part (leaves, a branch, a trunk shell) and never a tree part broken.
+     *   a tree part (leaves, a branch, a trunk shell) and never a tree part broken. noBuild (#557
+     *   review 2, the night's walks to better ground): no 1x1 tower and no scaffolding, so the walk
+     *   never spends the blocks the shelter needs (as treeSafe).
      **/
 
     // Every walk is fall-safe (G3 round 4 B, fall_safety.js): no drop over 3 blocks, and never a
@@ -2924,6 +2926,7 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false } = 
 
     const destructiveMovements = canDig ? plantSafe(fallSafe(new pf.Movements(bot))) : nonDestructiveMovements;
     if (offTrees) for (const m of new Set([nonDestructiveMovements, destructiveMovements])) offTreeParts(bot, m);
+    if (noBuild) for (const m of new Set([nonDestructiveMovements, destructiveMovements])) { m.allow1by1towers = false; m.scafoldingBlocks = []; }
 
     let final_movements = destructiveMovements;
 
