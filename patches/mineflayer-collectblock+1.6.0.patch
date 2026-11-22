@@ -1,5 +1,5 @@
 diff --git a/node_modules/mineflayer-collectblock/lib/CollectBlock.js b/node_modules/mineflayer-collectblock/lib/CollectBlock.js
-index 445df38..0ebf0c9 100644
+index 445df38..617fc78 100644
 --- a/node_modules/mineflayer-collectblock/lib/CollectBlock.js
 +++ b/node_modules/mineflayer-collectblock/lib/CollectBlock.js
 @@ -18,9 +18,70 @@ const BlockVeins_1 = require("./BlockVeins");
@@ -73,7 +73,16 @@ index 445df38..0ebf0c9 100644
              yield (0, Inventory_1.emptyInventoryIfFull)(bot, options.chestLocations, options.itemFilter);
              const closest = options.targets.getClosest();
              if (closest == null)
-@@ -37,17 +98,23 @@ function collectAll(bot, options) {
+@@ -29,6 +90,8 @@ function collectAll(bot, options) {
+                 case 'Block': {
+                     const goal = new mineflayer_pathfinder_1.goals.GoalLookAtBlock(closest.position, bot.world);
+                     yield bot.pathfinder.goto(goal);
++                    if (options.run != null && options.run.requested)
++                        throw cancelledError();
+                     yield mineBlock(bot, closest, options);
+                     // TODO: options.ignoreNoPath
+                     break;
+@@ -37,17 +100,25 @@ function collectAll(bot, options) {
                      // Don't collect any entities that are marked as 'invalid'
                      if (!closest.isValid)
                          break;
@@ -98,17 +107,19 @@ index 445df38..0ebf0c9 100644
 +                    finally {
 +                        waitForPickup.cleanup();
 +                    }
++                    // A run cancelTask gave up on (its timeout) reports nothing: the next collect owns lastPickup.
++                    if (options.run != null && options.run.abandoned)
++                        throw cancelledError();
 +                    const ended = { entity: closest, reason, ms: waitForPickup.ms() };
 +                    if (bot.collectBlock != null)
 +                        bot.collectBlock.lastPickup = { entityId: closest.id, reason, ms: ended.ms };
-+                    // @ts-expect-error
 +                    bot.emit('collectBlock_pickupEnded', ended);
 +                    if (reason === 'cancelled')
 +                        throw cancelledError();
                      break;
                  }
                  default: {
-@@ -151,6 +218,14 @@ class CollectBlock {
+@@ -151,6 +222,14 @@ class CollectBlock {
          this.bot = bot;
          this.targets = new Targets_1.Targets(bot);
          this.movements = new mineflayer_pathfinder_1.Movements(bot);
@@ -123,7 +134,7 @@ index 445df38..0ebf0c9 100644
      }
      /**
         * If target is a block:
-@@ -181,7 +256,9 @@ class CollectBlock {
+@@ -181,7 +260,9 @@ class CollectBlock {
                  ignoreNoPath: (_b = options.ignoreNoPath) !== null && _b !== void 0 ? _b : false,
                  chestLocations: (_c = options.chestLocations) !== null && _c !== void 0 ? _c : this.chestLocations,
                  itemFilter: (_d = options.itemFilter) !== null && _d !== void 0 ? _d : this.itemFilter,
@@ -134,7 +145,7 @@ index 445df38..0ebf0c9 100644
              };
              if (this.bot.pathfinder == null) {
                  throw (0, Util_1.error)('UnresolvedDependency', 'The mineflayer-collectblock plugin relies on the mineflayer-pathfinder plugin to run!');
-@@ -196,6 +273,10 @@ class CollectBlock {
+@@ -196,6 +277,14 @@ class CollectBlock {
              }
              if (!optionsFull.append)
                  yield this.cancelTask();
@@ -142,12 +153,20 @@ index 445df38..0ebf0c9 100644
 +            if (!optionsFull.append || this.run == null || this.run.requested)
 +                this.run = { requested: false, wake: new Set() };
 +            optionsFull.run = this.run;
++            // A run given up by cancelTask's timeout (abandoned) can resume later, when its stuck walk ends:
++            // only the current, not abandoned run clears the targets and emits collectBlock_finished, so it
++            // never clears the next collect's targets nor ends a cancel meant for it (mindcraft-RotN patch).
++            const run = this.run;
              if (Array.isArray(target)) {
                  this.targets.appendTargets(target);
              }
-@@ -208,8 +289,9 @@ class CollectBlock {
+@@ -206,15 +295,19 @@ class CollectBlock {
+                 yield collectAll(this.bot, optionsFull);
+             }
              catch (err) {
-                 this.targets.clear();
+-                this.targets.clear();
++                if (this.run === run && !run.abandoned)
++                    this.targets.clear();
                  // Ignore path stopped error for cancelTask to work properly (imo we shouldn't throw any pathing errors)
 +                // A cancelled run (CollectCancelled, mindcraft-RotN patch) ends quietly too.
                  // @ts-expect-error
@@ -156,7 +175,16 @@ index 445df38..0ebf0c9 100644
                      throw err;
              }
              finally {
-@@ -242,12 +324,42 @@ class CollectBlock {
+-                // @ts-expect-error
+-                this.bot.emit('collectBlock_finished');
++                if (this.run === run && !run.abandoned) {
++                    // @ts-expect-error
++                    this.bot.emit('collectBlock_finished');
++                }
+             }
+         });
+     }
+@@ -242,12 +335,42 @@ class CollectBlock {
                      cb();
                  return yield Promise.resolve();
              }
@@ -178,7 +206,6 @@ index 445df38..0ebf0c9 100644
 +                this.cancelling = new Promise(resolve => {
 +                    let timer = null;
 +                    const done = (reason) => {
-+                        // @ts-expect-error
 +                        this.bot.removeListener('collectBlock_finished', onFinished);
 +                        if (timer !== null)
 +                            clearTimeout(timer);
@@ -186,11 +213,12 @@ index 445df38..0ebf0c9 100644
 +                        resolve(reason);
 +                    };
 +                    const onFinished = () => done('finished');
-+                    // @ts-expect-error
 +                    this.bot.on('collectBlock_finished', onFinished);
++                    const cancelled = this.run;
 +                    timer = setTimeout(() => {
++                        if (cancelled != null)
++                            cancelled.abandoned = true;
 +                        this.targets.clear();
-+                        // @ts-expect-error
 +                        this.bot.emit('collectBlock_cancelTimeout', { ms: this.cancelTimeout });
 +                        done('timeout');
 +                    }, this.cancelTimeout);
