@@ -3031,7 +3031,7 @@ test('soak 8 (c): no better ground: out of the water, exposed, and no retry from
     assert.ok(!o.calls.slice(4).includes('build') && !o.calls.slice(4).includes('pit'), `no build from the same spot: ${o.calls}`);
     assert.equal(o.calls.filter(c => c === 'plan').length, 1 + EXPOSED_RETRIES, 'better ground looked for again on each quiet retry, bounded');
     assert.equal(nightState(agent).state, 'exposed');
-    assert.ok(logs.includes('[night] no better ground within 24 blocks; not trying again from 7, 64, 0'), logs.join('\n'));
+    assert.ok(logs.includes('[night] no better ground: no place here, and none within 24 blocks; not trying again from 7, 64, 0'), logs.join('\n'));
 });
 
 test('soak 8 (b, c): at most 2 walks a night; then exposed on dry ground, and the quiet retries neither build nor walk there', async (t) => {
@@ -3060,6 +3060,51 @@ test('soak 8 (b): a walk a hostile mob stopped is said; the tries go on from whe
     assert.ok(logs.includes('[night] the walk to better ground stopped: a zombie came within 8 blocks; sheltering from 0, 59, 0'), logs.join('\n'));
     assert.deepEqual(o.calls.slice(0, 6), ['build', 'pit', 'plan', 'walk', 'build', 'pit'], 'the build and the hole again, from where the walk ended');
     assert.equal(walks, 2);
+    // #557 review 5: a place a mob cut the walk short of is not left out of the next search.
+    assert.deepEqual(o.plans[1].skip, []);
+});
+
+test('#557 review 5: only a place reached is left out of the next search', async (t) => {
+    const { agent, tick } = riverAgent(t);
+    const o = riverOps({ plan: () => ({ feet: new Vec3(0, 59, 10), kind: 'shelter', blocks: 9, d: 10 }), bankCloses: false });
+    for (let i = 0; i < 10 && o.plans.length < 2; i++) await tick(o);
+    assert.equal(o.plans[1].skip.length, 1);
+    assert.ok(o.plans[1].skip[0].equals(new Vec3(0, 59, 10)));
+    assert.equal(nightState(agent).groundMoves, 2);
+});
+
+test('#557 review 1: no place to walk to because a mob is ahead on every way is said so, not "none within 24 blocks"', async (t) => {
+    const { agent, tick } = riverAgent(t);
+    const o = riverOps({ plan: (opts) => { Object.assign(opts.report, { mobSkipped: 3, mob: 'zombie' }); return null; }, bankCloses: false });
+    for (let i = 0; i < 10 && nightState(agent).state !== 'exposed'; i++) await tick(o);
+    assert.equal(agent.chat.at(-1), `[night] no shelter: no place for a shelter or a hole here (${RIVER_REFUSED}), and the places within 24 blocks have a zombie ahead on the way (3 left out); out of the water at 7, 64, 0; no retry from this spot; staying here until morning`);
+});
+
+test('#557 review 4: the walk is given the night check (12 blocks once night falls, with no weapon)', async (t) => {
+    const { agent, tick } = riverAgent(t, { time: DUSK });
+    const seen = [];
+    const o = riverOps({ armed: false, walk: (bot, p, opts) => { seen.push(opts); o.calls.push('walk'); bot.entity.position = p.feet.offset(0.5, 0, 0.5); return Promise.resolve({ arrived: true, stopped: null }); } });
+    for (let i = 0; i < 10 && nightState(agent).state !== 'inside'; i++) await tick(o);
+    assert.equal(o.plans[0].radius, 24, 'at dusk');
+    // shortNow reads the routine's clock at the wall clock's now (as the death walk's); its halt is
+    // tested in shelter_ground.test.js (#557 review 4).
+    assert.equal(typeof seen[0]?.shortNow, 'function');
+});
+
+test('#557 review 7: a build stopped by reflexes (counted) never searched: a hole that then finds no place does not walk; the next build that finds no place does', async (t) => {
+    const { agent, logs, tick } = riverAgent(t);
+    const o = riverOps({ bankCloses: true });
+    let stops = 0;
+    agent.actions.runAction = async (label, fn) => {
+        if (label === 'action:buildShelter' && stops < FREE_INTERRUPTS + 1) { stops++; return { message: '', interrupted: true }; }
+        await fn();
+        return { message: '', interrupted: false };
+    };
+    for (let i = 0; i < 20 && nightState(agent).state !== 'inside'; i++) await tick(o);
+    // The stopped builds call nothing; then the hole (no place), no walk; then a build (no place) walks.
+    assert.deepEqual(o.calls, ['pit', 'build', 'plan', 'walk', 'build'], o.calls.join(' '));
+    assert.ok(logs.some(l => l.startsWith('[night] the hole shelter failed (found no place to dig a hole shelter')), logs.join('\n'));
+    assert.equal(nightState(agent).state, 'inside');
 });
 
 test('soak 8: a build that fails for another reason (too few blocks) never walks: the tries and the hole as before', async (t) => {

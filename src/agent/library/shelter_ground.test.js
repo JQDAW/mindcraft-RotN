@@ -6,9 +6,11 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { groundPlan, walkToGround, stepToDry, dryCell, inWater, fitsAt, surfaceAt, planText, GROUND } from './shelter_ground.js';
+import { groundPlan, walkToGround, stepToDry, dryCell, inWater, fitsAt, surfaceAt, planText, mobOnWay, goodFloor, pureWalk, GROUND } from './shelter_ground.js';
 import { buildShelter, chooseSite, standsIn, tallyText } from './shelter.js';
 import { digPit } from './pit.js';
+import { setImmediate } from 'node:timers';
+import pf from 'mineflayer-pathfinder';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -84,12 +86,12 @@ test('soak 8 (a): a shelter that only lacks blocks is no "no place" (the night r
     assert.doesNotMatch(r.line, /no place/i);
 });
 
-test('soak 8 (b): the dry bank 8 blocks off and 5 up (outside the shelter search) is found, with what it takes', () => {
+test('soak 8 (b): the dry bank 8 blocks off and 5 up (outside the shelter search) is found, with what it takes', async () => {
     const bot = fakeBot();
     assert.equal(surfaceAt(bot, 8, 0, 59).y, 64, 'the bank surface, 5 up');
     assert.equal(surfaceAt(bot, 0, 0, 59), null, 'the channel: water all the way up');
     assert.equal(fitsAt(bot, new Vec3(7, 64, 0)), null, 'the edge: a wall over the water has nothing to go against');
-    const plan = groundPlan(bot);
+    const plan = await groundPlan(bot);
     assert.ok(plan, 'a place');
     assert.equal(plan.kind, 'shelter');
     assert.equal(Math.abs(plan.feet.x), 8);
@@ -99,29 +101,45 @@ test('soak 8 (b): the dry bank 8 blocks off and 5 up (outside the shelter search
     assert.ok(Math.abs(plan.d - 8) < 1);
 });
 
-test('soak 8 (b): a place with a hostile mob near the way is skipped; places walked to (skip) are not chosen again; none within the radius', () => {
-    // A zombie 20 west: the west bank's way passes within 12 of it, the east bank's not within 16.
-    const bot = fakeBot({ entities: { 1: zombie(-20, 64, 0) } });
-    const plan = groundPlan(bot);
-    assert.equal(plan.feet.x, 8, 'the east bank');
-    const again = groundPlan(fakeBot(), { skip: [new Vec3(-8, 64, 0), new Vec3(8, 64, 0)] });
+test('soak 8 (b), #557 review 1: a hostile mob ahead near the way skips a place; one behind the bot does not; places reached (skip) are not chosen again; none within the radius', async () => {
+    // A zombie between the bot and the west bank: the east bank.
+    const report = {};
+    assert.equal((await groundPlan(fakeBot({ entities: { 1: zombie(-5, 64, 3) } }), { report })).feet.x, 8, 'the east bank');
+    assert.equal(report.mobSkipped, 1);
+    // #557 review 1: a zombie 12 behind the bot (east of it, past the east bank's way start) blocked
+    // every plan before; now only the east bank, which it is ahead on the way to, is left out.
+    const behind = await groundPlan(fakeBot({ entities: { 1: zombie(12, 59, 0) } }));
+    assert.equal(behind?.feet.x, -8, 'the west bank: the zombie is behind the bot on that way');
+    assert.equal(mobOnWay(fakeBot({ entities: { 1: zombie(-13, 59, 0) } }), new Vec3(0.5, 59, 0.5), new Vec3(8, 64, 0)), null, '13 behind');
+    assert.equal(mobOnWay(fakeBot({ entities: { 1: zombie(10, 64, 0) } }), new Vec3(0.5, 59, 0.5), new Vec3(8, 64, 0))?.name, 'zombie', 'just past the place, nearer it than the bot: it waits there');
+    assert.equal(mobOnWay(fakeBot({ entities: { 1: zombie(0, 59, 10) } }), new Vec3(0.5, 59, 0.5), new Vec3(8, 64, 0)), null, 'level with the bot, to the side');
+    assert.equal(mobOnWay(fakeBot({ entities: { 1: zombie(30, 64, 0) } }), new Vec3(0.5, 59, 0.5), new Vec3(8, 64, 0)), null, 'far past the place, farther from it than the bot');
+    assert.equal(mobOnWay(fakeBot({ entities: { 1: zombie(4, 64, 6) } }), new Vec3(0.5, 59, 0.5), new Vec3(8, 64, 0))?.name, 'zombie', 'ahead, 6 off the way');
+    // Zombies ahead on every way: none, and the report says why.
+    const all = {};
+    const ring = Object.fromEntries([...Array(16).keys()].map(i => [i + 1, zombie(10 * Math.cos(i * Math.PI / 8), 64, 10 * Math.sin(i * Math.PI / 8))]));
+    assert.equal(await groundPlan(fakeBot({ entities: ring }), { report: all }), null);
+    assert.ok(all.mobSkipped > 0 && all.mob === 'zombie', JSON.stringify(all));
+    const again = await groundPlan(fakeBot(), { skip: [new Vec3(-8, 64, 0), new Vec3(8, 64, 0)] });
     assert.ok(again && !(Math.abs(again.feet.x) === 8 && again.feet.z === 0), `another place: ${again?.feet}`);
     // A river 30 wide: no bank within 24 (nor within 12).
-    assert.equal(groundPlan(fakeBot({ world: river({ half: 30 }) })), null);
+    const none = {};
+    assert.equal(await groundPlan(fakeBot({ world: river({ half: 30 }) }), { report: none }), null);
+    assert.equal(none.mobSkipped, 0);
     // A bank 16 off: within 24, not within the 12 of a night with no weapon.
     const wide = fakeBot({ world: river({ half: 14 }) });
-    assert.equal(groundPlan(wide, { radius: GROUND.unarmedRadius }), null);
-    assert.equal(Math.abs(groundPlan(wide, { radius: GROUND.radius }).feet.x), 16);
+    assert.equal(await groundPlan(wide, { radius: GROUND.unarmedRadius }), null);
+    assert.equal(Math.abs((await groundPlan(wide, { radius: GROUND.radius })).feet.x), 16);
 });
 
-test('soak 8 (b): the last shelter comes first within 48 blocks, if a shelter still fits there; else the best place', () => {
+test('soak 8 (b): the last shelter comes first within 48 blocks, if a shelter still fits there; else the best place', async () => {
     const last = new Vec3(-30, 64, 20);
-    const plan = groundPlan(fakeBot(), { lastShelter: last });
+    const plan = await groundPlan(fakeBot(), { lastShelter: last });
     assert.equal(plan.kind, 'last');
     assert.ok(plan.feet.equals(last));
     assert.equal(planText(plan), 'the last shelter');
-    assert.equal(groundPlan(fakeBot(), { lastShelter: new Vec3(-55, 64, 20) }).kind, 'shelter', 'more than 48 off');
-    assert.equal(groundPlan(fakeBot(), { lastShelter: new Vec3(3, 59, 0) }).kind, 'shelter', 'in the river: no shelter fits');
+    assert.equal((await groundPlan(fakeBot(), { lastShelter: new Vec3(-55, 64, 20) })).kind, 'shelter', 'more than 48 off');
+    assert.equal((await groundPlan(fakeBot(), { lastShelter: new Vec3(3, 59, 0) })).kind, 'shelter', 'in the river: no shelter fits');
 });
 
 test('soak 8 (b): the walk gets there; it stops when a hostile mob comes within 8; it stops at its time cap', async (t) => {
@@ -158,4 +176,95 @@ test('soak 8 (c): out of the water to the nearest dry ground; nothing to do when
     assert.deepEqual([dry.dry, dry.moved, walks.length], [true, false, 1]);
     const deep = await stepToDry(fakeBot({ world: river({ half: 30 }) }), { walk: () => Promise.resolve() });
     assert.deepEqual([deep.dry, deep.moved, deep.why], [false, false, 'no dry ground within 8 blocks']);
+});
+
+test('#557 review 2: the walks only walk: no digging, no 1x1 tower, no scaffolding (the shelter blocks stay held)', async () => {
+    const seen = [];
+    const bot = fakeBot();
+    bot.pathfinder = {
+        setMovements(m) { seen.push(m); }, stop() {}, setGoal() {}, isMoving: () => false,
+        getPathTo(m) { seen.push(m); return { status: 'success', path: [] }; },
+        goto() { return Promise.resolve(); },
+    };
+    await pureWalk(bot, new pf.goals.GoalNear(8, 64, 0, 1));
+    assert.ok(seen.length >= 2);
+    for (const m of seen) assert.deepEqual([m.canDig, m.allow1by1towers, m.scafoldingBlocks], [false, false, []]);
+});
+
+test('#557 review 3: the search yields to the event loop (no long block) and stops once distance alone cannot win', async () => {
+    const bot = fakeBot({ world: river({ half: 30 }) }); // nothing to find: every column looked at
+    let last = Date.now(), maxGap = 0;
+    const beat = setInterval(() => { const t = Date.now(); maxGap = Math.max(maxGap, t - last); last = t; }, 1);
+    const report = {};
+    const t0 = Date.now();
+    try { assert.equal(await groundPlan(bot, { report }), null); } finally { clearInterval(beat); }
+    const all = report.columns;
+    assert.ok(all > 1700, `columns ${all}`);
+    assert.ok(maxGap < 100, `the longest block of the event loop: ${maxGap} ms (whole search ${Date.now() - t0} ms)`);
+    // The bank 8 off scores about 9 x 4 + 8 = 44 > 24: every column is still looked at; a place that
+    // needs few blocks (a cell walled in by rock on 4 sides, open above) ends it early.
+    const nook = {};
+    for (const [x, z] of [[9, 0], [11, 0], [10, 1], [10, -1]]) for (const y of [64, 65]) nook[`${x},${y},${z}`] = 'stone';
+    const pick = {};
+    const plan = await groundPlan(fakeBot({ world: river({ set: nook }) }), { report: pick, pickaxe: true });
+    assert.ok(plan.feet.equals(new Vec3(10, 64, 0)) && plan.blocks <= 2, `${plan.feet} ${plan.blocks}`);
+    // Its score (2 blocks x 4 + 10 away = 18) leaves only the columns within 18: about pi x 18^2.
+    assert.ok(pick.columns < Math.PI * 19 * 19 && pick.columns < all * 0.65, `pruned: ${pick.columns} of ${all}`);
+});
+
+test('#557 review 4: a dusk walk of more than 12 blocks stops after 12 once night falls with no weapon', async (t) => {
+    quiet(t);
+    const saved = { ...GROUND };
+    t.after(() => Object.assign(GROUND, saved));
+    Object.assign(GROUND, { checkMs: 10, walkMs: 5000 });
+    const bot = fakeBot({ at: new Vec3(0, 64, 30), world: (q) => (q.y < 64 ? 'dirt' : 'air') });
+    const plan = { feet: new Vec3(20, 64, 30), kind: 'shelter', blocks: 9, d: 20 };
+    let night = false;
+    const step = (b) => new Promise(() => { const iv = setInterval(() => { b.entity.position = b.entity.position.offset(1, 0, 0); if (b.entity.position.x > 6) night = true; if (b.entity.position.x > 25) clearInterval(iv); }, 5); });
+    const r = await walkToGround(bot, plan, { walk: step, shortNow: () => night });
+    assert.equal(r.stopped, 'night');
+    assert.ok(bot.entity.position.x >= 12 && bot.entity.position.x < 16, `stopped at x ${bot.entity.position.x}`);
+    // Armed (shortNow false), or a place within 12: no such stop.
+    const near = await walkToGround(fakeBot({ at: new Vec3(0, 64, 30), world: (q) => (q.y < 64 ? 'dirt' : 'air') }), { ...plan, feet: new Vec3(10, 64, 30), d: 10 },
+        { walk: (b, f) => { b.entity.position = f.offset(0.5, 0, 0.5); return Promise.resolve(); }, shortNow: () => true });
+    assert.equal(near.arrived, true);
+});
+
+test('#557 review 1: the walk stops for a hostile mob ahead within 8 or any within 3, not for one behind', async (t) => {
+    quiet(t);
+    const saved = { ...GROUND };
+    t.after(() => Object.assign(GROUND, saved));
+    Object.assign(GROUND, { checkMs: 10, walkMs: 300 });
+    const plan = { feet: new Vec3(8, 64, 0), kind: 'shelter', blocks: 9, d: 8 };
+    const hang = () => new Promise(() => {});
+    const behind = await walkToGround(fakeBot({ entities: { 1: zombie(-6, 59, 0) } }), plan, { walk: hang });
+    assert.equal(behind.stopped, 'time', 'a zombie 6 behind: the walk goes on');
+    const close = await walkToGround(fakeBot({ entities: { 1: zombie(-2, 59, 0) } }), plan, { walk: hang });
+    assert.deepEqual([close.stopped, close.mob], ['hostile', 'zombie'], 'within 3, behind or not');
+    const ahead = await walkToGround(fakeBot({ entities: { 1: zombie(6, 60, 0) } }), plan, { walk: hang });
+    assert.equal(ahead.stopped, 'hostile');
+});
+
+test('#557 review 6: with no pickaxe a shelter fits only with a side to dig out by hand', () => {
+    // A 1x1 trench in stone, 2 deep: the walls are rock. With a pickaxe: fits (the roof only).
+    const set = {};
+    for (const [x, z] of [[9, 0], [11, 0], [10, 1], [10, -1]]) for (const y of [64, 65]) set[`${x},${y},${z}`] = 'stone';
+    const bot = fakeBot({ world: river({ set }) });
+    const feet = new Vec3(10, 64, 0);
+    assert.equal(fitsAt(bot, feet, { pickaxe: true })?.kind, 'shelter');
+    assert.equal(fitsAt(bot, feet, { pickaxe: false }), null, 'no side of stone could be dug out by hand; no hole in it either');
+    assert.equal(fitsAt(bot, new Vec3(20, 64, 0), { pickaxe: false })?.kind, 'shelter', 'open ground: its dirt walls can be dug out');
+});
+
+test('#557 review 8: dry ground is a good floor: not magma, not leaves, not sand over water', () => {
+    // The bot in the river at its east edge; the nearest bank cells made bad one by one.
+    const at = new Vec3(5, 63, 0);
+    const good = fakeBot({ at });
+    assert.ok(dryCell(good).equals(new Vec3(7, 64, 0)));
+    const bad = { '7,63,0': 'magma', '7,63,1': 'leaves', '7,63,-1': 'sand', '7,62,-1': 'water' };
+    const bot = fakeBot({ at, world: river({ set: bad }) });
+    for (const p of [new Vec3(7, 64, 0), new Vec3(7, 64, 1), new Vec3(7, 64, -1)]) assert.equal(goodFloor(bot, p), false, `${p}`);
+    const d = dryCell(bot);
+    assert.ok(d && !d.equals(new Vec3(7, 64, 0)) && !d.equals(new Vec3(7, 64, 1)) && !d.equals(new Vec3(7, 64, -1)), `${d}`);
+    assert.equal(goodFloor(bot, new Vec3(9, 64, 5)), true, 'dirt');
 });

@@ -126,11 +126,12 @@ export function nightState(agent) {
 
 /**
  * Soak 8 (night 2): the walks to better ground (shelter_ground.js). groundMoves: walks this night
- * (GROUND.maxMoves); groundSkip: the places walked to (not chosen again); buildNoPlace/buildRefused:
- * the last build found no place, and what refused the sites; noPlaceCell: where the night was found
+ * (GROUND.maxMoves); groundSkip: the places reached (not chosen again: #557 review 5); buildNoPlace/buildRefused:
+ * the last build found no place, and what refused the sites; pitNoPlace: the hole this build phase
+ * found no place (#557 review 7); noPlaceCell: where the night was found
  * to have no place, and no better ground was found or left (no retry from there); sameCellSaid: that was said.
  */
-const GROUND_CLEAR = { groundMoves: 0, buildNoPlace: false, buildRefused: null, noPlaceCell: null, sameCellSaid: false };
+const GROUND_CLEAR = { groundMoves: 0, buildNoPlace: false, buildRefused: null, pitNoPlace: false, noPlaceCell: null, sameCellSaid: false };
 const GROUND_LABEL = 'action:walkToGround';
 const DRY_LABEL = 'action:stepToDry';
 
@@ -909,35 +910,53 @@ function goExposed(agent, n, text) {
 }
 
 /**
- * Soak 8 (night 2), the lead's (b): no place for a shelter or a hole here. Walk to better ground
+ * Soak 8 (night 2), the lead's (b): no place for a shelter or a hole here. Look for better ground
  * (shelter_ground.groundPlan: the last shelter, else the best place within GROUND.radius, 12 at night
- * with no weapon), at most GROUND.maxMoves a night; the shelter tries then start again there.
- * Returns 'walking', 'none' (no such place) or 'spent' (no walks left, or the ops have none).
+ * with no weapon) and walk there, at most GROUND.maxMoves walks a night; the shelter tries then start
+ * again where the walk ended. The search is async (#557 review 3), so it runs in the job with the walk.
+ * onNone(text): no place to walk to (text: why, for the line). Returns 'started', or 'spent' (no
+ * walks left, or the ops have none).
  */
-function moveToGround(agent, n, ops, phase, refused) {
+function moveToGround(agent, n, ops, phase, refused, onNone) {
     const bot = agent.bot;
     if (!ops.groundPlan || !ops.walkToGround || (n.groundMoves ?? 0) >= GROUND.maxMoves) return 'spent';
     const armed = (ops.hasWeapon ?? hasWeapon)(bot);
     const radius = phase === 'night' && !armed ? GROUND.unarmedRadius : GROUND.radius;
     n.groundRadius = radius;
-    const plan = ops.groundPlan(bot, { radius, lastShelter: n.lastShelter ?? null, skip: n.groundSkip ?? [] });
-    if (!plan) return 'none';
-    n.groundMoves = (n.groundMoves ?? 0) + 1;
-    n.groundSkip = [...(n.groundSkip ?? []), plan.feet];
-    line(agent, `[night] no place for a shelter or a hole here${refused ? ` (${refused})` : ''}; walking to ${at(plan.feet)}: ${planText(plan)}, ${Math.round(plan.d)} blocks away (walk ${n.groundMoves} of ${GROUND.maxMoves})`);
-    startJob(agent, n, GROUND_LABEL, () => ops.walkToGround(bot, plan), (r, ret) => {
+    // #557 review 4: a walk planned at dusk (24 blocks) stops at 12 once night falls and there is no weapon.
+    const shortNow = () => { const tn = n.clock.timeOfDay(Date.now()); return tn !== null && nightPhase(tn) === 'night' && !(ops.hasWeapon ?? hasWeapon)(bot); };
+    const report = {};
+    let plan = null;
+    startJob(agent, n, GROUND_LABEL, async () => {
+        plan = await ops.groundPlan(bot, { radius, lastShelter: n.lastShelter ?? null, skip: n.groundSkip ?? [], report });
+        if (!plan) return null;
+        n.groundMoves = (n.groundMoves ?? 0) + 1;
+        line(agent, `[night] no place for a shelter or a hole here${refused ? ` (${refused})` : ''}; walking to ${at(plan.feet)}: ${planText(plan)}, ${Math.round(plan.d)} blocks away (walk ${n.groundMoves} of ${GROUND.maxMoves})`);
+        return ops.walkToGround(bot, plan, { shortNow });
+    }, (r, ret) => {
+        if (!plan) {
+            // #557 review 1: "none" only when there is none; places left out for a mob ahead are said so.
+            onNone(ret?.interrupted ? 'and the search for better ground was interrupted'
+                : report.mobSkipped > 0 ? `and the places within ${radius} blocks have ${aMob(report.mob ?? 'hostile mob')} ahead on the way (${report.mobSkipped} left out)`
+                    : `and none within ${radius} blocks`);
+            return;
+        }
         const here = bot.entity?.position?.floored?.();
+        // #557 review 5: a place is not chosen again only once reached (if no shelter fits there after
+        // all, the next search looks elsewhere); one a mob, the night or the time limit cut short may be.
+        if (r?.arrived) n.groundSkip = [...(n.groundSkip ?? []), plan.feet];
         const how = r?.arrived ? 'got there'
             : ret?.interrupted ? 'was interrupted'
                 : r?.stopped === 'hostile' ? `stopped: ${aMob(r.mob ?? 'hostile mob')} came within ${GROUND.stopRange} blocks`
-                    : r?.stopped === 'time' ? `ran out of time (${GROUND.walkMs / 1000} s)`
-                        : `did not get there${r?.why ? ` (${r.why})` : ''}`;
+                    : r?.stopped === 'night' ? `stopped after ${GROUND.unarmedRadius} blocks: night fell, and no weapon`
+                        : r?.stopped === 'time' ? `ran out of time (${GROUND.walkMs / 1000} s)`
+                            : `did not get there${r?.why ? ` (${r.why})` : ''}`;
         console.log(`[night] the walk to better ground ${how}; sheltering from ${here ? at(here) : 'here'}`);
         // The tries (and a hole) start again from where the walk ended.
         startBuilding(n, 0);
-        Object.assign(n, { pitTried: false, pitNext: false, pitProgress: {}, buildNoPlace: false, buildRefused: null, noPlaceCell: null, sameCellSaid: false });
+        Object.assign(n, { pitTried: false, pitNext: false, pitProgress: {}, buildNoPlace: false, buildRefused: null, pitNoPlace: false, noPlaceCell: null, sameCellSaid: false });
     });
-    return 'walking';
+    return 'started';
 }
 
 /**
@@ -1104,9 +1123,11 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     n.exposedRetries = (n.exposedRetries ?? 0) + 1;
                     line(agent, `[night] quiet for ${EXPOSED_RETRY_MS / 1000} s: looking for better ground again (${n.exposedRetries} of ${EXPOSED_RETRIES})`);
                     restoreCowardice(agent, n);
-                    if (moveToGround(agent, n, ops, phase, null) === 'walking') return 'night:exposed';
-                    keepAwayIfUnarmed(agent, n);
-                    console.log(`[night] no better ground within ${n.groundRadius ?? GROUND.radius} blocks; not trying again from ${here}`);
+                    moveToGround(agent, n, ops, phase, null, (text) => {
+                        keepAwayIfUnarmed(agent, n);
+                        console.log(`[night] no better ground: no place here, ${text}; not trying again from ${here}`);
+                    });
+                    return 'night:exposed';
                 } else if (!n.sameCellSaid) {
                     n.sameCellSaid = true;
                     console.log(`[night] quiet, but there is no place for a shelter here and no walk to better ground left tonight; not trying again from ${here}`);
@@ -1232,14 +1253,17 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             // Soak 8 (night 2), the lead's (b) and (c): no place for a shelter here and none for a hole
             // (the hole comes right after the first build; without one, the build alone): the same
             // tries from the same spot cannot do better. Better ground, else out of the water and exposed.
-            if (!ret?.interrupted && r?.noPlace && (pit ? n.buildNoPlace : !ops.digPit)) {
+            // #557 review 7: both must have looked and found nothing. A build that was stopped (a
+            // reflex, counted once past FREE_INTERRUPTS) never searched, so a hole that finds no place
+            // after it is not enough: the tries go on, and the next build that finds no place walks
+            // (pitNoPlace). An interrupted hole never counts as no place either.
+            if (pit) n.pitNoPlace = !ret?.interrupted && !!r?.noPlace;
+            if (!ret?.interrupted && r?.noPlace && (pit ? n.buildNoPlace : (!ops.digPit || n.pitNoPlace))) {
                 if (pit) console.warn(`[night] the hole shelter failed (${why})`);
                 const refused = n.buildRefused ?? r?.refused ?? null;
-                const moved = moveToGround(agent, n, ops, phase, refused);
-                if (moved === 'walking') return;
                 const here = `no place for a shelter or a hole here${refused ? ` (${refused})` : ''}`;
-                exposeOnDryGround(agent, n, ops, moved === 'none' ? `${here}, and none within ${n.groundRadius ?? GROUND.radius} blocks`
-                    : `${here}, and no walk to better ground left tonight (${n.groundMoves ?? 0} of ${GROUND.maxMoves} made)`);
+                const moved = moveToGround(agent, n, ops, phase, refused, (text) => exposeOnDryGround(agent, n, ops, `${here}, ${text}`));
+                if (moved === 'spent') exposeOnDryGround(agent, n, ops, `${here}, and no walk to better ground left tonight (${n.groundMoves ?? 0} of ${GROUND.maxMoves} made)`);
                 return;
             }
             if (n.attempts >= BUILD_ATTEMPTS) {
