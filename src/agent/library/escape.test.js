@@ -217,17 +217,17 @@ test('escape plan (2): unstuck firing again in the same cell within 10 min runs 
     await fire();
     assert.equal(escapes.length, 1, 'again in the same cell: the escape');
     assert.ok(warns.some(w => w === '[reflex] unstuck: the escape failed (no stair step, and no block to pillar up with); holding off for 5 min'), warns.join('\n'));
-    assert.ok(mode.hold_until > Date.now() + 4 * 60_000);
+    assert.ok(agent.bot.rotnUnstuck.holdUntil > Date.now() + 4 * 60_000);
     await fire();
     assert.equal(escapes.length, 1, 'held off');
     assert.equal(mode.stuck_time, 0);
     // Past the hold, in another cell 5 blocks off: the walk away first again.
-    mode.hold_until = 0;
-    mode.last_fire = { cell: new Vec3(-95, 61, -127), at: Date.now() };
+    agent.bot.rotnUnstuck.holdUntil = 0;
+    agent.bot.rotnUnstuck.lastFire = { cell: new Vec3(-95, 61, -127), at: Date.now() };
     await fire();
     assert.equal(escapes.length, 1, 'not a repeat: another cell');
     // A repeat more than 10 min after the last: the walk away.
-    mode.last_fire = { cell: position.floored(), at: Date.now() - 11 * 60_000 };
+    agent.bot.rotnUnstuck.lastFire = { cell: position.floored(), at: Date.now() - 11 * 60_000 };
     await fire();
     assert.equal(escapes.length, 1, 'not a repeat: too long ago');
 });

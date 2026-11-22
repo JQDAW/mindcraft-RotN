@@ -479,20 +479,19 @@ const modes_list = [
         free_timeout_ms: 10_000,
         prev_dig_block: null,
         progress_memo: {}, // what actionProgress saw (library/progress.js)
-        // Soak 8 (the flooded pit; the lead's escape plan): where and when it last fired; a repeat
-        // within repeat_cells of it within repeat_ms runs the escape (library/escape.js) instead of
-        // the walk away; an escape that fails holds this reflex off for hold_ms (said once).
-        last_fire: null,
+        // Soak 8 (the flooded pit; the lead's escape plan): where and when it last fired (per bot:
+        // bot.rotnUnstuck.lastFire); a repeat within repeat_cells of it within repeat_ms runs the escape
+        // (library/escape.js) instead of the walk away; an escape that fails holds this reflex off for
+        // hold_ms (bot.rotnUnstuck.holdUntil), said once.
         repeat_cells: 1,
         repeat_ms: 10 * 60_000,
         hold_ms: 5 * 60_000,
-        hold_until: 0,
         escape: (bot) => escape(bot), // library/escape.js (tests pass their own)
         update: async function (agent) {
             // A skill that keeps the bot in place on purpose sets bot.rotnStationary while it does
             // (D2b: the shelter build, once at the site; not the walk there, #195 review 6); the
             // escape (bot.rotnEscaping) is this reflex's own way out, never cut by it.
-            if (agent.isIdle() || agent.bot?.rotnStationary === true || agent.bot?.rotnEscaping === true || Date.now() < this.hold_until) {
+            if (agent.isIdle() || agent.bot?.rotnStationary === true || agent.bot?.rotnEscaping === true || Date.now() < (agent.bot?.rotnUnstuck?.holdUntil ?? 0)) {
                 this.prev_location = null;
                 this.stuck_time = 0;
                 return; // don't get stuck when idle
@@ -532,18 +531,19 @@ const modes_list = [
                 this.stuck_time = 0;
                 const cell = bot.entity.position.floored();
                 const now = Date.now();
-                const last = this.last_fire;
+                const memo = bot.rotnUnstuck ??= { lastFire: null, holdUntil: 0 };
+                const last = memo.lastFire;
                 const repeat = !!last && now - last.at <= this.repeat_ms
                     && Math.max(Math.abs(cell.x - last.cell.x), Math.abs(cell.y - last.cell.y), Math.abs(cell.z - last.cell.z)) <= this.repeat_cells;
-                this.last_fire = { cell, at: now };
+                memo.lastFire = { cell, at: now };
                 if (repeat) {
                     // The walk away did not free it last time, here: dig or climb out instead.
                     await say(agent, 'I\'m stuck here again: digging or climbing out.');
                     const mode = this;
                     execute(this, agent, async () => {
                         const r = await mode.escape(bot);
-                        if (r.out) { await say(agent, 'I\'m out.'); mode.last_fire = null; return; }
-                        mode.hold_until = Date.now() + mode.hold_ms;
+                        if (r.out) { await say(agent, 'I\'m out.'); memo.lastFire = null; return; }
+                        memo.holdUntil = Date.now() + mode.hold_ms;
                         console.warn(`[reflex] unstuck: the escape failed (${r.why}); holding off for ${mode.hold_ms / 60_000} min`);
                         await say(agent, `I'm stuck at ${cell.x}, ${cell.y}, ${cell.z} and could not dig or climb out (${r.why}).`);
                     }).catch(err => reportModeError('unstuck', err));
