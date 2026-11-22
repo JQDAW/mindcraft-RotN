@@ -10,11 +10,11 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, SHELTER_HOLD, REPAIR_SPARE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD, FOOD_AFTER_DEATH } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, SHELTER_HOLD, REPAIR_SPARE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD, FOOD_AFTER_DEATH, CLUB } from './agenda.js';
 import { Vec3 } from 'vec3';
 import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
-import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS } from './agenda_driver.js';
+import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS, autoCraftTick, AUTO_CRAFT } from './agenda_driver.js';
 import { Agent } from './agent.js';
 import { parseCommandMessage } from './commands/index.js';
 import { TaskQueue } from './task_queue.js';
@@ -59,7 +59,7 @@ function fakeAgent(t, items = [], opts = {}) {
     agent.agenda.start();
     return agent;
 }
-const stepOf = (items, opts) => new Agenda('x', { dir: path.join(tmpdir(), `rotn-none-${Math.random()}`) }).evaluate(agendaState(fakeBot(items, opts))).step?.id ?? null;
+const stepOf = (items, opts) => new Agenda('x', { dir: path.join(tmpdir(), `rotn-none-${Math.random()}`), weapon: null }).evaluate(agendaState(fakeBot(items, opts))).step?.id ?? null;
 
 test('first_plank needs a plank in the inventory: a debarked log (a !useOn block change) is not one (#216 review)', () => {
     const before = [stack('pyrotech:rock', 0, 6), stack('stick', 0, 4), stack('pyrotech:crude_axe', 0, 1), stack('log', 0, 3)];
@@ -842,19 +842,23 @@ test('#468 review 4: an agenda.json from before (one stuck step, the agenda paus
 // Soak 3 (rotn-v0.1.5): after the first death the bot never held a weapon again; bare hands did not
 // hurt the zombies digging into its shelter, which hit for 6-8 (12 deaths). The lead's decision: a
 // weapon in the before-night reserve.
-test('soak 3: before night, after the shelter\'s blocks and before food, the weapon reserve asks for a stone axe (or a crude axe with no table); a weapon held: done', (t) => {
+test('soak 3, soak 10 (W2): before night, after the shelter\'s blocks and before food, the weapon reserve asks for a wooden club (2 logs, no table); a crude axe is no weapon; a club held: done', (t) => {
     const blocks = [stack('pyrotech:rock', 0, 6), stack('dirt', 0, SHELTER_HOLD), stack('stick', 0, 1)];
     const agent = fakeAgent(t, blocks, { weapon: WEAPON_RESERVE_STEP });
     agent.bot.time = { timeOfDay: dayAt(7) };
     assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
     assert.equal(agent.said.at(-1), 'agenda step weapon started: hold a weapon for the night');
     const p = agent.self_prompter.prompt;
-    assert.match(p, /^RotN agenda, step weapon \(before night\): Night is near and you hold no weapon\. Zombies here hit for 6 to 8 /);
-    assert.match(p, /You hold 6 rocks and 1 stick, and no crafting table is near\. Craft a stone axe at a crafting table with !craftRecipe\("stone_axe", 1\)/);
-    assert.match(p, /a crude axe works too .* !craftRecipe\("pyrotech:crude_axe", 1\)/);
-    // A crude axe held counts (attack 3 on this pack): the step goes on.
+    assert.match(p, /^RotN agenda, step weapon \(before night\): Night is near and you hold no weapon\. Zombies here hit for 3 each, several at once/);
+    assert.match(p, /You hold 0 logs\. Craft a wooden club from 2 logs in your inventory grid \(no crafting table needed\): !craftRecipe\("spartanweaponry:club_wood", 1\)\. It hits for 4 and lasts 131 hits/);
+    assert.match(p, /The crude axe is a tool, not a weapon: it breaks on its 5th hit, before it kills one zombie/);
+    assert.doesNotMatch(p, /stone_axe|!craftRecipe\("pyrotech:crude_axe"/);
+    // Soak 10 (W1): a crude axe held is no weapon: still the reserve.
     blocks.push(stack('pyrotech:crude_axe', 0, 1));
-    assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks');
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'weapon');
+    // A wooden club held: the step goes on.
+    blocks.push(stack('spartanweaponry:club_wood', 0, 1));
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'sticks');
     // The shelter's blocks come first.
     const few = fakeAgent(t, [stack('pyrotech:rock', 0, 6)], { weapon: WEAPON_RESERVE_STEP });
     few.bot.time = { timeOfDay: dayAt(7) };
@@ -919,10 +923,10 @@ test('soak 5 (Fix H): unarmed and short of food by day, the weapon comes before 
     assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
     const p = agent.self_prompter.prompt;
     assert.match(p, /^RotN agenda, step weapon \(no weapon, before food\): You hold no weapon and you are short of food: the weapon comes first \(hunting needs one, and zombies attack by day too\); the agenda goes on to food once you hold one\. /);
-    assert.match(p, /You hold 2 rocks and 0 sticks, and no crafting table is near\. Craft a stone axe/);
+    assert.match(p, /You hold 0 logs\. Craft a wooden club/);
     assert.doesNotMatch(p, /Night is near/);
-    // A crude axe made: food next, with the hunt offered.
-    items.push(stack('pyrotech:crude_axe', 0, 1));
+    // A wooden club made (soak 10: the crude axe is no weapon): food next, with the hunt offered.
+    items.push(stack('spartanweaponry:club_wood', 0, 1));
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'food');
     assert.match(agent.self_prompter.prompt, /Near you: animania:cow_holstein: kill one with !attack\("animania:cow_holstein"\)/);
     // Running agenda too (not only once it is done).
@@ -1073,8 +1077,109 @@ test('#552 nit (rotn-data #551): the crude axe text says when it breaks, from it
     assert.deepEqual([block, hit], ['9th', '5th']);
     const step = ROTN_EARLY_GAME.find(s => s.id === 'crude_axe');
     assert.ok(step.goal.includes(`breaks on its ${block} block`) && step.goal.includes(`breaks on the ${hit} hit`), step.goal);
-    assert.ok(WEAPON_RESERVE_STEP.goal.includes(`breaks on its ${hit} hit, or its ${block} block`), WEAPON_RESERVE_STEP.goal);
+    // Soak 10: the reserve asks for a wooden club, and says the crude axe breaks on its 5th hit.
+    assert.ok(WEAPON_RESERVE_STEP.goal.includes(`breaks on its ${hit} hit, before it kills one zombie`), WEAPON_RESERVE_STEP.goal);
     for (const g of [step.goal, WEAPON_RESERVE_STEP.goal]) assert.doesNotMatch(g, /about 8 uses/);
+});
+
+// Soak 10 (W2, the lead's answer 3): the wooden club (2 logs, no table) is the weapon; the reserve is
+// due at any time once the logs for it are held, and the driver crafts it itself (no model call).
+test('soak 10 (W2): with no weapon and 2 logs held the weapon reserve is due by day too; 1 log is not; a club worn to its last hits does not end it', (t) => {
+    assert.deepEqual(CLUB, { item: 'spartanweaponry:club_wood', logs: 2 });
+    const items = [stack('pyrotech:rock', 0, 6), stack('stick', 0, 4), stack('pyrotech:crude_axe', 0, 1), stack('log', 1, 1)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: 1000 }; // full day, not near night
+    agent.bot.food = 20;
+    assert.equal(agendaTick(agent, { now: 0 }), 'logs', 'one log: the steps go on');
+    items[3].count = 2;
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'weapon');
+    const p = agent.self_prompter.prompt;
+    assert.match(p, /^RotN agenda, step weapon \(no weapon, logs held\): You hold no weapon, and you have the logs for one\. /);
+    assert.match(p, /You hold 2 logs, enough for a club\. Craft a wooden club from 2 logs/);
+    // A club with 2 hits left (131 durability, 1 a hit): no kill's worth, so the reserve goes on.
+    const worn = stack('spartanweaponry:club_wood', 0, 1);
+    worn.metadata = 130;
+    items.push(worn);
+    assert.equal(agentdone(agent), false);
+    worn.metadata = 0;
+    assert.equal(agentdone(agent), true);
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'logs');
+});
+const agentdone = (agent) => WEAPON_RESERVE_STEP.done(agendaState(agent.bot));
+
+test('soak 10 (W2): the driver crafts the club itself when the logs are held (no model call), at most AUTO_CRAFT.tries times; not over another running action', async (t) => {
+    const items = [stack('pyrotech:rock', 0, 6), stack('log', 1, 2)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: 1000 };
+    agent.bot.food = 20;
+    const runs = [];
+    agent.actions = { executing: false, currentActionLabel: '', runAction: (label, fn) => { runs.push(label); return Promise.resolve(fn()); } };
+    const crafted = [];
+    const step = WEAPON_RESERVE_STEP;
+    const state = agendaState(agent.bot);
+    const craft = (bot, item) => { crafted.push(item); return Promise.resolve(false); };
+    assert.equal(autoCraftTick(agent, step, state, { craft }), 'weapon');
+    await new Promise(r => setTimeout(r, 0));
+    assert.deepEqual(crafted, ['spartanweaponry:club_wood']);
+    assert.deepEqual(runs, ['action:craftRecipe:spartanweaponry:club_wood']);
+    assert.match(agent.said.at(-1), /^agenda step weapon: crafting spartanweaponry:club_wood \(try 1 of 2\)$/);
+    assert.equal(AUTO_CRAFT.tries, 2);
+    // Another action running: not over it.
+    agent.actions.executing = true;
+    agent.actions.currentActionLabel = 'action:collectBlocks';
+    assert.equal(autoCraftTick(agent, step, state, { craft }), null);
+    // Its own craft running: the step waits for it.
+    agent.actions.currentActionLabel = 'action:craftRecipe:spartanweaponry:club_wood';
+    assert.equal(autoCraftTick(agent, step, state, { craft }), 'weapon');
+    agent.actions.executing = false;
+    assert.equal(autoCraftTick(agent, step, state, { craft }), 'weapon', 'the second try');
+    assert.equal(autoCraftTick(agent, step, state, { craft }), null, 'two tries: the model gets the step');
+    assert.equal(crafted.length, 2);
+    // Too few logs: not ready.
+    const one = fakeAgent(t, [stack('log', 1, 1)], { weapon: WEAPON_RESERVE_STEP });
+    one.actions = agent.actions;
+    assert.equal(autoCraftTick(one, step, agendaState(one.bot), { craft }), null);
+    // Through agendaTick: the reserve's tick crafts and drives no prompt.
+    const driven = fakeAgent(t, [stack('pyrotech:rock', 0, 6), stack('log', 1, 2)], { weapon: WEAPON_RESERVE_STEP });
+    driven.bot.time = { timeOfDay: 1000 };
+    driven.bot.food = 20;
+    driven.actions = { executing: true, currentActionLabel: 'action:craftRecipe:spartanweaponry:club_wood', runAction: () => Promise.resolve() };
+    assert.equal(agendaTick(driven, { now: 0 }), 'weapon');
+    assert.equal(driven.self_prompter.prompt, '', 'no model prompt while the craft runs');
+});
+
+// #579 review 1: the try counter was per process (the early return came before the step tracking):
+// after 2 club crafts the reserve never auto-crafted again until a restart.
+test('#579 review 1: weapon, other, weapon, other, weapon: each time the weapon reserve is current again it gets fresh craft tries', async (t) => {
+    const agent = fakeAgent(t, [stack('log', 1, 2)], { weapon: WEAPON_RESERVE_STEP });
+    agent.actions = { executing: false, currentActionLabel: '', runAction: (label, fn) => Promise.resolve(fn()) };
+    const crafted = [];
+    const craft = (bot, item) => { crafted.push(item); return Promise.resolve(false); };
+    const state = agendaState(agent.bot);
+    const other = { id: 'logs' };
+    for (let round = 0; round < 3; round++) {
+        assert.equal(autoCraftTick(agent, WEAPON_RESERVE_STEP, state, { craft }), 'weapon', `round ${round}: first try`);
+        assert.equal(autoCraftTick(agent, WEAPON_RESERVE_STEP, state, { craft }), 'weapon', `round ${round}: second try`);
+        assert.equal(autoCraftTick(agent, WEAPON_RESERVE_STEP, state, { craft }), null, `round ${round}: the model's`);
+        assert.equal(autoCraftTick(agent, other, state, { craft }), null, 'another step in between');
+    }
+    await new Promise(r => setTimeout(r, 0));
+    assert.equal(crafted.length, 6);
+});
+
+// #579 nit 3: the exact soak 10 inventory at 15:30 (40 spruce logs, 1 stick, the crude axe worn to meta 6):
+// the reserve is due by day for the logs, and the driver crafts the club with no model prompt.
+test('#579 nit 3: the soak 10 inventory (40 logs, 1 stick, a worn crude axe): the club, crafted by the driver, no model prompt', (t) => {
+    const items = [stack('log', 1, 40), stack('stick', 0, 1), stack('pyrotech:crude_axe', 6, 1), stack('pyrotech_compat:rock_metamorphic', 6, 3), stack('betterwithmods:dirt_pile', 0, 56)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: 1000 };
+    agent.bot.food = 20;
+    const runs = [];
+    agent.actions = { executing: false, currentActionLabel: '', runAction: (label) => { runs.push(label); return Promise.resolve(); } };
+    agent.agenda.done_at = { rocks: 1, sticks: 1, crude_axe: 1, logs: 1, first_plank: 1 };
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    assert.deepEqual(runs, ['action:craftRecipe:spartanweaponry:club_wood']);
+    assert.equal(agent.self_prompter.prompt, '', 'no model prompt');
 });
 
 // Soak 10 (S1, the lead: 4): the reserve held exactly the shelter's 10 dirt; the dusk build used them

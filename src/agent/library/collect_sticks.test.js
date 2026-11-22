@@ -419,3 +419,17 @@ test('CX23 soak: a collect skips targets within 24 blocks of a recent death spot
     assert.deepEqual(old.log.digs.map(d => d.pos), ['8,64,0']);
 });
 
+
+// Soak 10 (W4): 15:28-15:30, !collectBlocks("stick", 1) broke about 10 leaves holding the crude axe,
+// which had its last uses then; the weapon reserve found no axe and no sticks before dusk.
+test('soak 10 (W4): leaves are broken with no tool that wears in hand: a held crude axe is put away first', T, async (t) => {
+    fast(t);
+    const axe = { name: 'pyrotech:crude_axe', metadata: 6, count: 1, type: 9000 };
+    const bot = fakeBot({ trees: [{ x: 3, branch: SPRUCE, sticks: 5, canopy: 67 }], leafSticks: [1, 1, 1], held: axe });
+    await skills.collectBlock(bot, 'stick', 2);
+    const leafDigs = bot.log.digs.filter(d => d.name === LEAVES);
+    assert.ok(leafDigs.length > 0, JSON.stringify(bot.log.digs));
+    assert.ok(leafDigs.every(d => d.held === null), `by hand, not with the axe: ${JSON.stringify(leafDigs)}`);
+    assert.equal(skills.wearsOnBreak(axe), true);
+    assert.equal(skills.wearsOnBreak({ name: 'stick', count: 1 }), false);
+});

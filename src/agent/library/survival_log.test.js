@@ -402,7 +402,7 @@ test('soak 7 (c): attackEntity (the !attack command, a cornered hit) holds the s
 });
 
 // Soak 7 (e): equipHighestAttack takes the best weapon by threats.weaponOrder on the path bot.attack takes.
-test('soak 7 (e): equipHighestAttack: a crude axe over a stone axe (more damage per tick); the attack path decides between an iron axe and a diamond sword', async (t) => {
+test('soak 7 (e): equipHighestAttack: the attack path decides between an iron axe and a diamond sword; soak 10: never the crude axe (a tool), and the wooden club over a stone axe', async (t) => {
     capture(t);
     const held = async (names, bot = openFight([])) => {
         bot.inventory = { items: () => names.map((name, i) => ({ name, metadata: 0, count: 1, slot: 36 + i })), slots: [] };
@@ -410,7 +410,8 @@ test('soak 7 (e): equipHighestAttack: a crude axe over a stone axe (more damage 
         assert.equal(await skills.equipHighestAttack(bot), true);
         return bot.heldItem.name;
     };
-    assert.equal(await held(['stone_axe', 'pyrotech:crude_axe']), 'pyrotech:crude_axe');
+    assert.equal(await held(['stone_axe', 'pyrotech:crude_axe']), 'stone_axe', 'soak 10 (W1): the crude axe is a tool, never a weapon');
+    assert.equal(await held(['stone_axe', 'spartanweaponry:club_wood']), 'spartanweaponry:club_wood', 'the club (4) over the stone axe (3)');
     assert.equal(await held(['diamond_sword', 'iron_axe']), 'iron_axe', 'vanilla: the first hit is all that lands');
     const bc = openFight([]);
     bc.forge = { bcAttack: { active: true } };
@@ -427,13 +428,14 @@ test('soak 7 (e): the weapon line is logged only when the held item changes', as
     bot.attack = () => Promise.resolve();
     for (let i = 0; i < 3; i++) await skills.attackEntity(bot, bot.entities[1], false);
     assert.deepEqual(survival(logs), ['[survival] weapon stone_sword (attack)'], 'three cornered hits, one line');
-    items = items.filter(i => i.name !== 'stone_sword'); // the sword broke
+    // The sword broke; soak 10 (W1): the crude axe is no weapon, so the stone axe comes next.
+    items = items.filter(i => i.name !== 'stone_sword');
     await skills.attackEntity(bot, bot.entities[1], false);
-    // A fight in the open with the same crude axe: no line again (the fight start is still logged).
+    // A fight in the open with the same stone axe: no line again (the fight start is still logged).
     bot.pvp.attack = () => { delete bot.entities[1]; };
     assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
     assert.ok(survival(logs).includes('[survival] fight start zombie (open)'), logs.join('\n'));
-    assert.deepEqual(survival(logs).filter(l => l.includes(' weapon ')), ['[survival] weapon stone_sword (attack)', '[survival] weapon pyrotech:crude_axe (attack)'], 'a new line for the new item only');
+    assert.deepEqual(survival(logs).filter(l => l.includes(' weapon ')), ['[survival] weapon stone_sword (attack)', '[survival] weapon stone_axe (attack)'], 'a new line for the new item only');
     assert.equal(skills.weaponRank({ name: 'stone_sword' }), 5, 'still exported from skills.js');
 });
 
@@ -542,4 +544,15 @@ test('(g): defendSelf ends a fight in which the mob takes no hurt and the bot ge
     assert.equal(await skills.defendSelf(hitting, 8, (e) => e.name === 'zombie'), true);
     assert.ok(hurts >= 6, `fought on past stallMs while it was hurt: ${hurts}`);
     assert.doesNotMatch(hitting.output, /Stopped fighting/);
+});
+
+// #579 nit 3: soak 10 held hitwithaxe:bark at night ("[survival] weapon hitwithaxe:bark"): bark alone is no weapon.
+test('#579 nit 3: equipHighestAttack with only bark and a crude axe takes neither (no weapon)', async (t) => {
+    capture(t);
+    const bot = openFight([]);
+    bot.inventory = { items: () => [{ name: 'hitwithaxe:bark', metadata: 20, count: 1, slot: 36 }, { name: 'pyrotech:crude_axe', metadata: 6, count: 1, slot: 37 }], slots: [] };
+    let equipped = null;
+    bot.equip = (item) => { equipped = item; return Promise.resolve(); };
+    assert.equal(await skills.equipHighestAttack(bot), false);
+    assert.equal(equipped, null);
 });

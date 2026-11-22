@@ -46,7 +46,7 @@ Every address is redacted (`<ip>`): the CX23's, the dev server's and the test se
 The survival notes show 0 reflex fights, 0 flees and 0 eats.
 
 ## The LLM spend and the reasoning tokens
-All 82 completions were made in daylight while self-prompting (11:51:12 to 12:05:19). Sunset came at 12:06:29, two seconds before the stop. Every completion was answered by provider `Near AI`.
+All 82 completions were made during the self-prompting window (11:51:12 to 12:05:19), in daylight; the memory summaries among them are side calls, not self-prompts. Sunset came at 12:06:29, two seconds before the stop. Every completion was answered by provider `Near AI`.
 
 | Window | Completions | USD | Completion tokens | Reasoning tokens |
 | --- | --- | --- | --- | --- |
@@ -55,8 +55,9 @@ All 82 completions were made in daylight while self-prompting (11:51:12 to 12:05
 | **The run** | **82** | **0.035526** | **30,991** | **26,405 (85%)** |
 
 - Prompt tokens were 273,662 in all.
-- **Memory summaries:** 21 calls, USD 0.011127 (31% of the spend).
-- **The largest call:** 4,556 prompt and 839 completion tokens (782 reasoning) at 11:58:47.
+- **Memory summaries:** 21 calls, USD 0.011127 (31% of the spend). A call counts as a memory summary when its prompt is under 2,000 tokens. Each of the 21 is also the call right before a `Memory updated to:` line.
+- **The largest call by total tokens:** 4,556 prompt and 839 completion tokens (782 reasoning) at 11:58:47.
+- **The largest completion, also the most expensive call:** 12:00:37, 790 prompt and 2,603 completion tokens, USD 0.0013647.
 - The rate is not comparable to the soak 8 overall figure (0.0437/h), which included 76 min of nights with almost no calls. Soak 8's daytime rate was 0.117/h and its self-prompting rate 0.131/h.
 
 ## The craft hang and the restart (timeline)
@@ -90,7 +91,7 @@ Taken from `driver.log` (the CX23 journal) and `server-since-start-1201-1202.txt
 **The cause is in review with skills-rotn (the craft action and the `unstuck` mode) and net-forge (the connection and the agent process).** Nothing here was judged beyond the lines above.
 
 ## `!placeHere`
-- One `!placeHere`, at 11:57:09: `!placeHere("log")`, during the first-plank step. The result (`driver.log:630`) was `Placed log at -26, 79, -93 by jumping and putting it under you: you now stand on it at -26, 80, -93.` This is #564's jump-place.
+- One `!placeHere`, at 11:57:09: `!placeHere("log")`, during the first-plank step. The result line at 11:57:10 (`driver.log:630`) was `Placed log at -26, 79, -93 by jumping and putting it under you: you now stand on it at -26, 80, -93.` This is #564's jump-place.
 - **No escape lines.** The run had none, nor any walk-to-better-ground line or ore skip for liquid. The bot was never in water or stuck in a pit in these 15 minutes. The only `stuck` is the `unstuck` mode at 12:01:50 above.
 
 ## Better Combat and mobs

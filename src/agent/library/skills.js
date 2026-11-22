@@ -14,7 +14,7 @@ import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
-import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath } from "./threats.js";
+import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath, isWeaponItem } from "./threats.js";
 import { logAte, fightJournal, swingLine, logWeapon } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -50,7 +50,8 @@ export { weaponRank };
  * an unanswered click and its retry, while the bot does not attack).
  */
 export async function equipHighestAttack(bot, fight = {}) {
-    const isWeapon = (item) => !!item && (item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe')));
+    // Soak 10 (W1): threats.isWeaponItem, the one weapon rule (never the crude axe or a Hit With Axe bark).
+    const isWeapon = (item) => !!item && isWeaponItem(item);
     // Soak 7 (e): the best by damage per tick of cooldown on the path bot.attack takes (threats.weaponOrder).
     const order = weaponOrder(attackPath(bot));
     const best = (items) => items.filter(isWeapon).sort(order)[0] ?? null;
@@ -260,8 +261,9 @@ export const CRAFT_LIMITS = { tableMs: 15_000, handMs: 10_000, perCraftMs: 2_000
  * #574 review 2, known gaps: two calls that overlap without nesting (the first ends while the second
  * runs: the first leaves the second's token alone) end with the second setting back what it saved,
  * the first's token; and a skill that saves the flag while a token is set (pit.js, the tree fall in
- * collectBlock: wasStationary) puts that token back. Either can leave a stale truthy flag, which holds the unstuck reflex off until the
- * shelter writes false. A shared release helper (a count, or tokens all round) would close both.
+ * collectBlock: wasStationary) puts that token back. Either can leave a stale truthy flag, which
+ * holds the unstuck reflex off until the shelter writes false. A shared release helper (a count, or
+ * tokens all round) would close both.
  */
 export async function stationaryWhile(bot, fn) {
     const was = bot.rotnStationary;
@@ -277,7 +279,8 @@ export async function stationaryWhile(bot, fn) {
 /**
  * bot.craft with mineflayer-auto-eat paused: it clicks the inventory too, and an eat in the middle of
  * a craft got a click rejected in net-forge's offline test (Request 2 answer). It is enabled again
- * afterwards only if it was on before. An eat already under way is given up to `eatWaitMs` to finish.
+ * afterwards only if it was on before. An eat already under way is given up to `eatWaitMs` to finish;
+ * #577 review 1: a stop ends that wait, and a craft is not started once a stop has come.
  * Soak 9: bounded by CRAFT_LIMITS and ended by a stop (bot.interrupt_code, or the command's limit);
  * either way the open window is closed and the result is counted before and after, and what
  * happened is said (crafted anyway, or not crafted). bot.rotnStationary is set while it runs.
@@ -290,8 +293,10 @@ export async function craftPausingAutoEat(bot, recipe, count, table, eatWaitMs =
     if (wasOn) autoEat.disable();
     try {
         return await stationaryWhile(bot, async () => {
-            for (let waited = 0; autoEat?.isEating && waited < eatWaitMs; waited += 100)
-                await new Promise(resolve => setTimeout(resolve, 100));
+            const run = currentRun(bot);
+            const stopped = () => !!bot.interrupt_code || run.aborted;
+            for (let waited = 0; autoEat?.isEating && waited < eatWaitMs && !stopped(); waited += limits.pollMs)
+                await new Promise(resolve => setTimeout(resolve, limits.pollMs));
             return await boundedCraft(bot, recipe, count, table, limits);
         });
     } finally {
@@ -306,6 +311,12 @@ async function boundedCraft(bot, recipe, count, table, limits) {
         ? bot.inventory.items().filter(i => i.type === resultId).reduce((n, i) => n + i.count, 0) : null);
     const before = have();
     const run = currentRun(bot);
+    const name = (Number.isInteger(resultId) && bot.registry?.items?.[resultId]?.name) || 'the item';
+    if (bot.interrupt_code || run.aborted) { // #577 review 1: a stop before the craft: none started
+        log(bot, `The craft of ${name} was stopped before it started; nothing crafted.`);
+        console.log('[craft] stopped before bot.craft was called');
+        return { ended: 'interrupted', made: before === null ? null : 0 };
+    }
     const ms = (table ? limits.tableMs : limits.handMs) + limits.perCraftMs * Math.max(0, (count ?? 1) - 1);
     let settled = false, failure = null, abandonedAt = null;
     // Handled here, so a craft that settles after it was given up never rejects unhandled; once given
@@ -352,7 +363,6 @@ async function boundedCraft(bot, recipe, count, table, limits) {
         await new Promise(resolve => setTimeout(resolve, limits.pollMs));
     const now = have();
     const made = before === null ? null : Math.max(0, now - before);
-    const name = (Number.isInteger(resultId) && bot.registry?.items?.[resultId]?.name) || 'the item';
     const what = ended === 'timeout'
         ? `The craft of ${name} did not finish within ${secsText(ms)} (timed out)`
         : `The craft of ${name} was stopped before it finished`;
@@ -1473,6 +1483,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 }
                 // Leaves from the ground (G3 round 4 B), not with collectBlock's walk into the tree.
                 if (isLeafBlock(block)) {
+                    // Soak 10 (W4): never with a tool that wears in hand (15:28-15:30: the stick collect broke
+                    // leaves holding the crude axe, which then had no use left). A full hotbar of tools: as it is.
+                    await stopHoldingWhere(bot, wearsOnBreak).catch(() => false);
                     const r = await breakLeafFromGround(bot, block, run);
                     if (!r) givenUp.push(block.position.clone ? block.position.clone() : block.position);
                     // Round 9 B: out of reach after the walk is remembered, and uses no attempt (below).
@@ -1689,6 +1702,9 @@ export async function stopHoldingWhere(bot, isUnwanted) {
     }
     return false;
 }
+
+/** Soak 10 (W4): an item that loses durability when it breaks a block (rotn-data knows its maxDamage). */
+export const wearsOnBreak = (item) => !!item && toolUsesLeft(item) !== null;
 
 /** Shears of any mod, by name: no shears in the dump has a "shears" tool class (rotn-data #312). */
 export const isShears = (item) => !!item && typeof item.name === 'string' && /shears/.test(item.name);
