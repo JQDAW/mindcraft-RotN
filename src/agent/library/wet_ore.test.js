@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { isOre, wetOreRefusal, footingFor, liquidNear, noteDrowning, WET_ORE } from './wet_ore.js';
+import { isOre, wetOreRefusal, wetOreSkip, footingFor, liquidNear, noteDrowning, WET_ORE } from './wet_ore.js';
 import * as skills from './skills.js';
 
 const reg = minecraftData('1.12.2');
@@ -99,9 +99,9 @@ test('PR 2 (4): the drowning reflex fired twice going for a block: it is refused
  * touches no water (collectBlock's own safeToBreak lets it be), but every cell within reach to stand
  * in is water (soak 8: the ore by the river, the bot's legs in it).
  */
-function pool(extra = {}) {
+function pool(extra = {}, liquid = 'water', z0 = -5) {
     const set = { ...extra };
-    for (let x = 0; x <= 10; x++) for (let z = -5; z <= 5; z++) for (const y of [64, 65]) set[`${x},${y},${z}`] = 'water';
+    for (let x = 0; x <= 10; x++) for (let z = z0; z <= z0 + 10; z++) for (const y of [64, 65]) set[`${x},${y},${z}`] = liquid;
     return set;
 }
 
@@ -215,4 +215,35 @@ test('#564 review 3: the skips yield to the event loop (no long block over many 
     clearInterval(spin);
     assert.match(bot.output, /Skipped 12 iron_ore that would put you in the water: no dry footing within reach \(12\)/);
     assert.ok(turns >= 5, `the event loop ran between the skips (${turns} turns)`);
+});
+
+// #564 review nit: the skip line said "would put you in the water" when lava caused the skip.
+test('#564 nit: each skip names its liquids: water, lava, or both', () => {
+    const ore = (x, y, z) => ({ name: 'iron_ore', position: new Vec3(x, y, z) });
+    assert.deepEqual(wetOreSkip(fakeBot({ set: { '3,64,0': 'iron_ore', '4,64,0': 'water' } }), ore(3, 64, 0)), { why: 'a liquid beside it', liquids: ['water'] });
+    assert.deepEqual(wetOreSkip(fakeBot({ set: { '3,64,0': 'iron_ore', '4,64,0': 'flowing_lava' } }), ore(3, 64, 0)), { why: 'a liquid beside it', liquids: ['lava'] });
+    assert.deepEqual(new Set(wetOreSkip(fakeBot({ set: { '3,64,0': 'iron_ore', '4,64,0': 'lava', '2,64,0': 'water' } }), ore(3, 64, 0)).liquids), new Set(['water', 'lava']));
+    assert.deepEqual(wetOreSkip(fakeBot({ set: pool({ '5,62,0': 'iron_ore' }, 'lava') }), ore(5, 62, 0)), { why: 'no dry footing within reach', liquids: ['lava'] });
+    assert.equal(wetOreRefusal(fakeBot({ set: pool({ '5,62,0': 'iron_ore' }, 'lava') }), ore(5, 62, 0)), 'no dry footing within reach');
+    const bot = fakeBot({ set: { '3,64,0': 'sand' } });
+    bot.rotnCollectTarget = new Vec3(3, 64, 0);
+    noteDrowning(bot);
+    noteDrowning(bot);
+    assert.deepEqual(wetOreSkip(bot, { name: 'sand', position: new Vec3(3, 64, 0) }), { why: 'the drowning reflex fired twice going for it', liquids: ['water'] });
+});
+
+test('#564 nit: collectBlock says "in the lava" for an ore under a lava pool, and "in the water or the lava" for both', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [{ name: 'stone_pickaxe', metadata: 0, count: 1, type: reg.itemsByName.stone_pickaxe.id }];
+    const lava = fakeBot({ set: pool({ '5,62,0': 'iron_ore', '-6,64,-9': 'iron_ore' }, 'lava'), at: new Vec3(5, 64, -7), items });
+    await skills.collectBlock(lava, 'iron_ore', 1);
+    assert.deepEqual(lava.calls.dug, ['-6,64,-9'], lava.output);
+    assert.match(lava.output, /Skipped 1 iron_ore that would put you in the lava: no dry footing within reach \(1\)\. Look for some away from the lava\./);
+    assert.doesNotMatch(lava.output, /in the water/);
+    // A water pool (z -5..5) and a lava pool (z 12..22), an ore under each: one line names both.
+    const both = fakeBot({ set: { ...pool({ '5,62,0': 'iron_ore' }), ...pool({ '5,62,17': 'iron_ore' }, 'lava', 12) }, at: new Vec3(5, 64, 8), items: [...items] });
+    await skills.collectBlock(both, 'iron_ore', 2);
+    assert.deepEqual(both.calls.dug, []);
+    assert.match(both.output, /Skipped 2 iron_ore that would put you in the water or the lava: no dry footing within reach \(2\)\. Look for some on dry ground away from the lava\./);
+    assert.equal((both.output.match(/Skipped \d+ iron_ore/g) ?? []).length, 1);
 });
