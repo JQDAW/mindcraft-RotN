@@ -8,7 +8,7 @@ import { Vec3 } from 'vec3';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { nightTick, nightState, resetNight, isFullDay, resumeNightGoal, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS, FREE_INTERRUPTS, THREAT_INTERRUPTS, EXPOSED_RETRY_MS, EXPOSED_RETRIES } from './night_routine.js';
+import { nightTick, nightState, resetNight, isFullDay, resumeNightGoal, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS, FREE_INTERRUPTS, THREAT_INTERRUPTS, EXPOSED_RETRY_MS, EXPOSED_RETRIES, NIGHT_ESCAPES } from './night_routine.js';
 import settings from './settings.js';
 import { autonomyTick } from './priority.js';
 import { maxHitOf } from './library/threats.js';
@@ -2979,6 +2979,8 @@ function riverOps({ plan = () => ({ feet: BANK, kind: 'shelter', blocks: 9, d: 8
     o.groundPlan = (bot, opts) => { o.calls.push('plan'); o.plans.push(opts); return plan(opts); };
     o.walkToGround = walk ?? ((bot, p) => { o.calls.push('walk'); bot.entity.position = p.feet.offset(0.5, 0, 0.5); return Promise.resolve({ arrived: true, stopped: null, mob: null }); });
     o.stepToDry = (bot) => { o.calls.push('dry'); bot.entity.position = new Vec3(7.5, 64, 0.5); return Promise.resolve({ dry: true, moved: true, at: new Vec3(7, 64, 0), why: null }); };
+    // Soak 8, the flooded pit: the escape fails unless a test says otherwise.
+    o.escape = () => { o.calls.push('escape'); return Promise.resolve({ out: false, why: 'no stair step, and no block to pillar up with', at: new Vec3(0, 59, 0) }); };
     o.hostileNear = () => null;
     return o;
 }
@@ -3114,4 +3116,100 @@ test('soak 8: a build that fails for another reason (too few blocks) never walks
     for (let i = 0; i < 20 && nightState(agent).state !== 'exposed'; i++) await tick(o);
     assert.deepEqual(o.calls, ['build', 'pit', 'build', 'build']);
     assert.match(agent.chat.at(-1), /^\[night\] no shelter after 3 tries and a hole shelter \(A shelter at 0, 64, 0 needs 10 sturdy blocks/);
+});
+
+// ---- Soak 8, the flooded pit (the lead's escape plan, PR 1): the night routine's hook ----
+
+/** A walk that finds no way: the bot stays where it is (the flooded pit). */
+const stuckWalk = (o) => () => { o.calls.push('walk'); return Promise.resolve({ arrived: false, stopped: null, mob: null, why: null }); };
+/** An escape that gets the bot out onto the bank. */
+const escapeOut = (o) => (bot) => { o.calls.push('escape'); bot.entity.position = BANK.offset(0.5, 0, 0.5); return Promise.resolve({ out: true, how: 'by hand', at: BANK }); };
+
+test('flooded pit: a walk to better ground that found no way gets the escape first; out, the tries start again there', async (t) => {
+    const { agent, logs, tick } = riverAgent(t);
+    const o = riverOps();
+    o.walkToGround = stuckWalk(o);
+    o.escape = escapeOut(o);
+    for (let i = 0; i < 10 && nightState(agent).state !== 'inside'; i++) await tick(o);
+    assert.deepEqual(o.calls, ['build', 'pit', 'plan', 'walk', 'escape', 'build']);
+    assert.ok(agent.chat.includes(`[night] the walk to better ground found no way out: getting out first (escape 1 of ${NIGHT_ESCAPES})`), agent.chat.join('\n'));
+    assert.ok(logs.includes('[night] the escape got out at 8, 64, 0'), logs.join('\n'));
+    assert.equal(nightState(agent).state, 'inside');
+});
+
+test('flooded pit: no better ground and still in the water after the step out: the escape; a failed one ends exposed, saying so', async (t) => {
+    const { agent, tick } = riverAgent(t);
+    const o = riverOps({ plan: () => null, bankCloses: false });
+    o.stepToDry = () => { o.calls.push('dry'); return Promise.resolve({ dry: false, moved: false, at: new Vec3(0, 59, 0), why: 'no dry ground within 8 blocks' }); };
+    for (let i = 0; i < 10 && nightState(agent).state !== 'exposed'; i++) await tick(o);
+    assert.deepEqual(o.calls, ['build', 'pit', 'plan', 'dry', 'escape']);
+    assert.ok(agent.chat.includes(`[night] could not get out of the water (no dry ground within 8 blocks): getting out first (escape 1 of ${NIGHT_ESCAPES})`), agent.chat.join('\n'));
+    assert.match(agent.chat.at(-1), /; still in the water \(no dry ground within 8 blocks\); no retry from this spot; staying here until morning$/);
+});
+
+test('flooded pit: out of the water by the escape after the step out failed: the tries start again where it got out', async (t) => {
+    const { agent, tick } = riverAgent(t);
+    const o = riverOps({ plan: () => null });
+    o.stepToDry = () => { o.calls.push('dry'); return Promise.resolve({ dry: false, moved: false, at: new Vec3(0, 59, 0), why: 'no dry ground within 8 blocks' }); };
+    o.escape = escapeOut(o);
+    for (let i = 0; i < 10 && nightState(agent).state !== 'inside'; i++) await tick(o);
+    assert.deepEqual(o.calls, ['build', 'pit', 'plan', 'dry', 'escape', 'build']);
+    assert.equal(agent.chat.at(-1), '[night] in the shelter at 8, 64, 0 until morning');
+});
+
+test('flooded pit: at most NIGHT_ESCAPES escapes a night; never for a walk a mob stopped or one that got there', async (t) => {
+    const { agent, tick } = riverAgent(t);
+    let n = 0;
+    const o = riverOps({ plan: () => ({ feet: new Vec3(0, 59, 10 * ++n), kind: 'shelter', blocks: 9, d: 10 }), bankCloses: false });
+    o.walkToGround = stuckWalk(o);
+    for (let i = 0; i < 20 && nightState(agent).state !== 'exposed'; i++) await tick(o);
+    assert.equal(o.calls.filter(c => c === 'escape').length, NIGHT_ESCAPES, o.calls.join(' '));
+    assert.equal(nightState(agent).state, 'exposed');
+    const mob = riverAgent(t);
+    const m = riverOps();
+    m.walkToGround = () => { m.calls.push('walk'); return Promise.resolve({ arrived: false, stopped: 'hostile', mob: 'zombie' }); };
+    for (let i = 0; i < 4; i++) await mob.tick(m);
+    assert.ok(!m.calls.includes('escape'), m.calls.join(' '));
+});
+
+// ---- #557 nits (folded into the escape PR) ----
+
+test('#557 nit: a walk that failed with no stop reason (no way there) leaves that place out of the next search', async (t) => {
+    const { agent, tick } = riverAgent(t);
+    let n = 0;
+    const o = riverOps({ plan: () => ({ feet: new Vec3(0, 59, 10 * ++n), kind: 'shelter', blocks: 9, d: 10 }), bankCloses: false });
+    // Part of the way, then the pathfinder gives up: not arrived, no stop reason, the bot moved (no escape).
+    o.walkToGround = (bot, p) => { o.calls.push('walk'); bot.entity.position = bot.entity.position.offset(0, 0, 4); return Promise.resolve({ arrived: false, stopped: null, mob: null, why: 'No path to the goal!' }); };
+    for (let i = 0; i < 10 && o.plans.length < 2; i++) await tick(o);
+    assert.equal(o.plans[1].skip.length, 1);
+    assert.ok(o.plans[1].skip[0].equals(new Vec3(0, 59, 10)));
+    assert.ok(!o.calls.includes('escape'), 'it moved: no escape');
+    assert.ok(agent);
+});
+
+test('#557 nit: a hole\'s "no place" no longer counts once the bot has moved: the next build that finds no place is followed by a hole from there', async (t) => {
+    const { agent, logs, tick } = riverAgent(t);
+    const o = riverOps({ bankCloses: false });
+    let stops = 0;
+    agent.actions.runAction = async (label, fn) => {
+        if (label === 'action:buildShelter' && stops < FREE_INTERRUPTS + 1) { stops++; return { message: '', interrupted: true }; }
+        await fn();
+        return { message: '', interrupted: false };
+    };
+    for (let i = 0; i < 10 && !o.calls.includes('pit'); i++) await tick(o);
+    agent.bot.entity.position = new Vec3(20.5, 59, 0.5); // a flee after the hole
+    for (let i = 0; i < 10 && o.calls.filter(c => c === 'pit').length < 2; i++) await tick(o);
+    assert.deepEqual(o.calls.slice(0, 3), ['pit', 'build', 'pit'], o.calls.join(' '));
+    assert.ok(logs.some(l => l.startsWith('[night] the bot has moved since the hole found no place (at 0, 59, 0): a hole may be dug here')), logs.join('\n'));
+});
+
+test('#557 nit: a search for better ground stopped by a reflex ends exposed, saying so', async (t) => {
+    const { agent, tick } = riverAgent(t);
+    const o = riverOps({ bankCloses: false });
+    const run = agent.actions.runAction.bind(agent.actions);
+    agent.actions.runAction = (label, fn, opts) => (label === 'action:walkToGround' ? Promise.resolve({ message: '', interrupted: true }) : run(label, fn, opts));
+    for (let i = 0; i < 10 && nightState(agent).state !== 'exposed'; i++) await tick(o);
+    assert.deepEqual(o.calls, ['build', 'pit', 'dry']);
+    assert.equal(agent.chat.at(-1), `[night] no shelter: no place for a shelter or a hole here (${RIVER_REFUSED}), and the search for better ground was interrupted; out of the water at 7, 64, 0; no retry from this spot; staying here until morning`);
+    assert.equal(nightState(agent).groundMoves, 0, 'no walk counted');
 });

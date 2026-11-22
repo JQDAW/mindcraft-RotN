@@ -1,3 +1,4 @@
+import { setImmediate } from "node:timers";
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
@@ -2938,6 +2939,12 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
     else if (await bot.pathfinder.getPathTo(destructiveMovements, goal, pathfind_timeout).status === 'success') {
         log(bot, `Found destructive path.`);
     }
+    // Soak 8 (the flooded pit; the lead's escape plan, PR 1): getPathTo runs one tick of the search
+    // (the pathfinder's tickTimeout, 40 ms) whatever its timeout, so any path that takes longer to
+    // find failed both checks above. A real search of up to GO_TO_LIMITS.planMs (planPath) first.
+    else if ((await planPath(bot, destructiveMovements, goal, GO_TO_LIMITS.planMs))?.status === 'success') {
+        log(bot, `Found destructive path (after a longer search).`);
+    }
     else {
         log(bot, `Path not found, but attempting to navigate anyway using destructive movements.`);
     }
@@ -4193,7 +4200,26 @@ function closeQuietly(bot, window) {
     try { if (typeof window?.close === 'function') window.close(); else bot.closeWindow?.(window); } catch { /* best effort */ }
 }
 
-export const GO_TO_LIMITS = { totalMs: 180_000, stepMs: 15_000, fleeMs: 30_000 };
+export const GO_TO_LIMITS = { totalMs: 180_000, stepMs: 15_000, fleeMs: 30_000, planMs: 5000 };
+
+/**
+ * A path search of up to ms (soak 8, the lead's escape plan): pathfinder.getPathTo computes one tick
+ * (tickTimeout, 40 ms) and returns 'partial'; this goes on tick by tick through getPathFromTo,
+ * yielding to the event loop between ticks, until 'success', 'noPath' or 'timeout'. Without
+ * getPathFromTo (an older pathfinder, the tests' fakes) it is getPathTo. Returns the result or null.
+ */
+export async function planPath(bot, movements, goal, ms) {
+    const pathfinder = bot.pathfinder;
+    if (typeof pathfinder?.getPathFromTo !== 'function') return pathfinder?.getPathTo?.(movements, goal, ms) ?? null;
+    movements.updateLavaAvoidance?.();
+    let result = null;
+    for (const { result: r } of pathfinder.getPathFromTo(movements, bot.entity.position, goal, { timeout: ms })) {
+        result = r;
+        if (r.status !== 'partial') break;
+        await new Promise(resolve => setImmediate(resolve));
+    }
+    return result;
+}
 
 /**
  * A raw pathfinder.goto with a time limit (stepMs for a step in a fight or a step back from a

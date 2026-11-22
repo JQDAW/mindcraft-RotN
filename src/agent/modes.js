@@ -14,6 +14,7 @@ import { forageTarget } from './library/foraging.js';
 import { actionProgress } from './library/progress.js';
 import { isFalling, centerIn, stepTo, wallHitters, farSpot, WALL_HITTERS } from './library/shelter.js';
 import { fallingTreeNear } from './library/felling.js';
+import { escape } from './library/escape.js';
 
 /**
  * A falling block at the head in the night shelter (#346 review 1): dig it out by hand and stay, but
@@ -478,10 +479,20 @@ const modes_list = [
         free_timeout_ms: 10_000,
         prev_dig_block: null,
         progress_memo: {}, // what actionProgress saw (library/progress.js)
+        // Soak 8 (the flooded pit; the lead's escape plan): where and when it last fired; a repeat
+        // within repeat_cells of it within repeat_ms runs the escape (library/escape.js) instead of
+        // the walk away; an escape that fails holds this reflex off for hold_ms (said once).
+        last_fire: null,
+        repeat_cells: 1,
+        repeat_ms: 10 * 60_000,
+        hold_ms: 5 * 60_000,
+        hold_until: 0,
+        escape: (bot) => escape(bot), // library/escape.js (tests pass their own)
         update: async function (agent) {
             // A skill that keeps the bot in place on purpose sets bot.rotnStationary while it does
-            // (D2b: the shelter build, once at the site; not the walk there, #195 review 6).
-            if (agent.isIdle() || agent.bot?.rotnStationary === true) {
+            // (D2b: the shelter build, once at the site; not the walk there, #195 review 6); the
+            // escape (bot.rotnEscaping) is this reflex's own way out, never cut by it.
+            if (agent.isIdle() || agent.bot?.rotnStationary === true || agent.bot?.rotnEscaping === true || Date.now() < this.hold_until) {
                 this.prev_location = null;
                 this.stuck_time = 0;
                 return; // don't get stuck when idle
@@ -518,8 +529,28 @@ const modes_list = [
             }
             const max_stuck_time = cur_dig_block?.name === 'obsidian' ? this.max_stuck_time * 2 : this.max_stuck_time;
             if (this.stuck_time > max_stuck_time) {
-                say(agent, 'I\'m stuck!');
                 this.stuck_time = 0;
+                const cell = bot.entity.position.floored();
+                const now = Date.now();
+                const last = this.last_fire;
+                const repeat = !!last && now - last.at <= this.repeat_ms
+                    && Math.max(Math.abs(cell.x - last.cell.x), Math.abs(cell.y - last.cell.y), Math.abs(cell.z - last.cell.z)) <= this.repeat_cells;
+                this.last_fire = { cell, at: now };
+                if (repeat) {
+                    // The walk away did not free it last time, here: dig or climb out instead.
+                    await say(agent, 'I\'m stuck here again: digging or climbing out.');
+                    const mode = this;
+                    execute(this, agent, async () => {
+                        const r = await mode.escape(bot);
+                        if (r.out) { await say(agent, 'I\'m out.'); mode.last_fire = null; return; }
+                        mode.hold_until = Date.now() + mode.hold_ms;
+                        console.warn(`[reflex] unstuck: the escape failed (${r.why}); holding off for ${mode.hold_ms / 60_000} min`);
+                        await say(agent, `I'm stuck at ${cell.x}, ${cell.y}, ${cell.z} and could not dig or climb out (${r.why}).`);
+                    }).catch(err => reportModeError('unstuck', err));
+                    this.last_time = Date.now();
+                    return;
+                }
+                say(agent, 'I\'m stuck!');
                 const free_timeout_ms = this.free_timeout_ms;
                 execute(this, agent, async () => {
                     // Upstream killed the process if this took over 10 s; on RotN terrain

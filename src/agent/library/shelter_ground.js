@@ -138,10 +138,11 @@ function columnsWithin(radius) {
  * ahead near the way (mobOnWay).
  * #557 review 3: the columns are looked at nearest first, and the search ends once the distance
  * alone cannot beat the best place; it yields to the event loop every GROUND.yieldEvery columns.
- * report (filled in): {columns, ms, mobSkipped, mob}: places left out for a mob on the way, and its name.
+ * report (filled in): {columns, yields, ms, mobSkipped, mob}: columns looked at, yields to the event loop,
+ * places left out for a mob on the way, and its name.
  */
 export async function groundPlan(bot, { radius = GROUND.radius, lastShelter = null, skip = [], report = {}, pickaxe = hasPickaxe(bot), onWay = (a, b) => mobOnWay(bot, a, b) } = {}) {
-    Object.assign(report, { columns: 0, ms: 0, mobSkipped: 0, mob: null });
+    Object.assign(report, { columns: 0, yields: 0, ms: 0, mobSkipped: 0, mob: null });
     const t0 = Date.now();
     const here = bot?.entity?.position;
     if (!here) return null;
@@ -160,7 +161,7 @@ export async function groundPlan(bot, { radius = GROUND.radius, lastShelter = nu
         let best = null, n = 0;
         for (const { dx, dz, d } of columnsWithin(radius)) {
             if (best && d >= best.score) break; // no place farther out can score better
-            if (++n % GROUND.yieldEvery === 0) await tick();
+            if (++n % GROUND.yieldEvery === 0) { await tick(); report.yields++; }
             report.columns++;
             const feet = surfaceAt(bot, base.x + dx, base.z + dz, base.y);
             if (!feet || skipped.has(key(feet))) continue;
@@ -206,7 +207,7 @@ function stopper(bot, target) {
  * A stop ends the wait at once, whether or not the walk's promise ends with it.
  * Returns {stopped: null|'time'|<reason>, why} (why: what the walk threw).
  */
-async function boundedWalk(bot, walk, ms, stop = () => null) {
+export async function boundedWalk(bot, walk, ms, stop = () => null) {
     let stopped = null, why = null, done;
     const ended = new Promise(resolve => { done = resolve; });
     const halt = (r) => { if (stopped) return; stopped = r; try { bot.pathfinder?.stop?.(); bot.pathfinder?.setGoal?.(null); bot.clearControlStates?.(); } catch { /* best effort */ } done(); };
@@ -247,7 +248,7 @@ export async function walkToGround(bot, plan, { walk = (b, f) => pureWalk(b, new
 export function inWater(bot) {
     const p = bot?.entity?.position?.floored?.();
     if (!p) return false;
-    return isLiquid(bot.blockAt(p)) || isLiquid(bot.blockAt(p.offset(0, 1, 0)));
+    return isLiquid(bot.blockAt?.(p)) || isLiquid(bot.blockAt?.(p.offset(0, 1, 0)));
 }
 
 /** The nearest dry cell within radius (and 3 up or down): a free 1x2 space with no liquid or hazard, on a good floor (goodFloor); or null. */
