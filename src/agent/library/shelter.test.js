@@ -1510,3 +1510,20 @@ test('soak 11 (A4): a mob standing on or just over an open cell, in its column, 
     assert.deepEqual(heldCells(at(0.5, 66, 0.5), site, shaft), [], 'two blocks up: not yet');
     assert.deepEqual(heldCells(at(1.5, 64, 0.5), site, shaft), [], 'beside the column');
 });
+
+// Soak 11 death 4 (21:57:06, G): the zombie dug the pocket's roof and dropped into the bot's own cell;
+// the repair "closed the shelter at -117, 64, -29" with it inside, and the bot died sealed in with it.
+test('soak 11 (G1): a shelter with a hostile body in the bot\'s two cells is never counted closed', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, placed } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+    bot.entities = { 1: bot.entity, 7: { name: 'zombie', type: 'mob', position: new Vec3(0.8, 64, 0.2), height: 1.95 } };
+    const r = await buildShelter(bot);
+    assert.deepEqual(placed, ['1,64,0'], 'the wall is still placed');
+    assert.equal(r.closed, false, r.line);
+    assert.equal(r.inside?.name, 'zombie');
+    assert.match(r.line, /^Shelter at 0, 64, 0 is not closed: zombie is inside it, at 0, 64, 0; placed 1\.$/);
+    // A passive animal in the cell does not stop it closing (shelterEnemy).
+    const p = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+    p.bot.entities = { 1: p.bot.entity, 8: { name: 'chicken', type: 'mob', position: new Vec3(0.8, 64, 0.2), height: 0.7 } };
+    assert.equal((await buildShelter(p.bot)).closed, true);
+});

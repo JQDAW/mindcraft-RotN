@@ -408,6 +408,12 @@ const BODY_TYPES = ['player', 'mob', 'hostile', 'animal', 'passive', 'ambient', 
  * Dropped items, XP orbs and arrows do not count (#204 re-review 2).
  */
 /** Soak 5: entities (not the bot) whose box overlaps the cell (width from entity.width, else 0.6). */
+/** Soak 11 (G): a hostile body in the shelter's two cells (feet and head), or null. */
+export function mobInside(bot, feet) {
+    if (!feet) return null;
+    return [feet, feet.offset(0, 1, 0)].flatMap(c => overlapping(bot, c)).find(e => shelterEnemy(e)) ?? null;
+}
+
 export function overlapping(bot, cell) {
     return Object.values(bot.entities ?? {}).filter(e => {
         // #502 nit 2: bodies only (as mobIn's BODY_TYPES): never an item, an XP orb or an arrow.
@@ -777,7 +783,15 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     const floor = bot.blockAt(feet.offset(0, -1, 0));
     const floorNote = isSturdy(floor) ? '' : ` The floor is ${floor?.name ?? 'unknown'}, not rock.`;
     const softNote = soft > 0 ? ` ${soft} of its walls and roof are dirt, which mobs can dig through.` : '';
-    const closed = missing.length === 0 && standing;
+    // Soak 11 (G1): never closed with a hostile body in the bot's two cells (21:57: the repair "closed"
+    // the pocket with the zombie in it, and the bot died sealed in with it).
+    const inside = mobInside(bot, feet);
+    const closed = missing.length === 0 && standing && !inside;
+    if (inside && missing.length === 0) {
+        const text = `Shelter at ${at(feet)} is not closed: ${inside.name ?? 'a mob'} is inside it, at ${at(inside.position.floored())}; placed ${placed}.`;
+        log(bot, text);
+        return { closed: false, feet, placed, missing, soft: 0, line: text, inside };
+    }
     const line = closed
         ? `Shelter closed at ${at(feet)}: placed ${placed} blocks.${softNote}${floorNote}`
         : missing.length === 0

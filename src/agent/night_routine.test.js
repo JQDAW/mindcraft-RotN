@@ -3463,29 +3463,37 @@ test('soak 11 (A1): the repair stops when a melee mob in reach hits the bot (or 
     assert.equal(burrows.length, 1, s.agent.chat.join('\n'));
 });
 
-test('soak 11 (A3): after a repair the weapon is back in the main hand (Corpse Complex keeps the main hand); WEAPON_HAND.offHand puts it in the off hand', async (t) => {
+test('soak 11 (A3): after a repair the weapon goes to the off hand (Corpse Complex keeps it; the lead, after rotn-data); an off hand holding something else stays and the main hand takes it; WEAPON_HAND.offHand false: the main hand', async (t) => {
     quiet(t);
     const { rearmWeapon, WEAPON_HAND } = await import('./library/skills.js');
     const club = { name: 'spartanweaponry:club_wood', metadata: 0, count: 1, slot: 37 };
     const dirt = { name: 'dirt', metadata: 0, count: 2, slot: 36 };
     const s = heldSetup({ plan: false, held: 'none' });
     const equips = [];
-    Object.assign(s.agent.bot, { heldItem: dirt, inventory: { items: () => [dirt, club], slots: [] },
-        equip: (item, dest) => { equips.push(`${item.name}>${dest}`); if (dest === 'hand') s.agent.bot.heldItem = item; return Promise.resolve(); } });
+    const slots = [];
+    Object.assign(s.agent.bot, { heldItem: dirt, inventory: { items: () => [dirt, club].filter(i => slots[45] !== i), slots },
+        equip: (item, dest) => { equips.push(`${item.name}>${dest}`); if (dest === 'hand') s.agent.bot.heldItem = item; else slots[45] = item; return Promise.resolve(); } });
+    assert.equal(WEAPON_HAND.offHand, true, 'the off hand by default');
     await breachAt(s);
     assert.ok(s.o.repairs.length >= 1);
-    assert.deepEqual(equips, ['spartanweaponry:club_wood>hand'], 'the club back in the main hand after the repair');
-    // Already a weapon in hand: nothing.
+    assert.deepEqual(equips, ['spartanweaponry:club_wood>off-hand'], 'the club in the off hand after the repair');
+    // Already in the off hand: nothing.
     equips.length = 0;
     assert.equal(await rearmWeapon(s.agent.bot), true);
     assert.deepEqual(equips, []);
-    // The off-hand flag (off by default until rotn-data's answer).
-    assert.equal(WEAPON_HAND.offHand, false);
-    WEAPON_HAND.offHand = true;
-    t.after(() => { WEAPON_HAND.offHand = false; });
+    // An off hand holding a shield: it stays, and the club goes to the main hand.
+    const shield = { name: 'shield', metadata: 0, count: 1, slot: 45 };
+    slots[45] = shield;
+    assert.equal(await rearmWeapon(s.agent.bot), true);
+    assert.deepEqual(equips, ['spartanweaponry:club_wood>hand']);
+    // The flag off: the main hand (already there: nothing).
+    WEAPON_HAND.offHand = false;
+    t.after(() => { WEAPON_HAND.offHand = true; });
+    slots[45] = undefined;
+    equips.length = 0;
     s.agent.bot.heldItem = dirt;
     assert.equal(await rearmWeapon(s.agent.bot), true);
-    assert.deepEqual(equips, ['spartanweaponry:club_wood>off-hand']);
+    assert.deepEqual(equips, ['spartanweaponry:club_wood>hand']);
     // No weapon: nothing to do.
     assert.equal(await rearmWeapon({ inventory: { items: () => [dirt], slots: [] }, heldItem: dirt, equip: () => { throw new Error('no'); } }), false);
 });
@@ -3520,4 +3528,45 @@ test('soak 11 (D, A1): unarmed, repairing first, the zombie steps into the openi
     nightTick(s.agent, { now: 3 * CHECK_MS, ops: s.o });
     await settle(s.agent);
     assert.equal(burrows.length, 1, s.agent.chat.join('\n'));
+});
+
+// Soak 11 death 4 (21:57, G): the zombie dug the pocket's roof and dropped into the bot's own cell; the
+// repair closed the shelter around it, the morning check said "staying in until it leaves", and the
+// unarmed bot did not swing ("not fighting from the shelter unless cornered") until it died.
+test('soak 11 (G): a hostile inside the bot\'s own cells is cornered: it hits back, at night and in the morning; the repair that placed every cell around it is not counted closed', async (t) => {
+    quiet(t);
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(0.5, 64, 0.5) };
+    const s = heldSetup({ plan: false, held: 'none' });
+    let inside = null;
+    s.o.mobInside = () => inside;
+    nightTick(s.agent, { now: 0, ops: s.o });
+    await settle(s.agent);
+    assert.equal(nightState(s.agent).state, 'inside');
+    inside = zombie;
+    assert.equal(nightTick(s.agent, { now: CHECK_MS + 1, ops: s.o }), 'night:inside');
+    assert.ok(s.agent.chat.includes('[night] a zombie is inside the shelter at 0, 64, 0: cornered, hitting back'), s.agent.chat.join('\n'));
+    assert.equal(nightState(s.agent).handFight, true);
+    assert.equal(s.agent.bot.rotnSheltered, 'open');
+    // Said once per mob.
+    nightTick(s.agent, { now: 2 * CHECK_MS + 2, ops: s.o });
+    assert.equal(s.agent.chat.filter(l => /is inside the shelter/.test(l)).length, 1);
+    // In the morning too, before "staying in until it leaves".
+    s.agent.bot.time.timeOfDay = MORNING;
+    s.o.hostileNear = () => zombie;
+    assert.equal(nightTick(s.agent, { now: 3 * CHECK_MS + 3, ops: s.o }), 'night:inside');
+    assert.equal(nightState(s.agent).handFight, true);
+    assert.ok(!s.agent.chat.some(l => /staying in until it leaves/.test(l)));
+    // Gone: the cornered fight ends.
+    inside = null;
+    nightTick(s.agent, { now: 4 * CHECK_MS + 4, ops: s.o });
+    assert.equal(nightState(s.agent).handFight, false);
+    // The repair that placed every cell with it inside (buildShelter's G1 result): not closed.
+    const r = heldSetup({ plan: false, held: 'none' });
+    r.o.mobInReach = () => null;
+    r.o.buildShelter = (bot, opts = {}) => (opts.site
+        ? Promise.resolve({ closed: false, feet: opts.site, placed: 2, missing: [], line: 'Shelter at 0, 64, 0 is not closed: zombie is inside it, at 0, 64, 0; placed 2.', inside: zombie })
+        : Promise.resolve({ closed: true, feet: SITE, placed: 10, line: 'Shelter closed' }));
+    await breachAt(r);
+    assert.ok(r.agent.chat.includes('[night] the repair placed every cell, but a zombie is inside the shelter: not closed; deciding again'), r.agent.chat.join('\n'));
+    assert.ok(!r.agent.chat.some(l => /the repair closed the shelter/.test(l)));
 });

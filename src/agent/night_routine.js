@@ -15,7 +15,7 @@
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, SCROLL_LABEL, shelterShell, isFullDay, replanHold, placeableDirt } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
+import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway, mobInside } from './library/shelter.js';
 import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon } from './library/skills.js';
 import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
@@ -149,7 +149,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     restoreCowardice(agent, n);
-    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, ...GROUND_CLEAR, groundSkip: [] });
+    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, insideSaidFor: null, ...GROUND_CLEAR, groundSkip: [] });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0, ...MORNING_CLEAR });
@@ -1170,7 +1170,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (spent) n.lastShelter = spent.clone?.() ?? spent;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, ...GROUND_CLEAR, groundSkip: [] });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, insideSaidFor: null, ...GROUND_CLEAR, groundSkip: [] });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -1366,6 +1366,22 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
     }
 
     if (n.state === 'inside') {
+        // Soak 11 (G, death 4 at 21:57): a zombie dug the pocket's roof and dropped into the bot's own
+        // cell; the shelter was whole again, so nothing here saw it, and the fight mode would not swing
+        // unarmed. A hostile in the bot's two cells is cornered (#470 review 2: hitting back beats
+        // standing still): the fight in place swings at it, armed or not, at any health. Before the
+        // morning's checks too (it was morning at 21:57: "staying in until it leaves").
+        const inCell = (ops.mobInside ?? mobInside)(bot, n.site);
+        if (inCell) {
+            if (n.insideSaidFor !== inCell.id) {
+                n.insideSaidFor = inCell.id;
+                line(agent, `[night] ${aMob(inCell.name ?? 'hostile mob')} is inside the shelter at ${at(n.site)}: cornered, hitting back`);
+            }
+            n.handFight = true;
+            bot.rotnSheltered = 'open';
+            return 'night:inside';
+        }
+        if (n.insideSaidFor != null) { n.insideSaidFor = null; n.handFight = false; } // the mob inside is dead or gone
         // Soak 10 (R6, the lead): the Scroll of New Life sets the respawn point where the bot stands; a
         // death within 32 blocks of it then raises no player zombie. Used once, by skill (never the
         // model), at a closed night shelter far from the spawn and every death spot, with no hostile near.
@@ -1726,6 +1742,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             };
             startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody, abort, ...(skip.length ? { skip } : {}) }), (r) => {
                 if (r?.aborted) { line(agent, `[night] the repair stopped: ${r.aborted}; deciding again`); n.repairStall = null; return; }
+                // Soak 11 (G1): every cell placed, but a hostile is inside: not closed; the next tick sees it.
+                if (r?.inside) { line(agent, `[night] the repair placed every cell, but ${aMob(r.inside.name ?? 'hostile mob')} is inside the shelter: not closed; deciding again`); n.repairStall = null; return; }
                 // Soak 5 (00:31:47): a repair that closed the shelter said nothing; the journal could not
                 // show the roof was closed before the troll came.
                 if (r?.closed) { bot.rotnSheltered = true; Object.assign(n, { repairStall: null, handFight: false, repairFirstFor: null, nightBurrowTried: null, nightBurrowWhy: null }); console.log(`[night] the repair closed the shelter at ${at(n.site)}`); return; } // #470 nit: no hand fight once closed; #580 re-review nit 1: a new breach is a new one
