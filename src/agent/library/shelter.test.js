@@ -1214,7 +1214,7 @@ test('soak 5: "did not stay" names what is in the cell now and the entities over
     bot.entities = { 1: bot.entity, 9: { id: 9, name: 'iceandfire:if_troll', type: 'mob', position: new Vec3(2.6, 64, 0.5), width: 1.5, height: 3.6 } };
     const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
     assert.equal(r.closed, false);
-    assert.match(r.line, /1, 64, 0: the block did not stay \(placed twice; now air; iceandfire:if_troll over the cell\)/);
+    assert.match(r.line, /1, 64, 0: the block did not stay \(placed twice; now air; iceandfire:if_troll over the cell; against /);
 });
 
 // #502 nit 2: "over the cell" names bodies only, never an XP orb, an arrow or an item.
@@ -1228,7 +1228,7 @@ test('#502 nit 2: overlapping skips XP orbs, arrows and items', async (t) => {
     bot.entities = { 1: bot.entity, a: over('orb', 'experience_orb'), b: over('object', 'arrow') };
     bot.placeBlock = () => Promise.resolve(); // never kept
     const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
-    assert.match(r.line, /1, 64, 0: the block did not stay \(placed twice; now air\)/);
+    assert.match(r.line, /1, 64, 0: the block did not stay \(placed twice; now air; against /);
 });
 
 // Soak 5 Fix B (PR 5), the lead's rule: an avoid mob that digs through anything (the troll: rotn-data
@@ -1481,4 +1481,88 @@ test('#580 review 2: a sideways modded log is a wood wall (so a repair keeps it)
     assert.equal(isWoodItem({ name: 'biomesoplenty:log_0', metadata: 0 }), true);
     assert.equal(isWoodItem({ name: 'crafting_table', metadata: 0 }), false, 'never placed in a repair');
     assert.equal(isWoodWall({ name: 'dirt', metadata: 0 }), false);
+});
+
+// Soak 11 night 1 (rotn-v0.1.17), B: from 21:05:58 every shelter at -95, 66, -134 failed the same way,
+// "1 open (-95, 68, -134: the block did not stay (placed twice; now air)); placed 0", 3 tries, a hole
+// and 4 quiet retries, always the same site.
+test('soak 11 (B4): a replaceable block (a snow layer) never holds a placement: the roof is held by a prop, never placed against the snow', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // A hole at 0 61 0, closed on every side, its roof cell 0 63 0 open with air beside it and a snow layer on top.
+    const set = { '1,61,0': 'dirt', '1,62,0': 'dirt', '0,63,0': 'air', '1,63,0': 'air', '-1,63,0': 'air', '0,63,1': 'air', '0,63,-1': 'air', '0,64,0': 'snow_layer' };
+    const f = holeShelter({ dirt: 4, set });
+    delete f.bot.entities[7];
+    const refs = [];
+    const place = f.bot.placeBlock;
+    f.bot.placeBlock = (ref, face) => { refs.push(ref.name); return place(ref, face); };
+    const r = await buildShelter(f.bot, { site: new Vec3(0, 61, 0), keepSoft: true });
+    assert.ok(!refs.includes('snow_layer'), `never against the snow: ${refs.join(' ')}`);
+    assert.equal(r.closed, true, r.line);
+    assert.ok(f.placed.includes('0,63,0') && f.placed.length === 2, `a prop, then the roof: ${f.placed.join(' ')}`);
+});
+
+test('soak 11 (B2, B1): never placed into the bot\'s own box (waited out, then said, and the cell is stuck); the reason names the face and where the bot was', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SETTLE };
+    Object.assign(SETTLE, { maxMs: 200 });
+    t.after(() => Object.assign(SETTLE, saved));
+    // The hole closed on every side, its roof cell 0 63 0 open; the bot afloat at 61.6: its box (to 63.4) reaches it.
+    const f = holeShelter({ dirt: 4, set: { '1,61,0': 'dirt', '1,62,0': 'dirt', '0,63,0': 'air' } });
+    delete f.bot.entities[7];
+    f.bot.entity.position = new Vec3(0.5, 61.6, 0.5);
+    const r = await buildShelter(f.bot, { site: new Vec3(0, 61, 0), keepSoft: true, tolerateBody: true });
+    assert.equal(r.closed, false);
+    assert.match(r.line, /0, 63, 0: the bot's own body is in it \(at 0\.50, 61\.60, 0\.50/);
+    assert.ok((r.stuck ?? []).some(c => key(c) === '0,63,0'), JSON.stringify(r.stuck));
+    assert.deepEqual(f.placed, [], 'nothing placed into it');
+    // B1: a block that does not stay names the face and the bot.
+    const g = fakeBot({ cobble: 2, set: shellAt({ '1,64,0': 'air' }) });
+    g.bot.placeBlock = () => Promise.resolve(); // the server never keeps it
+    const r2 = await buildShelter(g.bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.match(r2.line, /1, 64, 0: the block did not stay \(placed twice; now air; against [a-z_:]+ at -?\d+, -?\d+, -?\d+ \(face -?\d, -?\d, -?\d\); the bot at 0\.50, 64\.00, 0\.50/);
+    assert.ok(r2.stuck.some(c => key(c) === '1,64,0'));
+});
+
+test('soak 11 (Q3): a shelter with water in the bot\'s cells is given up (flooded, both cells stuck), not sealed', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const f = holeShelter({ dirt: 4, set: { '0,61,0': 'water' } });
+    delete f.bot.entities[7];
+    const r = await buildShelter(f.bot, { site: new Vec3(0, 61, 0), keepSoft: true });
+    assert.deepEqual([r.closed, r.flooded, r.stuck.map(key)], [false, true, ['0,61,0', '0,62,0']]);
+    assert.match(r.line, /^Giving up the shelter at 0, 61, 0: water came into it \(water at 0, 61, 0\)\.$/);
+    assert.deepEqual(f.placed, []);
+});
+
+test('soak 11 (B3): chooseSite skips a site that needs a cell to avoid; buildShelter takes another', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot } = fakeBot();
+    const first = chooseSite(bot, 4);
+    assert.ok(first);
+    const avoid = new Set([key(first.feet.offset(0, 2, 0))]); // its roof cell failed before
+    const other = chooseSite(bot, 4, { avoid });
+    assert.ok(other && !other.feet.equals(first.feet), 'another site');
+    const tally = new Map();
+    chooseSite(bot, 4, { avoid, tally });
+    assert.ok(tally.get('a cell failed here before') >= 1);
+    const r = await buildShelter(bot, { avoid });
+    assert.ok(r.feet && !r.feet.equals(first.feet), r.line);
+});
+
+test('soak 11 (C1): out of blocks part-way with dirt piles left: more dirt is crafted and the build goes on', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // A dirt shelter with three open walls; 1 dirt held and 12 piles (3 dirt).
+    const { bot, items } = fakeBot({ cobble: 0, pickaxe: false, set: dirtShell({ '1,64,0': 'air', '-1,64,0': 'air', '0,64,1': 'air' }), items: [n(DIRT, 1), n(PILE, 12)] });
+    const { craft, calls } = fakeCraft(items);
+    // The first placement uses a dirt that never lands (20:51: one short at the end), so the dirt
+    // crafted up front (exactly the 3 cells) runs out at the last cell, with 4 piles left.
+    const place = bot.placeBlock;
+    let lost = false;
+    bot.placeBlock = (ref, face) => {
+        if (!lost) { lost = true; bot.heldItem.count--; return Promise.resolve(); }
+        return place(ref, face);
+    };
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true, craft });
+    assert.equal(r.closed, true, r.line);
+    assert.equal(calls.filter(([name]) => /^dirt/.test(name)).length, 2, `up front, then once more part-way: ${JSON.stringify(calls)}`);
+    assert.match(bot.output, /The shelter needs 1 more blocks: making 1 dirt/);
 });

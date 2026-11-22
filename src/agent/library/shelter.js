@@ -62,6 +62,17 @@ export const isLiquid = (b) => !!b && (/water|lava/.test(b.name ?? '') || dumpSt
 export const isEmpty = (b) => !!b && b.boundingBox === 'empty' && !isLiquid(b) && !hazardOf(b);
 const isSolid = (b) => !!b && b.boundingBox === 'block';
 /**
+ * Soak 11 (B4): a block a placement can be made against. A replaceable one (a snow layer, tall grass,
+ * vines) takes the placed block into its own cell instead (1.12 ItemBlock), so it never holds one.
+ */
+const holds = (b) => isSolid(b) && dumpState(b)?.replaceable !== true;
+/** Soak 11 (B2): the bot's own box (0.6 wide, 1.8 high) overlaps the cell: the server refuses a block there. */
+export function botBoxIn(bot, cell) {
+    const p = bot?.entity?.position;
+    if (!p) return false;
+    return p.x + 0.3 > cell.x && p.x - 0.3 < cell.x + 1 && p.z + 0.3 > cell.z && p.z - 0.3 < cell.z + 1 && p.y + 1.8 > cell.y && p.y < cell.y + 1;
+}
+/**
  * The floor of a new site (gate2 B, 00:19:39: the bot was out of its new shelter 10 s after it
  * closed, one block lower): a solid block whose collision reaches its top, so the bot stands at its
  * cell's bottom; full height is told by the shape only (#381 review 3): rotn-data's collision boxes
@@ -238,7 +249,7 @@ export function siteNeeds(bot, feet, { accept = isSturdy, occupied = false, tole
     const interior = new Set([key(p), key(p.offset(0, 1, 0))]);
     const shell = new Set(order.map(key));
     const sim = new Map(); // key -> 'solid' | 'empty', the cells the build changes
-    const solidAt = (q) => (sim.has(key(q)) ? sim.get(key(q)) === 'solid' : isSolid(bot.blockAt(q)));
+    const solidAt = (q) => (sim.has(key(q)) ? sim.get(key(q)) === 'solid' : holds(bot.blockAt(q)));
     const emptyAt = (q) => (sim.has(key(q)) ? sim.get(key(q)) === 'empty' : isEmpty(bot.blockAt(q)));
     const todo = [], unsupported = [];
     let blocks = 0, unsafe = null, unsafeKind = null;
@@ -314,7 +325,7 @@ export function standsIn(bot) {
  * The site within `radius` (and 2 up or down) that needs the fewest blocks, then the nearest. Only
  * sites where digging is safe and every cell has a support face count (#195 review 1 and 3).
  */
-export function chooseSite(bot, radius = 4, { accept = isSturdy, handExit = false, tally = null } = {}) {
+export function chooseSite(bot, radius = 4, { accept = isSturdy, handExit = false, tally = null, avoid = null } = {}) {
     const base = bot.entity.position.floored();
     let best = null;
     for (let dy = -2; dy <= 2; dy++)
@@ -322,6 +333,11 @@ export function chooseSite(bot, radius = 4, { accept = isSturdy, handExit = fals
             for (let dz = -radius; dz <= radius; dz++) {
                 const feet = base.offset(dx, dy, dz);
                 const need = siteNeeds(bot, feet, { accept });
+                // Soak 11 (B3): never a site that needs a cell whose block did not stay this night.
+                if (need && avoid?.size && [feet, feet.offset(0, 1, 0), ...need.todo].some(c => avoid.has(key(c)))) {
+                    if (tally) tally.set('a cell failed here before', (tally.get('a cell failed here before') ?? 0) + 1);
+                    continue;
+                }
                 if (!need || need.unsafe || need.unsupported.length > 0 || (handExit && !need.handExit)) {
                     // Soak 8: tally: what refused each site (siteRefusal), for the line.
                     if (tally) { const why = siteRefusal(bot, feet, need, { handExit }); tally.set(why, (tally.get(why) ?? 0) + 1); }
@@ -428,7 +444,7 @@ export function mobIn(bot, cell) {
  * One placement at target against a solid neighbour outside the 1x2 space. mode.items(bot): the
  * stacks to place, best first; mode.accept(block): what counts as a wall.
  */
-async function placeOnce(bot, target, interior, mode, why = () => {}) {
+async function placeOnce(bot, target, interior, mode, why = () => {}, note = null) {
     const item = mode.items(bot)[0];
     if (!item) { why('no block left to place'); return false; }
     const mob = mobIn(bot, target);
@@ -438,10 +454,11 @@ async function placeOnce(bot, target, interior, mode, why = () => {}) {
         why(`a ${mob.name ?? mob.displayName ?? 'mob'} stands in it`);
         return false;
     }
-    const refPos = supportFor(target, interior, (q) => isSolid(bot.blockAt(q)));
+    const refPos = supportFor(target, interior, (q) => holds(bot.blockAt(q)));
     if (!refPos) { why('nothing to place a block against'); return false; }
     const ref = bot.blockAt(refPos);
     const face = target.minus(refPos);
+    if (note) Object.assign(note, { ref: ref?.name ?? 'unknown', at: refPos, face });
     try {
         await bot.equip(item, 'hand');
         await bot.lookAt(ref.position.offset(0.5, 0.5, 0.5).plus(face.scaled(0.5)), true);
@@ -511,10 +528,19 @@ export async function fillCell(bot, target, interior, mode, reasons = null) {
     const why = (text) => { if (reasons) reasons.set(key(target), hits ? `${text} (hit ${hits} times)` : text); };
     if (!mode.accept(bot.blockAt(target)) && mobIn(bot, target)) hits = await hitOutOf(bot, target);
     if (reasons) reasons.fought = (reasons.fought ?? 0) + hits;
+    const note = {};
     for (let attempt = 0; attempt < 2; attempt++) {
         if (mode.accept(bot.blockAt(target))) return true;
+        // Soak 11 (B2): never into the bot's own box (the server refuses it): wait for it to settle out
+        // of the cell (SETTLE.maxMs), else say so and leave the cell.
+        for (let waited = 0; botBoxIn(bot, target) && waited < SETTLE.maxMs; waited += 100) await sleep(100);
+        if (botBoxIn(bot, target)) {
+            if (reasons) (reasons.stuck ??= new Set()).add(key(target));
+            why(`the bot's own body is in it (at ${exactAt(bot)}${isLiquid(bot.blockAt(bot.entity.position.floored())) ? ', in water' : ''})`);
+            return false;
+        }
         if (!isEmpty(bot.blockAt(target)) && !isLiquid(bot.blockAt(target))) { why(`${bot.blockAt(target)?.name ?? 'something'} is in it`); return false; }
-        if (await placeOnce(bot, target, interior, mode, why)) return true;
+        if (await placeOnce(bot, target, interior, mode, why, note)) return true;
         await sleep(LATE_UPDATE_MS);
         if (mode.accept(bot.blockAt(target))) return true;
     }
@@ -522,7 +548,12 @@ export async function fillCell(bot, target, interior, mode, reasons = null) {
     if (reasons && !reasons.has(key(target))) {
         const now = bot.blockAt(target)?.name ?? 'unknown';
         const over = overlapping(bot, target).map(e => e.name ?? e.type ?? 'entity');
-        why(`the block did not stay (placed twice; now ${now}${over.length ? `; ${over.join(', ')} over the cell` : ''})`);
+        // Soak 11 (B1): what it was placed against, and where the bot was (on the ground, in water, its own box).
+        const face = note.face ? `against ${note.ref} at ${at(note.at)} (face ${note.face.x}, ${note.face.y}, ${note.face.z})` : 'no face used';
+        const feetBlock = bot.blockAt?.(bot.entity.position.floored());
+        const where = `the bot at ${exactAt(bot)}${isLiquid(feetBlock) ? ', in water' : ''}${botBoxIn(bot, target) ? ', its own box in the cell' : ''}`;
+        (reasons.stuck ??= new Set()).add(key(target));
+        why(`the block did not stay (placed twice; now ${now}${over.length ? `; ${over.join(', ')} over the cell` : ''}; ${face}; ${where})`);
     }
     return false;
 }
@@ -633,7 +664,7 @@ async function pickaxeFor(bot, level) {
  * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], soft: number, line: string}>}
  *   line: what it logged; soft: the dirt blocks in its walls and roof.
  */
-export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [] } = {}) {
+export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [], avoid = null } = {}) {
     // #470 review 2: skip: cells a mob holds, left out of a repair (the bot has no weapon to hit it out).
     const skipKeys = new Set(skip.map(key));
     // Soak 8 (night 2): noPlace: the search found no site at all (not a site short of blocks or a
@@ -641,9 +672,19 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     const sturdyTally = new Map(), softTally = new Map();
     const searched = { noPlace: false, refused: null };
     const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, soft: 0, line, ...searched }; };
+    // Soak 11 (Q3, the lead): a shelter (a hole) with water in the bot's two cells is given up, not sealed:
+    // the caller remembers the site (B3).
+    if (site) {
+        const f = new Vec3(Math.floor(site.x), Math.floor(site.y), Math.floor(site.z));
+        const wet = [f, f.offset(0, 1, 0)].find(c => isLiquid(bot.blockAt(c)));
+        if (wet) {
+            const r = refuse(f, [], `Giving up the shelter at ${at(f)}: water came into it (${bot.blockAt(wet).name} at ${at(wet)}).`);
+            return { ...r, flooded: true, stuck: [f, f.offset(0, 1, 0)] };
+        }
+    }
     // 1. A sturdy shelter (rock walls); a repair keeps the dirt walls it has.
     // A repair is of the shelter the bot is in: only fire, lava or a solid block there stops it (G3 round 7 B).
-    let plan = site ? siteNeeds(bot, site, { accept: keepSoft ? isWall : isSturdy, occupied: true, tolerateBody }) : chooseSite(bot, radius, { tally: sturdyTally });
+    let plan = site ? siteNeeds(bot, site, { accept: keepSoft ? isWall : isSturdy, occupied: true, tolerateBody }) : chooseSite(bot, radius, { tally: sturdyTally, avoid });
     const problem = planProblem(plan, site, radius, false, bot, sturdyTally);
     if (!site && !plan) Object.assign(searched, { noPlace: true, refused: `${tallyText(sturdyTally)}; ${standsIn(bot)}` });
     const level = problem ? 0 : exitLevel(bot, plan.feet);
@@ -662,7 +703,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     // 2. The dirt fallback: too few sturdy blocks, or no pickaxe to dig out of rock.
     if (!pick.ok || sturdy() < plan.blocks) {
         const handExit = !pick.ok;
-        const soft = site ? siteNeeds(bot, site, { accept: isWall, occupied: true, tolerateBody }) : chooseSite(bot, radius, { accept: isWall, handExit, tally: softTally });
+        const soft = site ? siteNeeds(bot, site, { accept: isWall, occupied: true, tolerateBody }) : chooseSite(bot, radius, { accept: isWall, handExit, tally: softTally, avoid });
         // No site for dirt walls either: still no place (a sturdy site short of blocks is a place).
         if (!site && soft) searched.noPlace = false;
         else if (!site && !plan) searched.refused = `${tallyText(softTally)}; ${standsIn(bot)}`;
@@ -749,12 +790,22 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
             if (!isEmpty(b) && !isLiquid(b)) {
                 if (!await breakBlockAt(bot, pos.x, pos.y, pos.z)) { reasons.set(key(pos), `could not break the ${b.name} in it`); continue; }
             }
-            if (pos.equals(roof) && !supportFor(roof, interior, (q) => isSolid(bot.blockAt(q)))) {
+            if (pos.equals(roof) && !supportFor(roof, interior, (q) => holds(bot.blockAt(q)))) {
                 // Nothing next to the roof cell: hold it up with one block on top of a finished wall.
                 const prop = propFor(roof, (q) => mode.accept(bot.blockAt(q)), (q) => isEmpty(bot.blockAt(q)));
                 if (prop && await fillCell(bot, prop, interior, mode, reasons)) placed++;
             }
             if (await fillCell(bot, pos, interior, mode, reasons)) placed++;
+            // Soak 11 (C1): out of blocks part-way with dirt piles left (20:51: "no block left to place"
+            // with 36 piles held): craft more from them and try the cell again.
+            else if (reasons.get(key(pos)) === 'no block left to place' && !bot.interrupt_code) {
+                const left = wallsAndRoof(feet).filter(q => !mode.accept(bot.blockAt(q))).length;
+                await craftMore(bot, 'dirt', left, craft);
+                if (mode.items(bot).length) {
+                    reasons.delete(key(pos));
+                    if (await fillCell(bot, pos, interior, mode, reasons)) placed++;
+                }
+            }
         }
     } finally {
         bot.rotnStationary = false;
@@ -778,12 +829,15 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
             ? `Shelter at ${at(feet)} is built but you are not standing on its floor (at ${exactAt(bot)}); placed ${placed}.`
             : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(q => `${at(q)}: ${reasons.get(key(q)) ?? (reasons.stopped ? 'stopped before it' : seenWall.has(key(q)) ? 'opened during the repair (a wall when checked)' : 'not tried')}`).join('; ')}); placed ${placed}.`;
     log(bot, line);
+    // Soak 11 (B3): the cells whose block did not stay (or held the bot's own body), for the caller to remember.
+    const stuck = closed ? [] : [...(reasons.stuck ?? [])].map(k => { const [x, y, z] = k.split(',').map(Number); return new Vec3(x, y, z); });
+    if (stuck.length) Object.assign(searched, { stuck });
     // Round 9 B (fix d): dirt walls can be dug by any zombie; keep dirt ready, so a repair only places.
     if (closed && soft > 0) {
         const held = countOf(softItems(bot));
         if (held < SHELTER_SPARE.dirt) await craftMore(bot, 'dirt', SHELTER_SPARE.dirt - held, craft, { spare: true });
     }
-    return { closed, feet, placed, missing, soft, line };
+    return { closed, feet, placed, missing, soft, line, ...(stuck.length ? { stuck } : {}) };
 }
 
 /** Wait (at most SETTLE.maxMs; a stop ends it, #381 review 4) for the bot to come to rest on the floor of the site at feet. */
