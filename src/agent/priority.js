@@ -30,6 +30,7 @@ import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget,
 import { quoteData, isTaskGiver } from './task_queue.js';
 import { nightTick, leaveShelterFor, resumeNightGoal } from './night_routine.js';
 import { relocateTick } from './respawn_relocate.js';
+import { respawnEscapeTick } from './respawn_escape.js';
 import { descendFromTree } from './library/skills.js';
 import { standsOnTree } from './library/fall_safety.js';
 import { parseStandOn, standCheck, describeTarget } from './library/stand_on.js';
@@ -186,6 +187,11 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
         agent._task_tick_at = undefined; // no LLM time while held
         return `held:${hold}`;
     }
+
+    // 2a. Soak 10 (R1): right after a respawn among recent death spots or player zombies, the escape
+    // runs first, at any time of day: the night routine, tasks, the agenda and the model wait for it.
+    const escaping = respawnEscapeTick(agent, { now });
+    if (escaping) return escaping;
 
     // 2b. Night (D2b-2): from dusk to full daylight the bot shelters; tasks and the agenda wait
     // and resume afterwards without a new run. Control holds above still win.

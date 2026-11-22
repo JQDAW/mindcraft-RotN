@@ -156,6 +156,11 @@ function runAsAction (actionFn, resume = false, timeout = -1, label = null) {
     let actionLabel = label;  // Will be set on first use (given when a perform checks first, then runs this)
     
     const wrappedAction = async function (agent, ...args) {
+        // Soak 10 (#581 review 4): no command runs over the respawn escape (it would end it among the
+        // player zombies at the spawn); it is refused, said why, until the escape ends.
+        // #581 re-review nit 5: its whole window (agent._escape.due, set by each escape tick; no import of
+        // respawn_escape.js here: that would be an import cycle through commands/index.js).
+        if (agent._escape?.job || agent._escape?.due) return 'Not now: the respawn escape is running (sprinting away from the spawn and the places you died). Try again when it has ended.';
         // Set actionLabel only once, when the action is first created
         if (!actionLabel) {
             const actionObj = actionsList.find(a => a.perform === wrappedAction);

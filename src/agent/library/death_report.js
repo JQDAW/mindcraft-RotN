@@ -216,6 +216,23 @@ export const NOTE_KINDS = 20;
  * What the model is told about the items it dropped (lead decision on rotn-data Request 12), with
  * the minutes left counted from the death (#247 review 1), so a note read later is not stale.
  */
+/**
+ * Soak 10 (R5): SPAWN_CAMP.deaths or more deaths within SPAWN_CAMP.withinMs, each within
+ * SPAWN_CAMP.range of the world spawn, make the death note say the spawn is camped and that the
+ * respawn escape runs (respawn_escape.js); a held Scroll of New Life is never the model's to use.
+ */
+export const SPAWN_CAMP = { deaths: 2, withinMs: 10 * 60_000, range: 48 };
+export function spawnCampNote(agent, now = Date.now()) {
+    const bot = agent?.bot;
+    const sp = bot?.spawnPoint;
+    const spots = typeof agent?._death?.recentSpots === 'function' ? agent._death.recentSpots(now) : [];
+    const camped = sp && spots.filter(s => s.pos && now - s.at <= SPAWN_CAMP.withinMs && Math.hypot(s.pos.x - sp.x, s.pos.z - sp.z) <= SPAWN_CAMP.range).length >= SPAWN_CAMP.deaths;
+    const scroll = (bot?.inventory?.items?.() ?? []).some(i => /(^|:)spawnscroll$/.test(i?.name ?? ''));
+    return (camped ? ' You keep dying near the spawn: a player zombie stands where you died, never leaves and never burns, and you respawn among them. '
+        + 'The respawn escape runs at once, sprinting at least 64 blocks from the spawn and every place you died; do not walk back there, and do not fight there.' : '')
+        + (scroll ? ' Never use the lifescroll:spawnscroll yourself: it sets your respawn point where you stand (it does not teleport); the night routine uses it once, at a safe shelter far away.' : '');
+}
+
 export function lostItemsNote(minutesLeft) {
     if (minutesLeft <= 0) {
         return `They lay at the death spot for ${DROPS_LAST_MIN} minutes after your death and are gone now; `
@@ -456,7 +473,7 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
         now, due: !r.streak,
         note: `You died at ${where(r.pos)} and respawned. ${byTree ? treeNote(lastFell) : ''}${items} The spot is saved as 'last_death_position'. `
             + `Do not go back there for ${DEATH_SPOT_WAIT_MS / 60_000} min, nor at dusk or night: what killed you may still be there, `
-            + 'and a zombie rises where a player dies.',
+            + 'and a zombie rises where a player dies.' + spawnCampNote(agent, now),
     });
     return r;
 }

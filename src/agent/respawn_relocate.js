@@ -21,7 +21,8 @@ import { dimensionKey, sameDimension } from './library/death_report.js';
  * now that cowardice is on, often cuts it short), waitMs apart; a walk that ran out its time or
  * ended short is not retried.
  */
-export const RELOCATE = { away: 48, recentMs: 10 * 60_000, zombieNearSpawn: 24, walkMs: 90_000, retryMs: 5 * 60_000, maxTarget: 160, tries: 3, waitMs: 5000 };
+// Soak 10 (R4): away 64 (was 48), as the respawn escape (respawn_escape.ESCAPE_RUN.away).
+export const RELOCATE = { away: 64, recentMs: 10 * 60_000, zombieNearSpawn: 24, walkMs: 90_000, retryMs: 5 * 60_000, maxTarget: 160, tries: 3, waitMs: 5000 };
 
 /** Horizontal distance (what "away" means on the surface). */
 const hdist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -211,7 +212,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
  * death within recentMs in this dimension, or already far enough). night: the night proper (not
  * dusk); armed: the bot holds a weapon. Returns {mode: 'full'|'short', target, places, away, line}.
  */
-export function nightRelocationPlan(agent, now = Date.now(), { night = false, armed = false } = {}) {
+export function nightRelocationPlan(agent, now = Date.now(), { night = false, armed = false, full: fullOnly = false } = {}) {
     const bot = agent.bot;
     const here = bot?.entity?.position;
     if (!here) return null;
@@ -222,7 +223,10 @@ export function nightRelocationPlan(agent, now = Date.now(), { night = false, ar
     const full = targetAwayFrom(here, places, { surfaceOk });
     const nearWay = full ? hostileNearWay(bot, here, full) : null;
     const towards = (t) => `towards ${t.x}, ${t.z}`;
-    if (nearWay || (night && !armed) || !full) {
+    // #581 review 3: after a respawn escape that did not get there, the full target (never the 24-block
+    // walk, which ends inside the spawn ring); #581 re-review nit 4: with no full target, the short walk
+    // still (not sheltering on the spot).
+    if ((fullOnly && !full) || (!fullOnly && (nearWay || (night && !armed) || !full))) {
         if (deaths.every(p => hdist(p.pos, here) >= NIGHT_RELOCATE.shortAway)) return null;
         const target = targetAwayFrom(here, deaths, { surfaceOk, away: NIGHT_RELOCATE.shortAway });
         if (!target) return null;

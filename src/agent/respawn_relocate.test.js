@@ -36,10 +36,10 @@ test('CX23 soak: the target is at least RELOCATE.away from the spawn and every d
     const t = targetAwayFrom(new Vec3(-50, 75, -60), places);
     for (const p of places) assert.ok(hdist(p.pos, t) >= RELOCATE.away, `${hdist(p.pos, t)} from ${p.pos}`);
     assert.ok(hdist(new Vec3(-50, 0, -60), t) < RELOCATE.maxTarget);
-    assert.equal(RELOCATE.away, 48);
+    assert.equal(RELOCATE.away, 64, 'soak 10 (R4): 64, as the respawn escape');
 });
 
-test('CX23 soak: after a respawn the bot walks 48 away from the spawn and the recent death spots, once per death; the agenda waits meanwhile', async () => {
+test('CX23 soak: after a respawn the bot walks RELOCATE.away (64) from the spawn and the recent death spots, once per death; the agenda waits meanwhile', async () => {
     const now = 1_000_000;
     const agent = agentAt(SPAWN.offset(2, 0, 3), { deaths: [[-80, 66, -38, 60_000], [-65, 64, -77, 30_000]], now });
     assert.deepEqual(placesToLeave(agent, now).map(p => p.what), ['spawn', 'death spot', 'death spot']);
@@ -51,7 +51,7 @@ test('CX23 soak: after a respawn the bot walks 48 away from the spawn and the re
     assert.equal(relocateTick(agent, { now, walk, log: (l) => logs.push(l) }), 'relocating', 'while the walk runs');
     await flush(); await flush();
     assert.deepEqual(agent.actions.runs, ['action:leaveDeathArea'], 'one walk, as an action');
-    assert.match(logs[0], /^\[respawn\] after a death: moving at least 48 blocks from the spawn and 2 recent death spots, towards -?\d+, -?\d+, before the agenda resumes$/);
+    assert.match(logs[0], /^\[respawn\] after a death: moving at least 64 blocks from the spawn and 2 recent death spots, towards -?\d+, -?\d+, before the agenda resumes$/);
     assert.match(logs.at(-1), /^\[respawn\] now \d+ blocks from the spawn and 2 recent death spots at .*; the agenda resumes$/);
     for (const p of placesToLeave(agent, now)) assert.ok(hdist(p.pos, walkedTo) >= RELOCATE.away);
     assert.equal(relocateTick(agent, { now: now + 1000, walk, log: () => {} }), null, 'far away now: the agenda resumes');
@@ -95,8 +95,10 @@ test('CX23 soak: in the priority stack the walk away comes before the agenda (ag
     agent.agenda = { get active() { agendaTicks++; return true; } };
     agent.tasks = { current: () => null, get: () => null };
     agent.actions.runAction = () => new Promise(() => {}); // the walk runs on
-    assert.equal(autonomyTick(agent, { now }), 'relocating');
-    assert.equal(autonomyTick(agent, { now: now + 300 }), 'relocating');
+    // Soak 10 (R1): right after a death near the spawn the respawn escape comes first (respawn_escape.js);
+    // the relocate's walk is its day-time follow-up. The agenda waits either way.
+    assert.equal(autonomyTick(agent, { now }), 'escaping');
+    assert.equal(autonomyTick(agent, { now: now + 300 }), 'escaping');
     assert.equal(agendaTicks, 0, 'the agenda waits');
     await flush();
 });
@@ -169,15 +171,15 @@ test('#416 nit: the target is not on water (where loaded): it goes farther out',
 const SOAK3_DEATHS = () => [[-60, 60, -66, 4 * 60_000], [-35, 66, -56, 3 * 60_000], [-62, 60, -63, 2 * 60_000], [-29, 72, -86, 60_000]];
 const zombieAt = (x, z) => ({ id: 9, type: 'mob', name: 'zombie', position: new Vec3(x, 64, z) });
 
-test('soak 3 C: armed at night, no mob near the way: at least 48 blocks from the spawn and every recent death spot', () => {
+test('soak 3 C: armed at night, no mob near the way: at least RELOCATE.away (64; soak 10 R4) blocks from the spawn and every recent death spot', () => {
     const now = 1_000_000;
     const agent = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now }); // the 20:00:57 respawn
     const plan = nightRelocationPlan(agent, now, { night: true, armed: true });
     assert.equal(plan.mode, 'full');
-    assert.equal(plan.away, 48);
+    assert.equal(plan.away, 64);
     assert.equal(plan.places.length, 5, 'the spawn and all four death spots, not only the last');
-    for (const p of plan.places) assert.ok(hdist(p.pos, plan.target) >= 48);
-    assert.match(plan.line, /^\[night\] I died near here recently: moving at least 48 blocks from the spawn and 4 recent death spots, towards -?\d+, -?\d+, before sheltering$/);
+    for (const p of plan.places) assert.ok(hdist(p.pos, plan.target) >= 64);
+    assert.match(plan.line, /^\[night\] I died near here recently: moving at least 64 blocks from the spawn and 4 recent death spots, towards -?\d+, -?\d+, before sheltering$/);
     // Dusk, unarmed: still the full walk (not yet night).
     assert.equal(nightRelocationPlan(agent, now, { night: false, armed: false }).mode, 'full');
 });
@@ -259,7 +261,7 @@ test('#471 nit 6: no 48-block spot (water beyond 44): the short walk instead; no
     ringed.bot.blockAt = (p) => (hdist(p, centre) >= 44 ? { name: 'water', boundingBox: 'empty' } : { name: 'air', boundingBox: 'empty' });
     const plan = nightRelocationPlan(ringed, now, { night: true, armed: true });
     assert.equal(plan.mode, 'short');
-    assert.match(plan.line, /, and there is no place 48 blocks away: moving to the first spot at least 24 blocks/);
+    assert.match(plan.line, /, and there is no place 64 blocks away: moving to the first spot at least 24 blocks/);
     const sea = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now });
     sea.bot.blockAt = () => ({ name: 'water', boundingBox: 'empty' });
     assert.equal(nightRelocationPlan(sea, now, { night: true, armed: false }), null, 'a null short target: no walk');
@@ -372,4 +374,17 @@ test('soak 5: up on a tree, the walk away climbs down first; a failed climb down
         walk: (bot, target) => { bot.entity.position = new Vec3(target.x, 70, target.z); return Promise.resolve(null); } });
     await flush(); await flush();
     assert.match(logs2.at(-1), /^\[respawn\] now \d+ blocks from/);
+});
+
+// #581 re-review nit 4: after a short escape (full: true) with no place 64 blocks away, the short walk,
+// not sheltering on the spot.
+test('#581 re-review nit 4: full asked but no full target: the short walk instead of none', () => {
+    const now = 1_000_000;
+    const ringed = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now });
+    const centre = new Vec3(-50, 0, -65);
+    ringed.bot.blockAt = (p) => (hdist(p, centre) >= 44 ? { name: 'water', boundingBox: 'empty' } : { name: 'air', boundingBox: 'empty' });
+    const plan = nightRelocationPlan(ringed, now, { night: true, armed: false, full: true });
+    assert.equal(plan?.mode, 'short');
+    const open = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now });
+    assert.equal(nightRelocationPlan(open, now, { night: true, armed: false, full: true }).mode, 'full', 'a full target: the full walk');
 });

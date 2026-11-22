@@ -3214,6 +3214,86 @@ test('#557 nit: a search for better ground stopped by a reflex ends exposed, say
     assert.equal(nightState(agent).groundMoves, 0, 'no walk counted');
 });
 
+// Soak 10 (R2, the lead): right after the respawn escape (respawn_escape.js) the night shelter goes
+// where the escape ended, a hole first (the bot lost its dirt), and there is no walk back.
+test('soak 10 (R2): right after the respawn escape, the night shelter is a hole first where the escape ended; no walk back toward the death spots', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    agent._death = deathAt(-60_000);
+    const o = deathOps();
+    o.escapedRecently = () => true;
+    let now = 0;
+    const run = async () => { nightTick(agent, { now: ++now, ops: o }); await settle(agent); };
+    await run();
+    assert.deepEqual(o.calls, ['pit', 'roof'], `a hole first, no walk away: ${agent.chat.join(' | ')}`);
+    assert.ok(agent.chat.includes('[night] after the respawn escape: sheltering here at 0, 64, 0, a hole first'), agent.chat.join('\n'));
+    assert.equal(nightState(agent).pit, true);
+    // No escape: the walk away first, as before.
+    const before = fakeAgent({ t: NIGHT });
+    before._death = deathAt(-60_000);
+    const o2 = deathOps();
+    o2.escapedRecently = () => false;
+    nightTick(before, { now: 1, ops: o2 });
+    await settle(before);
+    assert.deepEqual(o2.calls, ['away']);
+});
+
+// Soak 10 (R6, the lead): the Scroll of New Life, once, by skill, at a closed night shelter far from the
+// spawn and every death spot, with no hostile near (respawn_escape.scrollRefusal / useSpawnScroll).
+test('soak 10 (R6): in a closed night shelter the scroll is used once, as the routine\'s own job; refused: said in the journal only; never by day', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    const uses = [];
+    o.scrollRefusal = () => null;
+    o.useSpawnScroll = () => { uses.push(1); return Promise.resolve({ used: true }); };
+    const labels = [];
+    const run = agent.actions.runAction.bind(agent.actions);
+    agent.actions.runAction = (label, fn) => { labels.push(label); return run(label, fn); };
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'inside');
+    nightTick(agent, { now: 1, ops: o });
+    await settle(agent);
+    assert.deepEqual(uses, [1]);
+    assert.ok(labels.includes('action:spawnScroll'), labels.join(','));
+    assert.ok(agent.chat.includes('[night] setting the respawn point here at 0, 64, 0 with the Scroll of New Life (once): far from the spawn and every death spot, no hostile near'));
+    assert.ok(agent.chat.includes('[night] the respawn point is now 0, 64, 0: a death within 32 blocks of it raises no player zombie'));
+    nightTick(agent, { now: CHECK_MS + 2, ops: o });
+    await settle(agent);
+    assert.deepEqual(uses, [1], 'once a shelter');
+    // Refused: a console line, no chat, no use.
+    const near = fakeAgent({ t: NIGHT });
+    const o2 = ops();
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    o2.scrollRefusal = () => '40 blocks from the spawn (it needs 100)';
+    o2.useSpawnScroll = () => { throw new Error('not here'); };
+    nightTick(near, { now: 0, ops: o2 });
+    await settle(near);
+    nightTick(near, { now: 1, ops: o2 });
+    await settle(near);
+    assert.ok(logs.includes('[night] the Scroll of New Life is not used at 0, 64, 0: 40 blocks from the spawn (it needs 100)'), logs.join('\n'));
+    assert.ok(!near.chat.some(l => /Scroll of New Life/.test(l)));
+});
+
+// #581 review 3: after an escape that fell short (escapeFellShort), no hole where it stopped: the night
+// walk away takes the full target, never the 24-block one.
+test('#581 review 3: an escape that fell short: no R2 hole; the night walk with the full target', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    agent._death = deathAt(-60_000);
+    const o = deathOps();
+    o.escapedRecently = () => false;
+    o.escapeFellShort = () => true;
+    nightTick(agent, { now: 1, ops: o });
+    await settle(agent);
+    assert.deepEqual(o.calls, ['away']);
+    assert.equal(o.relocOpts.full, true);
+    assert.equal(o.away.mode, 'full', 'not the 24-block walk, though unarmed at night');
+    assert.ok(!agent.chat.some(l => /after the respawn escape/.test(l)));
+});
+
 // Soak 10 (rotn-v0.1.16, 15:51, N1, the lead): a zombie dug into the single-cell dirt shelter; no
 // weapon, no way to back away, and the bot hit back by hand (0.3 a swing) until it died 26 s later.
 // Now it burrows away first, a step down (closeQuarters' rule (iii), at night too).
@@ -3286,4 +3366,31 @@ test('#580 review 3: a zombie in reach, the opening free, a block held: the repa
     await breachAt(none);
     assert.equal(none.burrows.length, 1);
     assert.ok(!none.agent.chat.some(l => /repairing first/.test(l)));
+});
+
+// #580 re-review nit 1 (the lead): repair first on every breach while the opening is free and a block is
+// held: a second breach by the same zombie after the repair closed the shelter is repaired first again.
+test('#580 re-review nit 1: the same zombie breaches again after the repair closed the shelter: the repair first again, no burrow', async (t) => {
+    quiet(t);
+    const zombie = { id: 7, name: 'zombie', position: new Vec3(1.5, 64, 0.5) };
+    const s = heldSetup({ plan: false, held: 'none' });
+    s.o.mobInReach = () => zombie;
+    s.o.repairBlocks = () => 4;
+    const burrows = [];
+    s.o.burrowAway = () => { burrows.push(1); return Promise.resolve({ steps: 0, site: null, stopped: 'cornered' }); };
+    s.o.buildShelter = (bot, opts = {}) => {
+        s.o.builds.push(opts.site ?? null);
+        if (opts.site) { s.o.repairs.push({ site: opts.site, skip: [] }); s.o.open = []; }
+        return Promise.resolve({ closed: true, feet: opts.site ?? SITE, placed: 1, line: 'Shelter closed' });
+    };
+    await breachAt(s);
+    assert.equal(s.o.repairs.length, 1);
+    // Closed: a check sees it closed again. Then the zombie digs the same wall again.
+    nightTick(s.agent, { now: 3 * CHECK_MS, ops: s.o });
+    await settle(s.agent);
+    s.o.open = s.opening;
+    nightTick(s.agent, { now: 5 * CHECK_MS, ops: s.o });
+    await settle(s.agent);
+    assert.equal(s.o.repairs.length, 2, s.agent.chat.join('\n'));
+    assert.deepEqual(burrows, [], 'repaired first again, no burrow');
 });

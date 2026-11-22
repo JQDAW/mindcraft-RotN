@@ -31,6 +31,8 @@ export const BACK_AWAY_LABEL = 'action:backAway';
 export const POCKET_LABEL = 'action:sidePocket';
 /** The burrow away from a mob that digs through anything (soak 5 Fix B, PR 5: the troll). */
 export const BURROW_LABEL = 'action:burrowAway';
+/** Soak 10 (R6): the Scroll of New Life used at the night shelter (respawn_escape.useSpawnScroll). */
+export const SCROLL_LABEL = 'action:spawnScroll';
 export const NIGHT_START = 12542;
 export const NIGHT_END = 23460;
 export const MORNING_FREEZE = 3001;
@@ -107,6 +109,8 @@ export function nightRoutineActive(agent) {
  * safe at night then, and the model may need to act.
  */
 export function replanHold(agent, now = Date.now()) {
+    // Soak 10 (R5): the model's moves wait while the respawn escape runs (respawn_escape.js).
+    if (agent?._escape?.job) return 'the respawn escape is running';
     if (settings.night_shelter === false) return null;
     if (nightRoutineActive(agent)) return 'the night routine is running';
     let t = null;
@@ -300,6 +304,9 @@ export function isWoodItem(item) {
     return !!name && isWoodWall(item) && WOOD_ORES.some(ore => oreMembers(ore).some(m => m.name === name));
 }
 
+// #580 re-review nit 2: so every shelter check (the site choice in shelter.js, pit.js, shelter_ground.js
+// and the repairs) takes a wood-material full cube that needs no tool as a wall too: a log, a plank, a
+// crafting table. Wanted: the bot gets out of one by hand in the morning.
 export const isWall = (block) => isSturdy(block) || isSoftWall(block) || isWoodWall(block);
 
 /** Whether a block can be dug without a tool (the dump's toolRequired is false). */

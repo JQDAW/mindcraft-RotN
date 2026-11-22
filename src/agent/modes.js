@@ -1026,7 +1026,7 @@ function maybePromptReplan(controller, now = Date.now()) {
         const r = agent.replan;
         if (held && (r.interrupted || r.due) && !r.heldSaid) {
             r.heldSaid = true;
-            console.log(`[reflex] re-plan prompt held: ${held}; it goes once at full day`);
+            console.log(`[reflex] re-plan prompt held: ${held}; ${/respawn escape/.test(held) ? 'it goes when the escape ends' : 'it goes once at full day'}`);
         }
         return;
     }
@@ -1139,6 +1139,11 @@ class ModeController {
 
     anyActive() {
         return modes_list.some(mode => mode.active);
+    }
+
+    /** Whether the named mode is acting now (soak 10, #581 review 1: the respawn escape waits for self_preservation). */
+    isActive(mode_name) {
+        return !!modes_map[mode_name]?.active;
     }
 
     flushBehaviorLog() {
