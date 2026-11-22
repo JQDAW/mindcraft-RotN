@@ -21,7 +21,7 @@ import { stowCarried, toolAllows } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
-import { escapedRecently, scrollRefusal, useSpawnScroll } from './respawn_escape.js';
+import { escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll } from './respawn_escape.js';
 import { groundPlan, walkToGround, stepToDry, planText, inWater, GROUND } from './library/shelter_ground.js';
 import { escape } from './library/escape.js';
 import { hasWeapon, shelterEnemy, shelterTarget, threatFor, isPlayerZombie, canFightHard, maxHitOf, inMeleeReach, meleeReach, fightNumbers, fightOdds, hurtingInReach } from './library/threats.js';
@@ -858,7 +858,7 @@ export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSp
     groundPlan, walkToGround, stepToDry, // soak 8: better ground when there is no place
     escape: (bot) => escape(bot), // soak 8: out of a flooded pit first
     nightRelocation: nightRelocationPlan, walkAwayAtNight, morningChoice, openToward,
-    escapedRecently, scrollRefusal, useSpawnScroll, // soak 10 (R2, R6)
+    escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll, // soak 10 (R2, R6)
     // #497 review 2: away from every threat; cornered, it may hit a melee mob only, never a troll or a creeper.
     awayFromMobs: (bot) => avoidEnemies(bot, MORNING.awayDist, shelterEnemy, shelterTarget),
     heldCells, retreatPlan, backAway, hasWeapon, mobInReach, dangerInReach: (bot) => mobInReach(bot, notMelee),
@@ -1216,7 +1216,9 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             if (n.relocPending) { n.relocPending = false; n.relocWaitUntil = now + NIGHT_RELOCATE.waitMs; }
             if (n.relocWaitUntil != null && now < n.relocWaitUntil) return 'night:building';
             n.relocWaitUntil = null;
-            const plan = ops.nightRelocation(agent, now, { night: phase === 'night', armed: (ops.hasWeapon ?? hasWeapon)(bot) });
+            // #581 review 3: after an escape that fell short, the full target only (not the 24-block walk).
+            const full = !!ops.escapeFellShort?.(agent, now);
+            const plan = ops.nightRelocation(agent, now, { night: phase === 'night', armed: (ops.hasWeapon ?? hasWeapon)(bot), ...(full ? { full } : {}) });
             if (!plan) n.leftDeathSpot = true;
             else {
                 n.relocTries = (n.relocTries ?? 0) + 1;

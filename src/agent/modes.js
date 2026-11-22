@@ -1141,6 +1141,11 @@ class ModeController {
         return modes_list.some(mode => mode.active);
     }
 
+    /** Whether the named mode is acting now (soak 10, #581 review 1: the respawn escape waits for self_preservation). */
+    isActive(mode_name) {
+        return !!modes_map[mode_name]?.active;
+    }
+
     flushBehaviorLog() {
         const log = this.behavior_log;
         this.behavior_log = '';

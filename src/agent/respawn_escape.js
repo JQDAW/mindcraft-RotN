@@ -15,7 +15,9 @@
 //     ESCAPE_RUN.away from every death spot and from the spawn square (spawnRadius 10), at most
 //     ESCAPE_RUN.maxMs. A mob on the way: re-aim, never stop; a hit: keep running. At a walk when
 //     food is ESCAPE_RUN.walkFood or lower (food 0 kills).
-// R2: at night the shelter goes where the escape ended, a hole first (night_routine: escapedRecently).
+// R2: at night, after an escape that got there, the shelter goes where it ended, a hole first
+//     (night_routine: escapedRecently); after one that fell short, the night walk takes the full target
+//     (escapeFellShort, #581 review 3).
 // R6: the Scroll of New Life (lifescroll:spawnscroll) sets the respawn point where the bot stands
 //     (rotn-data: forced spawn, respawn within ~2 blocks; deaths within 32 blocks of it raise no
 //     player zombie). The bot uses it once, by skill, never the model: at its first night shelter
@@ -23,8 +25,7 @@
 //     SCROLL.quiet.
 
 import pf from 'mineflayer-pathfinder';
-import { isPlayerZombie } from './library/threats.js';
-import * as mc from '../utils/mcdata.js';
+import { isPlayerZombie, shelterEnemy } from './library/threats.js';
 import { safeError } from './safe_error.js';
 import { isGiverGoal } from './agenda_driver.js';
 import { placesToLeave } from './respawn_relocate.js';
@@ -33,15 +34,20 @@ import { placesToLeave } from './respawn_relocate.js';
  * away: blocks from every recent death spot and from the spawn square; spawnRadius: the spawn
  * square's half side (the spawnRadius gamerule, 10: a respawn lands within it); trigger: a death
  * spot or a player zombie this near the bot or the spawn starts it; afterDeathMs: how soon after a
- * death it may start; hostileRange: hostiles that steer the aim; aimMs: how often it re-aims; ahead:
- * how far ahead each aim points; checkMs: its poll; maxMs: its cap; walkFood: at or below, no sprint;
- * tries: runs per death (one a reflex cut short is run again); pitWithinMs: an escape this recent
- * makes the night shelter a hole (R2).
+ * death it may start; hostileRange: hostiles that steer the aim; aimMs: how often the aim is checked;
+ * turnDeg: the change of direction that sets a new goal (#581 review 6: each new goal resets the path
+ * and drops the sprint); ahead: how far ahead each aim points; checkMs: its poll; maxMs: its cap;
+ * walkFood: at or below, no sprint (checked while it runs, #581 review 7); tries: runs per death (a
+ * self_preservation interrupt or a death is no try, #581 review 1); pitWithinMs: an escape that got
+ * there this recently makes the night shelter a hole there (R2); stallMs/detourMs: no progress for
+ * stallMs turns the aim 90 degrees for detourMs (#581 nit 8: water, a cliff, a wall).
  */
-export const ESCAPE_RUN = { away: 64, spawnRadius: 10, trigger: 48, afterDeathMs: 3 * 60_000, hostileRange: 32, aimMs: 1000, ahead: 16,
-    checkMs: 250, maxMs: 60_000, walkFood: 6, tries: 3, pitWithinMs: 3 * 60_000 };
+export const ESCAPE_RUN = { away: 64, spawnRadius: 10, trigger: 48, afterDeathMs: 3 * 60_000, hostileRange: 32, aimMs: 1000, turnDeg: 30, ahead: 16,
+    checkMs: 250, maxMs: 60_000, walkFood: 6, tries: 3, pitWithinMs: 3 * 60_000, stallMs: 5000, detourMs: 3000, minGain: 2 };
 /** The modes the escape pauses while it runs (self_preservation stays on). */
 export const ESCAPE_PAUSES = ['cowardice', 'self_defense', 'unstuck', 'item_collecting', 'hunting', 'eating', 'torch_placing', 'elbow_room'];
+/** The escape's action label. */
+export const ESCAPE_LABEL = 'action:respawnEscape';
 
 const hdist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const at = (p) => `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`;
@@ -54,12 +60,15 @@ export function placeDistance(p, place, spawnRadius = ESCAPE_RUN.spawnRadius) {
 }
 const nearestOf = (p, places) => (places.length ? Math.min(...places.map(q => placeDistance(p, q))) : Infinity);
 
-/** The hostile mobs (a player zombie, or any mcdata hostile) within range of the bot. */
+/**
+ * The hostile mobs within range of the bot: a player zombie, or what the shelter treats as an enemy
+ * (threats.shelterEnemy; #581 review 5: never an animal or a villager, which mcdata's isHostile counted).
+ */
 export function hostilesNear(bot, range = ESCAPE_RUN.hostileRange) {
     const here = bot?.entity?.position;
     if (!here) return [];
     return Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(here) <= range
-        && (isPlayerZombie(e) || (() => { try { return mc.isHostile(e); } catch { return false; } })()));
+        && (isPlayerZombie(e) || (() => { try { return !!shelterEnemy(e); } catch { return false; } })()));
 }
 
 /**
@@ -87,10 +96,10 @@ export function escapeReason(agent, now = Date.now()) {
 
 /**
  * The point ESCAPE_RUN.ahead from the bot away from the weighted centre (1/d^2) of the places (the
- * spawn's square by its nearest point) and the hostiles near. Straight away from the spawn when the
- * pulls cancel out.
+ * spawn's square by its nearest point) and the hostiles near; turned by `turn` degrees (a detour).
+ * Straight away from the spawn when the pulls cancel out.
  */
-export function aimPoint(bot, places, hostiles = hostilesNear(bot)) {
+export function aimPoint(bot, places, hostiles = hostilesNear(bot), turn = 0) {
     const here = bot.entity.position;
     let vx = 0, vz = 0;
     const pull = (x, z) => {
@@ -113,7 +122,12 @@ export function aimPoint(bot, places, hostiles = hostilesNear(bot)) {
         len = Math.hypot(vx, vz) || 1;
         if (!s || len < 1e-9) { vx = 1; vz = 0; len = 1; }
     }
-    return { x: Math.round(here.x + vx / len * ESCAPE_RUN.ahead), z: Math.round(here.z + vz / len * ESCAPE_RUN.ahead) };
+    vx /= len; vz /= len;
+    if (turn) {
+        const a = turn * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+        [vx, vz] = [vx * c - vz * s, vx * s + vz * c];
+    }
+    return { x: Math.round(here.x + vx * ESCAPE_RUN.ahead), z: Math.round(here.z + vz * ESCAPE_RUN.ahead) };
 }
 
 /** The escape's movements: fall-safe (installWalkSafety), sprinting per bot.rotnSprint, and no digging, towers, scaffolding or parkour. */
@@ -126,44 +140,86 @@ export function escapeMovements(bot) {
     return m;
 }
 
+const angleDeg = (a, b) => {
+    const d = Math.abs(Math.atan2(a.z, a.x) - Math.atan2(b.z, b.x)) * 180 / Math.PI;
+    return d > 180 ? 360 - d : d;
+};
+
 /**
- * The run itself: re-aimed every ESCAPE_RUN.aimMs until ESCAPE_RUN.away from every place, the cap,
- * or a stop. Returns {arrived, far, ms, stopped?}. ops: setGoal(bot, x, z), sleep(ms), now().
+ * The run itself: until ESCAPE_RUN.away from every place, the cap, or a stop. Returns {arrived, far,
+ * ms, stopped?}. The aim is checked every ESCAPE_RUN.aimMs; a new goal only when the direction turned
+ * ESCAPE_RUN.turnDeg or more, or the bot is near the goal (#581 review 6). The food is checked as it
+ * runs: at ESCAPE_RUN.walkFood or lower, no sprint (#581 review 7). No progress for stallMs: a 90-degree
+ * detour for detourMs, the other side next time (#581 nit 8). ops: setGoal(bot, x, z), sleep(ms), now().
  */
 export async function escapeRun(bot, places, { now = () => Date.now(), sleep = (ms) => new Promise(r => setTimeout(r, ms)), setGoal = null } = {}) {
     const start = now();
     const far = () => nearestOf(bot.entity.position, places);
     const goTo = setGoal ?? ((b, x, z) => b.pathfinder.setGoal(new pf.goals.GoalNearXZ(x, z, 2)));
+    const before = bot.pathfinder?.movements ?? null;
     if (!setGoal) bot.pathfinder.setMovements(escapeMovements(bot));
-    let aimed = -Infinity;
+    let aimed = -Infinity, goal = null, dir = null;
+    let best = far(), bestAt = start, detour = 0, detourUntil = -Infinity, side = 90;
     try {
         for (;;) {
             const d = far();
-            if (d >= ESCAPE_RUN.away) return { arrived: true, far: d, ms: now() - start };
-            if (bot.interrupt_code) return { arrived: false, far: d, ms: now() - start, stopped: 'interrupted' };
-            if (now() - start >= ESCAPE_RUN.maxMs) return { arrived: false, far: d, ms: now() - start, stopped: 'time' };
-            if (now() - aimed >= ESCAPE_RUN.aimMs) {
-                const t = aimPoint(bot, places);
-                goTo(bot, t.x, t.z);
-                aimed = now();
+            const t = now();
+            if (d >= ESCAPE_RUN.away) return { arrived: true, far: d, ms: t - start };
+            if (bot.interrupt_code) return { arrived: false, far: d, ms: t - start, stopped: 'interrupted' };
+            if (t - start >= ESCAPE_RUN.maxMs) return { arrived: false, far: d, ms: t - start, stopped: 'time' };
+            if (bot.rotnSprint && Number.isFinite(bot.food) && bot.food <= ESCAPE_RUN.walkFood) {
+                bot.rotnSprint = false;
+                if (bot.pathfinder?.movements) bot.pathfinder.movements.allowSprinting = false;
+            }
+            if (d >= best + ESCAPE_RUN.minGain) { best = d; bestAt = t; }
+            if (t - bestAt >= ESCAPE_RUN.stallMs && t >= detourUntil) {
+                detour = side; side = -side; detourUntil = t + ESCAPE_RUN.detourMs; bestAt = t; aimed = -Infinity;
+            }
+            if (t >= detourUntil && detour) { detour = 0; aimed = -Infinity; }
+            if (t - aimed >= ESCAPE_RUN.aimMs) {
+                aimed = t;
+                const p = aimPoint(bot, places, hostilesNear(bot), detour);
+                const here = bot.entity.position;
+                const v = { x: p.x - here.x, z: p.z - here.z };
+                const nearGoal = goal && hdist(here, goal) <= 4;
+                if (!goal || nearGoal || !dir || angleDeg(v, dir) >= ESCAPE_RUN.turnDeg) {
+                    goTo(bot, p.x, p.z);
+                    goal = p; dir = v;
+                }
             }
             await sleep(ESCAPE_RUN.checkMs);
         }
     } finally {
-        if (!setGoal) { try { bot.pathfinder.setGoal(null); } catch { /* best effort */ } }
+        if (!setGoal) {
+            try { bot.pathfinder.setGoal(null); } catch { /* best effort */ }
+            // #581 review 7: the movements from before the run come back (no sprinting leaks into later walks).
+            try { if (before) bot.pathfinder.setMovements(before); } catch { /* best effort */ }
+        }
     }
 }
 
-/** Whether an escape ended within ESCAPE_RUN.pitWithinMs (R2: the night shelter there is a hole). */
+/**
+ * R2: whether an escape got there within ESCAPE_RUN.pitWithinMs (arrived, or the bot is at least
+ * ESCAPE_RUN.away from every place now): the night shelter then is a hole where it ended (#581 review 3).
+ */
 export function escapedRecently(agent, now = Date.now()) {
-    const t = agent?._escape?.endedAt;
-    return Number.isFinite(t) && now - t <= ESCAPE_RUN.pitWithinMs;
+    const r = agent?._escape;
+    if (!Number.isFinite(r?.endedAt) || now - r.endedAt > ESCAPE_RUN.pitWithinMs) return false;
+    if (r.arrived) return true;
+    const here = agent.bot?.entity?.position;
+    return !!here && nearestOf(here, placesToLeave(agent, now)) >= ESCAPE_RUN.away;
+}
+/** #581 review 3: an escape ended recently without getting there: the night walk takes the full target. */
+export function escapeFellShort(agent, now = Date.now()) {
+    const r = agent?._escape;
+    return Number.isFinite(r?.endedAt) && now - r.endedAt <= ESCAPE_RUN.pitWithinMs && !escapedRecently(agent, now);
 }
 
 /**
  * One check, from the priority stack before the night routine: 'escaping' while the escape runs (the
- * night routine, the agenda and the model's goal wait), else null. A task giver's typed goal waits for
- * it too (a respawn among zombies is no time for a walk elsewhere). Never throws.
+ * night routine, tasks, the agenda and the model's goal wait), 'escaping:wait' while self_preservation
+ * acts (#581 review 1: a swim-up or a low-health move away is never cut), else null. A task giver's
+ * goal is paused for it and resumed after (#581 review 4). Never throws.
  */
 export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, log = (l) => console.log(l) } = {}) {
     const r = agent._escape ??= { forDeath: null, tries: 0, job: null, endedAt: null };
@@ -171,9 +227,10 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
     let why = null;
     try { why = escapeReason(agent, now); } catch (err) { log(`[respawn] escape check: ${safeError(err)}`); why = null; }
     if (!why) return null;
-    if (r.forDeath !== why.key) Object.assign(r, { forDeath: why.key, tries: 0, done: false });
-    r.tries++;
     const bot = agent.bot;
+    if (bot.modes?.isActive?.('self_preservation')) return 'escaping:wait';
+    if (r.forDeath !== why.key) Object.assign(r, { forDeath: why.key, tries: 0, done: false, arrived: false });
+    r.tries++;
     const deaths = why.places.filter(p => p.what === 'death spot').length;
     const what = [why.places.some(p => p.what === 'spawn') ? 'the spawn' : null, deaths ? `${deaths} recent death spot${deaths === 1 ? '' : 's'}` : null].filter(Boolean).join(' and ');
     const sprint = !(Number.isFinite(bot.food) && bot.food <= ESCAPE_RUN.walkFood);
@@ -181,7 +238,15 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
     log(`[respawn] escape (try ${r.tries} of ${ESCAPE_RUN.tries}): ${sprint ? 'sprinting' : `walking (food ${bot.food})`} at least ${ESCAPE_RUN.away} blocks from ${what}`
         + `${zombies ? `, ${zombies} player zombie${zombies === 1 ? '' : 's'} near` : ''}; no digging, no pickups, no fights`);
     const sp = agent.self_prompter;
-    if (sp?.isActive?.() && !isGiverGoal(agent)) sp.stop(false);
+    let giverPaused = null;
+    if (sp?.isActive?.()) {
+        if (isGiverGoal(agent)) {
+            // #581 review 4: a task giver's goal waits too: paused (kept), resumed when the escape ends.
+            giverPaused = sp.prompt;
+            sp.setPromptPaused?.(sp.prompt);
+            Promise.resolve(sp.stopLoop?.()).catch(() => {});
+        } else sp.stop(false);
+    }
     agent._agenda_paused = true;
     const modes = bot.modes;
     for (const m of ESCAPE_PAUSES) { try { modes?.pause?.(m); } catch { /* not every mode exists */ } }
@@ -190,23 +255,31 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
     bot.rotnEscaping = true; // unstuck holds off (modes.js)
     let result = null;
     r.job = Promise.resolve()
-        .then(() => agent.actions.runAction('action:respawnEscape', async () => { result = await run(bot, why.places); }, { keepReplan: true }))
+        .then(() => agent.actions.runAction(ESCAPE_LABEL, async () => { result = await run(bot, why.places); }, { keepReplan: true }))
         .catch(err => { log(`[respawn] the escape failed: ${safeError(err)}`); return null; })
         .then((ret) => {
             r.job = null;
             bot.rotnSprint = wasSprint ?? false;
+            if (bot.pathfinder?.movements && !bot.rotnSprint) bot.pathfinder.movements.allowSprinting = false;
             bot.rotnEscaping = false;
             for (const m of ESCAPE_PAUSES) { try { modes?.unpause?.(m); } catch { /* best effort */ } }
+            if (giverPaused && sp?.isPaused?.()) { try { sp.start(giverPaused); } catch { /* best effort */ } }
             r.endedAt = Date.now();
             const here = bot.entity?.position;
             const far = here ? Math.round(nearestOf(here, why.places)) : 0;
             const secs = Math.round((result?.ms ?? 0) / 1000);
             if (result?.arrived) {
                 r.done = true;
+                r.arrived = true;
                 log(`[respawn] escape done: ${far} blocks from ${what} at ${here ? at(here) : '?'} in ${secs} s`);
                 return;
             }
-            const how = ret?.interrupted || result?.stopped === 'interrupted' ? 'was interrupted' : result?.stopped === 'time' ? `ran out of its ${ESCAPE_RUN.maxMs / 1000} s` : 'ended';
+            // #581 nit 9: a death during the run ends it; the next death has its own escape.
+            if (agent._death?.last?.at !== why.key) { log(`[respawn] the escape ended with a death at ${far} blocks from ${what}`); return; }
+            // #581 review 1: a self_preservation interrupt (a swim-up, a low-health move away) is no try.
+            const by = agent.rotnLastInterrupt?.of === ESCAPE_LABEL ? agent.rotnLastInterrupt.by : null;
+            if ((ret?.interrupted || result?.stopped === 'interrupted') && by === 'self_preservation') r.tries = Math.max(0, r.tries - 1);
+            const how = ret?.interrupted || result?.stopped === 'interrupted' ? `was interrupted${by ? ` by ${by}` : ''}` : result?.stopped === 'time' ? `ran out of its ${ESCAPE_RUN.maxMs / 1000} s` : 'ended';
             if (result?.stopped === 'time') r.done = true;
             log(`[respawn] the escape ${how} at ${far} blocks from ${what}${here ? ` (at ${at(here)})` : ''}${r.done || r.tries >= ESCAPE_RUN.tries ? '' : '; running it again'}`);
         });

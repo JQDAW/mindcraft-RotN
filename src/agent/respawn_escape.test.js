@@ -10,7 +10,7 @@ import { Vec3 } from 'vec3';
 import minecraftData from 'minecraft-data';
 import { setImmediate } from 'node:timers';
 import { DeathReporter, spawnCampNote, SPAWN_CAMP } from './library/death_report.js';
-import { ESCAPE_RUN, ESCAPE_PAUSES, escapeReason, respawnEscapeTick, escapeRun, aimPoint, placeDistance, escapedRecently, escapeMovements,
+import { ESCAPE_RUN, ESCAPE_PAUSES, escapeReason, respawnEscapeTick, escapeRun, aimPoint, placeDistance, escapedRecently, escapeMovements, hostilesNear,
     SCROLL, scrollRefusal, useSpawnScroll, isSpawnScroll } from './respawn_escape.js';
 import { placesToLeave } from './respawn_relocate.js';
 import { replanHold } from './library/night.js';
@@ -106,7 +106,8 @@ test('soak 10 (R1): the run re-aims every second and ends 64 blocks from every p
     const r = await escapeRun(a.bot, places, { now: () => clock, sleep, setGoal });
     assert.equal(r.arrived, true, JSON.stringify(r));
     for (const p of places) assert.ok(placeDistance(a.bot.entity.position, p) >= ESCAPE_RUN.away - 0.01, `${p.what} at ${placeDistance(a.bot.entity.position, p)}`);
-    assert.ok(r.ms < ESCAPE_RUN.maxMs && aims.length >= Math.floor(r.ms / ESCAPE_RUN.aimMs), `${aims.length} aims in ${r.ms} ms`);
+    // #581 review 6: a new goal only when the direction turned (each goal resets the path and the sprint).
+    assert.ok(r.ms < ESCAPE_RUN.maxMs && aims.length >= 1 && aims.length < Math.floor(r.ms / ESCAPE_RUN.aimMs), `${aims.length} goals in ${r.ms} ms`);
     // Never moving: the cap.
     const stuck = agentAt(SPAWN.offset(2, 0, 3), { now: now0 });
     let c2 = 0;
@@ -236,4 +237,119 @@ test('soak 10 (R5): the flee never digs, and its line says how far it really got
     assert.equal(moves[0].canDig, false, 'no digging while fleeing');
     assert.match(bot.output, /Moved away from enemies, but only to 3 blocks of the 16\./);
     assert.doesNotMatch(bot.output, /Moved 16 away/);
+});
+
+// #581 review 1: the escape waits while self_preservation acts (a swim-up, a low-health move away),
+// and neither that interrupt nor a death counts as a try.
+test('#581 review 1: self_preservation acting: the escape waits (no try); interrupted by it: no try; a death ends it without "running it again"', async () => {
+    const now = 1_000_000;
+    const a = agentAt(SPAWN.offset(2, 0, 3), { now });
+    let active = true;
+    a.bot.modes.isActive = (m) => m === 'self_preservation' && active;
+    assert.equal(respawnEscapeTick(a, { now, run: () => Promise.resolve({ arrived: true, ms: 1 }), log: () => {} }), 'escaping:wait');
+    assert.equal(a._escape.tries, 0);
+    active = false;
+    const logs = [];
+    const cut = () => { a.rotnLastInterrupt = { by: 'self_preservation', of: 'action:respawnEscape', at: now }; return Promise.resolve({ arrived: false, far: 10, ms: 1000, stopped: 'interrupted' }); };
+    for (let i = 0; i < 5; i++) {
+        assert.equal(respawnEscapeTick(a, { now: now + i, run: cut, log: (l) => logs.push(l) }), 'escaping', `run ${i + 1}: never out of tries`);
+        await flush(); await flush();
+    }
+    assert.equal(a._escape.tries, 0, logs.join('\n'));
+    assert.match(logs.at(-1), /was interrupted by self_preservation at \d+ blocks .*; running it again$/);
+    // A death during the run: no "running it again" for the old death.
+    const d = agentAt(SPAWN.offset(2, 0, 3), { now });
+    const dl = [];
+    const dies = (bot) => { d._death.died({ pos: SPAWN.offset(1, 0, 1), dimension: 'overworld', now: now + 5000 }); d._death.pending = null; return Promise.resolve({ arrived: false, far: 3, ms: 5000, stopped: 'interrupted' }); };
+    respawnEscapeTick(d, { now, run: dies, log: (l) => dl.push(l) });
+    await flush(); await flush();
+    assert.match(dl.at(-1), /^\[respawn\] the escape ended with a death at \d+ blocks/);
+});
+
+// #581 review 2: the guard missed name variants.
+test('#581 review 2: the scroll guard catches name variants and the slot the name would equip', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const scroll = { name: 'lifescroll:spawnscroll', count: 1, type: 9000, metadata: 0 };
+    let activated = 0;
+    const bot = { output: '', inventory: { items: () => [scroll], slots: [null, scroll] }, game: { gameMode: 'survival' }, equip: () => Promise.resolve(), activateItem: () => { activated++; } };
+    for (const name of ['lifescroll:spawnscroll:0', 'LIFESCROLL:SPAWNSCROLL', 'Lifescroll:Spawnscroll', 'lifescroll:spawnscroll ', 'spawnscroll']) {
+        bot.output = '';
+        assert.equal(await skills.useToolOn(bot, name, 'nothing'), false, name);
+        assert.match(bot.output, /Not using the Scroll of New Life/, name);
+    }
+    assert.equal(activated, 0);
+});
+
+// #581 review 3: R2 only after an escape that got there; after one that fell short, the full night walk.
+test('#581 review 3: escapedRecently only when the escape arrived or the bot is 64 away; else escapeFellShort', async () => {
+    const { escapeFellShort } = await import('./respawn_escape.js');
+    const now = Date.now();
+    const short = agentAt(SPAWN.offset(2, 0, 3), { now });
+    short._escape = { endedAt: now, arrived: false };
+    assert.equal(escapedRecently(short, now), false);
+    assert.equal(escapeFellShort(short, now), true);
+    short._escape.arrived = true;
+    assert.equal(escapedRecently(short, now), true);
+    const far = agentAt(SPAWN.offset(120, 0, 0), { now });
+    far._escape = { endedAt: now, arrived: false };
+    assert.equal(escapedRecently(far, now), true, 'timed out, but 64 away from every place');
+    assert.equal(escapeFellShort(far, now), false);
+});
+
+// #581 review 4: a task giver's goal is paused for the escape (it was skipped), then resumed.
+test('#581 review 4: a task giver\'s goal is paused (kept) for the escape and resumed after; a command is refused while it runs', async () => {
+    const now = 1_000_000;
+    const a = agentAt(SPAWN.offset(2, 0, 3), { now });
+    const sp = { state: 'active', prompt: 'build a hut', goal_by: 'giver', starts: [], loops: 0,
+        isActive() { return this.state === 'active'; }, isPaused() { return this.state === 'paused'; },
+        setPromptPaused(p) { this.prompt = p; this.state = 'paused'; }, stopLoop() { this.loops++; return Promise.resolve(); },
+        start(p) { this.state = 'active'; this.starts.push(p); }, stop() { this.state = 'stopped'; } };
+    a.self_prompter = sp;
+    let release;
+    respawnEscapeTick(a, { now, run: () => new Promise(res => { release = () => res({ arrived: true, ms: 1000 }); }), log: () => {} });
+    assert.deepEqual([sp.state, sp.prompt, sp.loops], ['paused', 'build a hut', 1]);
+    const { getCommand } = await import('./commands/index.js');
+    const out = await getCommand('!moveAway').perform(a, 10);
+    assert.match(out, /^Not now: the respawn escape is running/);
+    release();
+    await flush(); await flush();
+    assert.deepEqual(sp.starts, ['build a hut'], 'the giver\'s goal again');
+});
+
+// #581 review 5: animals (mcdata's isHostile counted every 'mob') neither steer the aim nor block the scroll.
+test('#581 review 5: a cow or a villager is no hostile; a zombie and a player zombie are', () => {
+    const a = agentAt(new Vec3(0, 64, 0), { deaths: [], entities: {
+        1: { id: 1, type: 'mob', name: 'animania:cow_holstein', position: new Vec3(3, 64, 0) },
+        2: { id: 2, type: 'mob', name: 'villager', position: new Vec3(0, 64, 3) },
+        3: { id: 3, type: 'mob', name: 'zombie', position: new Vec3(-3, 64, 0) },
+        4: zombie(4, 0, -3) } });
+    assert.deepEqual(hostilesNear(a.bot).map(e => e.id).sort(), [3, 4]);
+});
+
+// #581 review 7: the movements from before the run come back, and a food drop during it ends the sprint.
+test('#581 review 7: the run restores the movements it replaced, and stops sprinting when food falls to 6', async () => {
+    const now0 = 1_000_000;
+    const a = agentAt(SPAWN.offset(2, 0, 3), { now: now0 });
+    Object.assign(a.bot, { registry: minecraftData('1.12.2'), version: '1.12.2', rotnSprint: true });
+    const before = { name: 'before', allowSprinting: false };
+    const sets = [];
+    a.bot.pathfinder = { movements: before, setMovements(m) { this.movements = m; sets.push(m === before ? 'before' : 'escape'); }, setGoal() {} };
+    let clock = 0;
+    const r = await escapeRun(a.bot, placesToLeave(a, now0), { now: () => clock, sleep: (ms) => { clock += ms; if (clock >= 2000) a.bot.food = 5; return Promise.resolve(); } });
+    assert.equal(r.stopped, 'time');
+    assert.deepEqual(sets, ['escape', 'before']);
+    assert.equal(a.bot.rotnSprint, false, 'food 5: no sprint');
+});
+
+// #581 nit 11: the day relocate still runs from the priority stack once an escape timed out.
+test('#581 nit 11: after a timed-out escape, autonomyTick runs the relocate walk', async () => {
+    const { autonomyTick } = await import('./priority.js');
+    const now = 1_000_000;
+    const a = agentAt(SPAWN.offset(2, 0, 3), { now });
+    a.bot.modes.anyActive = () => false;
+    a._escape = { forDeath: a._death.last.at, done: true, tries: 1, job: null, endedAt: now, arrived: false };
+    a.agenda = { get active() { return true; } };
+    a.tasks = { current: () => null, get: () => null };
+    a.actions.runAction = () => new Promise(() => {});
+    assert.equal(autonomyTick(a, { now }), 'relocating');
 });

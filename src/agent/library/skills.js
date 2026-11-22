@@ -2992,8 +2992,14 @@ export async function viewChest(bot) {
  * (bot.rotnScrollBySkill); the model is refused, with why. Returns whether it was refused.
  */
 export function spawnScrollRefused(bot, item) {
+    if (bot?.rotnScrollBySkill === true) return false;
+    // #581 review 2: by the parsed name (any case, a trailing meta, spaces), and by the slot the name
+    // would equip ("lifescroll:spawnscroll:0", "LIFESCROLL:SPAWNSCROLL" got through).
+    const isScroll = (n) => /(^|:)spawnscroll$/.test(String(n ?? '').trim().toLowerCase().replace(/:\d+$/, ''));
     const name = typeof item === 'string' ? item : item?.name;
-    if (!/(^|:)spawnscroll$/.test(name ?? '') || bot?.rotnScrollBySkill === true) return false;
+    let slot = null;
+    if (typeof item === 'string') { try { slot = (bot?.inventory?.slots ?? []).find(s => s && itemMatches(s, item.trim())) ?? null; } catch { slot = null; } }
+    if (!isScroll(name) && !isScroll(slot?.name)) return false;
     log(bot, 'Not using the Scroll of New Life (lifescroll:spawnscroll): it sets your respawn point where you stand and does not teleport. '
         + 'The night routine uses it once, at a closed shelter far from the spawn and every place you died; never use it yourself.');
     return true;

@@ -3276,3 +3276,20 @@ test('soak 10 (R6): in a closed night shelter the scroll is used once, as the ro
     assert.ok(logs.includes('[night] the Scroll of New Life is not used at 0, 64, 0: 40 blocks from the spawn (it needs 100)'), logs.join('\n'));
     assert.ok(!near.chat.some(l => /Scroll of New Life/.test(l)));
 });
+
+// #581 review 3: after an escape that fell short (escapeFellShort), no hole where it stopped: the night
+// walk away takes the full target, never the 24-block one.
+test('#581 review 3: an escape that fell short: no R2 hole; the night walk with the full target', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    agent._death = deathAt(-60_000);
+    const o = deathOps();
+    o.escapedRecently = () => false;
+    o.escapeFellShort = () => true;
+    nightTick(agent, { now: 1, ops: o });
+    await settle(agent);
+    assert.deepEqual(o.calls, ['away']);
+    assert.equal(o.relocOpts.full, true);
+    assert.equal(o.away.mode, 'full', 'not the 24-block walk, though unarmed at night');
+    assert.ok(!agent.chat.some(l => /after the respawn escape/.test(l)));
+});

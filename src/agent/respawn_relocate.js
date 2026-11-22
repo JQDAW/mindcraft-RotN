@@ -212,7 +212,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
  * death within recentMs in this dimension, or already far enough). night: the night proper (not
  * dusk); armed: the bot holds a weapon. Returns {mode: 'full'|'short', target, places, away, line}.
  */
-export function nightRelocationPlan(agent, now = Date.now(), { night = false, armed = false } = {}) {
+export function nightRelocationPlan(agent, now = Date.now(), { night = false, armed = false, full: fullOnly = false } = {}) {
     const bot = agent.bot;
     const here = bot?.entity?.position;
     if (!here) return null;
@@ -223,7 +223,9 @@ export function nightRelocationPlan(agent, now = Date.now(), { night = false, ar
     const full = targetAwayFrom(here, places, { surfaceOk });
     const nearWay = full ? hostileNearWay(bot, here, full) : null;
     const towards = (t) => `towards ${t.x}, ${t.z}`;
-    if (nearWay || (night && !armed) || !full) {
+    // #581 review 3: after a respawn escape that did not get there, the full target only (never the
+    // 24-block walk, which ends inside the spawn ring).
+    if (!fullOnly && (nearWay || (night && !armed) || !full)) {
         if (deaths.every(p => hdist(p.pos, here) >= NIGHT_RELOCATE.shortAway)) return null;
         const target = targetAwayFrom(here, deaths, { surfaceOk, away: NIGHT_RELOCATE.shortAway });
         if (!target) return null;
@@ -232,6 +234,7 @@ export function nightRelocationPlan(agent, now = Date.now(), { night = false, ar
             line: `[night] I died near here recently, and ${why}: moving to the first spot at least ${NIGHT_RELOCATE.shortAway} blocks from ${plural(deaths.length, 'recent death spot')}, ${towards(target)}, before sheltering` };
     }
     if (places.every(p => hdist(p.pos, here) >= RELOCATE.away)) return null;
+    if (!full) return null;
     const what = [places.some(p => p.what === 'spawn') ? 'the spawn' : null, plural(deaths.length, 'recent death spot')].filter(Boolean).join(' and ');
     return { mode: 'full', target: full, places, away: RELOCATE.away,
         line: `[night] I died near here recently: moving at least ${RELOCATE.away} blocks from ${what}, ${towards(full)}, before sheltering` };
