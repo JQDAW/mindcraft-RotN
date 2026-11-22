@@ -513,6 +513,9 @@ export async function fillCell(bot, target, interior, mode, reasons = null) {
     if (reasons) reasons.fought = (reasons.fought ?? 0) + hits;
     for (let attempt = 0; attempt < 2; attempt++) {
         if (mode.accept(bot.blockAt(target))) return true;
+        // Soak 11 (A1): stopped between the placements of a cell too.
+        const stop = mode.abort?.() ?? null;
+        if (stop) { if (reasons) reasons.aborted = stop; why(`stopped: ${stop}`); return false; }
         if (!isEmpty(bot.blockAt(target)) && !isLiquid(bot.blockAt(target))) { why(`${bot.blockAt(target)?.name ?? 'something'} is in it`); return false; }
         if (await placeOnce(bot, target, interior, mode, why)) return true;
         await sleep(LATE_UPDATE_MS);
@@ -633,7 +636,7 @@ async function pickaxeFor(bot, level) {
  * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], soft: number, line: string}>}
  *   line: what it logged; soft: the dirt blocks in its walls and roof.
  */
-export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [] } = {}) {
+export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [], abort = null } = {}) {
     // #470 review 2: skip: cells a mob holds, left out of a repair (the bot has no weapon to hit it out).
     const skipKeys = new Set(skip.map(key));
     // Soak 8 (night 2): noPlace: the search found no site at all (not a site short of blocks or a
@@ -657,7 +660,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     const diggers = nearbyDiggers(bot);
     const defeat = blockDefeat([...shelterItems(bot), ...softItems(bot)], diggers);
     if (defeat) log(bot, defeat);
-    let mode = { items: (b) => wallItems(b, shelterItems(b), diggers), accept: keepSoft ? isWall : isSturdy };
+    let mode = { items: (b) => wallItems(b, shelterItems(b), diggers), accept: keepSoft ? isWall : isSturdy, abort };
 
     // 2. The dirt fallback: too few sturdy blocks, or no pickaxe to dig out of rock.
     if (!pick.ok || sturdy() < plan.blocks) {
@@ -683,7 +686,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
             plan = soft;
             // Dirt first; logs and planks only once no dirt is left (S2).
             const wallsFrom = (b) => (repairWood && softItems(b).length === 0 ? woodItems(b) : pick.ok ? items(b) : softItems(b));
-            mode = { items: (b) => wallItems(b, wallsFrom(b), diggers), accept: isWall };
+            mode = { items: (b) => wallItems(b, wallsFrom(b), diggers), accept: isWall, abort };
             if (repairWood && countOf(softItems(bot)) < soft.blocks) log(bot, `No dirt left for all of the repair: ${countOf(softItems(bot))} dirt, then logs or planks (they break by hand in the morning).`);
             log(bot, `Building the shelter with dirt too${pick.ok ? '' : ' (no pickaxe: dirt can be dug out by hand)'}; mobs can dig through dirt.`);
         } else {
@@ -743,6 +746,9 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     try {
         for (const pos of wallsAndRoof(feet)) {
             if (bot.interrupt_code) { reasons.stopped = true; break; }
+            // Soak 11 (A1): the caller's stop (a melee mob hit the bot, or holds an opening it repairs).
+            const why = abort?.() ?? null;
+            if (why) { reasons.stopped = true; reasons.aborted = why; break; }
             const b = bot.blockAt(pos);
             if (mode.accept(b)) { seenWall.add(key(pos)); continue; }
             if (skipKeys.has(key(pos))) { reasons.set(key(pos), 'a mob holds it (left for later)'); continue; }
@@ -778,6 +784,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
             ? `Shelter at ${at(feet)} is built but you are not standing on its floor (at ${exactAt(bot)}); placed ${placed}.`
             : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(q => `${at(q)}: ${reasons.get(key(q)) ?? (reasons.stopped ? 'stopped before it' : seenWall.has(key(q)) ? 'opened during the repair (a wall when checked)' : 'not tried')}`).join('; ')}); placed ${placed}.`;
     log(bot, line);
+    if (reasons.aborted) return { closed, feet, placed, missing, soft, line, aborted: reasons.aborted };
     // Round 9 B (fix d): dirt walls can be dug by any zombie; keep dirt ready, so a repair only places.
     if (closed && soft > 0) {
         const held = countOf(softItems(bot));
@@ -801,7 +808,7 @@ async function settleOn(bot, feet, { strict = true } = {}) {
  * the roof or the floor. The low-health rule that starts a back-away is per mob (threats.maxHitOf,
  * PR 5; it was BACK_AWAY.lowHealth, 8): back away if possible, else hit back.
  */
-export const BACK_AWAY = { margin: 0.15, centerMs: 2000 };
+export const BACK_AWAY = { margin: 0.15, centerMs: 2000, overAbove: 1.5 };
 
 /** The open cells a hostile mob (threats.shelterEnemy) holds: [{cell, mob}]. */
 export function heldCells(bot, site, open = []) {
@@ -811,6 +818,11 @@ export function heldCells(bot, site, open = []) {
     for (const cell of open) {
         const inIt = mobIn(bot, cell);
         if (inIt && shelterEnemy(inIt)) { out.push({ cell, mob: inIt }); continue; }
+        // Soak 11 (A4): a mob standing on or just over the open cell, in its column (21:04: the zombie
+        // dug the shaft from above, "over the cell", and the opening looked free): it holds the cell too.
+        const over = mobs.find(e => Math.floor(e.position.x) === cell.x && Math.floor(e.position.z) === cell.z
+            && e.position.y >= cell.y + 1 - 1e-6 && e.position.y < cell.y + 1 + BACK_AWAY.overAbove);
+        if (over) { out.push({ cell, mob: over }); continue; }
         const dx = cell.x - p.x, dz = cell.z - p.z;
         const wall = (cell.y === p.y || cell.y === p.y + 1) && Math.abs(dx) + Math.abs(dz) === 1;
         if (!wall) continue;

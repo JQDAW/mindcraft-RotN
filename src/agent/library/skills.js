@@ -49,6 +49,30 @@ export { weaponRank };
  * failed equip of a fight, no more are tried in it (#296 review 2: each try can wait about 11 s for
  * an unanswered click and its retry, while the bot does not attack).
  */
+/**
+ * Soak 11 (A3, the lead): a build or a repair leaves a block in the main hand (21:04 the bot died
+ * holding dirt; Corpse Complex keeps only the main hand, the off hand and the armour, so the club in
+ * the inventory dropped). Afterwards the best weapon goes back into the main hand. WEAPON_HAND.offHand
+ * (off until rotn-data answers on Better Combat and an off-hand club) keeps it in the off hand instead.
+ * Returns whether a weapon is in the hand it should be in.
+ */
+export const WEAPON_HAND = { offHand: false };
+export async function rearmWeapon(bot) {
+    const items = bot?.inventory?.items?.() ?? [];
+    const best = items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0] ?? null;
+    if (WEAPON_HAND.offHand) {
+        const off = bot.inventory?.slots?.[45];
+        if (off && isWeaponItem(off)) return true;
+        if (!best || typeof bot.equip !== 'function') return false;
+        await bot.equip(best, 'off-hand');
+        return true;
+    }
+    if (bot?.heldItem && isWeaponItem(bot.heldItem)) return true;
+    if (!best || typeof bot.equip !== 'function') return false;
+    await bot.equip(best, 'hand');
+    return true;
+}
+
 export async function equipHighestAttack(bot, fight = {}) {
     // Soak 10 (W1): threats.isWeaponItem, the one weapon rule (never the crude axe or a Hit With Axe bark).
     const isWeapon = (item) => !!item && isWeaponItem(item);

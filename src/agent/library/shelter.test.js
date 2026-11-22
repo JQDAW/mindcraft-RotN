@@ -1482,3 +1482,31 @@ test('#580 review 2: a sideways modded log is a wood wall (so a repair keeps it)
     assert.equal(isWoodItem({ name: 'crafting_table', metadata: 0 }), false, 'never placed in a repair');
     assert.equal(isWoodWall({ name: 'dirt', metadata: 0 }), false);
 });
+
+// Soak 11 (A1): the caller's abort stops a repair between cells (and between a cell's placements).
+test('soak 11 (A1): buildShelter with an abort stops before the next cell and says why', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, placed } = fakeBot({ cobble: 10, set: shellAt({ '1,64,0': 'air', '1,65,0': 'air', '-1,64,0': 'air' }) });
+    let calls = 0;
+    const abort = () => (++calls > 1 ? 'hit by a zombie' : null);
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true, abort });
+    assert.equal(r.aborted, 'hit by a zombie');
+    assert.equal(r.closed, false);
+    assert.ok(placed.length <= 1, `stopped early: ${placed.join(' ')}`);
+    // No abort: the same repair closes.
+    const ok = fakeBot({ cobble: 10, set: shellAt({ '1,64,0': 'air', '1,65,0': 'air', '-1,64,0': 'air' }) });
+    const r2 = await buildShelter(ok.bot, { site: new Vec3(0, 64, 0), keepSoft: true, abort: () => null });
+    assert.equal(r2.closed, true, ok.bot.output);
+    assert.equal(r2.aborted, undefined);
+});
+
+// Soak 11 (A4): 21:04 the zombie dug the hole's shaft from above: standing over the open cell, it held it.
+test('soak 11 (A4): a mob standing on or just over an open cell, in its column, holds it; one beside the column does not', () => {
+    const site = new Vec3(0, 61, 0);
+    const at = (x, y, z) => { const { bot } = holeShelter(); bot.entities[7].position = new Vec3(x, y, z); return bot; };
+    const shaft = [new Vec3(0, 63, 0)]; // the roof cell of the hole, open
+    assert.deepEqual(heldCells(at(0.5, 64, 0.5), site, shaft).map(h => key(h.cell)), ['0,63,0'], 'standing on it');
+    assert.deepEqual(heldCells(at(0.5, 65.2, 0.5), site, shaft).map(h => key(h.cell)), ['0,63,0'], 'just over it (falling, or on a block above)');
+    assert.deepEqual(heldCells(at(0.5, 66, 0.5), site, shaft), [], 'two blocks up: not yet');
+    assert.deepEqual(heldCells(at(1.5, 64, 0.5), site, shaft), [], 'beside the column');
+});

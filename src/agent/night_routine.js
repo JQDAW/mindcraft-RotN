@@ -16,7 +16,7 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, SCROLL_LABEL, shelterShell, isFullDay, replanHold, placeableDirt } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
-import { goToGoal, descendFromTree, avoidEnemies, inShelterReach } from './library/skills.js';
+import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon } from './library/skills.js';
 import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
@@ -149,7 +149,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     restoreCowardice(agent, n);
-    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, ...GROUND_CLEAR, groundSkip: [] });
+    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, ...GROUND_CLEAR, groundSkip: [] });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0, ...MORNING_CLEAR });
@@ -283,13 +283,18 @@ function startBurrow(agent, n, ops, threat) {
 function startJob(agent, n, label, fn, then) {
     const gen = n.gen;
     let result = null, ret = null;
+    // Soak 11 (A3): after a build, a repair, a hole, a burrow or a back-away (each places blocks from the
+    // hand), the weapon back in the main hand, inside the same action (skills.rearmWeapon).
+    const job = REARM_AFTER.includes(label)
+        ? async () => { try { return await fn(); } finally { try { await rearmWeapon(agent.bot); } catch { /* best effort */ } } }
+        : fn;
     n.job = Promise.resolve()
         .then(() => {
             // #431 review 2: only a stop of this run is attributed to its stopper, not an older one.
             if (agent.rotnLastInterrupt?.of === label) agent.rotnLastInterrupt = null;
             // #463 review 1: the routine's own jobs are no fresh decision: a held re-plan (a death's)
             // survives them and goes once at full day.
-            return agent.actions.runAction(label, async () => { result = await fn(); }, { keepReplan: true });
+            return agent.actions.runAction(label, async () => { result = await job(); }, { keepReplan: true });
         })
         .then(r => { ret = r ?? null; })
         .catch(err => console.warn(`[night] ${label} failed: ${err?.message ?? err}`))
@@ -713,6 +718,21 @@ export function closeMob(bot, site, { exposed = true } = {}) {
         if (!best || d < best.d) best = { mob: e, inCell, d };
     }
     return best;
+}
+
+/** Soak 11 (A3): the jobs that put a block in the hand; the weapon goes back after them. */
+export const REARM_AFTER = [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, 'action:buildShelter', 'action:digPit'];
+
+/**
+ * Soak 11 (A2): fight first from the shelter, armed, only with one melee mob within `range` and no other
+ * within `crowd` (rotn-data: the club kills one zombie in about 7 hits; it cannot win against two).
+ */
+export const FIGHT_FIRST = { range: 4, crowd: 8 };
+/** The melee mobs (threats.shelterTarget) within range of the bot. */
+export function meleeMobsNear(bot, range = FIGHT_FIRST.crowd) {
+    const here = bot?.entity?.position;
+    if (!here) return [];
+    return Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && shelterTarget(e) && e.position.distanceTo(here) <= range);
 }
 
 /** Soak 7 (C): a burrow away from a mob in reach: at most this many steps, until its reach + margin. */
@@ -1150,7 +1170,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (spent) n.lastShelter = spent.clone?.() ?? spent;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, ...GROUND_CLEAR, groundSkip: [] });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, ...GROUND_CLEAR, groundSkip: [] });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -1614,6 +1634,19 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             const melee = heldMelee && !armed ? { mob: heldMelee.mob, cell: heldMelee.cell }
                 : (() => { const m = ops.mobInReach?.(bot) ?? null; return m && (!armed || low(m)) ? { mob: m } : null; })();
             const reaching = other ?? melee;
+            // Soak 11 (A2, the lead): armed above its hit with ONE melee mob at the breach (rotn-data: the
+            // club wins against one, not two or more): fight it first from the shelter (self_defense's
+            // fight in place), and repair once it is dead or gone. Two or more: the #580 order below.
+            const meleeNear = (ops.meleeNear ?? meleeMobsNear)(bot, FIGHT_FIRST.crowd);
+            const one = meleeNear.length === 1 ? meleeNear[0] : null;
+            if (armed && !other && one && !low(one) && one.position && bot.entity.position.distanceTo(one.position) <= FIGHT_FIRST.range) {
+                bot.rotnSheltered = 'open';
+                n.handFight = false;
+                const text = `[night] armed, health ${Math.round(bot.health)} above the ${maxHitOf(one)} ${aMob(one.name ?? 'hostile mob')} may hit for, and the only melee mob near: fighting it from the shelter first, then the repair`;
+                const said = `fight:${one.id ?? ''}`;
+                if (n.fightFirstSaid === said) console.log(text); else { n.fightFirstSaid = said; line(agent, text); }
+                return 'night:inside';
+            }
             if (reaching) {
                 bot.rotnSheltered = 'open';
                 const name = reaching.mob.name ?? 'hostile mob';
@@ -1680,7 +1713,19 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             bot.rotnSheltered = 'open';
             const text = `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`;
             if (open) console.log(text); else line(agent, text); // said once, then logged (T1: chat volume)
-            startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody, ...(skip.length ? { skip } : {}) }), (r) => {
+            // Soak 11 (A1): the repair stops when the bot is hit by a melee mob in reach, or a melee mob
+            // holds an opening cell it repairs (21:04: the repair went on under the zombie for 9 s, to the
+            // death); the next tick decides again (fight first, the #580 order, or the burrow).
+            const startHealth = bot.health;
+            const skipKeys = new Set(skip.map(key3));
+            const abort = () => {
+                const hitter = Number.isFinite(bot.health) && Number.isFinite(startHealth) && bot.health < startHealth ? ops.mobInReach?.(bot) : null;
+                if (hitter) return `hit by ${aMob(hitter.name ?? 'hostile mob')}`;
+                const held = (ops.heldCells?.(bot, n.site, need.todo) ?? []).find(h => shelterTarget(h.mob) && !skipKeys.has(key3(h.cell)));
+                return held ? `${aMob(held.mob.name ?? 'hostile mob')} in the opening at ${at(held.cell)}` : null;
+            };
+            startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody, abort, ...(skip.length ? { skip } : {}) }), (r) => {
+                if (r?.aborted) { line(agent, `[night] the repair stopped: ${r.aborted}; deciding again`); n.repairStall = null; return; }
                 // Soak 5 (00:31:47): a repair that closed the shelter said nothing; the journal could not
                 // show the roof was closed before the troll came.
                 if (r?.closed) { bot.rotnSheltered = true; Object.assign(n, { repairStall: null, handFight: false, repairFirstFor: null, nightBurrowTried: null, nightBurrowWhy: null }); console.log(`[night] the repair closed the shelter at ${at(n.site)}`); return; } // #470 nit: no hand fight once closed; #580 re-review nit 1: a new breach is a new one
