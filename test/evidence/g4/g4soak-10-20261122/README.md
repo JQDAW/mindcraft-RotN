@@ -10,7 +10,7 @@
   - The first death was a zombie digging into the night-1 shelter while the bot had no weapon.
   - The other 125 were a death loop around the spawn:
     - **Server causes (whole run):** 116 `slain by Zombie <bot>`, 7 `slain by Zombie`, 2 `drowned`, 1 `drowned whilst trying to escape Zombie <bot>`.
-    - **Where:** all of the loop's deaths lie in x -88..-36, z -87..-44, and 82 of them in x -50..-36, z -76..-50.
+    - **Where:** the loop's deaths have the bounding box x -88..-38, z -87..-44 (observed extremes), and 82 of them lie inside the box x -50..-36, z -76..-50.
     - **The bot's own reflex line:** a player zombie "rises there and never leaves".
 - **The loop ended with the day relocate.** At 16:50:41 the run's first `[respawn]` line started it, and 3 s later the bot was 51 blocks from the spawn (16:50:44). There was no death after that.
 - **Night 2** was spent in a shelter that the walk to better ground reached (16:54:55). The bot repaired it four times and did not die.
@@ -18,7 +18,7 @@
 - **Better Combat:** one line, `[forge-bridge] bettercombat attack: on`, and no self-check trip. The only melee hits were 14 swings with `hitwithaxe:bark` in hand (0.3 to 0.4 damage each), and no hostile mob was killed.
 - **Cost:**
   - **Overall:** USD 0.0256/h.
-  - **By the self-prompting windows (21.5 min):** USD 0.070/h.
+  - **By the self-prompting windows (21.5 min):** USD 0.079/h.
   - **Reasoning:** 96% of the completion tokens.
   - **Memory summaries:** 28% of the completions and 43% of the spend.
 
@@ -53,23 +53,23 @@ Every address is redacted (`<ip>`): the CX23's, the dev server's and the test se
 The survival notes show 2 eats, 5 fights, 215 flees and 121 food lines.
 
 ## The LLM spend and the reasoning tokens (per window)
-The windows come from the journal: the night routine's `sunset is near` lines and the `[respawn]` relocate.
+The windows come from the journal: the night routine's `sunset is near` lines and the `[respawn]` relocate. The memory summary logged at 15:37:43 (`driver.log:986`) comes before `self prompt loop stopped` and `[night] sunset is near` (`driver.log:990`–`991`), so it counts in day 1.
 - All 108 completions were answered by provider `Wafer`.
 - **The rule for a memory summary:** a call whose prompt is under 2,000 tokens. All 30 are also the call right before a `Memory updated to:` line.
 
 | Window | Min | Completions | USD | USD/h | Completion tokens | Reasoning tokens | Memory summaries (USD) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Day 1: join to `sunset is near` (15:20:08–15:37:43); the self-prompting window | 17.6 | 56 | 0.019931 | 0.068 | 66,911 | 63,919 | 13 (0.006244) |
-| Sunset 1 to the relocate (15:37:43–16:50:41): night 1, morning and the death loop; no self-prompting | 73.0 | 42 | 0.025570 | 0.021 | 103,904 | 100,602 | 14 (0.013241) |
+| Day 1: join to `sunset is near` (15:20:08–15:37:43, up to `driver.log:990`); the self-prompting window | 17.6 | 57 | 0.023157 | 0.079 | 84,273 | 81,116 | 14 (0.009471) |
+| Sunset 1 to the relocate (15:37:43 from `driver.log:991`, to 16:50:41): night 1, morning and the death loop; no self-prompting | 73.0 | 41 | 0.022343 | 0.018 | 86,542 | 83,405 | 13 (0.010014) |
 | The relocate to `sunset is near` (16:50:41–16:54:39); the self-prompting window from 16:50:44 | 4.0 | 9 | 0.005168 | 0.078 | 19,963 | 19,412 | 2 (0.001756) |
 | Night 2 (16:54:39–17:20:20) | 25.7 | 1 | 0.000611 | – | 3,024 | 2,858 | 1 (0.000611) |
 | **The run** | **120.1** | **108** | **0.051280** | **0.0256** | **193,802** | **186,791 (96%)** | **30 (0.021853, 43%)** |
 
-- **The self-prompting windows:** 21.5 min, 65 completions, USD 0.025099 (0.070/h). The memory summaries made in them are side calls, not self-prompts.
-- **The death-loop window's 42 calls** were the replies to reflex re-plan prompts (`Reflexes (death) interrupted …`) and their memory summaries. The self-prompter was off from 15:37:43 to 16:50:44.
+- **The self-prompting windows:** 21.5 min, 66 completions, USD 0.028325 (0.079/h). The memory summaries made in them are side calls, not self-prompts.
+- **The death-loop window's 41 calls** were the replies to reflex re-plan prompts (`Reflexes (death) interrupted …`) and their memory summaries. The self-prompter was off from 15:37:43 to 16:50:44.
 - **Prompt tokens:** 372,095 in all.
 - **The largest call by total tokens:** 16:15:20, 5,489 prompt and 13,176 completion tokens (12,984 reasoning).
-- **The largest completion, also the most expensive call:** a memory summary at 15:37:43, 765 prompt and 17,362 completion tokens (17,197 reasoning), USD 0.003227 (6.3% of the run's spend).
+- **The largest completion, also the most expensive call:** a memory summary at 15:37:43 (`driver.log:986`, the last call of day 1), 765 prompt and 17,362 completion tokens (17,197 reasoning), USD 0.003227 (6.3% of the run's spend).
 - **Empty replies:** three completions had no content (15:28:14, 15:30:13, 16:46:58). For example: `content null chars`, `reasoning_tokens 4546` of 4,546 completion tokens, then `Empty content returned (model @preset/glm-5-3-flash-cheap-reliable, finish_reason stop)` and `No response received.`
 
 ## What happened
@@ -80,9 +80,9 @@ The windows come from the journal: the night routine's `sunset is near` lines an
 - **Food:** no animal was found within 128 blocks (15:24:52–15:25:40). Foraging gave crops.
 - **First plank:**
   - `!placeHere("log")` failed once and then worked (see `!placeHere` below).
-  - In between, the LLM asked for `!newAction(…)` (15:26:35) and got `newAction is disabled. Enable with allow_insecure_coding=true in settings.js`, so `allow_insecure_coding=false` held.
+  - In between, the LLM asked for `!newAction(…)` (15:26:35) and got `newAction is disabled. Enable with allow_insecure_coding=true in settings.js` (server.log chat, `server.log:1167`), so `allow_insecure_coding=false` held.
   - The bot then debarked the log twice with `!useOn("pyrotech:crude_axe", …)` (15:26:52, 15:27:01).
-- **The weapon step started again at 15:29:36.** The chat at 15:31:49 says `Need 2 sticks for the reserve crude axe but only hold 1`. Then `agenda step weapon stuck: 5 min of self-prompting; going on without it until the night` (15:34:23).
+- **The weapon step started again at 15:29:36.** The chat at 15:31:49 says `Need 2 sticks for the reserve crude axe but only hold 1`. Then `agenda step weapon stuck: 5 min of self-prompting; going on without it until the night` (15:34:23, server.log chat, `server.log:1274`).
 - `crafting_tools` started at 15:27:04 and again at 15:34:25, and was not done by sunset.
 
 ### Night 1 and the death loop (15:37–16:50)
@@ -132,7 +132,7 @@ The windows come from the journal: the night routine's `sunset is near` lines an
 - **collectBlock pickup or cancel timeouts:** none in the journal.
   - The patch (`patches/mineflayer-collectblock+1.6.0.patch`) records each pickup end in `bot.collectBlock.lastPickup` and the `collectBlock_pickupEnded` event. Nothing in this release logs them, so the journal cannot show one.
   - The journal has 224 `MaxListenersExceededWarning` lines: 112 for `11 diggingAborted listeners` and 112 for `11 diggingCompleted listeners`. That is a different listener from soak 9's `collectBlock_finished`.
-- **Escape lines (`[escape] …`, `[reflex] unstuck: the escape …`):** none. The unstuck reflex logged `still stuck after 10 s; re-planning instead of a restart` (16:49:49) instead.
+- **Escape lines (`[escape] …`, `[reflex] unstuck: the escape …`):** none. Instead, the unstuck reflex logged `still stuck after 10 s; re-planning instead of a restart` 9 times: 15:54:55, 15:57:29, 15:59:53, 16:24:03, 16:24:55, 16:34:35, 16:46:41, 16:47:33 and 16:49:49.
 - **Walk to better ground:** one, at 16:54:55 (`driver.log:5647`), above.
 - **Ore skips for a liquid:** none.
 - **`!placeHere`:** two, both `!placeHere("log")` during the first-plank step:
@@ -151,7 +151,7 @@ The windows come from the journal: the night routine's `sunset is near` lines an
 - **15:24:32:** `server.log` has a `---- Minecraft Crash Report ----` for `Ticking entity`, a `java.util.ConcurrentModificationException` in an `animania:hedgehog` at 8.53, 66.00, 118.52. The server went on logging normally the same second.
 - **Universal Tweaks:** 4 `Failed to save chunk` NullPointerExceptions (15:32:42, 15:34:11, 16:38:43, 17:16:59).
 - **Lag:** 4 `Can't keep up!` lines, the largest `Running 2648ms behind, skipping 52 tick(s)` (15:24:34).
-- **Skeleton summons:** 6 `[Skeleton: Object successfully summoned]` lines. As in soak 8, this is a pack command sender, not the bot.
+- **Summons:** 7 `Object successfully summoned` lines: 6 from `[Skeleton: …]` and 1 from `[Skeleton Warrior: …]` (`server.log:1626`, 16:31:32). As in soak 8, these are pack command senders, not the bot.
 
 ## Step 7 (harness-ops)
 - `starts=1` after `up`.
