@@ -1,0 +1,329 @@
+{
+  "scenario": "g4-soak-2h",
+  "gate": "G4",
+  "title": "A 2-hour soak of the CX23 service: no crash, memory and hourly cost within the soak ADR's targets, the agenda done, eats when low, deaths reported",
+  "runId": "20261122t115049-54b828",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": false,
+  "weakenedParams": [
+    "not a G4 acceptance run: (a) no ROTN_G4_ACCEPT marker (only the six step-7 runs, under the lead's written acceptance GO, set it); (d) no gate/ctl hash confirmation (it is part of ROTN_G4_ACCEPT)",
+    "a G4 run on the CX23 service (set-up S) is not an acceptance run: G4 evidence comes only from the step-7 acceptance runs (test/scenarios/g4/PLAN.md)"
+  ],
+  "verdict": "FAIL",
+  "passed": 7,
+  "failed": 2,
+  "durationS": 941,
+  "params": {
+    "bot": "<bot>",
+    "worldSeed": "1880465901402976865",
+    "durationMinutes": 120,
+    "sampleMinutes": 5,
+    "peakMemoryMaxMb": 850,
+    "usdPerHourMax": 0.05,
+    "foodFloor": 6,
+    "eatWithinMinutes": 5,
+    "loginTimeoutMs": 240000,
+    "pollMs": 5000,
+    "logTail": 20000,
+    "consoleWaitS": 1
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "The bot logs in with its own account (online mode); on S from an inactive unit of this run's bot"
+    },
+    {
+      "check": "naming",
+      "pass": true,
+      "detail": "[naming]: 17 kinds, unknown 0, all real; no entity near (+240s)",
+      "readyToTry": "The bot's [naming] line near spawn shows RotN names: no unknown, numeric or placeholder ids (#2)"
+    },
+    {
+      "check": "no_crash",
+      "pass": false,
+      "detail": "gone at minute 15: lost (Internal Exception: io.netty.channel.unix.Errors$NativeIoException: syscall:read(..) failed: Connection reset by peer); 2 agent restart or exit line(s): \"Agent process exited with code 1 and signal null\"",
+      "readyToTry": "Two hours with no crash: online to the end, no agent exit or restart, NRestarts unchanged (#7)"
+    },
+    {
+      "check": "peak_memory",
+      "pass": true,
+      "detail": "peak 474 MiB (target 850 MiB)",
+      "readyToTry": "Peak memory within the soak ADR's target (#7; ADR 0010: 850 MiB)"
+    },
+    {
+      "check": "usd_per_hour",
+      "pass": false,
+      "detail": "USD 0.139529/h (target 0.05; USD 0.035526 over 15 min, 82 completions)",
+      "readyToTry": "The LLM spend per hour within the soak ADR's target (#7; ADR 0010: USD 0.05 per hour)"
+    },
+    {
+      "check": "agenda_done",
+      "pass": true,
+      "detail": "\"agenda done\" within the soak",
+      "readyToTry": "The early-game agenda finishes from a fresh spawn (#4)"
+    },
+    {
+      "check": "food_floor",
+      "pass": true,
+      "detail": "lowest food 20 (floor 6; 16 food lines)",
+      "readyToTry": "The food level never falls below the floor (#5)"
+    },
+    {
+      "check": "ate_when_low",
+      "pass": true,
+      "detail": "the food level was never low",
+      "readyToTry": "When the food level is low, the bot eats (#5)"
+    },
+    {
+      "check": "deaths_reported",
+      "pass": true,
+      "detail": "no death",
+      "readyToTry": "Every death is reported (#5, as in #6)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "block": {
+        "line": "[naming] <bot> near spawn: 17 kinds; unknown 0; dirt:292 undergroundbiomes:sedimentary_stone:79 dynamictrees:leaves0:75 tallgrass:58 dynamictrees:trunkshell:56 dynamictrees:sprucebranch:46 dynamictreesbop:leaves1:11 dynamictrees:oakbranch:8 double_plant:4 brown_mushroom:3 grass:3 biomesoplenty:flower_0:2 biomesoplenty:plant_0:2 pyrotech_compat:rock_sedimentary:2 dynamictrees:rootydirt:1 pyrotech_compat:rock_metamorphic:1 undergroundbiomes:metamorphic_stone:1",
+        "kinds": 17,
+        "unknown": 0,
+        "entries": [
+          {
+            "name": "dirt",
+            "count": 292
+          },
+          {
+            "name": "undergroundbiomes:sedimentary_stone",
+            "count": 79
+          },
+          {
+            "name": "dynamictrees:leaves0",
+            "count": 75
+          },
+          {
+            "name": "tallgrass",
+            "count": 58
+          },
+          {
+            "name": "dynamictrees:trunkshell",
+            "count": 56
+          },
+          {
+            "name": "dynamictrees:sprucebranch",
+            "count": 46
+          },
+          {
+            "name": "dynamictreesbop:leaves1",
+            "count": 11
+          },
+          {
+            "name": "dynamictrees:oakbranch",
+            "count": 8
+          },
+          {
+            "name": "double_plant",
+            "count": 4
+          },
+          {
+            "name": "brown_mushroom",
+            "count": 3
+          },
+          {
+            "name": "grass",
+            "count": 3
+          },
+          {
+            "name": "biomesoplenty:flower_0",
+            "count": 2
+          },
+          {
+            "name": "biomesoplenty:plant_0",
+            "count": 2
+          },
+          {
+            "name": "pyrotech_compat:rock_sedimentary",
+            "count": 2
+          },
+          {
+            "name": "dynamictrees:rootydirt",
+            "count": 1
+          },
+          {
+            "name": "pyrotech_compat:rock_metamorphic",
+            "count": 1
+          },
+          {
+            "name": "undergroundbiomes:metamorphic_stone",
+            "count": 1
+          }
+        ]
+      },
+      "entity": {
+        "line": "[naming] <bot> entities +240s: 0 kinds; unknown 0;",
+        "secs": 240,
+        "kinds": 0,
+        "unknown": 0,
+        "entries": []
+      }
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "samples": [
+      {
+        "min": 0,
+        "memoryMb": 354,
+        "peakMb": 364,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 5,
+        "memoryMb": 468,
+        "peakMb": 468,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 10.1,
+        "memoryMb": 427,
+        "peakMb": 474,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 15.2,
+        "memoryMb": 420,
+        "peakMb": 474,
+        "nRestarts": 0,
+        "state": "active"
+      }
+    ],
+    "journalCoverage": {
+      "complete": true,
+      "coveredMinutes": 15.3,
+      "minutes": 15.3
+    },
+    "nearbyBlocks": {
+      "names": [
+        "hitwithaxe:debarked_oak",
+        "grass",
+        "pyrotech_compat:rock_igneous",
+        "pyrotech_compat:rock_metamorphic",
+        "dirt",
+        "dynamictrees:oakbranch",
+        "tallgrass",
+        "biomesoplenty:flower_0",
+        "undergroundbiomes:metamorphic_stone",
+        "dynamictreesbop:leaves1",
+        "biomesoplenty:plant_0",
+        "dynamictreesbop:leaves0",
+        "dynamictrees:leaves0",
+        "yellow_flower",
+        "brown_mushroom",
+        "undergroundbiomes:sedimentary_stone",
+        "dynamictrees:darkoakbranch",
+        "grass",
+        "air",
+        "air",
+        "dynamictrees:oakbranch"
+      ],
+      "problems": []
+    },
+    "namingEntities": "no entity near (+240s)",
+    "peakMemoryMb": 474,
+    "llmUsage": {
+      "calls": 82,
+      "usageLines": 82,
+      "unknown": 0,
+      "usd": 0.035526,
+      "minutes": 15,
+      "usdPerHour": 0.139529
+    },
+    "survival": {
+      "eats": 0,
+      "fights": 0,
+      "fightOutcomes": {},
+      "flees": 0,
+      "foodLines": 16
+    },
+    "deaths": {
+      "deaths": 0,
+      "reports": 0
+    }
+  },
+  "botExitCode": null,
+  "botExitSignal": null,
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "c62e3155c8d61ac44c763e322fbaae29c883fd25",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261122-113937",
+  "driver": "service frcfld via cx23-ctl",
+  "service": {
+    "goId": "G4-SOAK-9-20261122",
+    "startError": null,
+    "incident": null,
+    "stateUnknown": null
+  },
+  "g4Acceptance": {
+    "marker": null,
+    "unit": "frcfld",
+    "release": {
+      "tag": "rotn-v0.1.15",
+      "sha12": "c62e3155c8d6",
+      "commit": "c62e3155c8d61ac44c763e322fbaae29c883fd25",
+      "source": "release line"
+    },
+    "fresh": {
+      "ok": true,
+      "why": "fresh: no earlier run, join or scenario; started once; world 10024 of at most 13328 ticks",
+      "facts": {
+        "starts": {
+          "starts": 1,
+          "files": 1
+        },
+        "gametime": 10024,
+        "createdAt": "2026-11-22T11:39:44.000Z",
+        "readAt": "2026-11-22T11:50:50.392Z"
+      }
+    },
+    "conditions": {
+      "a": {
+        "ok": false,
+        "why": "no ROTN_G4_ACCEPT marker (only the six step-7 runs, under the lead's written acceptance GO, set it)"
+      },
+      "b": {
+        "ok": true,
+        "why": "the S service frcfld via cx23-ctl"
+      },
+      "c": {
+        "ok": true,
+        "why": "rotn-v0.1.15 (c62e3155c8d61ac44c763e322fbaae29c883fd25), read from the journal (release line)"
+      },
+      "d": {
+        "ok": false,
+        "why": "no gate/ctl hash confirmation (it is part of ROTN_G4_ACCEPT)"
+      },
+      "e": {
+        "ok": true,
+        "why": "host confirmed (ROTN_SERVICE_GO); fresh: no earlier run, join or scenario; started once; world 10024 of at most 13328 ticks"
+      }
+    },
+    "valid": false,
+    "reasons": [
+      "(a) no ROTN_G4_ACCEPT marker (only the six step-7 runs, under the lead's written acceptance GO, set it)",
+      "(d) no gate/ctl hash confirmation (it is part of ROTN_G4_ACCEPT)"
+    ]
+  },
+  "batch": null
+}
