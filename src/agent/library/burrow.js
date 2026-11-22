@@ -19,7 +19,7 @@
 // down (the surface-shelter escape: dig down, seal above).
 
 import { Vec3 } from 'vec3';
-import { handDiggable, dumpState, isWall, placeableDirt, isSoftWall } from './night.js';
+import { handDiggable, dumpState, isWall, placeableDirt } from './night.js';
 import { mobDigging } from '../../../packages/rotn-data/index.js';
 import { isEmpty, isLiquid, hazardOf, hurtsOnContact, isFalling, mobIn, centerIn, fillCell, craftMore, shelterItems, softItems, wallItems, nearbyDiggers, countOf } from './shelter.js';
 import { threatFor } from './threats.js';
@@ -127,7 +127,10 @@ const sealBlocks = (bot) => countOf(shelterItems(bot)) + placeableDirt(bot.inven
  * one dirt that seals a step down. pickupMs: how long the piles may take to reach the inventory.
  */
 export const SELF_SEAL = { pickupMs: 1500 };
-const pilesByHand = (b) => !!b && isSoftWall(b) && /(^|:)(dirt|grass)$/.test(b.name ?? '');
+// #580 review 1: by name and variant (dirt 0 and 1, grass), dug by hand; minecraft:grass is not in the
+// dirt ore, so isSoftWall missed the usual open-ground floor (rotn-data: both drop 4 piles by hand).
+const pilesByHand = (b) => !!b && handDiggable(b)
+    && (/^(minecraft:)?grass$/.test(b.name ?? '') || (/^(minecraft:)?dirt$/.test(b.name ?? '') && [0, 1].includes(b.metadata ?? 0)));
 
 /**
  * Soak 7 (C): whether a body (not the bot) overlaps the cell, so nothing can be placed there (a

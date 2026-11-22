@@ -286,7 +286,18 @@ export function placeableDirt(items) {
 export const WOOD_ORES = ['logWood', 'plankWood'];
 export function isWoodWall(block) {
     const st = dumpState(block);
-    return wholeBlock(st) && st.toolRequired === false && WOOD_ORES.some(ore => inOre(ore, block));
+    // #580 review 2: a log placed sideways has axis bits in its metadata (+4, +8) that the ore lists
+    // do not hold for modded logs (biomesoplenty:log_0:8): the dump's wood material counts too, so a
+    // repair does not dig its own log out again.
+    return wholeBlock(st) && st.toolRequired === false && (st.material === 'wood' || WOOD_ORES.some(ore => inOre(ore, block)));
+}
+
+/** An item a repair may place as a wood wall: a log or plank (an item's metadata has no axis bits); never a crafting table. */
+export function isWoodItem(item) {
+    let name = null;
+    try { name = registryName(item?.name); } catch { name = null; }
+    // By name: the ore lists some modded logs at one meta only (biomesoplenty:log_0 at 4-7).
+    return !!name && isWoodWall(item) && WOOD_ORES.some(ore => oreMembers(ore).some(m => m.name === name));
 }
 
 export const isWall = (block) => isSturdy(block) || isSoftWall(block) || isWoodWall(block);

@@ -3238,8 +3238,52 @@ test('soak 10 (N1): unarmed and cornered at night by a melee mob in the opening:
     await settle(c.agent);
     assert.ok(c.agent.chat.includes('[night] no weapon, health 20, and no way to back away or burrow (no blocks to seal with) from a zombie in the opening at 1, 64, 0: hitting back by hand'), c.agent.chat.join('\n'));
     assert.equal(nightState(c.agent).handFight, true);
-    // Armed above its hit: no burrow (the fight in place, as before).
+    // Armed above its hit: no burrow (the fight in place, as before). #580 review 4: calls are recorded
+    // (a throwing stub would only be logged by startJob's catch).
     const armed = heldSetup({ weapon: true, plan: false });
-    armed.o.burrowAway = () => { throw new Error('no burrow when armed'); };
+    const armedBurrows = [];
+    armed.o.burrowAway = () => { armedBurrows.push(1); return Promise.resolve({ steps: 0, site: null, stopped: 'cornered' }); };
     await breachAt(armed);
+    assert.deepEqual(armedBurrows, []);
+    assert.ok(!armed.labels.includes('action:burrowAway'), armed.labels.join(','));
+});
+
+// #580 review 3 (the lead's order): the opening free (no melee mob in it) and a block held: the repair
+// first, closed before the zombie steps in (the soak 10 breach with a spare); the burrow only when a mob
+// holds the opening, still reaches after the repair, or no block is held.
+test('#580 review 3: a zombie in reach, the opening free, a block held: the repair first (closed), no burrow; still in reach after it, or no block: the burrow', async (t) => {
+    quiet(t);
+    const zombie = { id: 7, name: 'zombie', position: new Vec3(1.5, 64, 0.5) };
+    const setup = ({ blocks, closes = true }) => {
+        const s = heldSetup({ plan: false, held: 'none' });
+        s.o.mobInReach = () => zombie;
+        s.o.repairBlocks = () => blocks;
+        s.burrows = [];
+        s.o.burrowAway = (bot, mob, opts) => { s.burrows.push(opts); return Promise.resolve({ steps: 1, site: SITE.offset(0, -2, 0), stopped: 'far' }); };
+        s.o.buildShelter = (bot, opts = {}) => {
+            s.o.builds.push(opts.site ?? null);
+            if (opts.site) s.o.repairs.push({ site: opts.site, skip: [] });
+            if (opts.site && closes) s.o.open = [];
+            return Promise.resolve({ closed: !opts.site || closes, feet: opts.site ?? SITE, placed: closes ? 1 : 0, line: closes ? 'Shelter closed' : 'Shelter is not closed: 1 open' });
+        };
+        return s;
+    };
+    // With a spare: repaired at once, closed, no burrow.
+    const spare = setup({ blocks: 4 });
+    await breachAt(spare);
+    assert.deepEqual(spare.o.repairs, [{ site: SITE, skip: [] }]);
+    assert.deepEqual(spare.burrows, []);
+    assert.ok(spare.agent.chat.includes('[night] no weapon, health 20, and a zombie in reach at 1, 64, 0, and no way to back away: the opening is free and 4 blocks held: repairing first'), spare.agent.chat.join('\n'));
+    // The repair did not stop it (still open, still in reach): the burrow next.
+    const still = setup({ blocks: 4, closes: false });
+    await breachAt(still);
+    nightTick(still.agent, { now: 3 * CHECK_MS, ops: still.o });
+    await settle(still.agent);
+    assert.equal(still.o.repairs.length >= 1, true);
+    assert.equal(still.burrows.length, 1, still.agent.chat.join('\n'));
+    // No block held: the burrow at once, no repair first.
+    const none = setup({ blocks: 0 });
+    await breachAt(none);
+    assert.equal(none.burrows.length, 1);
+    assert.ok(!none.agent.chat.some(l => /repairing first/.test(l)));
 });

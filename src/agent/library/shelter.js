@@ -14,7 +14,7 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { isSturdy, isSoftWall, isWall, isWoodWall, handDiggable, dirtPileRecipes, shelterShell, dumpState, placeableDirt } from './night.js';
+import { isSturdy, isSoftWall, isWall, isWoodItem, handDiggable, dirtPileRecipes, shelterShell, dumpState, placeableDirt } from './night.js';
 import { loadRotnData, PACK_VERSION, registryName, botName, getItem, mobDigging, canMobDig } from '../../../packages/rotn-data/index.js';
 import { formatName } from './rotn_names.js';
 import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
@@ -153,7 +153,7 @@ export function softItems(bot) {
 /** Soak 10 (S2): the logs and planks held that make a wall (night.isWoodWall), most first. */
 export function woodItems(bot) {
     return bot.inventory.items()
-        .filter(i => isWoodWall({ name: i.name, metadata: i.metadata ?? 0 }))
+        .filter(i => isWoodItem({ name: i.name, metadata: i.metadata ?? 0 }))
         .sort((a, b) => b.count - a.count);
 }
 
@@ -672,7 +672,8 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
                 ? `Cannot build the shelter at ${at(soft.feet)}: your pickaxe could not dig out of its walls.` : null);
         // Without a pickaxe only dirt goes in: the bot must be able to dig itself out by hand.
         // Soak 10 (S2, the lead): a repair with no dirt left (and none its piles make) uses logs or
-        // planks, which break by hand in the morning; never stone-type blocks without a pickaxe.
+        // planks, which break by hand in the morning; never stone-type blocks without a pickaxe. A repair
+        // is any call with a site (#580 nit 6): the routine's repairs, the hole's roof, the morning re-seal.
         const repairWood = !!site && keepSoft && !pick.ok;
         const items = (b) => (pick.ok ? [...shelterItems(b), ...softItems(b)] : repairWood ? [...softItems(b), ...woodItems(b)] : softItems(b));
         const dirtHeld = () => countOf(pick.ok ? items(bot) : softItems(bot));

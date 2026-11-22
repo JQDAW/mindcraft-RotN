@@ -1451,3 +1451,34 @@ test('soak 10 (S2): a repair with no dirt left places a log (it breaks by hand);
     assert.equal(r4.closed, false);
     assert.deepEqual(fresh.placed, []);
 });
+
+// #580 review 1 and 5: the usual open-ground floor is grass (not in the dirt ore), and the soak 10
+// shelter was a single cell on open ground: with no block held, the step down on grass seals itself.
+test('#580 review 1 and 5: the soak 10 single cell on open ground, grass floor, a zombie in the opening, no block held: a step down sealed with the dug dirt', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const set = dirtShell({ '1,64,0': 'air', '0,63,0': 'grass' });
+    const f = withGravity(fakeBot({ cobble: 0, pickaxe: false, set }));
+    const z = { id: 7, type: 'mob', name: 'zombie', position: new Vec3(1.5, 64, 0.5), height: 1.95, width: 0.6 };
+    f.bot.entities = { 7: z };
+    const dig = f.bot.dig;
+    f.bot.dig = async (b) => { const was = f.bot.blockAt(b.position).name; await dig(b); if (was === 'dirt' || was === 'grass') f.items.push(n(PILE, 4)); };
+    const step = burrowStep(f.bot, z, { prefer: 'down' });
+    assert.deepEqual([step.kind, step.selfSeal, key(step.to), step.dig.map(key), step.seal.map(key)], ['down', true, '0,62,0', ['0,63,0', '0,62,0'], ['0,64,0']], JSON.stringify(step));
+    const r = await takeBurrowStep(f.bot, step, { craft: fakeCraft(f.items).craft });
+    assert.deepEqual(r, { site: new Vec3(0, 62, 0) }, f.bot.output);
+    assert.deepEqual(f.placed, ['0,64,0'], 'sealed above, under the zombie\'s reach');
+    // A grass floor in a hole shelter too (#580 review 1: isSoftWall missed grass).
+    const g = holeShelter({ dirt: 0, set: { '0,60,0': 'grass' } });
+    Object.assign(g.bot.entities[7], { position: new Vec3(1.3, 61, 0.5), width: 0.6 });
+    assert.equal(burrowStep(g.bot, g.bot.entities[7], { prefer: 'down' }).selfSeal, true);
+});
+
+// #580 review 2: a modded log placed sideways has axis bits (+4, +8) its ore entry does not list.
+test('#580 review 2: a sideways modded log is a wood wall (so a repair keeps it); a crafting table is a wall but never a repair item', async () => {
+    const { isWoodWall, isWoodItem } = await import('./night.js');
+    for (const meta of [0, 4, 8, 12]) assert.equal(isWoodWall({ name: 'biomesoplenty:log_0', metadata: meta }), true, `log_0:${meta}`);
+    assert.equal(isWoodWall({ name: 'betterwithmods:blood_log', metadata: 5 }), true);
+    assert.equal(isWoodItem({ name: 'biomesoplenty:log_0', metadata: 0 }), true);
+    assert.equal(isWoodItem({ name: 'crafting_table', metadata: 0 }), false, 'never placed in a repair');
+    assert.equal(isWoodWall({ name: 'dirt', metadata: 0 }), false);
+});
