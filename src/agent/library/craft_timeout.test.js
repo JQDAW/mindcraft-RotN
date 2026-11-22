@@ -21,7 +21,7 @@ const PICK = reg.itemsByName.stone_pickaxe.id;
 const stack = (name, count) => ({ name, metadata: 0, count, type: reg.itemsByName[name].id });
 const pickRecipe = { result: { id: PICK, count: 1, metadata: 0 }, requiresTable: true };
 const table = { name: 'crafting_table', position: new Vec3(1, 64, 0) };
-const FAST = { ...CRAFT_LIMITS, tableMs: 400, handMs: 300, pollMs: 20, settleMs: 300 };
+const FAST = { ...CRAFT_LIMITS, tableMs: 400, handMs: 300, pollMs: 20, abandonMs: 200, settleMs: 300 };
 const quiet = (t) => { t.mock.method(console, 'log', () => {}); };
 
 /**
@@ -56,13 +56,14 @@ test('soak 9 (1): a table craft that never resolves ends at its limit, closes th
     assert.equal(bot.currentWindow, null);
     assert.match(bot.output, /The craft of stone_pickaxe did not finish within 0\.4 s \(timed out\); closed the crafting table; crafted anyway: you now have 1 stone_pickaxe\./);
     assert.deepEqual(calls.crafts.map(c => c.count), [1, 0], 'then a craft of 0, which lets mineflayer\'s kept table window go');
-    assert.equal(calls.crafts[0].stationary, true, 'rotnStationary during the craft');
+    assert.ok(calls.crafts[0].stationary, 'rotnStationary during the craft');
     assert.equal(bot.rotnStationary, false, 'and set back after');
 });
 
 test('soak 9 (1): nothing made: "not crafted"; the table limit is CRAFT_LIMITS.tableMs, plus perCraftMs per further use', async (t) => {
     quiet(t);
     assert.equal(CRAFT_LIMITS.tableMs, 15_000);
+    assert.equal(CRAFT_LIMITS.perCraftMs, 2_000, '#571 review 2: 2 s for each further use');
     const { bot } = hangBot();
     const r = await craftPausingAutoEat(bot, pickRecipe, 3, table, 3000, { ...FAST, tableMs: 300, perCraftMs: 100 });
     assert.deepEqual(r, { ended: 'timeout', made: 0 });
@@ -76,7 +77,9 @@ test('soak 9 (1): a stop ends a craft that never resolves at once (the default 1
     const start = Date.now();
     const r = await craftPausingAutoEat(bot, pickRecipe, 1, table);
     const ms = Date.now() - start;
-    assert.ok(ms < 2500, `ended on the stop: ${ms} ms`);
+    // #571 review 1: plus up to abandonMs for the abandoned craft and settleMs for the count; still
+    // well inside Mindcraft's 10 s.
+    assert.ok(ms < CRAFT_LIMITS.abandonMs + CRAFT_LIMITS.settleMs + 1500, `ended on the stop: ${ms} ms`);
     assert.deepEqual(r, { ended: 'interrupted', made: 0 });
     assert.equal(calls.closed, 1);
     assert.match(bot.output, /The craft of stone_pickaxe was stopped before it finished; closed the crafting table; not crafted: you have 0 stone_pickaxe\./);
@@ -205,7 +208,7 @@ test('soak 9 (2): the unstuck reflex never counts a craft at the table (or a che
     });
     assert.equal(await viewChest(bot), true);
     assert.equal(walking, false, 'not on the way to the chest');
-    assert.equal(during, true, 'while the chest window is open');
+    assert.ok(during, 'while the chest window is open');
     assert.equal(bot.rotnStationary, false);
     // Set by a skill already (the shelter): kept.
     bot.rotnStationary = true;
@@ -294,4 +297,79 @@ test('soak 9 (c): a line right after bot.craft returns (or throws), before the t
     const failing = { output: '', craft: () => Promise.reject(new Error('click rejected')) };
     await assert.rejects(craftPausingAutoEat(failing, pickRecipe, 1, table), /click rejected/);
     assert.ok(logs.some(l => /^\[craft\] bot\.craft returned after \d+ ms \(it threw: .*click rejected.*\)$/.test(l)), logs.join('\n'));
+});
+
+// #571 review 1: an abandoned bot.craft keeps running; it can click, or close the next craft's window
+// when it ends. It gets abandonMs to settle first, and its settling is logged from its handlers.
+test('#571 review 1: the abandoned craft gets abandonMs to settle, logged when it settles (or that it did not)', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(`${Date.now()} ${a.join(' ')}`));
+    // It settles (throws, its click on the closed window unconfirmed) 120 ms after the close.
+    const { bot } = hangBot();
+    let settledAt = null;
+    bot.craft = (recipe, count) => (count === 0 ? Promise.resolve() : new Promise((resolve, reject) => {
+        const close = bot.closeWindow;
+        bot.closeWindow = (w) => { close(w); setTimeout(() => { settledAt = Date.now(); reject(new Error('Server didn\'t respond to transaction')); }, 120); };
+    }));
+    const r = await craftPausingAutoEat(bot, pickRecipe, 1, table, 3000, { ...FAST, abandonMs: 1000 });
+    const returnedAt = Date.now();
+    assert.equal(r.ended, 'timeout');
+    assert.ok(settledAt !== null && settledAt <= returnedAt, 'it settled before the craft returned');
+    assert.ok(logs.some(l => /\[craft\] the abandoned craft settled after \d+ ms \(it threw: .*Server didn't respond.*\)$/.test(l)), logs.join('\n'));
+    assert.ok(!logs.some(l => /did not settle/.test(l)));
+    // One that never settles: the wait ends at abandonMs, said; it is logged if it ever settles.
+    logs.length = 0;
+    const never = hangBot();
+    let late = null;
+    never.bot.craft = (recipe, count) => (count === 0 ? Promise.resolve() : new Promise((resolve) => { late = resolve; }));
+    const start = Date.now();
+    await craftPausingAutoEat(never.bot, pickRecipe, 1, table, 3000, FAST);
+    assert.ok(Date.now() - start >= FAST.tableMs + FAST.abandonMs);
+    assert.ok(logs.some(l => / \[craft\] the abandoned craft did not settle within 200 ms; going on$/.test(l)), logs.join('\n'));
+    late();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.ok(logs.some(l => /\[craft\] the abandoned craft settled after \d+ ms$/.test(l)), 'its late end logged from its handler');
+});
+
+// #571 review 4: a late end of stationaryWhile never overwrites a flag a newer action set.
+test('#571 review 4: stationaryWhile sets the flag back only while it is still its own', async () => {
+    const bot = {};
+    let release;
+    const old = stationaryWhile(bot, () => new Promise(resolve => { release = resolve; }));
+    assert.ok(bot.rotnStationary, 'set (truthy)');
+    bot.rotnStationary = true; // a newer action set it (the shelter build)
+    release();
+    await old;
+    assert.equal(bot.rotnStationary, true, 'the newer flag kept');
+    // A newer action released it: left released.
+    const b2 = {};
+    const p = stationaryWhile(b2, () => new Promise(resolve => setTimeout(resolve, 20)));
+    b2.rotnStationary = false;
+    await p;
+    assert.equal(b2.rotnStationary, false);
+    // Nested: each sets back its own.
+    const b3 = { rotnStationary: false };
+    await stationaryWhile(b3, async () => {
+        const outer = b3.rotnStationary;
+        await stationaryWhile(b3, () => Promise.resolve());
+        assert.equal(b3.rotnStationary, outer, 'the inner set back the outer token');
+    });
+    assert.equal(b3.rotnStationary, false);
+});
+
+// #571 review 3: within() ends on a stop with TIMED_OUT; useToolOn said "time limit ... reached".
+test('#571 review 3: a stop during useToolOn says it was stopped, not the time limit', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const stick = { name: 'stick', metadata: 0, count: 1, type: reg.itemsByName.stick.id };
+    const bot = {
+        output: '', registry: reg, interrupt_code: false, game: { gameMode: 'survival' },
+        inventory: { items: () => [stick], slots: [null, stick] },
+        equip: () => new Promise(() => {}), // never done
+    };
+    setTimeout(() => { bot.interrupt_code = true; }, 150);
+    const start = Date.now();
+    assert.equal(await skills.useToolOn(bot, 'stick', 'nothing'), false);
+    assert.ok(Date.now() - start < 1000, `${Date.now() - start} ms`);
+    assert.match(bot.output, /useOn stopped \(interrupted\)\./);
+    assert.doesNotMatch(bot.output, /time limit/);
 });

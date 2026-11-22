@@ -500,9 +500,10 @@ const modes_list = [
         escape: (bot) => escape(bot), // library/escape.js (tests pass their own)
         update: async function (agent) {
             // A skill that keeps the bot in place on purpose sets bot.rotnStationary while it does
+            // (true, or stationaryWhile's token: #571 review 4)
             // (D2b: the shelter build, once at the site; not the walk there, #195 review 6); the
             // escape (bot.rotnEscaping) is this reflex's own way out, never cut by it.
-            if (agent.isIdle() || agent.bot?.rotnStationary === true || agent.bot?.rotnEscaping === true || Date.now() < (agent.bot?.rotnUnstuck?.holdUntil ?? 0)) {
+            if (agent.isIdle() || !!agent.bot?.rotnStationary || agent.bot?.rotnEscaping === true || Date.now() < (agent.bot?.rotnUnstuck?.holdUntil ?? 0)) {
                 this.prev_location = null;
                 this.stuck_time = 0;
                 return; // don't get stuck when idle
