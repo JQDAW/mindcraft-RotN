@@ -219,7 +219,9 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
     const inventory = Object.fromEntries(Object.keys(requiredIngredients).map(name => [name, countItem(bot, name)]));
     const craftLimit = mc.calculateLimitingResource(inventory, requiredIngredients);
     
-    await craftPausingAutoEat(bot, recipe, Math.min(craftLimit.num, num), craftingTable);
+    const crafted = await craftPausingAutoEat(bot, recipe, Math.min(craftLimit.num, num), craftingTable);
+    // Soak 9: timed out or stopped; what happened is said (craftPausingAutoEat). The finally picks a placed table up.
+    if (crafted.ended !== 'crafted') return (crafted.made ?? 0) > 0;
     if(craftLimit.num<num) log(bot, `Not enough ${craftLimit.limitingResource} to craft ${num}, crafted ${craftLimit.num}. You now have ${countItem(bot, itemName)} ${itemName}.`);
     else log(bot, `Successfully crafted ${itemName}, you now have ${countItem(bot, itemName)} ${itemName}.`);
     } finally {
@@ -234,21 +236,105 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
 }
 
 /**
+ * Soak 9 (rotn-v0.1.15, 12:01): bot.craft for a stone pickaxe at the table never resolved; the
+ * server had made it. The unstuck reflex (20 s at the table) tried to stop the craft, which ignored
+ * the stop, and Mindcraft killed the process 10 s later. So a craft is bounded:
+ * tableMs at a table, handMs in the inventory's 2x2 grid, plus perCraftMs for each further use of
+ * the recipe; pollMs: how often the stop is checked; settleMs: how long the inventory may take to
+ * show what the server made after the window is closed.
+ */
+export const CRAFT_LIMITS = { tableMs: 15_000, handMs: 10_000, perCraftMs: 1_000, pollMs: 100, settleMs: 1_000 };
+
+/**
+ * Soak 9: in-place window work (a craft, a chest) is no being stuck: the unstuck reflex leaves the
+ * bot alone while fn runs (bot.rotnStationary), only for the window part, never the walk there.
+ * The flag is set back as it was, so a skill that set it already keeps it.
+ */
+export async function stationaryWhile(bot, fn) {
+    const was = bot.rotnStationary;
+    bot.rotnStationary = true;
+    try {
+        return await fn();
+    } finally {
+        bot.rotnStationary = was ?? false;
+    }
+}
+
+/**
  * bot.craft with mineflayer-auto-eat paused: it clicks the inventory too, and an eat in the middle of
  * a craft got a click rejected in net-forge's offline test (Request 2 answer). It is enabled again
  * afterwards only if it was on before. An eat already under way is given up to `eatWaitMs` to finish.
+ * Soak 9: bounded by CRAFT_LIMITS and ended by a stop (bot.interrupt_code, or the command's limit);
+ * either way the open window is closed and the result is counted before and after, and what
+ * happened is said (crafted anyway, or not crafted). bot.rotnStationary is set while it runs.
+ * Returns { ended: 'crafted' | 'timeout' | 'interrupted', made } (made: result items gained, or
+ * null when the recipe names no result); a craft that fails throws, as bot.craft does.
  */
-export async function craftPausingAutoEat(bot, recipe, count, table, eatWaitMs = 3000) {
+export async function craftPausingAutoEat(bot, recipe, count, table, eatWaitMs = 3000, limits = CRAFT_LIMITS) {
     const autoEat = bot.autoEat;
     const wasOn = !!autoEat && typeof autoEat.disable === 'function' && !autoEat.disabled;
     if (wasOn) autoEat.disable();
     try {
-        for (let waited = 0; autoEat?.isEating && waited < eatWaitMs; waited += 100)
-            await new Promise(resolve => setTimeout(resolve, 100));
-        await bot.craft(recipe, count, table);
+        return await stationaryWhile(bot, async () => {
+            for (let waited = 0; autoEat?.isEating && waited < eatWaitMs; waited += 100)
+                await new Promise(resolve => setTimeout(resolve, 100));
+            return await boundedCraft(bot, recipe, count, table, limits);
+        });
     } finally {
         if (wasOn) autoEat.enable?.();
     }
+}
+
+/** bot.craft within CRAFT_LIMITS, ended by a stop (craftPausingAutoEat). */
+async function boundedCraft(bot, recipe, count, table, limits) {
+    const resultId = recipe?.result?.id;
+    const have = () => (Number.isInteger(resultId) && typeof bot.inventory?.items === 'function'
+        ? bot.inventory.items().filter(i => i.type === resultId).reduce((n, i) => n + i.count, 0) : null);
+    const before = have();
+    const run = currentRun(bot);
+    const ms = (table ? limits.tableMs : limits.handMs) + limits.perCraftMs * Math.max(0, (count ?? 1) - 1);
+    let settled = false, failure = null;
+    // Handled here, so a craft that settles after it was given up never rejects unhandled.
+    const craft = Promise.resolve().then(() => bot.craft(recipe, count, table))
+        .then(() => { settled = true; }, (err) => { settled = true; failure = err ?? new Error('the craft failed'); });
+    const start = Date.now();
+    let ended = null;
+    for (;;) {
+        await Promise.race([craft, new Promise(resolve => setTimeout(resolve, limits.pollMs))]);
+        if (settled) break;
+        if (bot.interrupt_code || run.aborted) { ended = 'interrupted'; break; }
+        if (Date.now() - start >= ms) { ended = 'timeout'; break; }
+    }
+    if (settled) {
+        // Soak 9: which part stuck shows in the journal (this line, then the table pickup's).
+        console.log(`[craft] bot.craft returned after ${Date.now() - start} ms${failure ? ` (it threw: ${safeError(failure)})` : ''}`);
+        if (failure) throw failure;
+        const after = have();
+        return { ended: 'crafted', made: before === null ? null : Math.max(0, after - before) };
+    }
+    // Given up. mineflayer's craft keeps the table's window between its crafts (windowCraftingTable)
+    // and lets it go only when a craft ends, so the next table craft would click in this one; a craft
+    // of 0 runs no craft, then closes that window and lets it go (mineflayer 4.33.0 craft.js).
+    if (table) {
+        const reset = Promise.resolve().then(() => bot.craft(recipe, 0, table)).catch(() => {});
+        await Promise.race([reset, new Promise(resolve => setTimeout(resolve, limits.pollMs))]);
+    }
+    // Then whatever is still open (a window that opened late), and count.
+    try { if (bot.currentWindow) bot.closeWindow(bot.currentWindow); } catch { /* best effort */ }
+    for (let waited = 0; before !== null && have() <= before && waited < limits.settleMs; waited += limits.pollMs)
+        await new Promise(resolve => setTimeout(resolve, limits.pollMs));
+    const now = have();
+    const made = before === null ? null : Math.max(0, now - before);
+    const name = (Number.isInteger(resultId) && bot.registry?.items?.[resultId]?.name) || 'the item';
+    const what = ended === 'timeout'
+        ? `The craft of ${name} did not finish within ${secsText(ms)} (timed out)`
+        : `The craft of ${name} was stopped before it finished`;
+    const where = table ? 'the crafting table' : 'the inventory';
+    const result = made === null ? 'whether it was made is unknown'
+        : made > 0 ? `crafted anyway: you now have ${now} ${name}` : `not crafted: you have ${now} ${name}`;
+    log(bot, `${what}; closed ${where}; ${result}.`);
+    console.log(`[craft] ${ended} after ${Date.now() - start} ms (limit ${ms} ms): ${name} ${made === null ? '?' : made > 0 ? `+${made}` : 'none'}`);
+    return { ended, made };
 }
 
 /** How long a crafting table's block update may come late before it counts as not placed. */
@@ -273,13 +359,36 @@ async function placeTableNear(bot, itemName, lateMs = TABLE_LATE_UPDATE_MS) {
     return table;
 }
 
-/** Pick up a crafting table the bot placed for a craft; a failure is logged, never thrown. */
-async function pickUpTable(bot) {
+/**
+ * Soak 9 (net-forge's analysis): the craft's finally picked its table up through collectBlock, and
+ * mineflayer-collectblock's wait for the drop has no bound; the action never ended. The pickup gets
+ * this long; then the collect is cancelled and the table is left where it is (said).
+ */
+export const TABLE_PICKUP_MS = 10_000;
+
+/** Pick up a crafting table the bot placed for a craft, within ms; a failure is logged, never thrown. */
+async function pickUpTable(bot, ms = TABLE_PICKUP_MS) {
+    const start = Date.now();
+    console.log('[craft] picking the crafting table up again');
     try {
-        await collectBlock(bot, 'crafting_table', 1);
+        // The collect itself bounded too: given up here, it must not go on in the background.
+        const limits = { ...COLLECT_LIMITS, blockMs: ms, totalMs: ms };
+        const res = await within(bot, collectBlock(bot, 'crafting_table', 1, null, 64, limits), ms, () => cancelCollect(bot));
+        if (res === TIMED_OUT) {
+            log(bot, bot.interrupt_code ? 'Stopped while picking up the crafting table; it is left where it is.'
+                : `Could not pick up the crafting table within ${secsText(ms)}; it is left where it is.`);
+        }
+        console.log(`[craft] the table pickup ${res === TIMED_OUT ? 'was given up' : 'ended'} after ${Date.now() - start} ms`);
     } catch (err) {
         log(bot, `Could not pick up the crafting table again (${safeError(err)}).`);
     }
+}
+
+/** Stop a collect under way: mineflayer-collectblock's task, a dig, a walk (best effort). */
+function cancelCollect(bot) {
+    try { Promise.resolve(bot.collectBlock?.cancelTask?.()).catch(() => {}); } catch { /* best effort */ }
+    try { bot.stopDigging?.(); } catch { /* best effort */ }
+    stopWalking(bot);
 }
 
 /** The walk to the nearest crafting table for a craft; its result is judged by tableInReach. */
@@ -373,10 +482,16 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
                 break;
             }
             const before = countItem(bot, itemName);
+            let crafted;
             try {
-                await craftPausingAutoEat(bot, recipe, 1, table);
+                crafted = await craftPausingAutoEat(bot, recipe, 1, table);
             } catch (err) {
                 why = `the craft failed (${safeError(err)})`;
+                break;
+            }
+            if (crafted.ended !== 'crafted') { // soak 9: timed out or stopped (said)
+                if (countItem(bot, itemName) > before) made++;
+                why = crafted.ended === 'timeout' ? 'the craft timed out' : 'stopped';
                 break;
             }
             if (countItem(bot, itemName) <= before) {
@@ -618,25 +733,27 @@ export async function clearNearestFurnace(bot) {
         if (run.aborted) return false;
     }
 
-    console.log('clearing furnace...');
-    const furnace = await bot.openFurnace(furnaceBlock);
-    if (run.aborted) { closeQuietly(bot, furnace); return false; }
-    console.log('opened furnace...')
-    // take the items out of the furnace
-    let smelted_item, intput_item, fuel_item;
-    if (furnace.outputItem())
-        smelted_item = await furnace.takeOutput();
-    if (furnace.inputItem())
-        intput_item = await furnace.takeInput();
-    if (furnace.fuelItem())
-        fuel_item = await furnace.takeFuel();
-    console.log(smelted_item, intput_item, fuel_item)
-    let smelted_name = smelted_item ? `${smelted_item.count} ${smelted_item.name}` : `0 smelted items`;
-    let input_name = intput_item ? `${intput_item.count} ${intput_item.name}` : `0 input items`;
-    let fuel_name = fuel_item ? `${fuel_item.count} ${fuel_item.name}` : `0 fuel items`;
-    log(bot, `Cleared furnace, received ${smelted_name}, ${input_name}, and ${fuel_name}.`);
-    return true;
-
+    // Soak 9: the window part is in-place work, never "stuck" (stationaryWhile).
+    return await stationaryWhile(bot, async () => {
+        console.log('clearing furnace...');
+        const furnace = await bot.openFurnace(furnaceBlock);
+        if (run.aborted) { closeQuietly(bot, furnace); return false; }
+        console.log('opened furnace...')
+        // take the items out of the furnace
+        let smelted_item, intput_item, fuel_item;
+        if (furnace.outputItem())
+            smelted_item = await furnace.takeOutput();
+        if (furnace.inputItem())
+            intput_item = await furnace.takeInput();
+        if (furnace.fuelItem())
+            fuel_item = await furnace.takeFuel();
+        console.log(smelted_item, intput_item, fuel_item)
+        let smelted_name = smelted_item ? `${smelted_item.count} ${smelted_item.name}` : `0 smelted items`;
+        let input_name = intput_item ? `${intput_item.count} ${intput_item.name}` : `0 input items`;
+        let fuel_name = fuel_item ? `${fuel_item.count} ${fuel_item.name}` : `0 fuel items`;
+        log(bot, `Cleared furnace, received ${smelted_name}, ${input_name}, and ${fuel_name}.`);
+        return true;
+    });
 }
 
 
@@ -978,7 +1095,7 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
     return swings > 0;
 }
 
-export async function collectBlock(bot, blockType, num=1, exclude=null, range=64) {
+export async function collectBlock(bot, blockType, num=1, exclude=null, range=64, limits=COLLECT_LIMITS) {
     /**
      * Collect one of the given block type.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -1127,9 +1244,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         if (wetSkips.size && !wetSaid) {
             wetSaid = true;
             const n = [...wetSkips.values()].reduce((a, b) => a + b, 0);
-            const lava = wetLiquids.has('lava'), wetter = wetLiquids.has('water') || wetLiquids.has('liquid');
+            const lava = wetLiquids.has('lava'), nonLava = wetLiquids.has('water') || wetLiquids.has('liquid');
             const into = ['water', 'lava', 'liquid'].filter(k => wetLiquids.has(k)).map(k => (k === 'liquid' ? 'a liquid' : `the ${k}`)).join(' or ') || 'the water';
-            const where = lava ? (wetter ? 'on dry ground away from the lava' : 'away from the lava') : 'on dry ground';
+            const where = lava ? (nonLava ? 'on dry ground away from the lava' : 'away from the lava') : 'on dry ground';
             log(bot, `Skipped ${n} ${blockType} that would put you in ${into}: ${[...wetSkips].map(([why, k]) => `${why} (${k})`).join(', ')}. Look for some ${where}.`);
         }
         if (deathSkips === 0 || deathSkipsSaid) return;
@@ -1153,8 +1270,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     const unsafeBlocks = ['obsidian'];
 
     // Bounded (G3 review of #221): bot.collectBlock.collect has no time limit. Each block gets
-    // COLLECT_LIMITS.blockMs (then it is given up and skipped), the whole run totalMs.
-    const CL = COLLECT_LIMITS;
+    // COLLECT_LIMITS.blockMs (then it is given up and skipped), the whole run totalMs. `limits`: the
+    // craft's table pickup passes its own (soak 9), so the collect ends by itself too.
+    const CL = limits;
     const run = currentRun(bot);
     const runStart = Date.now();
     const givenUp = [];
@@ -1367,7 +1485,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             // #356 review 1: a fell has its own limit (the fall and the drop wait come after the cut).
             const blockMs = Math.min(fellsTree(block) ? fellBlockMs() : CL.blockMs, CL.totalMs - (Date.now() - runStart));
             const breaking = breakIt();
-            const res = await within(breaking, blockMs, () => {
+            const res = await within(bot, breaking, blockMs, () => {
                 cancelled = true;
                 try { Promise.resolve(bot.collectBlock?.cancelTask?.()).catch(() => {}); } catch { /* best effort */ }
                 try { bot.stopDigging?.(); } catch { /* best effort */ }
@@ -1375,9 +1493,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             });
             if (res === TIMED_OUT) {
                 // Let the cancelled break end before the next block (#224 review 2), at most STOP_SETTLE_MS.
-                await within(breaking.catch(() => {}), STOP_SETTLE_MS);
+                await within(bot, breaking.catch(() => {}), STOP_SETTLE_MS);
                 givenUp.push(block.position.clone ? block.position.clone() : block.position);
-                log(bot, `Gave up on ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: time limit of ${secsText(blockMs)} reached.`);
+                log(bot, `Gave up on ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: ${bot.interrupt_code ? 'stopped' : `time limit of ${secsText(blockMs)} reached`}.`);
             }
             else success = res;
             if (missed && res !== TIMED_OUT && walkMisses < CL.unreachableTargets) {
@@ -1736,7 +1854,7 @@ export async function sticksByAxe(bot, need, run = currentRun(bot), ops = AXE_CH
         const rest = bot.blockAt(pos);
         if (rest && rest.name !== 'air' && rest.boundingBox !== 'empty') {
             try {
-                const res = await within(O.takeBack(bot, rest), L.cleanupMs, () => { try { bot.stopDigging?.(); } catch { /* best effort */ } });
+                const res = await within(bot, O.takeBack(bot, rest), L.cleanupMs, () => { try { bot.stopDigging?.(); } catch { /* best effort */ } });
                 if (res === TIMED_OUT) log(bot, `Could not break the placed ${rest.name} back within ${secsText(L.cleanupMs)}.`);
             } catch (err) {
                 log(bot, `Could not break the placed ${rest.name} back (${safeError(err)}).`);
@@ -1889,7 +2007,7 @@ async function pickUpNear(bot, pos, L = AXE_CHOP_LIMITS) {
         if (!item) break;
         tried.add(item.id ?? item);
         const p = item.position;
-        await within(goToGoal(bot, new pf.goals.GoalNear(p.x, p.y, p.z, 1), { canDig: false }),
+        await within(bot, goToGoal(bot, new pf.goals.GoalNear(p.x, p.y, p.z, 1), { canDig: false }),
             Math.max(0, L.pickupMs - (Date.now() - start)), () => stopWalking(bot));
         await new Promise(r => setTimeout(r, 250));
     }
@@ -2006,7 +2124,7 @@ export async function descendFromTree(bot, run = currentRun(bot)) {
         && !isUnsafeBlock(bot, bot.blockAt(new Vec3(node.x, node.y, node.z)));
     log(bot, 'You are up on a tree; climbing down to the ground (at most 3 blocks per drop).');
     bot.pathfinder.setMovements(moves);
-    try { await within(bot.pathfinder.goto(ground), TREE_SAFETY.descendMs, () => stopWalking(bot)); }
+    try { await within(bot, bot.pathfinder.goto(ground), TREE_SAFETY.descendMs, () => stopWalking(bot)); }
     catch { /* no path: checked below */ }
     if (run.aborted) return !standsOnTree(bot);
     let down = !standsOnTree(bot) || await digDownThroughLeaves(bot, run);
@@ -2089,7 +2207,7 @@ async function shiftToLeafColumn(bot, run) {
         moves.scafoldingBlocks = [];
         bot.pathfinder.setMovements(moves);
         log(bot, `Walking over the canopy to ${spot.x}, ${spot.y}, ${spot.z} to dig down through the leaves there.`);
-        try { await within(bot.pathfinder.goto(new pf.goals.GoalBlock(spot.x, spot.y, spot.z)), CANOPY_DESCENT.shiftMs, () => stopWalking(bot)); }
+        try { await within(bot, bot.pathfinder.goto(new pf.goals.GoalBlock(spot.x, spot.y, spot.z)), CANOPY_DESCENT.shiftMs, () => stopWalking(bot)); }
         catch { /* checked below */ }
         if (run.aborted) return false;
         if (!bot.entity.position.floored().equals(spot)) continue;
@@ -2212,7 +2330,7 @@ export async function breakLeafFromGround(bot, block, run = currentRun(bot)) {
     const p = block.position;
     bot.pathfinder.setMovements(treeSafe(bot, new pf.Movements(bot)));
     try {
-        await within(bot.pathfinder.goto(new pf.goals.GoalNear(p.x, p.y, p.z, TREE_SAFETY.leafReach)),
+        await within(bot, bot.pathfinder.goto(new pf.goals.GoalNear(p.x, p.y, p.z, TREE_SAFETY.leafReach)),
             TREE_SAFETY.leafWalkMs, () => stopWalking(bot));
     } catch { /* no path: checked below */ }
     if (run.aborted) return false;
@@ -2294,7 +2412,7 @@ export async function fellTree(bot, block, run = currentRun(bot), refused = null
         const moves = fallSafe(new pf.Movements(bot));
         moves.canDig = false;
         bot.pathfinder.setMovements(moves);
-        try { await within(bot.pathfinder.goto(goal), ms, () => stopWalking(bot)); } catch { /* checked by the caller */ }
+        try { await within(bot, bot.pathfinder.goto(goal), ms, () => stopWalking(bot)); } catch { /* checked by the caller */ }
     };
     let spot = null;
     for (const [i, s] of spots.slice(0, 3).entries()) { // the best few; the walk may not get there
@@ -2398,7 +2516,7 @@ async function collectFelledDrops(bot, center, limits = {}, baseline = null, { o
         const p = item.position;
         onSettled?.(); // the walks to the drops start: the bot no longer stands still on purpose
         try {
-            const walk = await within(goToGoal(bot, new pf.goals.GoalNear(p.x, p.y, p.z, 1)),
+            const walk = await within(bot, goToGoal(bot, new pf.goals.GoalNear(p.x, p.y, p.z, 1)),
                 Math.min(L.walkMs, left()), () => stopWalking(bot));
             if (walk !== TIMED_OUT) walked++;
         } catch { /* a walk that failed: try the next drop */ }
@@ -2743,12 +2861,15 @@ export async function putInChest(bot, itemName, num=-1) {
     const run = currentRun(bot);
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
     if (run.aborted) return false;
-    const chestContainer = await bot.openContainer(chest);
-    if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
-    await chestContainer.deposit(item.type, variantMeta(itemName), to_put);
-    await chestContainer.close();
-    log(bot, `Successfully put ${to_put} ${itemName} in the chest.`);
-    return true;
+    // Soak 9: the window part is in-place work, never "stuck" (stationaryWhile).
+    return await stationaryWhile(bot, async () => {
+        const chestContainer = await bot.openContainer(chest);
+        if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
+        await chestContainer.deposit(item.type, variantMeta(itemName), to_put);
+        await chestContainer.close();
+        log(bot, `Successfully put ${to_put} ${itemName} in the chest.`);
+        return true;
+    });
 }
 
 export async function takeFromChest(bot, itemName, num=-1) {
@@ -2769,35 +2890,38 @@ export async function takeFromChest(bot, itemName, num=-1) {
     const run = currentRun(bot);
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
     if (run.aborted) return false;
-    const chestContainer = await bot.openContainer(chest);
-    if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
+    // Soak 9: the window part is in-place work, never "stuck" (stationaryWhile).
+    return await stationaryWhile(bot, async () => {
+        const chestContainer = await bot.openContainer(chest);
+        if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
     
-    // Find all matching items in the chest
-    let matchingItems = chestContainer.containerItems().filter(item => itemMatches(item, itemName));
-    if (matchingItems.length === 0) {
-        log(bot, `Could not find any ${itemName} in the chest.`);
+        // Find all matching items in the chest
+        let matchingItems = chestContainer.containerItems().filter(item => itemMatches(item, itemName));
+        if (matchingItems.length === 0) {
+            log(bot, `Could not find any ${itemName} in the chest.`);
+            await chestContainer.close();
+            return false;
+        }
+    
+        let totalAvailable = matchingItems.reduce((sum, item) => sum + item.count, 0);
+        let remaining = num === -1 ? totalAvailable : Math.min(num, totalAvailable);
+        let totalTaken = 0;
+    
+        // Take items from each slot until we've taken enough or run out
+        for (const item of matchingItems) {
+            if (remaining <= 0 || run.aborted) break;
+        
+            let toTakeFromSlot = Math.min(remaining, item.count);
+            await chestContainer.withdraw(item.type, variantMeta(itemName), toTakeFromSlot);
+        
+            totalTaken += toTakeFromSlot;
+            remaining -= toTakeFromSlot;
+        }
+    
         await chestContainer.close();
-        return false;
-    }
-    
-    let totalAvailable = matchingItems.reduce((sum, item) => sum + item.count, 0);
-    let remaining = num === -1 ? totalAvailable : Math.min(num, totalAvailable);
-    let totalTaken = 0;
-    
-    // Take items from each slot until we've taken enough or run out
-    for (const item of matchingItems) {
-        if (remaining <= 0 || run.aborted) break;
-        
-        let toTakeFromSlot = Math.min(remaining, item.count);
-        await chestContainer.withdraw(item.type, variantMeta(itemName), toTakeFromSlot);
-        
-        totalTaken += toTakeFromSlot;
-        remaining -= toTakeFromSlot;
-    }
-    
-    await chestContainer.close();
-    log(bot, `Successfully took ${totalTaken} ${itemName} from the chest.`);
-    return totalTaken > 0;
+        log(bot, `Successfully took ${totalTaken} ${itemName} from the chest.`);
+        return totalTaken > 0;
+    });
 }
 
 export async function viewChest(bot) {
@@ -2816,20 +2940,23 @@ export async function viewChest(bot) {
     const run = currentRun(bot);
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
     if (run.aborted) return false;
-    const chestContainer = await bot.openContainer(chest);
-    if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
-    let items = chestContainer.containerItems();
-    if (items.length === 0) {
-        log(bot, `The chest is empty.`);
-    }
-    else {
-        log(bot, `The chest contains:`);
-        for (let item of items) {
-            log(bot, `${item.count} ${item.name}`);
+    // Soak 9: the window part is in-place work, never "stuck" (stationaryWhile).
+    return await stationaryWhile(bot, async () => {
+        const chestContainer = await bot.openContainer(chest);
+        if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
+        let items = chestContainer.containerItems();
+        if (items.length === 0) {
+            log(bot, `The chest is empty.`);
         }
-    }
-    await chestContainer.close();
-    return true;
+        else {
+            log(bot, `The chest contains:`);
+            for (let item of items) {
+                log(bot, `${item.count} ${item.name}`);
+            }
+        }
+        await chestContainer.close();
+        return true;
+    });
 }
 
 export async function consume(bot, itemName="") {
@@ -2989,7 +3116,7 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
         // no time limit and can keep going on partial paths. At the limit the walk is stopped
         // and this throws, as a stopped walk does; goToPosition reports it.
         const limitMs = GO_TO_LIMITS.totalMs;
-        const walked = await within(bot.pathfinder.goto(goal), limitMs, () => stopWalking(bot));
+        const walked = await within(bot, bot.pathfinder.goto(goal), limitMs, () => stopWalking(bot));
         clearInterval(doorCheckInterval);
         if (walked === TIMED_OUT) throw new Error(`time limit of ${secsText(limitMs)} reached`);
         return true;
@@ -3806,7 +3933,7 @@ export async function forageOne(bot, target, run = currentRun(bot), limits = {})
     if (bot.entity.position.distanceTo(pos.offset(0.5, 0.5, 0.5)) > FORAGE.reach + 0.5) {
         let walked;
         try {
-            walked = await within(goToGoal(bot, new pf.goals.GoalNear(pos.x, pos.y, pos.z, FORAGE.reach), { canDig: false }), L.walkMs, () => stopWalking(bot));
+            walked = await within(bot, goToGoal(bot, new pf.goals.GoalNear(pos.x, pos.y, pos.z, FORAGE.reach), { canDig: false }), L.walkMs, () => stopWalking(bot));
         } catch {
             walked = false;
         }
@@ -4259,21 +4386,30 @@ export async function planPath(bot, movements, goal, ms) {
  * true, or TIMED_OUT. A goto that fails still throws, as before.
  */
 async function boundedGoto(bot, goal, ms) {
-    const walked = await within(bot.pathfinder.goto(goal), ms, () => stopWalking(bot));
+    const walked = await within(bot, bot.pathfinder.goto(goal), ms, () => stopWalking(bot));
     return walked === TIMED_OUT ? TIMED_OUT : true;
 }
 
 const TIMED_OUT = Symbol('timed out');
-/** The promise's value, or TIMED_OUT after `ms` (then `onTimeout` runs). A later rejection is swallowed. */
-function within(promise, ms, onTimeout = () => {}) {
-    let timer;
+/** How often within() looks for a stop (bot.interrupt_code). */
+export const STOP_POLL_MS = 100;
+/**
+ * The promise's value, or TIMED_OUT after `ms` (then `onTimeout` runs). A later rejection is swallowed.
+ * Soak 9 (net-forge's analysis): also ended by a stop (bot.interrupt_code), polled every
+ * STOP_POLL_MS, the same way (onTimeout, TIMED_OUT): Mindcraft kills the process when an action
+ * outlives its stop by 10 s, and a collect's block limit is 90 s.
+ */
+function within(bot, promise, ms, onTimeout = () => {}) {
+    let timer, poll;
     const limit = new Promise(resolve => {
         // Resolve first: onTimeout (a pathfinder stop) rejects the work, which must not win the race.
-        timer = setTimeout(() => { resolve(TIMED_OUT); try { onTimeout(); } catch { /* best effort */ } }, Math.max(0, ms));
+        const end = () => { resolve(TIMED_OUT); try { onTimeout(); } catch { /* best effort */ } };
+        timer = setTimeout(end, Math.max(0, ms));
+        if (bot) poll = setInterval(() => { if (bot.interrupt_code) end(); }, STOP_POLL_MS);
     });
     const work = Promise.resolve(promise);
     work.catch(() => {});
-    return Promise.race([work, limit]).finally(() => clearTimeout(timer));
+    return Promise.race([work, limit]).finally(() => { clearTimeout(timer); clearInterval(poll); });
 }
 function stopWalking(bot) {
     try { bot.pathfinder?.stop?.(); } catch { /* best effort */ }
@@ -4304,7 +4440,7 @@ async function useToolOnBlockBounded(bot, toolName, block, L, left) {
     const where = posText(block.position);
     const distance = toolName === 'water_bucket' && !names112.isLava(block.name) ? 1.5 : 2;
     const walkMs = Math.min(L.walkMs, left());
-    const walk = await within(goToPosition(bot, block.position.x, block.position.y, block.position.z, distance),
+    const walk = await within(bot, goToPosition(bot, block.position.x, block.position.y, block.position.z, distance),
         walkMs, () => stopWalking(bot));
     if (bot.interrupt_code) return 'interrupted';
     const headPos = () => bot.entity.position.offset(0, bot.entity.height ?? 1.62, 0);
@@ -4314,21 +4450,21 @@ async function useToolOnBlockBounded(bot, toolName, block, L, left) {
         // A walk cut short by the total limit means time is up.
         return walk === TIMED_OUT && walkMs < L.walkMs ? 'timeout' : 'unreachable';
     }
-    if (await within(bot.lookAt(center), left()) === TIMED_OUT) return 'timeout';
+    if (await within(bot, bot.lookAt(center), left()) === TIMED_OUT) return 'timeout';
     const blockInView = bot.blockAtCursor?.(5);
     if (blockInView && !blockInView.position.equals(block.position)
         && blockInView.position.distanceTo(headPos()) < block.position.distanceTo(headPos())) {
         log(bot, `Block ${blockInView.name} is in the way of the ${block.name} at ${where}.`);
         return 'blocked';
     }
-    const equipped = await within(equip(bot, toolName), left());
+    const equipped = await within(bot, equip(bot, toolName), left());
     if (equipped === TIMED_OUT) return 'timeout';
     if (!equipped) { log(bot, `Could not equip ${toolName}.`); return 'no_tool'; }
 
     const before = slotCounts(bot);
     const was = { name: block.name, metadata: block.metadata };
     const use = toolName.includes('bucket') ? bot.activateItem() : bot.activateBlock(block);
-    if (await within(use, left()) === TIMED_OUT) return 'timeout';
+    if (await within(bot, use, left()) === TIMED_OUT) return 'timeout';
     // The result: an inventory gain, or the block changed (a debarked log, a tilled field).
     const until = Date.now() + Math.min(L.settleMs, Math.max(0, left()));
     let gained = [], now = null;
@@ -4370,12 +4506,12 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
     targetName = targetName.toLowerCase();
     const timeUp = () => { log(bot, `useOn failed: time limit of ${secsText(L.totalMs)} reached.`); return false; };
     if (targetName === 'nothing') {
-        const equipped = await within(equip(bot, toolName), left());
+        const equipped = await within(bot, equip(bot, toolName), left());
         if (equipped === TIMED_OUT) return timeUp();
         if (!equipped) {
             return false;
         }
-        if (await within(bot.activateItem(), left()) === TIMED_OUT) return timeUp();
+        if (await within(bot, bot.activateItem(), left()) === TIMED_OUT) return timeUp();
         log(bot, `Used ${toolName}.`);
     } else if (world.isEntityType(targetName)) {
         const entity = world.getNearestEntityWhere(bot, e => e.name === targetName, L.range);
@@ -4384,18 +4520,18 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
             return false;
         }
         const walkMs = Math.min(L.walkMs, left());
-        const walk = await within(goToPosition(bot, entity.position.x, entity.position.y, entity.position.z),
+        const walk = await within(bot, goToPosition(bot, entity.position.x, entity.position.y, entity.position.z),
             walkMs, () => stopWalking(bot));
         if (bot.interrupt_code) return false;
         if (walk === TIMED_OUT) {
             log(bot, `useOn failed: could not reach the ${targetName} within ${secsText(walkMs)}${walkMs < L.walkMs ? ` (the ${secsText(L.totalMs)} limit)` : ''}.`);
             return false;
         }
-        const equipped = await within(toolName === 'hand' ? Promise.resolve(bot.unequip('hand')).then(() => true) : equip(bot, toolName), left());
+        const equipped = await within(bot, toolName === 'hand' ? Promise.resolve(bot.unequip('hand')).then(() => true) : equip(bot, toolName), left());
         if (equipped === TIMED_OUT) return timeUp();
         if (!equipped) return false;
         if (bot.interrupt_code) return false;
-        if (await within(bot.useOn(entity), left()) === TIMED_OUT) return timeUp();
+        if (await within(bot, bot.useOn(entity), left()) === TIMED_OUT) return timeUp();
         log(bot, `Used ${toolName} on ${targetName}.`);
     } else {
         let blocks;
