@@ -29,6 +29,8 @@ import { isPlayerZombie, shelterEnemy } from './library/threats.js';
 import { safeError } from './safe_error.js';
 import { isGiverGoal } from './agenda_driver.js';
 import { placesToLeave } from './respawn_relocate.js';
+import { waitText } from './library/wait_text.js';
+export { waitText }; // #588 re-review nit 2: one helper (library/wait_text.js)
 
 /**
  * away: blocks from every recent death spot and from the spawn square; spawnRadius: the spawn
@@ -321,8 +323,6 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
 
 /** R6: the Scroll of New Life. away: from the spawn square and every death spot; quiet: no hostile this near. */
 // Soak 11 (F1): waitMs 5 s (2 s before), one retry, and the use only once an eat is over (afterEatMs after it, settleMs at most).
-/** #587 nit 1: a wait in words ("50 ms" under a second, "5 s" from one up; toFixed(0) said "0 s"). */
-export const waitText = (ms) => (ms < 1000 ? `${Math.round(ms)} ms` : `${+(ms / 1000).toFixed(1)} s`);
 /** #587 review 1: the server's own line after a scroll use (a hint for the journal, never the proof). */
 export const SCROLL_SAID = /^Your spawnpoint is now -?\d+, -?\d+, -?\d+!$/;
 export const SCROLL = { item: 'lifescroll:spawnscroll', away: 100, quiet: 16, waitMs: 5000, tries: 2, afterEatMs: 1000, settleMs: 5000 };

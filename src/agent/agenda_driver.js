@@ -23,7 +23,7 @@ import { heldFoodHunger } from './library/food.js';
 import { nearbyHuntable } from './library/hunting.js';
 import { nearbyForage } from './library/foraging.js';
 import { hasWeapon, WEAPON } from './library/threats.js';
-import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN } from './agenda.js';
+import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT } from './agenda.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
 export const TICK_MS = 2_000;
@@ -39,6 +39,21 @@ const MAX_TICK_GAP_MS = 10_000; // a stalled update loop does not count as LLM t
 export const SAVE_EVERY_MS = 10_000;
 /** Soak 10 (W2): a step's autoCraft is run as a skill at most this many times while it stays current. */
 export const AUTO_CRAFT = { tries: 2 };
+
+/** #590 review 5: the margin over the longest food backoff and a tick in foodStartMs. */
+export const FOOD_START_SLACK_MS = 10_000;
+/**
+ * #588 nit 1: H3's wait for a picked food run to start: the longest backoff before a food run (the one
+ * before its last: BACKOFF_MS doubling per run, stepBudget().attempts runs) plus a tick and
+ * FOOD_START_SLACK_MS. #590 review 1 and 2: never below FOOD_BEFORE_NIGHT.startMs (120 s: the backoff
+ * clock starts only once a self-prompter loop still finishing a long command is idle), never above
+ * half the blocks' window (RESERVE_LEAD_MIN), so the blocks keep their time.
+ */
+export function foodStartMs() {
+    const runs = stepBudget().attempts;
+    const backoff = BACKOFF_MS * 2 ** Math.max(0, runs - 2) + TICK_MS + FOOD_START_SLACK_MS;
+    return Math.min(Math.max(FOOD_BEFORE_NIGHT.startMs, backoff), RESERVE_LEAD_MIN * 60_000 / 2);
+}
 
 /** A step's budget; settings.agenda_step_attempts and agenda_step_llm_ms override it. */
 export function stepBudget() {
@@ -162,6 +177,7 @@ export const minutes = (ms) => `${Math.round(ms / 6_000) / 10} min`;
 function tickState(agent) {
     const state = agendaState(agent.bot, agent._night?.clock);
     state.foodRunning = () => agent._agenda_step != null && agent._agenda_step === agent.agenda?.food?.id && !!agent.self_prompter?.isActive?.();
+    state.foodStartMs = () => foodStartMs(); // #588 nit 1: H3's wait for its run, from this budget
     return state;
 }
 
