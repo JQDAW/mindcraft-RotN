@@ -1011,3 +1011,33 @@ test('(g) 5: a mob that starts hurting the bot while a hit waits for its cooldow
     assert.deepEqual(got.cancelled, [], 'hurting in reach: no cap');
     assert.equal(got.sent.length, 1);
 });
+
+// #592 review nit 4 (soak 12, death 1 at 15:11): the whole chain through the real mode loop. A closed
+// shelter, armed, a zombie in the bot's cell: the night routine (closeQuarters) opens the shelter to the
+// fight in place, and modes.update runs self_defense -> fightInShelter -> defendInPlace, which swings.
+// Before: rotnSheltered stayed true, shelterQuiet kept self_defense quiet, and no swing came.
+test('#592 review nit 4: death 1 through modes.update: a closed shelter, armed, a zombie in the bot\'s cell: the night routine opens it and the fight in place swings', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const saved = { ...SHELTER_FIGHT };
+    Object.assign(SHELTER_FIGHT, { swingMs: 10 });
+    t.after(() => Object.assign(SHELTER_FIGHT, saved));
+    const { initModes } = await import('./modes.js');
+    const { nightTick, nightState } = await import('./night_routine.js');
+    const { agent, bot, calls } = shelter({ zombieAt: 0.1, killAfter: 3 }); // the zombie at 0.6, 64, 0.5: in the bot's cell
+    Object.assign(bot, { rotnSheltered: true, time: { timeOfDay: 15000 } });
+    Object.assign(agent, { prompter: { getInitModes: () => ({}) }, self_prompter: { isActive: () => false, stop() {} }, control: { blocking: () => null } });
+    initModes(agent);
+    const n = nightState(agent);
+    Object.assign(n, { state: 'inside', site: new Vec3(0, 64, 0), checkedAt: 0 });
+    const ops = { siteNeeds: () => ({ todo: [] }), hasWeapon: () => true, buildShelter: () => Promise.resolve({ closed: true }) };
+    await bot.modes.update();
+    assert.deepEqual(calls.attacks, [], 'closed: self_defense is quiet');
+    assert.equal(nightTick(agent, { now: 1000, ops }), 'night:inside');
+    assert.equal(bot.rotnSheltered, 'open');
+    await bot.modes.update();
+    for (let i = 0; i < 60 && calls.attacks.length < 3; i++) await new Promise(r => setTimeout(r, 20));
+    assert.ok(calls.attacks.length >= 1, logs.join('\n'));
+    assert.ok(logs.includes('[survival] fight start zombie (shelter)'), logs.join('\n'));
+});

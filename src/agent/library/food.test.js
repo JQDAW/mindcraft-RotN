@@ -327,3 +327,100 @@ test('soak 6 (b): between fights (a reflex\'s action) at food 12 or lower it eat
     assert.deepEqual(await run({ label: 'action:collectBlocks' }), [], 'the model\'s action is not cut at 11');
     assert.deepEqual(await run({ food: 13 }), [], 'not hungry');
 });
+
+// ---- Soak 12 (rotn-v0.1.18), death 1 at 15:11 ----
+// The eating reflex ate raw prime mutton 9 times at "food 12->12", about 0.5 s apart, with a zombie in
+// the bot's cell 0.6 m away hitting it: a closed shelter counted as safe (soak 4), and every consume
+// that resolved counted as an eat, while mineflayer ends an eat as done on any held-item change. The 2
+// mutton were still held.
+
+test('soak 12 (A3): only a food level or item count change is an eat; a consume that resolves with neither is cut; a change a tick after the resolve counts', async () => {
+    const cut = eatBot([stack('animania:raw_prime_mutton', 0, 2)], 12);
+    cut.bot.consume = () => Promise.resolve(); // resolved by a held-item change: nothing eaten
+    const r = await eatFood(cut.bot, cut.bot.inventory.items()[0], { settleMs: 20, step: 5 });
+    assert.equal(r.ate, false);
+    assert.equal(r.cut, true);
+    assert.ok(Number.isFinite(r.ms));
+    const late = eatBot([stack('animania:raw_prime_mutton', 0, 2)], 12);
+    late.bot.consume = () => { setTimeout(() => { late.bot.food = 13; late.bot.held.count--; }, 10); return Promise.resolve(); };
+    const ok = await eatFood(late.bot, late.bot.inventory.items()[0], { settleMs: 100, step: 5 });
+    assert.equal(ok.ate, true, 'the server\'s update a tick later');
+    assert.equal(ok.cut, undefined);
+});
+
+test('soak 12 (A2, death 1): in a closed shelter a zombie in the bot\'s cell (or the roof cell over it) puts off the eat at food 12; one outside the walls does not (soak 4); hurt just now, not now', async (t) => {
+    quiet(t);
+    const run = async (pos, { hurtAgo = Infinity, site = null } = {}) => {
+        const mode = freshMode();
+        const b = eatBot([stack('animania:raw_prime_mutton', 0, 2)], 12);
+        b.bot.entities = { 1: b.bot.entity, 2: { id: 2, name: 'zombie', type: 'mob', position: pos, height: 1.95, metadata: [] } };
+        b.bot.rotnSheltered = true;
+        b.bot.lastDamageTime = Date.now() - hurtAgo;
+        const agent = modeAgent(b.bot);
+        if (site) agent._night = { site };
+        await mode.update(agent);
+        await settled();
+        return b.eaten;
+    };
+    assert.deepEqual(await run(new Vec3(0.6, 64, 0.9)), [], 'the zombie in the bot\'s cell, 0.6 m away');
+    assert.deepEqual(await run(new Vec3(0.5, 66.2, 0.5)), [], 'over it, in the roof cell');
+    assert.deepEqual(await run(new Vec3(0.6, 64, 0.9), { site: new Vec3(0, 64, 0) }), [], 'the night routine\'s site');
+    assert.deepEqual(await run(new Vec3(1.5, 64, 1.5)), ['animania:raw_prime_mutton'], 'outside the walls (soak 4): it eats');
+    assert.deepEqual(await run(new Vec3(1.5, 64, 1.5), { hurtAgo: 4000 }), [], 'hurt 4 s ago: not now');
+});
+
+test('soak 12 (A3, the lead): a cut eat is no failure of that food (never given up); it waits cut_ms; that wait never holds off an emergency eat with no hostile within EAT_SAFE.distance', async (t) => {
+    const warns = [];
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
+    const mode = freshMode();
+    const b = eatBot([stack('animania:raw_prime_mutton', 0, 3)], 12);
+    let cuts = 0;
+    b.bot.consume = () => { cuts++; return Promise.resolve(); };
+    const agent = modeAgent(b.bot);
+    for (let k = 0; k < 4; k++) { mode.wait_until = -Infinity; await mode.update(agent); await settled(200); }
+    assert.equal(cuts, 4);
+    assert.equal(mode.given_up.size, 0, 'four cuts: still not given up (3 failures would give it up)');
+    assert.deepEqual(mode.fails, {});
+    assert.ok(warns.some(l => /^\[reflex\] eating: the eat of animania:raw_prime_mutton:0 was cut after \d+ ms \(no food or count change, food 12\); trying again in 3 s$/.test(l)), warns.join('\n'));
+    // Within the cut wait: at 12 it waits; at EAT_NOW_AT with nothing near it eats now; with a zombie
+    // within 4 blocks it waits.
+    assert.ok(mode.wait_until > Date.now() && mode.cut_wait);
+    await mode.update(agent);
+    await settled(200);
+    assert.equal(cuts, 4, 'food 12: the wait holds');
+    b.bot.food = EAT_NOW_AT;
+    b.bot.entities = { 1: b.bot.entity, 2: { id: 2, name: 'zombie', type: 'mob', position: new Vec3(3, 64, 0), metadata: [] } };
+    await mode.update(agent);
+    await settled(200);
+    assert.equal(cuts, 4, 'a zombie 3 blocks away: the wait holds');
+    b.bot.entities = { 1: b.bot.entity };
+    b.bot.consume = () => { cuts++; b.bot.held.count--; b.bot.food += 3; return Promise.resolve(); };
+    await mode.update(agent);
+    await settled(200);
+    assert.equal(cuts, 5, `food ${EAT_NOW_AT}, nothing near: it eats despite the wait`);
+    assert.equal(b.bot.food, EAT_NOW_AT + 3);
+});
+
+test('#592 review nit 3: the settle is 300 ms (a lagging server); a change that shows after the eat was judged cut counts as that eat (no second item eaten)', async (t) => {
+    const { EAT_SETTLE } = await import('./food.js');
+    assert.equal(EAT_SETTLE.ms, 300);
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const mode = freshMode();
+    const b = eatBot([stack('animania:raw_prime_mutton', 0, 2)], 12);
+    let consumes = 0;
+    // The server's update arrives 400 ms after the resolve: past the settle.
+    b.bot.consume = () => { consumes++; setTimeout(() => { b.bot.food = 13; b.bot.held.count--; }, 400); return Promise.resolve(); };
+    const agent = modeAgent(b.bot);
+    await mode.update(agent);
+    await settled(350);
+    assert.ok(mode.cut_wait, 'judged cut at 300 ms');
+    await settled(150);
+    await mode.update(agent);
+    await settled(50);
+    assert.ok(logs.includes('[reflex] ate animania:raw_prime_mutton:0 at food 12 (it showed after the eat was judged cut)'), logs.join('\n'));
+    assert.equal(consumes, 1, 'food 13: no second eat');
+    assert.equal(mode.cut_wait, false);
+});

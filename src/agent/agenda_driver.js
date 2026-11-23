@@ -47,7 +47,9 @@ export const FOOD_START_SLACK_MS = 10_000;
  * before its last: BACKOFF_MS doubling per run, stepBudget().attempts runs) plus a tick and
  * FOOD_START_SLACK_MS. #590 review 1 and 2: never below FOOD_BEFORE_NIGHT.startMs (120 s: the backoff
  * clock starts only once a self-prompter loop still finishing a long command is idle), never above
- * half the blocks' window (RESERVE_LEAD_MIN), so the blocks keep their time.
+ * half the blocks' window (RESERVE_LEAD_MIN), so the blocks keep their time. From 6 attempts the 300 s
+ * cap is below the real backoff (480 s before the sixth run): H3 then hands the window to the blocks
+ * before that food run starts, by design (#590 re-review).
  */
 export function foodStartMs() {
     const runs = stepBudget().attempts;

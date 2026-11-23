@@ -237,7 +237,9 @@ export function siteProblem(bot, feet, { occupied = false, tolerateBody = false 
             const chokes = q.y > p.y && suffocates(b);
             const hurts = hurtsOnContact(b);
             if (tolerateBody && !chokes && !hurts) continue;
-            return { ...found(q, b, 'a solid block in the 1x2 space', 'body'), suffocates: chokes, hurts };
+            // Soak 12 (A4): fullCube false (Epic Siege Mod's scaffolding): solid, never suffocating; the
+            // night routine keeps such a block while a mob may stand on it (night_routine.keepShelter).
+            return { ...found(q, b, 'a solid block in the 1x2 space', 'body'), suffocates: chokes, hurts, fullCube: suffocates(b) };
         }
     }
     for (const q of wallsAndRoof(p)) {

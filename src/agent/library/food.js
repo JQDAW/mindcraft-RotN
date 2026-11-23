@@ -151,11 +151,26 @@ const countKey = (bot, key) => bot.inventory.items().filter(i => foodKey(i) === 
  * CONSUME_CHECK_MS the food level and the item count decide.
  * @returns {Promise<{ate: boolean, threw: Error|null, before: number, after: number}>}
  */
-export async function eatFood(bot, item, { checkMs = CONSUME_CHECK_MS } = {}) {
+/**
+ * Soak 12 (A3): after a consume resolves, the food level and the item count get this long (polled every
+ * step ms) to show the eat: the server sends them a tick after its "eating done" status. #592 review nit
+ * 3: 300 ms (6 ticks) for a lagging server; a change that shows later still is counted by the eating mode
+ * (a cut eat's food and count are kept: food.lateEat).
+ */
+export const EAT_SETTLE = { ms: 300, step: 25 };
+
+/** #592 review nit 3: the count of a food key held now. */
+export const heldCount = (bot, key) => countKey(bot, key);
+/** #592 review nit 3: whether a cut eat ({key, before, had}) has shown since (the food or its count changed). */
+export const lateEat = (bot, cut) => !!cut && (bot.food > cut.before || countKey(bot, cut.key) < cut.had);
+
+export async function eatFood(bot, item, { checkMs = CONSUME_CHECK_MS, settleMs = EAT_SETTLE.ms, step = EAT_SETTLE.step } = {}) {
     const key = foodKey(item);
     const before = bot.food, had = countKey(bot, key);
+    const changed = () => bot.food > before || countKey(bot, key) < had;
     let threw = null;
-    bot.rotnAteAt = Date.now(); // soak 11 (F1): the scroll waits for an eat to be over
+    const startedAt = Date.now();
+    bot.rotnAteAt = startedAt; // soak 11 (F1): the scroll waits for an eat to be over
     try {
         await bot.equip(item, 'hand');
         await bot.consume();
@@ -163,12 +178,17 @@ export async function eatFood(bot, item, { checkMs = CONSUME_CHECK_MS } = {}) {
         threw = err;
         await new Promise(resolve => setTimeout(resolve, checkMs));
     }
-    // A consume that resolved has eaten; after a throw the food level or the item count tells.
+    // Soak 12 (A3, death 1): mineflayer ends an eat as done on any change of the held item (and on a
+    // cooldown packet), not only on the server's "eating done": 9 eats of raw mutton resolved about 0.5 s
+    // apart at "food 12->12" while the zombie hit the bot, and the 2 mutton were still held. Only a food
+    // level or item count change is an eat now, after a resolve as after a throw; a resolve with
+    // neither is a cut eat (cut: true), never logged as eaten.
+    for (let waited = 0; !threw && waited < settleMs && !changed(); waited += step) await new Promise(resolve => setTimeout(resolve, step));
     bot.rotnAteAt = Date.now();
-    const ate = !threw || bot.food > before || countKey(bot, key) < had;
+    const ate = changed();
     // G4 #5: "[survival] ate <item> food <before>-><after>" once the food level has changed.
     if (ate) await logAte(bot, key, before);
-    return { ate, threw, before, after: bot.food };
+    return { ate, threw, before, after: bot.food, ...(!ate && !threw ? { cut: true, ms: Date.now() - startedAt, key, had } : {}) };
 }
 
 /**
