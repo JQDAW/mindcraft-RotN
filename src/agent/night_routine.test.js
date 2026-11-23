@@ -3785,7 +3785,7 @@ test('soak 12 (A4, death 1, rotn-data): scaffolding in the head cell is kept whi
     assert.ok(s.agent.chat.some(l => /breaking it from inside; staying in the shelter$/.test(l)), s.agent.chat.join('\n'));
 });
 
-test('soak 12 (A4): scaffolding in the head cell with the shell open (checked with it allowed): the repair first (the block kept), then the clear', async (t) => {
+test('soak 12 (A4), #592 review 1: scaffolding in the head cell with the shell open: kept, and the normal breach path repairs the opening (the block allowed); then the clear', async (t) => {
     quiet(t);
     const s = scaffoldSetup();
     nightTick(s.agent, { now: 0, ops: s.o });
@@ -3798,10 +3798,66 @@ test('soak 12 (A4): scaffolding in the head cell with the shell open (checked wi
     assert.deepEqual(s.o.clears, []);
     assert.equal(s.o.repairs.length, repairs + 1, 'the repair');
     assert.equal(s.o.tolerate.at(-1), true, 'with the block allowed');
-    assert.ok(s.agent.chat.includes('[night] contenttweaker:scaffolding in the head cell at 0, 65, 0: a mob placed it from above; keeping it while the shelter is open at 1, 65, 0 (it is solid and decays by itself): repairing first'), s.agent.chat.join('\n'));
-    nightTick(s.agent, { now: CHECK_MS + 2, ops: s.o });
+    assert.ok(s.agent.chat.includes('[night] contenttweaker:scaffolding in the head cell at 0, 65, 0: a mob placed it from above; keeping it while the shelter is open at 1, 65, 0 (it is solid and decays by itself): the opening first'), s.agent.chat.join('\n'));
+    assert.ok(s.agent.chat.some(l => /^\[night\] the shelter is open at 1, 65, 0: repairing$/.test(l)), 'the normal repair line');
+    nightTick(s.agent, { now: 2 * CHECK_MS + 2, ops: s.o }); // the next check, CHECK_MS on (the normal cadence)
     await settle(s.agent);
     assert.deepEqual(s.o.clears, ['(0, 65, 0)'], 'closed, nothing over it: cleared');
+});
+
+// #592 review 1: keepMobBlock's own repair had none of the breach path's guards and restarted every tick
+// (a zombie holding the opening; no blocks), so the fight first, the back-away and the burrow never came.
+test('#592 review 1: scaffolding kept, a zombie holding the opening (unarmed), or no blocks held: the repair is not restarted every tick; the breach order goes on', async (t) => {
+    quiet(t);
+    const held = scaffoldSetup();
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 65, 0.5) };
+    held.o.heldCells = (bot, site, open) => open.map(cell => ({ cell, mob: zombie }));
+    held.o.repairBlocks = () => 4;
+    held.o.burrows = [];
+    held.o.burrowAway = (bot, m, opts) => { held.o.burrows.push(opts); return Promise.resolve({ steps: 0, stopped: 'cornered', why: 'no step' }); };
+    nightTick(held.agent, { now: 0, ops: held.o });
+    await settle(held.agent);
+    nightTick(held.agent, { now: 1, ops: held.o });
+    Object.assign(held.state, { body: true, shell: [SITE.offset(1, 1, 0)] });
+    const repairs = held.o.repairs.length;
+    for (let k = 1; k <= 10; k++) { nightTick(held.agent, { now: CHECK_MS + k, ops: held.o }); await settle(held.agent); }
+    assert.equal(held.o.repairs.length - repairs, 0, 'no repair under the held cell');
+    assert.equal(held.o.burrows.length, 1, 'the #580 order: the burrow (unarmed, held)');
+    assert.deepEqual(held.o.clears, []);
+    // No blocks held: one repair try at most, then the stall waits CHECK_MS (#331), not every tick.
+    const bare = scaffoldSetup();
+    bare.o.repairBlocks = () => 0;
+    const build = bare.o.buildShelter;
+    bare.o.buildShelter = (bot, opts = {}) => (opts.site ? (bare.o.repairs.push({ site: opts.site, skip: [] }), bare.o.tolerate.push(opts.tolerateBody ?? false), Promise.resolve({ closed: false, feet: opts.site, placed: 0, line: 'no blocks' })) : build(bot, opts));
+    nightTick(bare.agent, { now: 0, ops: bare.o });
+    await settle(bare.agent);
+    nightTick(bare.agent, { now: 1, ops: bare.o });
+    Object.assign(bare.state, { body: true, shell: [SITE.offset(1, 1, 0)] });
+    const before = bare.o.repairs.length;
+    for (let k = 1; k <= 10; k++) { nightTick(bare.agent, { now: CHECK_MS + k, ops: bare.o }); await settle(bare.agent); }
+    assert.ok(bare.o.repairs.length - before <= 1, `${bare.o.repairs.length - before} repairs in 10 ticks`);
+});
+
+// #592 review 2 and nit 4: unarmed in a closed shelter, a zombie in the bot's cell or over it in the roof cell
+// (over the scaffolding): after the burrow try, rule (iv) opens the shelter to the fight in place.
+test('#592 review 2: unarmed, a closed shelter, a zombie in the bot\'s cell or the roof cell over the scaffolding: no burrow step, so it hits back with self_defense let act (not quiet); the scaffolding is kept', async (t) => {
+    quiet(t);
+    for (const pos of [new Vec3(0.6, 64, 0.9), new Vec3(0.5, 66, 0.5)]) {
+        const s = scaffoldSetup();
+        s.o.burrows = [];
+        s.o.burrowAway = (bot, m, opts) => { s.o.burrows.push(opts); return Promise.resolve({ steps: 0, stopped: 'cornered', why: 'no step' }); };
+        nightTick(s.agent, { now: 0, ops: s.o });
+        await settle(s.agent);
+        assert.equal(s.agent.bot.rotnSheltered, true);
+        if (pos.y > 65) s.state.body = true; // the roof-cell zombie stands over ESM's scaffolding in the head cell
+        s.agent.bot.entities = { 7: { id: 7, name: 'zombie', type: 'mob', position: pos, height: 1.95 } };
+        for (let k = 1; k <= 3; k++) { nightTick(s.agent, { now: k * 300, ops: s.o }); await settle(s.agent); }
+        assert.equal(s.o.burrows.length, 1, `${pos}: the burrow once`);
+        assert.equal(nightState(s.agent).handFight, true);
+        assert.equal(s.agent.bot.rotnSheltered, 'open', `${pos}: not quiet`);
+        assert.equal(shelterQuiet('self_defense', s.agent.bot), false);
+        assert.deepEqual(s.o.clears, [], 'the scaffolding is not broken under it');
+    }
 });
 
 // Soak 12 (D4): "fighting it from the shelter first" is said only of a mob the fight in place reaches.
@@ -3820,4 +3876,19 @@ test('soak 12 (D4): the only melee mob holds an opening but is out of the shelte
     assert.equal(s.agent.chat.filter(l => /out of the shelter fight's reach/.test(l)).length, 1, s.agent.chat.join('\n'));
     assert.ok(s.agent.chat.includes('[night] a zombie at 3, 64, 0 is the only melee mob near, but out of the shelter fight\'s reach (3.2 blocks, it reaches 3): not fighting it first'), s.agent.chat.join('\n'));
     assert.ok(s.o.repairs.length >= 1, 'the repair of the cells it does not hold');
+});
+
+test('#592 review nit 6: armed, a zombie in the roof cell over the bot, the shelter open beside: the fight first (cornered), not a re-seal try', async (t) => {
+    quiet(t);
+    const s = heldSetup({ weapon: true, plan: false, held: 'none' });
+    nightTick(s.agent, { now: 0, ops: s.o });
+    await settle(s.agent);
+    const repairs = s.o.repairs.length;
+    s.o.open = [SITE.offset(1, 1, 0)];
+    s.agent.bot.entities = { 7: { id: 7, name: 'zombie', type: 'mob', position: new Vec3(0.5, 66, 0.5), height: 1.95 } };
+    assert.equal(nightTick(s.agent, { now: 300, ops: s.o }), 'night:inside');
+    await settle(s.agent);
+    assert.equal(s.o.repairs.length, repairs, 'no re-seal before the fight');
+    assert.equal(nightState(s.agent).handFight, true);
+    assert.match(s.agent.chat.at(-1), /in the roof cell over the bot at 0, 66, 0: not leaving past it; armed, cornered/);
 });

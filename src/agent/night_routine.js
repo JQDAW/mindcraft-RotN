@@ -860,11 +860,15 @@ function closeQuarters(agent, n, ops, { when = 'morning: ' } = {}) {
     const said = (k, text) => { if (n.closeSaid !== k) { n.closeSaid = k; line(agent, text); } };
     const where = inCell ? `in the bot's cell at ${at(n.site)}` : inRoof ? `in the roof cell over the bot at ${at(n.site.offset(0, 2, 0))}` : `${close.d.toFixed(1)} blocks away, in its reach`;
     const lead = `[night] ${when}${aMob(name)} ${where}: not leaving past it`;
+    // Soak 12 (A1, the lead): a melee mob in the bot's cells (or over it in the roof cell, in reach) leaves
+    // no room to back away: it is cornered.
+    const cornered = inCell || inRoof;
     const held = todo.length ? (ops.heldCells?.(bot, n.site, todo) ?? []) : [];
     // #514 review 1: the re-seal is tried once per mob and opening; a failed one (no blocks, a
     // placement that fails) falls through to (ii)-(iv), so the repair does not hold the fight off.
     const sealKey = `${mob.id ?? name}:${todo.map(key3).join(';')}`;
-    if (todo.length && !held.length && !inCell && n.closeSealTried !== sealKey) {
+    // #592 review nit 6: never for a cornered mob (the roof cell too): the fight comes before a repair try.
+    if (todo.length && !held.length && !cornered && n.closeSealTried !== sealKey) {
         n.closeSealTried = sealKey;
         said(`seal:${todo.map(key3).join(';')}`, `${lead}; closing the shelter again at ${todo.map(at).join('; ')}`);
         startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody: n.tolerated }), (r) => {
@@ -875,10 +879,8 @@ function closeQuarters(agent, n, ops, { when = 'morning: ' } = {}) {
     const melee = shelterTarget(mob);
     const armed = (ops.hasWeapon ?? hasWeapon)(bot);
     const max = maxHitOf(mob);
-    // Soak 12 (A1, the lead): a melee mob in the bot's cells (or over it in the roof cell, in reach) leaves
-    // no room to back away: it is cornered. Armed, the fight in place runs at any health (n.handFight
-    // waives threats.fightRefusal in modes.fightInShelter); unarmed, the burrow once, then hitting back.
-    const cornered = inCell || inRoof;
+    // Cornered and armed, the fight in place runs at any health (n.handFight waives threats.fightRefusal in
+    // modes.fightInShelter); unarmed, the burrow once, then hitting back (rule (iv)).
     if (melee && armed && (cornered || (Number.isFinite(bot.health) && bot.health > max))) {
         n.handFight = cornered;
         // Death 1 (15:11:03): rotnSheltered stayed true in the closed shelter, so self_defense (which
@@ -903,7 +905,9 @@ function closeQuarters(agent, n, ops, { when = 'morning: ' } = {}) {
     }
     if (melee) {
         n.handFight = true;
-        if (bot.rotnSheltered !== true) bot.rotnSheltered = 'open';
+        // #592 review 2: a mob in the bot's cells or the roof cell opens even a closed shelter to the fight in
+        // place (self_defense is quiet while rotnSheltered is true): unarmed and cornered, it hits back.
+        if (cornered || bot.rotnSheltered !== true) bot.rotnSheltered = 'open';
         said(`hand:${mob.id}`, `${lead}; ${armed ? '' : 'no weapon, '}health ${health}, and no burrow step${n.closeBurrowWhy ? ` (${n.closeBurrowWhy})` : ''}: ${armed ? 'hitting back' : 'hitting back by hand'}`);
         return 'night:inside';
     }
@@ -1123,9 +1127,11 @@ export function mobOverBlock(bot, pos) {
  * Soak 12 (A4, death 1 at 15:11:00, the lead's decision): a block in the bot's space that is not a full
  * cube (Epic Siege Mod's scaffolding: solid, no suffocation, decays by itself in about 2 min) is never
  * broken while a hostile mob is over it (mobOverBlock: breaking it let the zombie on it drop into the
- * bot's cell 3 s later), nor while the shell (checked with the block allowed) is open: the open cells are
- * repaired first. Looked at again on the next tick. Returns the tick's result while kept, else null
- * (the clear as before: nothing over it and the shell closed).
+ * bot's cell 3 s later), nor while the shell (checked with the block allowed) is open.
+ * Returns 'night:inside' (kept, a mob over it, the shell closed: looked at again on the next tick),
+ * 'breach' (kept, the shell open: #592 review 1, the tick goes on to the normal breach path with the
+ * block tolerated, with all its guards: held cells, the abort, the stall back-off, the fight first,
+ * the back-away, the burrow), or null (the clear as before: nothing over it and the shell closed).
  */
 function keepMobBlock(agent, n, ops, found) {
     if (found.fullCube !== false || found.hurts || !found.pos) return null;
@@ -1140,15 +1146,10 @@ function keepMobBlock(agent, n, ops, found) {
     const key = `${key3(found.pos)}|${over?.id ?? ''}|${open.map(key3).join(';')}`;
     if (n.keepSaid !== key) { // soak 12 (F): once per change
         n.keepSaid = key;
-        line(agent, `[night] ${found.block} in the ${cell} cell at ${at(found.pos)}: ${what}; keeping it while ${why} (it is solid and decays by itself)${open.length ? ': repairing first' : ''}`);
+        line(agent, `[night] ${found.block} in the ${cell} cell at ${at(found.pos)}: ${what}; keeping it while ${why} (it is solid and decays by itself)${open.length ? ': the opening first' : ''}`);
     }
-    n.checkedAt = -Infinity; // looked at again on the next tick
-    if (open.length) {
-        startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody: true }), (r) => {
-            if (r?.closed) console.log(`[night] the repair closed the shelter at ${at(n.site)} around the ${found.block}`);
-            n.checkedAt = -Infinity;
-        });
-    }
+    if (open.length) return 'breach';
+    n.checkedAt = -Infinity; // a mob over it, the shell closed: looked at again on the next tick
     return 'night:inside';
 }
 
@@ -1686,12 +1687,18 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // Dirt walls (the fallback) are walls too: only an opening is a breach (G3 round 6 B). Only
         // real fire or lava, or a solid block in the bot's two cells, makes the shelter unusable: a
         // dropped item or a harmless block (a torch, a carpet, snow) never does (G3 round 7 B).
-        const tolerateBody = n.tolerated;
-        const need = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody });
+        let tolerateBody = n.tolerated;
+        let need = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody });
+        // #592 review 1: a mob block kept with the shell open: the normal breach path below, the block allowed.
+        const breach = !need ? (() => { const found = ops.siteProblem?.(bot, n.site, { occupied: true, tolerateBody }); return { found, kept: keepShelter(agent, n, ops, found, now) }; })() : null;
+        if (breach?.kept === 'breach') {
+            tolerateBody = true;
+            need = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody });
+        }
         if (!need) {
             // Say exactly what is where (G3 round 7 B).
-            const found = ops.siteProblem?.(bot, n.site, { occupied: true, tolerateBody });
-            const kept = keepShelter(agent, n, ops, found, now);
+            const found = breach?.found;
+            const kept = breach?.kept === 'breach' ? 'night:inside' : breach?.kept;
             if (kept) return kept;
             // Deadly (fire, lava, drowning, a block it suffocates in and cannot break): it cannot be
             // repaired there (#204 review 2). G3 gate B: with a hostile mob near, the in-shelter fight

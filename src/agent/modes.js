@@ -427,11 +427,19 @@ const modes_list = [
         check_ms: food.CONSUME_CHECK_MS, // after a consume that threw, judge the eat this long later
         cut_ms: 3_000, // soak 12 (A3): after a cut eat (no food or count change), the next try after this
         cut_wait: false, // the wait now is a cut eat's (an emergency eat with nothing near does not wait for it)
+        cut_eat: null, // #592 review nit 3: the last cut eat ({key, before, had, at}): a change shown later counts as the eat
+        late_ms: 2_000, // ... within this of the cut (no other eat in between)
         wait_until: -Infinity,
         fails: {},
         given_up: new Set(),
         update: function (agent) {
             const bot = agent.bot;
+            // #592 review nit 3: a cut eat whose food or count change showed later was an eat after all.
+            if (this.cut_eat && Date.now() - this.cut_eat.at > this.late_ms) this.cut_eat = null; // too late to be that eat
+            if (this.cut_eat && food.lateEat(bot, this.cut_eat)) {
+                console.log(`[reflex] ate ${this.cut_eat.key} at food ${this.cut_eat.before} (it showed after the eat was judged cut)`);
+                Object.assign(this, { cut_eat: null, cut_wait: false, wait_until: -Infinity });
+            }
             if (Date.now() < this.wait_until) {
                 // Soak 12 (the lead): a cut eat's wait never holds off an emergency eat (food EAT_NOW_AT or
                 // lower) with no hostile mob within EAT_SAFE.distance.
@@ -470,6 +478,7 @@ const modes_list = [
             const key = food.foodKey(item);
             if (food.isAvoided(item)) console.warn(`[reflex] eating: food ${bot.food} (food 0 kills on this pack): eating ${key} although it is avoided (${food.avoidReason(item)})`);
             // Not awaited, so the update loop is not held up by the eat (execute never rejects).
+            this.cut_eat = null; // a new eat: an older cut is not judged any more
             execute(this, agent, async () => {
                 const r = await food.eatFood(bot, item, { checkMs: this.check_ms });
                 if (r.ate) {
@@ -482,6 +491,7 @@ const modes_list = [
                     // give it up for good), a short wait.
                     this.wait_until = Date.now() + this.cut_ms;
                     this.cut_wait = true;
+                    this.cut_eat = { key: r.key, before: r.before, had: r.had, at: Date.now() };
                     console.warn(`[reflex] eating: the eat of ${key} was cut after ${r.ms} ms (no food or count change, food ${r.before}); trying again in ${this.cut_ms / 1000} s`);
                     return;
                 }

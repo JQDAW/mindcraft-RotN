@@ -153,9 +153,16 @@ const countKey = (bot, key) => bot.inventory.items().filter(i => foodKey(i) === 
  */
 /**
  * Soak 12 (A3): after a consume resolves, the food level and the item count get this long (polled every
- * step ms) to show the eat: the server sends them a tick after its "eating done" status.
+ * step ms) to show the eat: the server sends them a tick after its "eating done" status. #592 review nit
+ * 3: 300 ms (6 ticks) for a lagging server; a change that shows later still is counted by the eating mode
+ * (a cut eat's food and count are kept: food.lateEat).
  */
-export const EAT_SETTLE = { ms: 150, step: 25 };
+export const EAT_SETTLE = { ms: 300, step: 25 };
+
+/** #592 review nit 3: the count of a food key held now. */
+export const heldCount = (bot, key) => countKey(bot, key);
+/** #592 review nit 3: whether a cut eat ({key, before, had}) has shown since (the food or its count changed). */
+export const lateEat = (bot, cut) => !!cut && (bot.food > cut.before || countKey(bot, cut.key) < cut.had);
 
 export async function eatFood(bot, item, { checkMs = CONSUME_CHECK_MS, settleMs = EAT_SETTLE.ms, step = EAT_SETTLE.step } = {}) {
     const key = foodKey(item);
@@ -181,7 +188,7 @@ export async function eatFood(bot, item, { checkMs = CONSUME_CHECK_MS, settleMs 
     const ate = changed();
     // G4 #5: "[survival] ate <item> food <before>-><after>" once the food level has changed.
     if (ate) await logAte(bot, key, before);
-    return { ate, threw, before, after: bot.food, ...(!ate && !threw ? { cut: true, ms: Date.now() - startedAt } : {}) };
+    return { ate, threw, before, after: bot.food, ...(!ate && !threw ? { cut: true, ms: Date.now() - startedAt, key, had } : {}) };
 }
 
 /**

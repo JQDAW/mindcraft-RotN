@@ -401,3 +401,26 @@ test('soak 12 (A3, the lead): a cut eat is no failure of that food (never given 
     assert.equal(cuts, 5, `food ${EAT_NOW_AT}, nothing near: it eats despite the wait`);
     assert.equal(b.bot.food, EAT_NOW_AT + 3);
 });
+
+test('#592 review nit 3: the settle is 300 ms (a lagging server); a change that shows after the eat was judged cut counts as that eat (no second item eaten)', async (t) => {
+    const { EAT_SETTLE } = await import('./food.js');
+    assert.equal(EAT_SETTLE.ms, 300);
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const mode = freshMode();
+    const b = eatBot([stack('animania:raw_prime_mutton', 0, 2)], 12);
+    let consumes = 0;
+    // The server's update arrives 400 ms after the resolve: past the settle.
+    b.bot.consume = () => { consumes++; setTimeout(() => { b.bot.food = 13; b.bot.held.count--; }, 400); return Promise.resolve(); };
+    const agent = modeAgent(b.bot);
+    await mode.update(agent);
+    await settled(350);
+    assert.ok(mode.cut_wait, 'judged cut at 300 ms');
+    await settled(150);
+    await mode.update(agent);
+    await settled(50);
+    assert.ok(logs.includes('[reflex] ate animania:raw_prime_mutton:0 at food 12 (it showed after the eat was judged cut)'), logs.join('\n'));
+    assert.equal(consumes, 1, 'food 13: no second eat');
+    assert.equal(mode.cut_wait, false);
+});
