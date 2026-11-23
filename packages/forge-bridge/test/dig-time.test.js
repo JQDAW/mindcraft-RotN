@@ -190,7 +190,7 @@ test('install: the world\'s Block class gets the rule (bot.blockAt blocks); othe
     assert.equal(sponge.digTime(null, false, false, false, [], {}), 900);
     sponge.digTime(null, false, false, false, [], {});
     assert.equal(report.fallbacks, 2);
-    assert.equal(logs.filter(l => l.includes('sponge:0 is not in the dump')).length, 1, 'logged once');
+    assert.equal(logs.filter(l => l.includes('sponge:0 is not in the dump, or its dumped hardness 0 is not used')).length, 1, 'logged once');
     // Other classes are untouched: a new prismarine-block class and another chunk class.
     const Plain = require('prismarine-block')(require('prismarine-registry')('1.12.2'));
     assert.equal(new Plain(1, 0, 0).digTime(null, false, false, false, [], {}), 7500, 'minecraft-data\'s vanilla class');

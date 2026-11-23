@@ -340,7 +340,7 @@ In RotN 3.3.4, `minecraft:crafting_table` is FastWorkbench 1.7.4's block: Run A'
 
 mineflayer's `bot.dig` waits `block.digTime(heldItemType, …)` and then sends STOP_DESTROY. prismarine-block computes that time from minecraft-data's vanilla tables (`registry.materials[material][itemId]` for the speed, `block.harvestTools` for the harvest check). No modded tool is in them, so every modded tool dug at hand speed: a `pyrotech:flint_pickaxe` on stone waited 7.5 s, where the server takes 0.6 s. Pathfinder's dig costs, `bestHarvestTool` and mineflayer-tool's `equipForBlock` read the same `digTime`.
 
-**The server (Forge 1.12.2):** read from the vanilla bytecode with Forge 14.23.5.2860's binpatches applied; the full plan is in `/home/rv/forge-dig-time-plan.md` on the CX33.
+**The server (Forge 1.12.2):** read from the vanilla bytecode with Forge 14.23.5.2860's binpatches applied; the full plan is filed as `docs/research/forge-dig-time.md`.
 - Progress = break speed × (ticks since START + 1).
   - A STOP at progress ≥ 0.7 breaks the block.
   - An earlier STOP becomes the one "delayed destroy", which the server finishes at progress 1.0, at its own speed. A second early STOP while one is pending is ignored.
@@ -372,13 +372,33 @@ mineflayer's `bot.dig` waits `block.digTime(heldItemType, …)` and then sends S
 - A block Tool Progression keeps from the held tool is `Infinity`:
   - `bot.dig` throws `dig time for … is Infinity` at once (no packet is sent);
   - pathfinder's cost for breaking it is `Infinity`, so the move is dropped.
+- `block.canHarvest` is unchanged (prismarine's vanilla harvest check).
+
+**Who reaches it (`src/agent`, as of #595):**
+- **`bot.dig` directly** (`skills.js`): `collectBlock`, `takeBackByHand`, `digDownThroughLeaves`, `breakLeafFromGround`, `fellTree`, `breakBlockAt`, `forageOne`. `takeBackByHand` (~2117) is only used through `AXE_CHOP_OPS.takeBack` (`sticksByAxe`, `sticksFromPlanks`).
+- **Through `pit.js` `digWithin`:**
+  - `night_routine.js` ~562 `digExitCell`;
+  - `escape.js` ~174 `digCell`;
+  - `walk_exit.js` ~180 `stairOut`;
+  - `burrow.js` ~241 `takeBurrowStep`;
+  - `pit.js` ~205 `digPit`.
+
+  Those that pass the dump rule as `equip` (`burrow.digEquip`) already refuse what Tool Progression refuses.
+- **Through `skills.breakBlockAt`:**
+  - `modes.js` ~339 (`self_preservation`: sand or gravel at the head in the shelter);
+  - `pit.js` ~295/~298 `pitOut`;
+  - `shelter.js` `clearSpace` (~624), `buildShelter` (~845) and `backAway` (~998);
+  - `npc/build_goal.js` ~55;
+  - in `skills.js`: `pickUpFurnaceAt`, `placeBlock`, `tillAndSow`, `digDown`.
+- **`bot.digTime`:** `pit.js` `digBudget` and `progress.js` `actionProgress` (their time limits follow the real dig). `walk_exit.js` `toolDigMs` uses `block.digTime` only as its fallback.
+- **Pathfinder dig costs:** every Movements whose `canDig` stays true, `escape.js` `escapeMovements` included. mineflayer-collectblock's `mineBlock` and mineflayer-tool's `equipForBlock` rank tools by `digTime`. In `equipForBlock`'s `a - b` sort, two `Infinity` times give `NaN`, which only reorders tools that cannot dig the block anyway.
 
 **Known limits:**
 - **Mod `BreakSpeed` hooks other than Tool Progression are not modelled.** BWM `HCStrata` and `HCStumping`, and Quark "Axes break leaves", are off on this pack. Better With Addons and Inspirations were not decoded. The rest act through enchantments, potion effects, Carry On, or other dimensions.
 - **Blocks whose hardness depends on the world** have one value per state in the dump.
-- **A tool on a block whose harvest tool it lacks digs at speed 1**, even where vanilla 1.12 gives its speed by material (a pickaxe on rock, an axe on wood). That is slower than the server, which is safe.
+- **A tool on a block whose harvest tool it lacks digs at speed 1**, even where vanilla 1.12 gives its speed by material (an axe on a noteblock or jukebox: wood material, no harvest tool named). That is slower than the server, which is safe.
 - **A server below about 14 TPS** makes a correct estimate too short for the 0.7 rule.
-- **Tool Progression levels are as dumped.** Where the dump's level is too high (rotn-data is checking `redstone_ore`), the rule says `Infinity` for a tool that can break the block.
+- **Tool Progression levels are as dumped.** rotn-data confirmed the dumped levels after #595, `redstone_ore` included. A wrong dumped level would make the rule say `Infinity` for a tool that can break the block.
 - **Later option, not done:** a mineflayer patch so `dig()` resolves when the server sends air (with a time limit) instead of on its local air prediction. It would cover lag and unmodelled hooks, but it changes when `dig()` resolves or fails, for collectblock and skills alike.
 
 ## Other protocol changes
