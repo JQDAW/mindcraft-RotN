@@ -11,10 +11,11 @@
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { handDiggable, dumpState } from './night.js';
+import { digRule, digEquip } from './burrow.js';
+import { allowedTool } from './rotn_sources.js';
 import { isLiquid, isFalling } from './shelter.js';
 import { goToGoal } from './skills.js';
 import { digWithin, digBudget, PIT } from './pit.js';
-import { toolLevels } from './rotn_sources.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const SIX = [...HORIZONTAL, new Vec3(0, 1, 0), new Vec3(0, -1, 0)];
@@ -27,10 +28,11 @@ const solid = (b) => !!b && b.boundingBox === 'block' && !isLiquid(b);
 const passable = (bot, p, free) => free.has(key(p)) || (() => { const b = bot.blockAt(p); return !!b && !solid(b) && !isLiquid(b); })();
 
 /**
- * WALK_EXIT: reach, the horizontal blocks from the start a walk must get (8: B(i)'s walkable exit;
- * the dig-out's "out" uses outReach, 4); maxNodes bounds the search.
+ * WALK_EXIT: reach, the horizontal blocks from the start a walk must get (8): one reach for "walled in"
+ * (the escape's check, B(i)'s walkable exit) and for "out" (the dig-out's end), #593 review 4, so a
+ * pocket 4 to 7 wide is not "dug out" with 0 blocks; maxNodes bounds the search.
  */
-export const WALK_EXIT = { reach: 8, outReach: 4, maxNodes: 400 };
+export const WALK_EXIT = { reach: 8, maxNodes: 400 };
 
 /**
  * Whether the bot can walk from `from` (a cell it stands in) to a cell `reach` blocks away horizontally
@@ -66,24 +68,36 @@ export function walkableExit(bot, from, { reach = WALK_EXIT.reach, maxNodes = WA
 }
 
 /**
- * Whether the bot breaks this block quickly (the lead's "at most 1 s with what it holds"): hand-diggable
- * at most PIT.maxHardness (dirt, grass, sand, gravel by hand: about a second), or, holding a pickaxe in
- * the inventory, rock at most DIG_OUT.pickHardness (stone 1.5, cobblestone 2). Never a falling block,
- * nor one next to a liquid (the dig would let it in).
+ * The lead's decision 1 (#593 review 5): a block the bot breaks within DIG_OUT.maxMs with what it holds:
+ * its real dig time (prismarine's block.digTime, the harvest tier included: rotn-data's tool rule,
+ * burrow.digRule) with the best tool it carries that may break it, or the hand. Never a falling
+ * block, one next to a liquid (the dig would let it in), or (#593 review 1) one with a falling block
+ * right above it (gravel or sand over the roof drops down the dug column). A block whose dig time is
+ * unknown falls back to the pit's rule (hand-diggable, hardness at most PIT.maxHardness).
  */
-export const DIG_OUT = { maxBlocks: 6, side: 3, rise: 4, pickHardness: 2 };
+export const DIG_OUT = { maxBlocks: 6, side: 3, rise: 4, maxMs: 1000 };
+export function digMs(bot, b) {
+    const rule = digRule(b);
+    if (rule === false) return Infinity;
+    if (typeof b?.digTime !== 'function') return handDiggable(b) && (dumpState(b)?.hardness ?? Infinity) <= PIT.maxHardness ? 0 : Infinity;
+    const effects = bot.entity?.effects ?? {};
+    const time = (item) => { try { return b.digTime(item?.type ?? null, false, false, false, [], effects); } catch { return Infinity; } };
+    if (rule) { const tool = allowedTool(bot, rule); return tool ? time(tool) : Infinity; } // a tool it requires, of its tier
+    const tools = (bot.inventory?.items?.() ?? []).filter(i => /_(pickaxe|shovel|axe|spade|mattock)$/.test(i.name ?? ''));
+    return Math.min(time(null), ...tools.map(time));
+}
 export function quickDig(bot, p) {
+    if (typeof bot?.blockAt !== 'function') return false;
     const b = bot.blockAt(p);
     if (!solid(b) || isFalling(b)) return false;
     if (SIX.some(d => isLiquid(bot.blockAt(p.plus(d))))) return false;
-    const hardness = dumpState(b)?.hardness ?? Infinity;
-    if (handDiggable(b) && hardness <= PIT.maxHardness) return true;
-    return hardness <= DIG_OUT.pickHardness && toolLevels(bot, 'pickaxe').length > 0;
+    if (isFalling(bot.blockAt(p.offset(0, 1, 0)))) return false;
+    return digMs(bot, b) <= DIG_OUT.maxMs;
 }
 
 /**
  * The dig-out from `feet`: for each side, `s` blocks of tunnel (0 to DIG_OUT.side) and then `k` stairs up
- * (0 to DIG_OUT.rise), the first (s, k) whose end cell has a walkable exit (WALK_EXIT.outReach) with
+ * (0 to DIG_OUT.rise), the first (s, k) whose end cell has a walkable exit (WALK_EXIT.reach) with
  * the dug cells counted free. Only plans of at most maxBlocks blocks to dig, every one quickDig, and
  * (with hostiles) ending farther from the nearest of them than the bot is now. The fewest blocks first,
  * then the farthest from the hostiles. Returns {dig: [Vec3] (in order), to: Vec3, side: Vec3} or null.
@@ -111,7 +125,7 @@ export function stairOutPlan(bot, feet, { hostiles = [], maxBlocks = DIG_OUT.max
                 if (!need.every(p => !isLiquid(bot.blockAt(p)))) { ok = false; break; }
                 if (!dig.every(p => quickDig(bot, p))) { ok = false; break; } // every higher step needs it too
                 const free = new Set(dig.map(key));
-                if (!walkableExit(bot, to, { reach: WALK_EXIT.outReach, free })) continue;
+                if (!walkableExit(bot, to, { reach: WALK_EXIT.reach, free })) continue;
                 const far = nearest(to);
                 if (hostiles.length && !(far > startFar)) break; // toward a hostile: not this way
                 plans.push({ dig, to, side: d, far });
@@ -136,7 +150,7 @@ export async function stairOut(bot, feet, { hostiles = [], maxBlocks = DIG_OUT.m
         if (bot.interrupt_code) return { to: null, dug, why: 'stopped' };
         const b = bot.blockAt(p);
         if (!solid(b)) continue;
-        const r = await digWithin(bot, b, digBudget(bot, b).limitMs);
+        const r = await digWithin(bot, b, digBudget(bot, b).limitMs, { equip: digEquip(bot, b) });
         if (r !== true) return { to: null, dug, why: `could not dig ${b.name} at ${p.x}, ${p.y}, ${p.z}` };
         dug++;
     }
@@ -146,6 +160,6 @@ export async function stairOut(bot, feet, { hostiles = [], maxBlocks = DIG_OUT.m
             new Promise(resolve => { timer = setTimeout(resolve, walkMs); })]);
     } finally { clearTimeout(timer); try { bot.pathfinder?.setGoal?.(null); } catch { /* best effort */ } }
     const here = bot.entity.position.floored();
-    if (here.equals(plan.to) || walkableExit(bot, here, { reach: WALK_EXIT.outReach })) return { to: here, dug };
+    if (here.equals(plan.to) || walkableExit(bot, here, { reach: WALK_EXIT.reach })) return { to: here, dug };
     return { to: null, dug, why: `the walk to ${plan.to.x}, ${plan.to.y}, ${plan.to.z} did not get there` };
 }

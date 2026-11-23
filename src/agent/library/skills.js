@@ -83,7 +83,11 @@ export async function rearmWeapon(bot) {
     return true;
 }
 
-export async function equipHighestAttack(bot, fight = {}) {
+export async function equipHighestAttack(bot, fight = null) {
+    // #593 review 6: a fight's own object (defendSelf, defendInPlace) gets the journal line once; a call
+    // outside a fight (an attack, the hunt's equip) logs no "none held".
+    const inFight = !!fight;
+    fight ??= {};
     // Soak 10 (W1): threats.isWeaponItem, the one weapon rule (never the crude axe or a Hit With Axe bark).
     const isWeapon = (item) => !!item && isWeaponItem(item);
     // Soak 7 (e): the best by damage per tick of cooldown on the path bot.attack takes (threats.weaponOrder).
@@ -94,7 +98,8 @@ export async function equipHighestAttack(bot, fight = {}) {
     // Soak 12 (C, death 2): the fight held raw mutton with the club in the off hand, and nothing said why
     // (the texts below went only to the action's output). The way this returns false is logged to the
     // journal too, once per fight (fight.noWeaponSaid: the first one; later calls see its after-effects).
-    const noWeapon = (why) => {
+    const noWeapon = (why, { none = false } = {}) => {
+        if (none && !inFight) return false;
         if (!fight.noWeaponSaid) { fight.noWeaponSaid = why; console.log(`[survival] no weapon in hand: ${why}; holding ${bot.heldItem?.name ?? 'nothing'}`); }
         return false;
     };
@@ -125,7 +130,7 @@ export async function equipHighestAttack(bot, fight = {}) {
     let weapon = best(bot.inventory.items());
     if (!weapon)
         weapon = bot.inventory.items().find(item => item.name.includes('pickaxe') || item.name.includes('shovel')) ?? null;
-    if (!weapon) return noWeapon(isWeapon(off) ? `the ${off.name} moved out of the off hand, but no weapon is in the inventory` : 'none held');
+    if (!weapon) return isWeapon(off) ? noWeapon(`the ${off.name} moved out of the off hand, but no weapon is in the inventory`) : noWeapon('none held', { none: true });
     if (fight.equipFailed) return noWeapon(`an earlier equip failed this fight`); // fighting with what is in hand (#296 review 2)
     if (bot.heldItem === weapon || (weapon.slot != null && bot.heldItem?.slot === weapon.slot)) return true;
     try {

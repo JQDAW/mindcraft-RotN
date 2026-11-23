@@ -764,13 +764,65 @@ test('soak 12 (B(i)): the scroll is never used in a hole shelter, below the surf
     assert.equal(scrollRefusal(a, site), null, 'open ground');
     assert.match(scrollRefusal(a, site, { pit: true }), /^a hole shelter: no walkable way out of it/);
     assert.match(scrollRefusal(a, site, { below: true }), /^below the surface after a burrow/);
-    // Its walls come down in the morning (counted free); a pit of ground around them does not.
-    const walls = {};
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1]) walls[`${150 + dx},${64 + dy},${-62 + dz}`] = 'cobblestone';
-    a.bot.blockAt = ground(walls);
-    assert.equal(scrollRefusal(a, site), null, 'a closed shelter on open ground');
+    // Its walls come down in the morning (counted free when the bot breaks them quickly: dirt by hand);
+    // #593 review 3: natural rock it cannot break quickly (stone, no pickaxe) is no way out.
+    const walls = (name) => { const w = {}; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1]) w[`${150 + dx},${64 + dy},${-62 + dz}`] = name; return w; };
+    a.bot.blockAt = ground(walls('dirt'));
+    assert.equal(scrollRefusal(a, site), null, 'a closed dirt shelter on open ground');
+    a.bot.blockAt = ground(walls('stone'));
+    assert.match(scrollRefusal(a, site), /^no walkable way out of 150, 64, -62/, 'stone walls, no pickaxe');
     const sunk = {};
     for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) for (const dy of [0, 1, 2]) if (Math.abs(x) + Math.abs(z) > 0) sunk[`${150 + x},${64 + dy},${-62 + z}`] = 'dirt';
     a.bot.blockAt = ground(sunk);
     assert.match(scrollRefusal(a, site), /^no walkable way out of 150, 64, -62 to 8 blocks/);
+});
+
+// #593 review 2 (the lead's decision): at night, a respawn in an intact closed shell (the scroll's surface
+// shelter) with no mob in or over its cells stays (the night routine's shelter rules); the escape runs
+// when the shell is open or a mob is in or over the cells.
+test('#593 review 2: at night a respawn inside an intact closed shell, a zombie outside: no escape (said once); a wall open, or a zombie in the roof cell: the escape', () => {
+    const reg = minecraftData('1.12.2');
+    const now = 1_000_000;
+    const site = RESPAWN;
+    const shell = (open = []) => {
+        const cells = {};
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1]) cells[`${site.x + dx},${site.y + dy},${site.z + dz}`] = 'cobblestone';
+        cells[`${site.x},${site.y + 2},${site.z}`] = 'cobblestone';
+        for (const k of open) delete cells[k];
+        return (p) => { const q = p.floored(); const v = cells[`${q.x},${q.y},${q.z}`] ?? (q.y < site.y ? 'dirt' : 'air'); return { name: v, metadata: 0, boundingBox: reg.blocksByName[v]?.boundingBox ?? 'block', position: q }; };
+    };
+    const mk = (blockAt, mobPos) => {
+        const a = agentAt(site.offset(0.5, 0, 0.5), { deaths: [[16, 64, -46]], now, lastAgo: 6_000, entities: { 9: zmb(9, mobPos) } });
+        Object.assign(a.bot, { blockAt });
+        a.bot.time.timeOfDay = NIGHT_T;
+        return a;
+    };
+    const closed = mk(shell(), site.offset(5.5, 0, 0.5));
+    const s = stubs();
+    assert.equal(respawnEscapeTick(closed, { now, ...s.opts }), null, 'stays');
+    respawnEscapeTick(closed, { now: now + 300, ...s.opts });
+    assert.deepEqual(s.logs, ['[respawn] respawned at night in a closed shelter at -70, 65, 87 with nothing in it or over it: staying, no escape (the night routine\'s shelter rules)']);
+    assert.equal(s.runs.length, 0);
+    const open = mk(shell([`${site.x + 1},${site.y},${site.z}`, `${site.x + 1},${site.y + 1},${site.z}`]), site.offset(5.5, 0, 0.5));
+    const o = stubs();
+    assert.equal(respawnEscapeTick(open, { now, ...o.opts }), 'escaping', 'a wall open');
+    const over = mk(shell(), site.offset(0.5, 2, 0.5));
+    const v = stubs();
+    assert.equal(respawnEscapeTick(over, { now, ...v.opts }), 'escaping', 'a zombie in the roof cell');
+});
+
+// #593 review 10: the first tick alive could still hold the death spot's position; the respawn point is
+// noted only after the respawn's spawn event (agent.js: bot.rotnSpawnedAt).
+test('#593 review 10: the respawn point is noted only after the spawn event that follows the death', async () => {
+    const now = 1_000_000;
+    const a = agentAt(RESPAWN.offset(0.5, 0, 0.5), { deaths: [[16, 64, -46]], now, lastAgo: 6_000 });
+    a.bot.rotnSpawnedAt = now - 60_000; // the spawn before this death
+    a.bot.entity.position = new Vec3(16.5, 64, -45.5); // still the death spot
+    respawnEscapeTick(a, { now, ...stubs().opts });
+    assert.equal(respawnPoint(a, a._death.last.at), null, 'not yet');
+    await flush(); await flush(); // the escape that tick started (at the death spot) ends
+    a.bot.rotnSpawnedAt = now + 100;
+    a.bot.entity.position = RESPAWN.offset(0.5, 0, 0.5);
+    respawnEscapeTick(a, { now: now + 200, ...stubs().opts });
+    assert.ok(respawnPoint(a, a._death.last.at)?.equals(RESPAWN));
 });

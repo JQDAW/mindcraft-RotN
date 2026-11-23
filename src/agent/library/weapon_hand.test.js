@@ -58,3 +58,13 @@ test('soak 12 (C): every false path is logged to the journal, once per fight', a
     assert.equal(await equipHighestAttack(fakeBot({ offHand: null }), {}), false);
     assert.deepEqual(logs, ['[survival] no weapon in hand: none held; holding animania:raw_prime_mutton']);
 });
+
+test('#593 review 6: outside a fight (an attack, the hunt\'s equip: no fight object) "none held" is not logged', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    assert.equal(await equipHighestAttack(fakeBot({ offHand: null })), false);
+    assert.deepEqual(logs, []);
+    // A failure with a weapon held is still said outside a fight.
+    assert.equal(await equipHighestAttack(fakeBot({ equipFails: true })), false);
+    assert.equal(logs.filter(l => l.startsWith('[survival] no weapon in hand')).length, 1);
+});

@@ -15,7 +15,7 @@
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, SCROLL_LABEL, shelterShell, isFullDay, replanHold, placeableDirt } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
+import { buildShelter, dirtShelterNeed, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
 import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon, SHELTER_FIGHT, collectBlock } from './library/skills.js';
 import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
@@ -734,29 +734,35 @@ export function inRoofCell(e, site) {
 }
 
 /**
- * Soak 12 (B(ii) step 6): the night dirt gather after a respawn. minBlocks: fewer shelter blocks held
- * (dirt counted as blocks, 4 piles each) start it; piles: what it digs for (!collectBlocks' 12, 3 dirt);
+ * Soak 12 (B(ii) step 6): the night dirt gather after a respawn, to what the dirt shelter here needs
+ * (#593 review 7: shelter.dirtShelterNeed, its blocks; perDirt piles make one dirt). maxPiles bounds it;
  * radius, maxMs, hostileRange: where, how long, and what stops it; afterDeathMs: how soon after a death.
  */
-export const GATHER = { minBlocks: 3, piles: 12, radius: 8, maxMs: 45_000, hostileRange: 16, afterDeathMs: 3 * 60_000 };
+export const GATHER = { perDirt: 4, maxPiles: 40, radius: 8, maxMs: 45_000, hostileRange: 16, afterDeathMs: 3 * 60_000 };
 const GATHER_LABEL = 'action:gatherDirt';
+const PILE = 'betterwithmods:dirt_pile';
 
-/** Soak 12 (B(ii) step 6): dig dirt piles by hand near the bot, bounded by GATHER.maxMs and `stop` (a why, or null). */
-export async function gatherDirtPiles(bot, { stop = () => null, collect = collectBlock } = {}) {
-    const start = Date.now();
+/**
+ * Soak 12 (B(ii) step 6): dig `piles` dirt piles by hand near the bot, a dirt block's worth per collect.
+ * #593 review 8: its own stop (`stop()`, a why, or GATHER.maxMs) is checked between collects; it never
+ * sets or clears bot.interrupt_code, so a real stop (a reflex, a command) ends it and stays a stop.
+ * Returns {got, why}.
+ */
+export async function gatherDirtPiles(bot, { piles = GATHER.perDirt * 3, stop = () => null, collect = collectBlock } = {}) {
+    const held = () => (bot.inventory?.items?.() ?? []).filter(i => i.name === PILE).reduce((n, i) => n + (i.count ?? 0), 0);
+    const start = Date.now(), before = held();
     let why = null;
-    const watch = setInterval(() => {
-        if (why) return;
+    for (;;) {
+        if (bot.interrupt_code) { why = 'stopped'; break; }
         why = stop() ?? (Date.now() - start >= GATHER.maxMs ? `${GATHER.maxMs / 1000} s are up` : null);
-        if (why) bot.interrupt_code = true; // the collect checks it between blocks
-    }, 250);
-    try { await collect(bot, 'betterwithmods:dirt_pile', GATHER.piles, null, GATHER.radius); }
-    catch (err) { why ??= `the collect failed: ${err?.message ?? err}`; }
-    finally {
-        clearInterval(watch);
-        if (why) bot.interrupt_code = false; // its own stop, not the action's
+        if (why || held() - before >= piles) break;
+        const was = held();
+        let ok = false;
+        try { ok = await collect(bot, PILE, Math.min(GATHER.perDirt, piles - (was - before)), null, GATHER.radius); }
+        catch (err) { why = `the collect failed: ${err?.message ?? err}`; break; }
+        if (!ok || held() <= was) { why = bot.interrupt_code ? 'stopped' : `no more dirt within ${GATHER.radius} blocks`; break; }
     }
-    return { why };
+    return { got: held() - before, why };
 }
 
 /** Soak 11 (A3): the jobs that put a block in the hand; the weapon goes back after them. */
@@ -949,7 +955,7 @@ export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSp
     nightRelocation: nightRelocationPlan, walkAwayAtNight, morningChoice, openToward,
     escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll, // soak 10 (R2, R6)
     stairOut: (bot, feet, opts) => stairOut(bot, feet, opts), // soak 12 (D3)
-    gatherDirt: (bot, opts) => gatherDirtPiles(bot, opts), // soak 12 (B(ii) step 6)
+    gatherDirt: (bot, opts) => gatherDirtPiles(bot, opts), shelterNeed: (bot) => dirtShelterNeed(bot), // soak 12 (B(ii) step 6)
     // #497 review 2: away from every threat; cornered, it may hit a melee mob only, never a troll or a creeper.
     awayFromMobs: (bot) => avoidEnemies(bot, MORNING.awayDist, shelterEnemy, shelterTarget),
     heldCells, retreatPlan, backAway, hasWeapon, mobInReach, dangerInReach: (bot) => mobInReach(bot, notMelee),
@@ -1404,14 +1410,16 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // bot stood at the spawn 3.5 min), and nothing hostile within GATHER.hostileRange: dirt piles by
         // hand within GATHER.radius first, at most GATHER.maxMs, stopped by a hostile coming near. Once
         // per night; never a walk back to the death spot for the drops.
-        if (!n.gatherTried && ops.gatherDirt && ops.repairBlocks && now - (agent._death?.last?.at ?? -Infinity) <= GATHER.afterDeathMs) {
+        if (!n.gatherTried && ops.gatherDirt && ops.repairBlocks && ops.shelterNeed && now - (agent._death?.last?.at ?? -Infinity) <= GATHER.afterDeathMs) {
             const blocks = ops.repairBlocks(bot);
-            if (blocks < GATHER.minBlocks && !ops.hostileNear?.(bot, GATHER.hostileRange)) {
+            const need = ops.shelterNeed(bot);
+            if (Number.isFinite(need) && blocks < need && !ops.hostileNear?.(bot, GATHER.hostileRange)) {
                 n.gatherTried = true;
-                line(agent, `[night] respawned with ${blocks} shelter block${blocks === 1 ? '' : 's'} (a dirt shelter needs ${GATHER.minBlocks}): digging up to ${GATHER.piles} dirt piles by hand within ${GATHER.radius} blocks first (at most ${GATHER.maxMs / 1000} s)`);
-                startJob(agent, n, GATHER_LABEL, () => ops.gatherDirt(bot, { stop: () => (ops.hostileNear?.(bot, GATHER.hostileRange) ? `a hostile mob within ${GATHER.hostileRange} blocks` : null) }), (r) => {
+                const piles = Math.min(GATHER.maxPiles, GATHER.perDirt * (need - blocks));
+                line(agent, `[night] respawned with ${blocks} shelter block${blocks === 1 ? '' : 's'}, and the dirt shelter here needs ${need}: digging ${piles} dirt piles by hand within ${GATHER.radius} blocks first (at most ${GATHER.maxMs / 1000} s)`);
+                startJob(agent, n, GATHER_LABEL, () => ops.gatherDirt(bot, { piles, stop: () => (ops.hostileNear?.(bot, GATHER.hostileRange) ? `a hostile mob within ${GATHER.hostileRange} blocks` : null) }), (r) => {
                     n.nextAt = 0;
-                    console.log(`[night] the dirt gather ended with ${ops.repairBlocks(bot)} shelter blocks${r?.why ? ` (${r.why})` : ''}`);
+                    console.log(`[night] the dirt gather ended: ${r?.got ?? 0} piles, ${ops.repairBlocks(bot)} shelter blocks${r?.why ? ` (${r.why})` : ''}`);
                 });
                 return 'night:building';
             }

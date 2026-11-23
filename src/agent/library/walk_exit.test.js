@@ -14,13 +14,17 @@ __setRegistryForTest(reg);
 const key = (p) => `${p.x},${p.y},${p.z}`;
 
 /** The world: `ground` below y 64, air above; `set` overrides cells. The bot digs (air) and walks where sent. */
+/** #593 review 5: dig times by name and held tool type (ms): stone 7.5 s by hand, 0.4 s with a stone pickaxe; dirt 0.75 s. */
+const PICK = reg.itemsByName.stone_pickaxe.id;
+const DIG_MS = { stone: (t) => (t === PICK ? 400 : 7500), dirt: () => 750, gravel: () => 900, sand: () => 750, clay: () => 1500 };
 function world({ set = {}, ground = 'dirt', at = new Vec3(0, 64, 0), items = [] } = {}) {
     const cells = new Map(Object.entries(set));
     const blockAt = (p) => {
         const q = p.floored();
         const v = cells.get(key(q)) ?? (q.y < 64 ? ground : 'air');
         const b = reg.blocksByName[v];
-        return { name: v, metadata: 0, boundingBox: b?.boundingBox ?? 'block', material: b?.material, position: q, canHarvest: () => true };
+        return { name: v, metadata: 0, boundingBox: b?.boundingBox ?? 'block', material: b?.material, position: q, canHarvest: () => true,
+            digTime: (type) => (DIG_MS[v] ?? (() => 60_000))(type) };
     };
     const calls = { digs: [], gotos: [] };
     const bot = {
@@ -77,12 +81,42 @@ test('soak 12 (the lead\'s decision 1): only quick blocks: stone not without a p
     const rock = hole({ ground: 'stone' });
     assert.equal(quickDig(rock.bot, HOLE.offset(1, 0, 0)), false, 'stone by hand: no');
     assert.equal(stairOutPlan(rock.bot, HOLE), null);
-    const pick = hole({ ground: 'stone', items: [{ name: 'stone_pickaxe', metadata: 0, count: 1 }] });
+    const pick = hole({ ground: 'stone', items: [{ name: 'stone_pickaxe', metadata: 0, count: 1, type: PICK }] });
     assert.ok(stairOutPlan(pick.bot, HOLE), 'with a pickaxe');
     const wet = hole({ set: Object.fromEntries([[1, 0], [-1, 0], [0, 1], [0, -1]].map(([x, z]) => [key(new Vec3(2 * x, 62, 2 * z)), 'water'])) });
     const p = stairOutPlan(wet.bot, HOLE);
     assert.ok(!p || p.dig.every(c => quickDig(wet.bot, c)), 'no dug block next to water');
     assert.equal(stairOutPlan(hole().bot, HOLE, { maxBlocks: 2 }), null, 'a 2-block budget is too little from 3 deep');
+    // #593 review 5: the real dig time decides (clay 1.5 s by hand: no), not a hardness bucket.
+    assert.equal(quickDig(hole({ ground: 'clay' }).bot, HOLE.offset(1, 0, 0)), false);
+    assert.equal(stairOutPlan(hole({ ground: 'clay' }).bot, HOLE), null);
+});
+
+// #593 review 1 (blocking): gravel over the hole's roof dropped down the column the dig-out opened.
+test('#593 review 1: never a dig under a falling block: gravel over the hole\'s roof, or sand over a tunnel cell, refuses that cell (another way, or none)', () => {
+    const roof = HOLE.offset(0, 2, 0); // the dirt over the bot's head; the gravel above it is at the surface (y 64)
+    const g = hole({ set: { [key(HOLE.offset(0, 3, 0))]: 'gravel' } });
+    assert.equal(quickDig(g.bot, roof), false, 'the roof under the gravel');
+    const plan = stairOutPlan(g.bot, HOLE);
+    assert.ok(!plan || !plan.dig.some(c => c.equals(roof)), `never the roof: ${plan?.dig.join(' ')}`);
+    // Sand over every first tunnel cell's head: those cells are refused.
+    const sandy = {};
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) sandy[key(new Vec3(x, 63, z))] = 'sand';
+    const s = hole({ set: sandy });
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) assert.equal(quickDig(s.bot, new Vec3(x, 62, z)), false);
+    const p2 = stairOutPlan(s.bot, HOLE);
+    assert.ok(!p2 || p2.dig.every(c => quickDig(s.bot, c)), 'every dug cell checked');
+});
+
+// #593 review 4: one reach for "walled in" and "out": a pocket 5 wide is walled in, and the dig-out
+// from it ends at a real way out (8 blocks), never "dug out" with 0 blocks.
+test('#593 review 4: a pocket 5 wide is not a way out; the dig-out from it digs', () => {
+    const pocket = {};
+    for (let x = -2; x <= 2; x++) { pocket[key(new Vec3(x, 61, 0))] = 'air'; pocket[key(new Vec3(x, 62, 0))] = 'air'; }
+    const w = world({ at: HOLE, set: pocket });
+    assert.equal(walkableExit(w.bot, HOLE), null);
+    const plan = stairOutPlan(w.bot, HOLE);
+    assert.ok(plan && plan.dig.length > 0, 'a plan that digs');
 });
 
 test('soak 12 (B, D3): stairOut digs the plan and walks out; nothing to dig out by: null with why', async () => {

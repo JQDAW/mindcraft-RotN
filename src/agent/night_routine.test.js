@@ -3920,41 +3920,52 @@ test('#592 re-review nit 2: the fight over, the shell closed with the scaffoldin
 // ---- Soak 12 PR 2: the respawn trap (B(ii) step 6, D3) ----
 // Death 1 lost 344 dirt piles; after the respawn three shelter tries and a hole failed on "0 dirt" and
 // the bot stood at the respawn point for 3.5 min until a zombie came.
-test('soak 12 (B(ii) step 6): right after a respawn with fewer than 3 shelter blocks and nothing hostile within 16: dirt piles by hand first (once a night), then the shelter; a hostile near, or blocks held: no gather', async (t) => {
+test('soak 12 (B(ii) step 6), #593 review 7: right after a respawn with fewer shelter blocks than the dirt shelter here needs and nothing hostile within 16: that many dirt piles by hand first (once a night), then the shelter; a hostile near, blocks enough, no fresh respawn: no gather', async (t) => {
     quiet(t);
     const { GATHER } = await import('./night_routine.js');
-    assert.deepEqual(GATHER, { minBlocks: 3, piles: 12, radius: 8, maxMs: 45_000, hostileRange: 16, afterDeathMs: 180_000 });
-    const run = async ({ blocks = 0, hostile = null, deathAgo = 5_000 } = {}) => {
+    assert.deepEqual(GATHER, { perDirt: 4, maxPiles: 40, radius: 8, maxMs: 45_000, hostileRange: 16, afterDeathMs: 180_000 });
+    const run = async ({ blocks = 0, need = 3, hostile = null, deathAgo = 5_000 } = {}) => {
         const agent = fakeAgent({ t: NIGHT });
         agent._death = { last: { at: -deathAgo } };
         const o = ops();
         o.gathers = [];
         let held = blocks;
         o.repairBlocks = () => held;
+        o.shelterNeed = () => need;
         o.hostileNear = () => hostile;
-        o.gatherDirt = (bot, opts) => { o.gathers.push(opts); held = 3; return Promise.resolve({ why: null }); };
+        o.gatherDirt = (bot, opts) => { o.gathers.push(opts); held = need; return Promise.resolve({ got: opts.piles, why: null }); };
         for (let k = 0; k < 4; k++) { nightTick(agent, { now: k, ops: o }); await settle(agent); }
         return { agent, o };
     };
-    const g = await run();
+    const g = await run({ blocks: 1, need: 5 });
     assert.equal(g.o.gathers.length, 1);
+    assert.equal(g.o.gathers[0].piles, 16, '4 piles a dirt for the 4 missing');
     assert.equal(g.o.gathers[0].stop(), null, 'its stop: nothing near');
-    assert.ok(g.agent.chat.includes('[night] respawned with 0 shelter blocks (a dirt shelter needs 3): digging up to 12 dirt piles by hand within 8 blocks first (at most 45 s)'), g.agent.chat.join('\n'));
+    assert.ok(g.agent.chat.includes('[night] respawned with 1 shelter block, and the dirt shelter here needs 5: digging 16 dirt piles by hand within 8 blocks first (at most 45 s)'), g.agent.chat.join('\n'));
     assert.ok(g.o.builds.length >= 1, 'then the shelter');
     assert.equal((await run({ hostile: { name: 'zombie', position: new Vec3(5, 64, 0) } })).o.gathers.length, 0, 'a hostile within 16');
-    assert.equal((await run({ blocks: 3 })).o.gathers.length, 0, 'blocks enough');
+    assert.equal((await run({ blocks: 3, need: 3 })).o.gathers.length, 0, 'blocks enough');
+    assert.equal((await run({ need: null })).o.gathers.length, 0, 'no dirt shelter fits here');
     assert.equal((await run({ deathAgo: 10 * 60_000 })).o.gathers.length, 0, 'no fresh respawn');
 });
 
-test('soak 12 (B(ii) step 6): the gather stops at GATHER.maxMs or on its stop, and clears its own interrupt', async () => {
+test('soak 12 (B(ii) step 6), #593 review 8: the gather stops on its own stop between collects and never touches bot.interrupt_code; a real stop ends it and stays set', async () => {
     const { gatherDirtPiles } = await import('./night_routine.js');
-    const bot = { interrupt_code: false };
-    let calls = 0;
-    const collect = () => { calls++; return new Promise(r => { const poll = setInterval(() => { if (bot.interrupt_code) { clearInterval(poll); r(false); } }, 10); }); };
-    let near = false;
-    setTimeout(() => { near = true; }, 300);
-    const r = await gatherDirtPiles(bot, { stop: () => (near ? 'a hostile mob within 16 blocks' : null), collect });
-    assert.deepEqual([calls, r.why, bot.interrupt_code], [1, 'a hostile mob within 16 blocks', false]);
+    const items = [];
+    const bot = { interrupt_code: false, inventory: { items: () => items } };
+    const collect = (b, name, n) => { items.push({ name: 'betterwithmods:dirt_pile', count: n }); return Promise.resolve(true); };
+    let k = 0;
+    const r = await gatherDirtPiles(bot, { piles: 40, stop: () => (++k > 3 ? 'a hostile mob within 16 blocks' : null), collect });
+    assert.deepEqual([r.got, r.why, bot.interrupt_code], [12, 'a hostile mob within 16 blocks', false]);
+    // A real stop (a reflex) during a collect: it ends, and interrupt_code is left set for the action manager.
+    const items2 = [];
+    const b2 = { interrupt_code: false, inventory: { items: () => items2 } };
+    const r2 = await gatherDirtPiles(b2, { piles: 40, collect: () => { b2.interrupt_code = true; return Promise.resolve(false); } });
+    assert.deepEqual([r2.got, r2.why, b2.interrupt_code], [0, 'stopped', true]);
+    // Enough: it stops at the piles asked for.
+    const items3 = [];
+    const r3 = await gatherDirtPiles({ interrupt_code: false, inventory: { items: () => items3 } }, { piles: 8, collect: (b, name, n) => { items3.push({ name: 'betterwithmods:dirt_pile', count: n }); return Promise.resolve(true); } });
+    assert.deepEqual([r3.got, r3.why], [8, null]);
 });
 
 // Soak 12 (D3): morning 3 at -69, 65, 87: a zombie on the hole shelter's rim in shade (it never burns or

@@ -26,11 +26,12 @@
 
 import pf from 'mineflayer-pathfinder';
 import { Vec3 } from 'vec3';
-import { isPlayerZombie, shelterEnemy, shelterTarget, hasWeapon, isWeaponItem } from './library/threats.js';
+import { isPlayerZombie, shelterEnemy, shelterTarget, hasWeapon, isWeaponItem, mobInShelterCells } from './library/threats.js';
+import { siteNeeds } from './library/shelter.js';
 import { attackEntity, defendInPlace, equipHighestAttack } from './library/skills.js';
 import { burrowAway } from './library/burrow.js';
-import { nightPhase } from './library/night.js';
-import { walkableExit, stairOut, WALK_EXIT, DIG_OUT } from './library/walk_exit.js';
+import { nightPhase, isWall } from './library/night.js';
+import { walkableExit, stairOut, quickDig, WALK_EXIT, DIG_OUT } from './library/walk_exit.js';
 import { safeError } from './safe_error.js';
 import { isGiverGoal, say } from './agenda_driver.js';
 import { placesToLeave } from './respawn_relocate.js';
@@ -104,6 +105,11 @@ export function escapeReason(agent, now = Date.now()) {
     if (Number.isFinite(bot.health) && bot.health <= 0) return null; // not respawned yet
     const r = agent._escape ??= { forDeath: null, tries: 0, job: null, endedAt: null };
     if (r.forDeath === last.at && (r.done || r.tries >= ESCAPE_RUN.tries)) return null;
+    // #593 review 2 (the lead's decision): at night, a respawn inside an intact closed shell (the scroll's
+    // surface shelter) with no mob in its cells or the roof cell stays: the night routine's shelter rules
+    // hold there (#592's cornered fight included). The escape runs when the shell is open or a mob is in
+    // or over the cells.
+    if (isNight(agent, now) && closedShellHere(bot)) { r.stayedIn = last.at; return null; }
     let places = placesToLeave(agent, now);
     const spawn = places.find(p => p.what === 'spawn');
     const deaths = places.filter(p => p.what === 'death spot');
@@ -119,6 +125,17 @@ export function escapeReason(agent, now = Date.now()) {
     if (night) places = [...places, { pos: spawnedAt, what: 'respawn point' }];
     if (nearestOf(here, places) >= ESCAPE_RUN.away) return null;
     return { places, key: last.at, night };
+}
+
+/** #593 review 2: the bot's 1x2 cell is a closed shell (walls and roof, a body block allowed) with no hostile in its cells or the roof cell. */
+export function closedShellHere(bot) {
+    const p = bot?.entity?.position;
+    if (!p || typeof bot.blockAt !== 'function') return false;
+    const f = new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
+    let need = null;
+    try { need = siteNeeds(bot, f, { accept: isWall, occupied: true, tolerateBody: true }); } catch { need = null; }
+    if (!need || need.todo?.length) return false;
+    return !mobInShelterCells(bot, f);
 }
 
 /** The night clock's time (the night routine's NightClock, else the server's), or null. */
@@ -141,6 +158,9 @@ function noteRespawn(agent, now) {
     const last = agent?._death?.last;
     const here = bot?.entity?.position;
     if (!here || !last || !Number.isFinite(last.at) || (Number.isFinite(bot.health) && bot.health <= 0) || bot.isAlive === false) return;
+    // #593 review 10: not before the respawn's spawn event (agent.js sets rotnSpawnedAt): the first tick
+    // alive could still hold the death spot's position, which loopAt's 2-block test would take for the spawn.
+    if (Number.isFinite(bot.rotnSpawnedAt) && bot.rotnSpawnedAt < last.at) return;
     const r = agent._escape;
     r.respawns ??= [];
     if (r.respawns.some(x => x.death === last.at)) return;
@@ -368,6 +388,10 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
     let why = null;
     try { why = escapeReason(agent, now); } catch (err) { log(`[respawn] escape check: ${safeError(err)}`); why = null; }
     noteWindow(agent, now);
+    if (!why && r.stayedIn != null && r.stayedSaid !== r.stayedIn) {
+        r.stayedSaid = r.stayedIn;
+        log(`[respawn] respawned at night in a closed shelter at ${at(agent.bot.entity.position)} with nothing in it or over it: staying, no escape (the night routine's shelter rules)`);
+    }
     if (!why) return null;
     const bot = agent.bot;
     if (bot.modes?.isActive?.('self_preservation')) return 'escaping:wait';
@@ -496,9 +520,10 @@ export function scrollRefusal(agent, site, { pit = false, below = false } = {}) 
     if (below) return 'below the surface after a burrow: no walkable way out (a respawn there could not leave without digging)';
     if (site) {
         const f = new Vec3(Math.floor(site.x), Math.floor(site.y), Math.floor(site.z));
-        // The shelter's walls (feet and head height on each side) come down in the morning: free here.
+        // The shelter's walls (feet and head height on each side) come down in the morning: counted free, but
+        // only a block the bot breaks quickly (#593 review 3: walk_exit.quickDig; never natural rock it cannot).
         const walls = new Set([new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)]
-            .flatMap(d => [f.plus(d), f.plus(d).offset(0, 1, 0)]).map(p => `${p.x},${p.y},${p.z}`));
+            .flatMap(d => [f.plus(d), f.plus(d).offset(0, 1, 0)]).filter(p => quickDig(bot, p)).map(p => `${p.x},${p.y},${p.z}`));
         if (!walkableExit(bot, f, { reach: WALK_EXIT.reach, free: walls })) return `no walkable way out of ${at(f)} to ${WALK_EXIT.reach} blocks (a respawn there could not leave without digging)`;
     }
     const spots = [...(agent._death?.spots ?? []), ...(agent._death?.last ? [agent._death.last] : [])].filter(s => s?.pos);

@@ -343,6 +343,14 @@ export function standsIn(bot) {
  * The site within `radius` (and 2 up or down) that needs the fewest blocks, then the nearest. Only
  * sites where digging is safe and every cell has a support face count (#195 review 1 and 3).
  */
+/**
+ * Soak 12 (#593 review 7): the dirt a dirt shelter here needs (buildShelter's dirt fallback: the site
+ * chooseSite picks with dirt walls and a way out by hand, its .blocks), or null when no such site.
+ */
+export function dirtShelterNeed(bot, radius = 4) {
+    try { return chooseSite(bot, radius, { accept: isWall, handExit: true })?.blocks ?? null; } catch { return null; }
+}
+
 export function chooseSite(bot, radius = 4, { accept = isSturdy, handExit = false, tally = null, avoid = null } = {}) {
     const base = bot.entity.position.floored();
     let best = null;
