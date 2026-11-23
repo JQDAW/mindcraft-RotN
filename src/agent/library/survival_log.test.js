@@ -624,18 +624,22 @@ test('#579 nit 3: equipHighestAttack with only bark and a crude axe takes neithe
 // hurt line said "by zombie", the server "shot by Skeleton". Each drop now has its own source; an arrow
 // near the bot (or one just gone, as one that hits is) names the nearest ranged mob.
 test('soak 12 (G): each drop is named: an arrow\'s by the nearest ranged mob ("skeleton/arrow"), a swing\'s by its mob; the hurt line names every source when there is more than one', async (t) => {
-    const { hurtCheck, noteSwing, noteArrowGone, dropSource, ARROW } = await import('./survival_log.js');
-    assert.deepEqual(ARROW, { range: 2.5, goneMs: 500, mobRange: 24, minSpeed: 0.01 });
+    const { hurtCheck, noteSwing, noteArrowGone, noteArrowSpawn, dropSource, ARROW } = await import('./survival_log.js');
+    assert.deepEqual(ARROW, { range: 2.5, goneMs: 500, mobRange: 24, freshMs: 2500 });
     const lines = [];
     t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
     const here = new Vec3(-70.3, 62, 88.1);
     const zombie = { id: 2, name: 'zombie', type: 'mob', position: here.offset(1.8, 0, 0), height: 1.95 };
     const skeleton = { id: 3, name: 'skeleton', type: 'mob', position: here.offset(0, 0, 1.3), height: 1.99 };
-    const arrow = { id: 4, name: 'arrow', type: 'object', position: here.offset(0.3, 1, 0), velocity: new Vec3(0.6, -0.1, 0) }; // in flight
+    // #594 re-review 1: on this server an arrow's velocity reads 0 (mineflayer sets none for objects; the tracker sends arrows none).
+    const arrow = { id: 4, name: 'arrow', type: 'object', position: here.offset(0.3, 1, 0), velocity: new Vec3(0, 0, 0) };
     const bot = { health: 15, food: 12, entity: { position: here, velocity: { y: 0 }, onGround: true }, entities: { 2: zombie, 3: skeleton, 4: arrow } };
     const state = { swings: new Map() };
     hurtCheck(state, bot, 0);
+    noteArrowSpawn(state, arrow, 700); // shot 400 ms before it hit
+    // The health packet first (end of the hit tick); the arrow's destroy about 50 ms later.
     bot.health = 13.1; assert.equal(hurtCheck(state, bot, 1100), null, '1.9 alone: no line yet');
+    noteArrowGone(state, bot, arrow, 1150);
     delete bot.entities[4];
     noteSwing(state.swings, zombie, 1750);
     bot.health = 8.1;
@@ -646,11 +650,18 @@ test('soak 12 (G): each drop is named: an arrow\'s by the nearest ranged mob ("s
     noteArrowGone(s2, bot, arrow, 1000);
     assert.equal(dropSource(bot, s2, 1300), 'skeleton/arrow');
     assert.equal(dropSource(bot, s2, 1600), 'skeleton', 'past goneMs: the old rule (no swing: the nearest hostile, 1.3 m)');
-    // #594 review 2: a stuck arrow (no velocity) near the bot claims nothing: the zombie's swing is the source.
+    // #594 review 2, re-review 1: a stuck arrow that spawned 10 s ago, lying near the bot, claims nothing: the zombie's swing is.
     const s4 = { swings: new Map() };
-    const stuck = { ...bot, entities: { 2: zombie, 3: skeleton, 4: { ...arrow, velocity: new Vec3(0, 0, 0) } } };
+    const stuck = { ...bot, entities: { 2: zombie, 3: skeleton, 4: { ...arrow } } };
+    noteArrowSpawn(s4, arrow, 2050 - 10_000);
     noteSwing(s4.swings, zombie, 2000);
     assert.equal(dropSource(stuck, s4, 2050), 'zombie');
+    // A fresh arrow (spawned 300 ms ago) near the bot is the shot, velocity 0 or not.
+    noteArrowSpawn(s4, { ...arrow, id: 5 }, 1750);
+    const shot = { ...bot, entities: { 2: zombie, 3: skeleton, 5: { ...arrow, id: 5 } } };
+    assert.equal(dropSource(shot, s4, 2050), 'skeleton/arrow');
+    // An arrow whose spawn the bot did not see (it logged in after) is no shot.
+    assert.equal(dropSource({ ...bot, entities: { 2: zombie, 3: skeleton, 6: { ...arrow, id: 6 } } }, s4, 2050), 'zombie');
     // One source only: the line as before.
     const s3 = { swings: new Map() };
     const solo = { ...bot, health: 20, entities: { 2: zombie } };
@@ -658,4 +669,18 @@ test('soak 12 (G): each drop is named: an arrow\'s by the nearest ranged mob ("s
     noteSwing(s3.swings, zombie, 50);
     solo.health = 15;
     assert.equal(hurtCheck(s3, solo, 100), '[survival] hurt 5 health 20->15 (by zombie)');
+});
+
+// #594 re-review 2: the swing line's "before" health is read at the real send, not at the bot.attack call
+// (a Better Combat cooldown wait lets fire or another hit change it in between).
+test('#594 re-review 2: the swing line\'s health before is the mob\'s health at the send (after a cooldown wait)', async (t) => {
+    const logs = capture(t);
+    const bot = openFight(logs);
+    const zombie = bot.entities[1];
+    zombie.metadata = { 7: 20 };
+    bot.attack = () => { zombie.metadata[7] = 19; return new Promise(r => setTimeout(() => r({ sent: true, path: 'bettercombat' }), 30)); }; // fire during the wait
+    bot.pvp.attack = (e) => { bot.attack(e).then(() => { delete bot.entities[1]; }); };
+    assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
+    const swings = logs.filter(l => l.startsWith('[survival] swing '));
+    assert.deepEqual(swings, ['[survival] swing zombie with hand first: health 19 -> gone']);
 });

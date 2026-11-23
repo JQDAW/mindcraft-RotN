@@ -1025,11 +1025,11 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
     const origAttack = typeof bot.attack === 'function' ? bot.attack : null;
     if (origAttack) {
         bot.attack = function (target, ...rest) {
-            const before = healthOf(target);
             const stamp = () => {
                 const now = Date.now();
                 swing.prev = Number.isFinite(swing.at) ? now - swing.at : null;
-                Object.assign(swing, { at: now, before, target, pending: true });
+                // #594 re-review 2: the mob's health at the real send (after a Better Combat wait, not at the call).
+                Object.assign(swing, { at: now, before: healthOf(target), target, pending: true });
             };
             // #594 review 1: only a hit that went out counts. Better Combat's path resolves {sent: false,
             // reason: 'sight'|'reach'} for a mob in reach but out of sight, which mineflayer-pvp keeps calling

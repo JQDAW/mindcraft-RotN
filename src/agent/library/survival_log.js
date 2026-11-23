@@ -126,19 +126,29 @@ export function hurtSource(bot, { swings = null, now = Date.now() } = {}) {
  * world within ARROW.range in the last ARROW.goneMs (an arrow that hits is removed at once): the drop
  * is named after the nearest ranged mob (threats.threatFor(e).ranged) as "<mob>/arrow". Else hurtSource.
  */
-export const ARROW = { range: 2.5, goneMs: 500, mobRange: 24, minSpeed: 0.01 };
+export const ARROW = { range: 2.5, goneMs: 500, mobRange: 24, freshMs: 2500 };
 const isArrow = (e) => /(arrow|bolt|dart)$/.test(String(e?.name ?? ''));
+/** #594 re-review 1: an arrow's spawn time (entitySpawn), kept ARROW.freshMs: only a fresh arrow is a shot. */
+export function noteArrowSpawn(state, e, now = Date.now()) {
+    if (!isArrow(e) || e?.id == null) return;
+    const m = state.arrowSpawns ??= new Map();
+    m.set(e.id, now);
+    for (const [id, at] of m) if (now - at > ARROW.freshMs) m.delete(id);
+}
 export function noteArrowGone(state, bot, e, now = Date.now()) {
     const p = bot?.entity?.position;
     if (p && isArrow(e) && e.position && e.position.distanceTo(p) <= ARROW.range) state.arrowAt = now;
 }
 export function dropSource(bot, state = {}, now = Date.now()) {
     const p = bot?.entity?.position;
-    // #594 review 2: only an arrow in flight (moving) or one just gone (a hit removes it); a stuck arrow
-    // lies about 60 s, and a skeleton's misses land around the bot: it would claim every hit.
-    const flying = (e) => { const v = e.velocity; return !!v && Math.hypot(v.x ?? 0, v.y ?? 0, v.z ?? 0) > ARROW.minSpeed; };
+    // #594 review 2 and re-review 1: a stuck arrow lies about 60 s, and a skeleton's misses land around the
+    // bot, so a near arrow alone would claim every hit. An arrow's velocity reads 0 here (mineflayer sets
+    // none for objects, and the 1.12.2 tracker sends arrows no velocity), and its destroy comes about 50 ms
+    // after the health packet: a shot is an arrow near the bot that spawned within ARROW.freshMs, or one
+    // gone near it within ARROW.goneMs.
+    const fresh = (e) => now - (state.arrowSpawns?.get(e.id) ?? -Infinity) <= ARROW.freshMs;
     const arrow = !!p && (now - (state.arrowAt ?? -Infinity) <= ARROW.goneMs
-        || Object.values(bot.entities ?? {}).some(e => e && e !== bot.entity && e.position && isArrow(e) && flying(e) && e.position.distanceTo(p) <= ARROW.range));
+        || Object.values(bot.entities ?? {}).some(e => e && e !== bot.entity && e.position && isArrow(e) && fresh(e) && e.position.distanceTo(p) <= ARROW.range));
     if (arrow) {
         const shooter = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(p) <= ARROW.mobRange && threatFor(e)?.ranged)
             .sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];
@@ -281,7 +291,8 @@ export function bindSurvivalLog(bot, { eatAt }) {
     const state = { swings: new Map() };
     const check = () => { try { foodCheck(state, bot, Date.now(), eatAt); } catch { /* never breaks the bot */ } };
     bot.on('entitySwingArm', (e) => { try { noteSwing(state.swings, e); } catch { /* never breaks the bot */ } });
-    bot.on('entityGone', (e) => { try { noteArrowGone(state, bot, e); } catch { /* never breaks the bot */ } }); // soak 12 (G)
+    bot.on('entitySpawn', (e) => { try { noteArrowSpawn(state, e); } catch { /* never breaks the bot */ } }); // soak 12 (G)
+    bot.on('entityGone', (e) => { try { noteArrowGone(state, bot, e); } catch { /* never breaks the bot */ } });
     bot.on('health', () => { try { hurtCheck(state, bot, Date.now()); } catch { /* never breaks the bot */ } });
     bot.on('health', check);
     bot.on('physicsTick', check);
