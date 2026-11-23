@@ -460,6 +460,8 @@ test('#581 follow-up 1: a due flag no tick refreshed (a control hold) stops hold
     a.bot.modes.isActive = (m) => m === 'self_preservation';
     assert.equal(respawnEscapeTick(a, { now, log: () => {} }), 'escaping:wait');
     assert.ok(a._escape.due && a._escape.dueUntil > Date.now(), 'fresh: due');
+    // #583 nit 1: the tick sets dueUntil about dueFreshMs ahead.
+    assert.ok(Math.abs(a._escape.dueUntil - Date.now() - ESCAPE_RUN.dueFreshMs) < 200, `${a._escape.dueUntil - Date.now()} ms ahead`);
     a.actions.runAction = () => Promise.resolve({ message: 'ran', interrupted: false });
     assert.match(await getCommand('!moveAway').perform(a, 10), /^Not now: the respawn escape is running/);
     // A giver's !stop: the priority stack holds, no escape tick refreshes the flag.
@@ -500,6 +502,8 @@ test('#581 follow-up 3: in the gap between tries, before the next tick, a comman
     for (let i = 0; i < 40 && a._escape.job; i++) await new Promise(r => setTimeout(r, 10));
     assert.equal(a._escape.job, null, 'the run ended');
     assert.equal(a._escape.tries, 1);
+    // #583 nit 1: refreshed at the run's end, about dueFreshMs ahead (the test set it to the past during the run).
+    assert.ok(Math.abs(a._escape.dueUntil - Date.now() - ESCAPE_RUN.dueFreshMs) < 300, `${a._escape.dueUntil - Date.now()} ms ahead`);
     a.actions.runAction = () => { ran++; return Promise.resolve({ message: 'ran', interrupted: false }); };
     assert.match(await getCommand('!moveAway').perform(a, 10), /^Not now: the respawn escape is running/);
     assert.equal(ran, 0);
