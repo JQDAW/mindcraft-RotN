@@ -433,3 +433,27 @@ test('soak 10 (W4): leaves are broken with no tool that wears in hand: a held cr
     assert.equal(skills.wearsOnBreak(axe), true);
     assert.equal(skills.wearsOnBreak({ name: 'stick', count: 1 }), false);
 });
+
+// #595 review 2 (net-forge's Forge dig-time rule): bot.dig throws "dig time for X is Infinity" when Tool
+// Progression keeps the held tool from X. The collect says it plainly, once, and goes on to the next target.
+test('#595 review 2: a block Tool Progression keeps from the held tool: "needs a better tool (Tool Progression)", said once; the next target is tried', T, async (t) => {
+    fast(t);
+    const bot = fakeBot({ bushes: [{ x: -4, sticks: 2 }], trees: [{ x: 10, branch: DARK_OAK, sticks: 2 }] });
+    const dig = bot.dig;
+    bot.dig = (b) => (bot.blockAt(b.position)?.name === BUSH ? Promise.reject(new Error(`dig time for ${BUSH} is Infinity`)) : dig(b));
+    assert.equal(await skills.collectBlock(bot, 'stick', 1), true, bot.output);
+    assert.equal((bot.output.match(/needs a better tool \(Tool Progression\)/g) ?? []).length, 1, bot.output);
+    assert.match(bot.output, new RegExp(`Failed to collect stick: ${BUSH} needs a better tool \\(Tool Progression\\): the tool you have cannot break it; get a higher-tier one first\\.`));
+    assert.doesNotMatch(bot.output, /is Infinity/);
+    assert.match(bot.output, /Collected 2 stick\./);
+});
+
+test('#595 review 2: breakBlockAt says a block needs a better tool (Tool Progression) and returns false; any other dig error still throws', async () => {
+    const block = { name: 'stone', position: new Vec3(1, 64, 0), canHarvest: () => true };
+    const mk = (err) => ({ output: '', game: { gameMode: 'survival' }, entity: { position: new Vec3(0.5, 64, 0.5) }, modes: { isOn: () => false },
+        blockAt: () => block, tool: { equipForBlock: () => Promise.resolve() }, heldItem: null, dig: () => Promise.reject(err) });
+    const bot = mk(new Error('dig time for stone is Infinity'));
+    assert.equal(await skills.breakBlockAt(bot, 1, 64, 0), false);
+    assert.match(bot.output, /Cannot break the block at x:1\.0, y:64\.0, z:0\.0: stone needs a better tool \(Tool Progression\)/);
+    await assert.rejects(skills.breakBlockAt(mk(new Error('the server closed')), 1, 64, 0), /the server closed/);
+});

@@ -1434,6 +1434,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     const run = currentRun(bot);
     const runStart = Date.now();
     const givenUp = [];
+    const tooHard = new Set(); // #595 review 2: block names Tool Progression kept from the held tool (said once each)
     const refusedTrees = new Set(); // trees fellTree found no safe place for: said once (G3 round 5 A)
     // Fall safety (G3 round 4 B, fall_safety.js): off a tree first; mineflayer-collectblock's own
     // walks never drop over 3 blocks nor break a branch; leaves only from the ground.
@@ -1712,6 +1713,16 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             if (err.name === 'NoChests') {
                 log(bot, `Failed to collect ${blockType}: Inventory full, no place to deposit.`);
                 break;
+            }
+            else if (toolProgressionBlock(err)) {
+                // #595 review 2: Tool Progression keeps the held tool from this block: said once per block name
+                // in this collect (no raw "dig time … is Infinity"), the target given up; the next is tried. The
+                // first such block of a name uses no attempt (no packet went out); later ones of that name do.
+                const name = toolProgressionBlock(err);
+                if (!tooHard.has(name)) { tooHard.add(name); log(bot, `Failed to collect ${blockType}: ${betterToolText(name)}`); i--; }
+                if (block?.position) givenUp.push(block.position.clone ? block.position.clone() : block.position);
+                if (bot.interrupt_code) break;
+                continue;
             }
             else {
                 log(bot, `Failed to collect ${blockType}: ${err}.`);
@@ -2737,6 +2748,17 @@ async function collectFelledDrops(bot, center, limits = {}, baseline = null, { o
     return walked;
 }
 
+/**
+ * #595 (net-forge): with the Forge dig-time rule, bot.dig throws "dig time for X is Infinity" at once when
+ * Tool Progression keeps the held tool from block X (no packet goes out). The block's name, or null.
+ */
+export function toolProgressionBlock(err) {
+    const m = /dig time for (.+) is Infinity/.exec(String(err?.message ?? err ?? ''));
+    return m ? m[1] : null;
+}
+/** The LLM-facing text for it (#595 review 2). */
+export const betterToolText = (name) => `${name} needs a better tool (Tool Progression): the tool you have cannot break it; get a higher-tier one first.`;
+
 export async function breakBlockAt(bot, x, y, z) {
     /**
      * Break the block at the given position. Will use the bot's equipped item.
@@ -2776,7 +2798,13 @@ export async function breakBlockAt(bot, x, y, z) {
                 return false;
             }
         }
-        await bot.dig(block, true);
+        try { await bot.dig(block, true); }
+        catch (err) {
+            const name = toolProgressionBlock(err);
+            if (!name) throw err;
+            log(bot, `Cannot break the block at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)}: ${betterToolText(name)}`);
+            return false;
+        }
         log(bot, `Broke ${block.name} at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)}.`);
     }
     else {

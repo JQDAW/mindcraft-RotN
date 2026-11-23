@@ -684,3 +684,29 @@ test('#594 re-review 2: the swing line\'s health before is the mob\'s health at 
     const swings = logs.filter(l => l.startsWith('[survival] swing '));
     assert.deepEqual(swings, ['[survival] swing zombie with hand first: health 19 -> gone']);
 });
+
+// #594 nit 1: at a spawn or respawn the server sends the loaded chunks' entities again, stuck arrows too;
+// they would read as fresh for 2.5 s. Arrow spawns in the first ARROW.freshMs after the bot's spawn are not counted.
+test('#594 nit 1: an old stuck arrow sent again right after the bot\'s respawn is no shot; one shot later is', async () => {
+    const { noteBotSpawn, noteArrowSpawn, noteSwing, dropSource, bindSurvivalLog } = await import('./survival_log.js');
+    const here = new Vec3(0.5, 64, 0.5);
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: here.offset(1.5, 0, 0), height: 1.95 };
+    const skeleton = { id: 3, name: 'skeleton', type: 'mob', position: here.offset(0, 0, 6), height: 1.99 };
+    const old = { id: 4, name: 'arrow', type: 'object', position: here.offset(0.4, 0, 0) };
+    const bot = { entity: { position: here }, entities: { 2: zombie, 3: skeleton, 4: old } };
+    const state = { swings: new Map() };
+    noteBotSpawn(state, 10_000);
+    noteArrowSpawn(state, old, 10_200); // the chunk's arrow, sent with the respawn
+    noteSwing(state.swings, zombie, 11_000);
+    assert.equal(dropSource(bot, state, 11_050), 'zombie', 'not the old arrow');
+    const shot = { id: 5, name: 'arrow', type: 'object', position: here.offset(0.3, 1, 0) };
+    bot.entities[5] = shot;
+    noteArrowSpawn(state, shot, 13_000); // past ARROW.freshMs after the spawn: a real shot
+    assert.equal(dropSource(bot, state, 13_300), 'skeleton/arrow');
+    // bindSurvivalLog wires 'spawn'.
+    const on = {};
+    const wired = { on: (ev, f) => { (on[ev] ??= []).push(f); } };
+    const st = bindSurvivalLog(wired, { eatAt: 12 });
+    on.spawn.forEach(f => f());
+    assert.ok(Number.isFinite(st.spawnedAt));
+});
