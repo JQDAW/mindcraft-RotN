@@ -40,6 +40,16 @@ export const SAVE_EVERY_MS = 10_000;
 /** Soak 10 (W2): a step's autoCraft is run as a skill at most this many times while it stays current. */
 export const AUTO_CRAFT = { tries: 2 };
 
+/**
+ * #588 nit 1: the longest wait before a food run starts (the backoff before its last run: BACKOFF_MS
+ * doubling per run, stepBudget().attempts runs), plus a tick and a little margin: H3's grace
+ * (agenda.FOOD_BEFORE_NIGHT.startMs is the fallback, for 3 attempts).
+ */
+export function foodStartMs() {
+    const runs = stepBudget().attempts;
+    return BACKOFF_MS * 2 ** Math.max(0, runs - 2) + TICK_MS + 10_000;
+}
+
 /** A step's budget; settings.agenda_step_attempts and agenda_step_llm_ms override it. */
 export function stepBudget() {
     const n = (v, d) => (Number.isFinite(v) && v > 0 ? v : d);
@@ -162,6 +172,7 @@ export const minutes = (ms) => `${Math.round(ms / 6_000) / 10} min`;
 function tickState(agent) {
     const state = agendaState(agent.bot, agent._night?.clock);
     state.foodRunning = () => agent._agenda_step != null && agent._agenda_step === agent.agenda?.food?.id && !!agent.self_prompter?.isActive?.();
+    state.foodStartMs = () => foodStartMs(); // #588 nit 1: H3's wait for its run, from this budget
     return state;
 }
 

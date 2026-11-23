@@ -16,6 +16,7 @@ import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
 import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath, isWeaponItem } from "./threats.js";
 import { logAte, fightJournal, swingLine, logWeapon } from "./survival_log.js";
+import { waitText } from './wait_text.js';
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
 import pf from 'mineflayer-pathfinder';
@@ -2231,7 +2232,7 @@ export async function pickupKillDrops(bot, at, { radius = KILL_DROPS.radius, max
 export function killDropsText(r, radius = KILL_DROPS.radius, maxMs = KILL_DROPS.maxMs) {
     if (!r) return 'the drop not checked';
     if (r.picked.length) return `picked up ${r.picked.map(p => `${p.count} ${p.name}`).join(', ')}`;
-    if (!r.seen) return `no drop seen within ${radius} blocks in ${maxMs < 1000 ? `${Math.round(maxMs)} ms` : `${+(maxMs / 1000).toFixed(1)} s`}`; // #587 nit 1
+    if (!r.seen) return `no drop seen within ${radius} blocks in ${waitText(maxMs)}`; // #587 nit 1, one helper
     return `${r.seen} drop${r.seen === 1 ? '' : 's'} left: ${r.refused ?? 'not picked up'}`;
 }
 

@@ -320,8 +320,12 @@ export function foodFirstAfterDeath(s) {
  */
 // #588 re-review nit 2: startMs, the wait for a picked run to start, is above the driver's longest food
 // backoff (BACKOFF_MS doubling: 0, 30, 60 s for the 3 attempts) plus a tick; startSlackMs, from the
-// driver's own start (recordAttempt) to its self-prompter running.
+// driver's own start (recordAttempt) to its self-prompter running. #588 nit 1: the driver passes the
+// bound from its own budget (state.foodStartMs: stepBudget().attempts, BACKOFF_MS, TICK_MS); startMs
+// is the fallback with no driver (it assumes STEP_ATTEMPTS 3).
 export const FOOD_BEFORE_NIGHT = { minPerHunger: 2, startMs: 120_000, startSlackMs: 10_000 };
+/** #588 nit 1: the wait for a picked food run to start: the driver's bound, else FOOD_BEFORE_NIGHT.startMs. */
+const startBound = (s) => { let ms = null; try { ms = s.foodStartMs?.() ?? null; } catch { ms = null; } return Number.isFinite(ms) && ms > 0 ? ms : FOOD_BEFORE_NIGHT.startMs; };
 /** Whether food comes before the shelter blocks now (FOOD_BEFORE_NIGHT). */
 export function foodRunsOutBeforeNight(s) {
     let m = Infinity, food = null, held = 0;
@@ -517,7 +521,7 @@ export class Agenda {
         const now = this.now();
         const waiting = !this.h3Run.seen && (this.h3Run.started != null
             ? now - this.h3Run.started < FOOD_BEFORE_NIGHT.startSlackMs
-            : now - this.h3Run.at < FOOD_BEFORE_NIGHT.startMs);
+            : now - this.h3Run.at < startBound(state));
         if (waiting) return true;
         if (!readOnly) this.h3Run.ended = true;
         return false;

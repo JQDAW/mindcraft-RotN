@@ -1404,3 +1404,35 @@ test('#588 re-review nit 2: H3\'s one food run survives the driver\'s backoff (c
     clock += 20_000;
     assert.equal(agendaTick(agent, { now: clock }), 'shelter_blocks', 'its one run over: the blocks');
 });
+
+test('#588 nit 1: H3\'s wait for its food run to start comes from the driver\'s budget (stepBudget, BACKOFF_MS, TICK_MS), not a fixed 3 attempts', async (t) => {
+    const { foodStartMs } = await import('./agenda_driver.js');
+    const settings = (await import('./settings.js')).default;
+    const saved = settings.agenda_step_attempts;
+    t.after(() => { settings.agenda_step_attempts = saved; });
+    settings.agenda_step_attempts = undefined;
+    assert.equal(foodStartMs(), BACKOFF_MS * 2 + TICK_MS + 10_000, '3 runs: the 60 s wait before the third');
+    assert.ok(foodStartMs() <= FOOD_BEFORE_NIGHT.startMs, 'the fallback covers 3 runs');
+    settings.agenda_step_attempts = 5;
+    assert.equal(foodStartMs(), BACKOFF_MS * 8 + TICK_MS + 10_000, '5 runs: the 240 s wait before the fifth');
+    // The agenda uses the bound the state carries.
+    let clock = 0;
+    const agenda = new Agenda('x', { dir: tempDir(t), weapon: null });
+    agenda.now = () => clock;
+    const state = { minutesToSunset: () => 7.5, food: () => 8, foodHeld: () => 0, foodRunning: () => false, foodStartMs: () => 5000 };
+    agenda.foodBeforeBlocksRan();
+    clock = 4000;
+    assert.equal(agenda.foodBeforeBlocks(state), true, 'within the driver\'s bound');
+    clock = 6000;
+    assert.equal(agenda.foodBeforeBlocks(state), false, 'past it: never started, the blocks');
+});
+
+test('#588 nit 2: one wait formatter for the scroll and the kill-drop lines', async () => {
+    const { waitText } = await import('./library/wait_text.js');
+    const esc = await import('./respawn_escape.js');
+    const { killDropsText } = await import('./library/skills.js');
+    assert.equal(esc.waitText, waitText);
+    assert.deepEqual([waitText(50), waitText(999), waitText(1000), waitText(1500), waitText(5000)], ['50 ms', '999 ms', '1 s', '1.5 s', '5 s']);
+    assert.equal(killDropsText({ picked: [], seen: 0, refused: null }, 4, 3000), 'no drop seen within 4 blocks in 3 s');
+    assert.equal(killDropsText({ picked: [], seen: 0, refused: null }, 4, 50), 'no drop seen within 4 blocks in 50 ms');
+});
