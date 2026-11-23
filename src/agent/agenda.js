@@ -326,7 +326,8 @@ export function foodFirstAfterDeath(s) {
 // startSlackMs: from the driver's own start (recordAttempt) to its self-prompter running.
 export const FOOD_BEFORE_NIGHT = { minPerHunger: 2, startMs: 120_000, startSlackMs: 10_000 };
 /** #588 nit 1: the wait for a picked food run to start: the driver's bound, else FOOD_BEFORE_NIGHT.startMs. */
-const startBound = (s) => { let ms = null; try { ms = s.foodStartMs?.() ?? null; } catch { ms = null; } return Number.isFinite(ms) && ms > 0 ? ms : FOOD_BEFORE_NIGHT.startMs; };
+// #590 re-review nit: the 120 s floor here too, whatever the state passes (agenda.js never imports the driver).
+const startBound = (s) => { let ms = null; try { ms = s.foodStartMs?.() ?? null; } catch { ms = null; } return Number.isFinite(ms) && ms > 0 ? Math.max(FOOD_BEFORE_NIGHT.startMs, ms) : FOOD_BEFORE_NIGHT.startMs; };
 /** Whether food comes before the shelter blocks now (FOOD_BEFORE_NIGHT). */
 export function foodRunsOutBeforeNight(s) {
     let m = Infinity, food = null, held = 0;

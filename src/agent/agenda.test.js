@@ -1427,10 +1427,18 @@ test('#588 nit 1, #590 review: H3\'s wait for its food run to start comes from t
     agenda.now = () => clock;
     const state = { minutesToSunset: () => 7.5, food: () => 8, foodHeld: () => 0, foodRunning: () => false, foodStartMs: () => 5000 };
     agenda.foodBeforeBlocksRan();
-    clock = 4000;
-    assert.equal(agenda.foodBeforeBlocks(state), true, 'within the driver\'s bound');
+    // #590 re-review nit: a bound under the 120 s floor (5 s here) is raised to it.
     clock = 6000;
-    assert.equal(agenda.foodBeforeBlocks(state), false, 'past it: never started, the blocks');
+    assert.equal(agenda.foodBeforeBlocks(state), true, 'a 5 s bound is raised to the 120 s floor');
+    clock = FOOD_BEFORE_NIGHT.startMs + 1000;
+    assert.equal(agenda.foodBeforeBlocks(state), false, 'past the floor: never started, the blocks');
+    // A bound above the floor is kept.
+    const longer = new Agenda('y', { dir: tempDir(t), weapon: null });
+    longer.now = () => clock;
+    clock = 0;
+    longer.foodBeforeBlocksRan();
+    clock = FOOD_BEFORE_NIGHT.startMs + 1000;
+    assert.equal(longer.foodBeforeBlocks({ ...state, foodStartMs: () => 200_000 }), true, 'within a 200 s bound');
 });
 
 test('#588 nit 2: one wait formatter for the scroll and the kill-drop lines', async () => {
