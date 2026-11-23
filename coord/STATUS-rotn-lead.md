@@ -1,6 +1,6 @@
 # Status: rotn-lead
 
-Updated: 2026-11-22 20:08 UTC (from `date -u`)
+Updated: 2026-11-23 02:06 UTC (from `date -u`)
 
 
 ## CX23 deploy record (ADR 0011)
@@ -14,6 +14,7 @@ Updated: 2026-11-22 20:08 UTC (from `date -u`)
 | 2026-11-22 04:07 | rotn-v0.1.15 | c62e3155c8d6 (c62e3155c8d61ac44c763e322fbaae29c883fd25) | the lead, through the gate (GO G-DEPLOY-v0.1.15-20261122) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.15-c62e3155c8d6, previous=rotn-v0.1.14-92faa83fdd50; pruned rotn-v0.1.4; no bot restarted; deploy/cx23 changed only README.md (documentation, not installed) |
 | 2026-11-22 14:28 | rotn-v0.1.16 | 453713d21290 (453713d21290f6cc2a9f540fa723580b99302fed) | the lead, through the gate (GO G-DEPLOY-v0.1.16-20261122) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.16-453713d21290, previous=rotn-v0.1.15-c62e3155c8d6; pruned rotn-v0.1.5; no bot restarted; deploy/cx23 unchanged; package-lock: the collectblock pin (root entry only); patches: + mineflayer-collectblock+1.6.0.patch, applied with the other 8 on the CX23 |
 | 2026-11-22 20:07 | rotn-v0.1.17 | d92bcdeecb73 (d92bcdeecb73ca6ef030d47bb41f93893a7e6e39) | the lead, through the gate (GO G-DEPLOY-v0.1.17-20261122) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.17-d92bcdeecb73, previous=rotn-v0.1.16-453713d21290; pruned rotn-v0.1.7; no bot restarted; deploy/cx23, package-lock and patches unchanged |
+| 2026-11-23 02:06 | rotn-v0.1.18 | 5101e5c84e30 (5101e5c84e30dd18ed2da98c04a8ffaaf0f7697d) | the lead, through the gate (GO G-DEPLOY-v0.1.18-20261123) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.18-5101e5c84e30, previous=rotn-v0.1.17-d92bcdeecb73; pruned rotn-v0.1.11; no bot restarted; deploy/cx23, package-lock and patches unchanged |
 
 ## Snapshot (2026-11-18 17:40 UTC): development resumed; the pause list is done; rotn-v0.1.5 next
 
