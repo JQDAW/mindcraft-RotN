@@ -141,6 +141,7 @@ test('G4 #5: a fight\'s outcome: killed when the first mob is dead or gone from 
     ]);
 });
 
+// Soak 12 (C): an unarmed fight also logs, once, why no weapon is in hand (equipHighestAttack).
 test('G4 #5: defendSelf (a fight in the open) logs its start and end: killed', async (t) => {
     const logs = capture(t);
     const self = { id: 0, name: 'player', type: 'player', position: new Vec3(0.5, 64, 0.5), height: 1.8 };
@@ -155,7 +156,7 @@ test('G4 #5: defendSelf (a fight in the open) logs its start and end: killed', a
         nearestEntity: (match) => Object.values(bot.entities).filter(e => e !== self && match(e))[0] ?? null,
     };
     assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
-    assert.deepEqual(survival(logs).map(l => l.replace(/after \d+ s/, 'after N s')), ['[survival] fight start zombie (open)', '[survival] weapon hand (open)', '[survival] fight end zombie killed after N s']);
+    assert.deepEqual(survival(logs).map(l => l.replace(/after \d+ s/, 'after N s')), ['[survival] no weapon in hand: none held; holding nothing', '[survival] fight start zombie (open)', '[survival] weapon hand (open)', '[survival] fight end zombie killed after N s']);
 });
 
 /** A defendSelf bot: a zombie `at` blocks away; calls (walks, attacks) go into `logs` in order. */
@@ -180,7 +181,7 @@ test('#384 nit 1: defendSelf logs the fight start at its first attack, after the
     const bot = openFight(logs, { at: 5, attack: (b) => { if (++hits >= 1) delete b.entities[1]; } });
     assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
     const seq = logs.filter(l => l.startsWith('<') || l.startsWith('[survival] ')).map(l => l.replace(/after \d+ s/, 'after N s'));
-    assert.deepEqual(seq, ['<walk>', '[survival] fight start zombie (open)', '[survival] weapon hand (open)', '<attack>', '[survival] fight end zombie killed after N s']);
+    assert.deepEqual(seq, ['[survival] no weapon in hand: none held; holding nothing', '<walk>', '[survival] fight start zombie (open)', '[survival] weapon hand (open)', '<attack>', '[survival] fight end zombie killed after N s']);
 });
 
 test('#384 nit 2: a defendSelf fight that throws after its start still logs its end (interrupted)', async (t) => {
@@ -189,14 +190,14 @@ test('#384 nit 2: a defendSelf fight that throws after its start still logs its 
     const bot = openFight(logs, { attack: () => { if (++hits === 2) throw new Error('the server closed the window'); } });
     await assert.rejects(skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), /closed the window/);
     assert.deepEqual(survival(logs).map(l => l.replace(/after \d+ s/, 'after N s')),
-        ['[survival] fight start zombie (open)', '[survival] weapon hand (open)', '[survival] fight end zombie interrupted after N s']);
+        ['[survival] no weapon in hand: none held; holding nothing', '[survival] fight start zombie (open)', '[survival] weapon hand (open)', '[survival] fight end zombie interrupted after N s']);
     // A stop (interrupt_code) after the start: one end, interrupted; nothing logged without an attack.
     const stopped = [];
     t.mock.method(console, 'log', (...a) => stopped.push(a.join(' ')));
     const b2 = openFight(stopped, { attack: (b) => { b.interrupt_code = true; } });
     assert.equal(await skills.defendSelf(b2, 8, (e) => e.name === 'zombie'), false);
     assert.deepEqual(survival(stopped).map(l => l.replace(/after \d+ s/, 'after N s')),
-        ['[survival] fight start zombie (open)', '[survival] weapon hand (open)', '[survival] fight end zombie interrupted after N s']);
+        ['[survival] no weapon in hand: none held; holding nothing', '[survival] fight start zombie (open)', '[survival] weapon hand (open)', '[survival] fight end zombie interrupted after N s']);
     const none = [];
     t.mock.method(console, 'log', (...a) => none.push(a.join(' ')));
     const b3 = openFight(none);

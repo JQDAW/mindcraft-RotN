@@ -626,7 +626,9 @@ export class Agent {
     // a respawn, and the bot is elsewhere) (#204 review 6).
     bindNightReset() {
         this.bot.on('death', () => { resetNight(this, 'death'); this._jumpWatch?.reset(); });
-        this.bot.on('spawn', () => { resetNight(this, 'spawn'); this._jumpWatch?.reset(); });
+        // #593 review 10: the time of the spawn (mineflayer emits it after the respawn's position): the
+        // respawn escape notes the respawn point only after it (respawn_escape.noteRespawn).
+        this.bot.on('spawn', () => { this.bot.rotnSpawnedAt = Date.now(); resetNight(this, 'spawn'); this._jumpWatch?.reset(); });
     }
 
     // D1b: a teleport (AggroTP) is a server position packet, after which mineflayer emits

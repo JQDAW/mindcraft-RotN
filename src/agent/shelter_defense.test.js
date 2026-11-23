@@ -1041,3 +1041,31 @@ test('#592 review nit 4: death 1 through modes.update: a closed shelter, armed, 
     assert.ok(calls.attacks.length >= 1, logs.join('\n'));
     assert.ok(logs.includes('[survival] fight start zombie (shelter)'), logs.join('\n'));
 });
+
+// Soak 12 (B(ii) step 3): 8 respawn escapes at the scroll's respawn point were interrupted by the
+// low-health move away ("the escape was interrupted by self_preservation"), each followed by a death in
+// the same pit. The escape is itself the flee: that move away waits; the hazards still act.
+test('soak 12 (B(ii) step 3): during the respawn escape, low health does not start self_preservation\'s move away (said once); with no escape it does', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const run = async (escaping) => {
+        const { agent, bot, ran } = shelter({ zombieAt: 2 });
+        hurt(bot);
+        Object.assign(bot, { rotnSheltered: false, rotnEscaping: escaping, blockAt: () => ({ name: 'air', boundingBox: 'empty' }) });
+        await selfPreservation(agent);
+        return ran;
+    };
+    assert.deepEqual(await run(true), [], 'no move away over the escape');
+    assert.equal(logs.filter(l => /the respawn escape is the flee; not moving away over it$/.test(l)).length, 1);
+    assert.deepEqual(await run(false), ['mode:self_preservation'], 'no escape: the move away as before');
+});
+
+test('#593 review 9: during the respawn escape, lava at the feet still acts (the hazards run before the escape hold)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { agent, bot, ran } = shelter({ zombieAt: 2 });
+    hurt(bot);
+    Object.assign(bot, { rotnSheltered: false, rotnEscaping: true, blockAt: (p) => ({ name: p.y < 65 ? 'lava' : 'air', position: p.floored(), boundingBox: 'empty' }),
+        inventory: { ...bot.inventory, findInventoryItem: () => null }, findBlocks: () => [], findBlock: () => null });
+    await selfPreservation(agent);
+    assert.deepEqual(ran, ['mode:self_preservation'], 'the lava branch acted');
+});

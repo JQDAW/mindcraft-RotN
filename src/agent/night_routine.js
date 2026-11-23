@@ -15,13 +15,14 @@
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, SCROLL_LABEL, shelterShell, isFullDay, replanHold, placeableDirt } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
-import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon, SHELTER_FIGHT } from './library/skills.js';
+import { buildShelter, dirtShelterNeed, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
+import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon, SHELTER_FIGHT, collectBlock } from './library/skills.js';
 import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
 import { escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll } from './respawn_escape.js';
+import { stairOut, DIG_OUT } from './library/walk_exit.js';
 import { groundPlan, walkToGround, stepToDry, planText, inWater, GROUND } from './library/shelter_ground.js';
 import { escape } from './library/escape.js';
 import { hasWeapon, shelterEnemy, shelterTarget, threatFor, isPlayerZombie, canFightHard, maxHitOf, inMeleeReach, meleeReach, fightNumbers, fightOdds, hurtingInReach } from './library/threats.js';
@@ -150,7 +151,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     restoreCowardice(agent, n);
-    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, badCells: null, ...GROUND_CLEAR, groundSkip: [] });
+    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, badCells: null, gatherTried: false, ...GROUND_CLEAR, groundSkip: [] });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     Object.assign(n, { clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0, ...MORNING_CLEAR });
@@ -732,8 +733,40 @@ export function inRoofCell(e, site) {
     return !!p && !!site && Math.floor(p.x) === site.x && Math.floor(p.z) === site.z && p.y >= site.y + 1.5 && p.y < site.y + 3;
 }
 
+/**
+ * Soak 12 (B(ii) step 6): the night dirt gather after a respawn, to what the dirt shelter here needs
+ * (#593 review 7: shelter.dirtShelterNeed, its blocks; perDirt piles make one dirt). maxPiles bounds it;
+ * radius, maxMs, hostileRange: where, how long, and what stops it; afterDeathMs: how soon after a death.
+ */
+export const GATHER = { perDirt: 4, maxPiles: 40, radius: 8, maxMs: 45_000, hostileRange: 16, afterDeathMs: 3 * 60_000 };
+const GATHER_LABEL = 'action:gatherDirt';
+const PILE = 'betterwithmods:dirt_pile';
+
+/**
+ * Soak 12 (B(ii) step 6): dig `piles` dirt piles by hand near the bot, a dirt block's worth per collect.
+ * #593 review 8: its own stop (`stop()`, a why, or GATHER.maxMs) is checked between collects; it never
+ * sets or clears bot.interrupt_code, so a real stop (a reflex, a command) ends it and stays a stop.
+ * Returns {got, why}.
+ */
+export async function gatherDirtPiles(bot, { piles = GATHER.perDirt * 3, stop = () => null, collect = collectBlock } = {}) {
+    const held = () => (bot.inventory?.items?.() ?? []).filter(i => i.name === PILE).reduce((n, i) => n + (i.count ?? 0), 0);
+    const start = Date.now(), before = held();
+    let why = null;
+    for (;;) {
+        if (bot.interrupt_code) { why = 'stopped'; break; }
+        why = stop() ?? (Date.now() - start >= GATHER.maxMs ? `${GATHER.maxMs / 1000} s are up` : null);
+        if (why || held() - before >= piles) break;
+        const was = held();
+        let ok = false;
+        try { ok = await collect(bot, PILE, Math.min(GATHER.perDirt, piles - (was - before)), null, GATHER.radius); }
+        catch (err) { why = `the collect failed: ${err?.message ?? err}`; break; }
+        if (!ok || held() <= was) { why = bot.interrupt_code ? 'stopped' : `no more dirt within ${GATHER.radius} blocks`; break; }
+    }
+    return { got: held() - before, why };
+}
+
 /** Soak 11 (A3): the jobs that put a block in the hand; the weapon goes back after them. */
-export const REARM_AFTER = [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, 'action:buildShelter', 'action:digPit'];
+export const REARM_AFTER = [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, 'action:buildShelter', 'action:digPit', GATHER_LABEL];
 
 /**
  * Soak 11 (A2): fight first from the shelter, armed, only with one melee mob within `range` and no other
@@ -921,6 +954,8 @@ export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSp
     escape: (bot) => escape(bot), // soak 8: out of a flooded pit first
     nightRelocation: nightRelocationPlan, walkAwayAtNight, morningChoice, openToward,
     escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll, // soak 10 (R2, R6)
+    stairOut: (bot, feet, opts) => stairOut(bot, feet, opts), // soak 12 (D3)
+    gatherDirt: (bot, opts) => gatherDirtPiles(bot, opts), shelterNeed: (bot) => dirtShelterNeed(bot), // soak 12 (B(ii) step 6)
     // #497 review 2: away from every threat; cornered, it may hit a melee mob only, never a troll or a creeper.
     awayFromMobs: (bot) => avoidEnemies(bot, MORNING.awayDist, shelterEnemy, shelterTarget),
     heldCells, retreatPlan, backAway, hasWeapon, mobInReach, dangerInReach: (bot) => mobInReach(bot, notMelee),
@@ -1138,6 +1173,12 @@ function keepMobBlock(agent, n, ops, found) {
     const bot = agent.bot;
     const over = (ops.mobOver ?? mobOverBlock)(bot, found.pos);
     const open = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody: true })?.todo ?? [];
+    // #592 re-review nit 2: the shell closed (the block allowed) and no mob cornered (in the bot's cells or the
+    // roof cell): the closed shelter's rules are back, as the "closed again" line does when nothing is in the space.
+    if (!open.length && bot.rotnSheltered === 'open') {
+        const close = (ops.closeMob ?? closeMob)(bot, n.site, { exposed: false });
+        if (!close?.inCell && !close?.inRoof) { bot.rotnSheltered = true; n.handFight = false; }
+    }
     if (!over && !open.length) return null;
     const cell = found.pos.y > n.site.y ? 'head' : 'feet';
     const what = /(^|:)scaffolding$/.test(found.block ?? '') ? 'a mob placed it from above' : 'not a full cube, no suffocation';
@@ -1265,7 +1306,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (spent) n.lastShelter = spent.clone?.() ?? spent;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, badCells: null, ...GROUND_CLEAR, groundSkip: [] });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, badCells: null, gatherTried: false, ...GROUND_CLEAR, groundSkip: [] });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -1364,6 +1405,28 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 return 'night:building';
             }
         }
+        // Soak 12 (B(ii) step 6, the lead): right after a respawn with fewer shelter blocks than a shelter
+        // needs (death 1 lost 344 dirt piles; three shelter tries and a hole failed on "0 dirt", and the
+        // bot stood at the spawn 3.5 min), and nothing hostile within GATHER.hostileRange: dirt piles by
+        // hand within GATHER.radius first, at most GATHER.maxMs, stopped by a hostile coming near. Once
+        // per night; never a walk back to the death spot for the drops.
+        if (!n.gatherTried && ops.gatherDirt && ops.repairBlocks && ops.shelterNeed && now - (agent._death?.last?.at ?? -Infinity) <= GATHER.afterDeathMs) {
+            // #593 re-review 3: the cheap checks first; the site search (chooseSite) once per death.
+            const blocks = !ops.hostileNear?.(bot, GATHER.hostileRange) ? ops.repairBlocks(bot) : Infinity;
+            const deathAt = agent._death?.last?.at;
+            if (Number.isFinite(blocks) && n.gatherNeed?.death !== deathAt) n.gatherNeed = { death: deathAt, need: ops.shelterNeed(bot) };
+            const need = n.gatherNeed?.death === deathAt ? n.gatherNeed.need : null;
+            if (Number.isFinite(need) && blocks < need) {
+                n.gatherTried = true;
+                const piles = Math.min(GATHER.maxPiles, GATHER.perDirt * (need - blocks));
+                line(agent, `[night] respawned with ${blocks} shelter block${blocks === 1 ? '' : 's'}, and the dirt shelter here needs ${need}: digging ${piles} dirt piles by hand within ${GATHER.radius} blocks first (at most ${GATHER.maxMs / 1000} s)`);
+                startJob(agent, n, GATHER_LABEL, () => ops.gatherDirt(bot, { piles, stop: () => (ops.hostileNear?.(bot, GATHER.hostileRange) ? `a hostile mob within ${GATHER.hostileRange} blocks` : null) }), (r) => {
+                    n.nextAt = 0;
+                    console.log(`[night] the dirt gather ended: ${r?.got ?? 0} piles, ${ops.repairBlocks(bot)} shelter blocks${r?.why ? ` (${r.why})` : ''}`);
+                });
+                return 'night:building';
+            }
+        }
         if (n.nextAt === null) n.nextAt = now + RETRY_MS;
         if (now < n.nextAt) return 'night:building';
         const pit = n.pitNext;
@@ -1389,7 +1452,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.pit = pit;
                 n.digAt = null; // digging seen at an earlier shelter is not this one's
                 n.repairStall = null;
-                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false, scrollTried: false });
+                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false, scrollTried: false, digOutTried: false });
                 n.checkedAt = null; // set by the next tick, on its clock
                 bot.rotnSheltered = true;
                 // Gate2 B: where the bot was and what it stood on, for the line if it is ever out of it.
@@ -1478,7 +1541,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // model), at a closed night shelter far from the spawn and every death spot, with no hostile near.
         if (!isFullDay(t) && !n.scrollTried && n.site && bot.rotnSheltered === true && ops.useSpawnScroll && ops.scrollRefusal) {
             n.scrollTried = true;
-            const why = ops.scrollRefusal(agent, n.site);
+            // Soak 12 (B(i)): never in a hole shelter or below the surface (a pocket or a burrow).
+            const why = ops.scrollRefusal(agent, n.site, { pit: !!n.pit, below: (n.burrowSteps ?? 0) > 0 });
             if (why) console.log(`[night] the Scroll of New Life is not used at ${at(n.site)}: ${why}`);
             else {
                 line(agent, `[night] setting the respawn point here at ${at(n.site)} with the Scroll of New Life (once): far from the spawn and every death spot, no hostile near`);
@@ -1501,7 +1565,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.state = 'day';
                 n.site = null;
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
-                    burrowSteps: 0, burrowNoneAt: null, ...MORNING_CLEAR });
+                    burrowSteps: 0, burrowNoneAt: null, digOutTried: false, ...MORNING_CLEAR });
                 line(agent, text);
             };
             const failedTry = (why) => {
@@ -1509,9 +1573,37 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 if (n.exitTries < EXIT_TRIES) {
                     n.exitAt = now + RETRY_MS;
                     line(agent, `[night] morning: ${why} (try ${n.exitTries} of ${EXIT_TRIES}); trying again in ${RETRY_MS / 1000} s`);
+                } else if (n.pit && !n.digOutTried && ops.stairOut) {
+                    digOutOfHole(why);
                 } else {
                     handBack(`[night] morning: could not leave the shelter at ${at(n.site)} after ${EXIT_TRIES} tries (${why}); back to work, still enclosed: dig a way out`);
                 }
+            };
+            // Soak 12 (D3, the lead's decision 1; rotn-data: a zombie in shade never burns and never leaves):
+            // morning 3 handed the bot back still walled in its hole shelter, a zombie on the rim. Now the
+            // routine digs out itself (walk_exit.stairOut: at most DIG_OUT.maxBlocks quick blocks, a tunnel
+            // of up to 3 then stairs, ending farther from the mob); no such way out: armed and the fight
+            // good (morningChoice as for a shelter on the ground), the wall toward the mob is opened and it
+            // is fought from the shelter; else the hand-back as before.
+            const digOutOfHole = (why) => {
+                n.digOutTried = true;
+                const mob = ops.hostileNear?.(bot, LEAVE_MOB_RANGE);
+                const from = bot.entity.position.floored();
+                line(agent, `[night] morning: ${why} after ${EXIT_TRIES} tries; digging a way out of the hole shelter myself (at most ${DIG_OUT.maxBlocks} quick blocks${mob ? `, away from ${mobText(mob)}` : ''})`);
+                startJob(agent, n, 'action:leaveShelter', () => ops.stairOut(bot, from, { hostiles: mob?.position ? [mob] : [] }), (r) => {
+                    if (r?.to) { handBack(`[night] morning: dug out of the hole shelter at ${at(n.site)} to ${at(r.to)} (${r.dug} block${r.dug === 1 ? '' : 's'}); back to work`); return; }
+                    const choice = mob ? (ops.morningChoice ?? morningChoice)(bot, n.site, { pit: false }) : null;
+                    if (choice?.action !== 'fight') {
+                        handBack(`[night] morning: could not leave the shelter at ${at(n.site)} (${r?.why ?? 'no way out'}${choice ? `; no fight: ${choice.why}` : ''}); back to work, still enclosed: dig a way out`);
+                        return;
+                    }
+                    Object.assign(n, { morningAct: 'fight', morningWhy: choice.why, morningLeaving: false, exitTries: 0, exitAt: null });
+                    line(agent, `[night] morning: no dig-out (${r?.why ?? 'no result'}); ${choice.why}: opening the wall toward ${mobText(mob)} to fight it from the shelter`);
+                    startJob(agent, n, 'action:openShelter', () => ops.openToward(bot, n.site, mob.position), (cells) => {
+                        if (cells?.length) { bot.rotnSheltered = 'open'; return; }
+                        handBack(`[night] morning: could not open the wall toward ${mobText(mob)} either; back to work, still enclosed: dig a way out`);
+                    });
+                });
             };
             if (walkedOut) {
                 // #435 review 4: a failed way out that could not walk the bot back is no way out.

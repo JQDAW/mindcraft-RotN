@@ -421,6 +421,8 @@ test('#592 review nit 3: the settle is 300 ms (a lagging server); a change that 
     await mode.update(agent);
     await settled(50);
     assert.ok(logs.includes('[reflex] ate animania:raw_prime_mutton:0 at food 12 (it showed after the eat was judged cut)'), logs.join('\n'));
+    // #592 re-review nit 1: and the journal's line, which the harness's ate_when_low counts.
+    assert.ok(logs.includes('[survival] ate animania:raw_prime_mutton:0 food 12->13'), logs.join('\n'));
     assert.equal(consumes, 1, 'food 13: no second eat');
     assert.equal(mode.cut_wait, false);
 });

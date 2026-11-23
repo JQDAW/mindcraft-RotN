@@ -25,9 +25,15 @@
 //     SCROLL.quiet.
 
 import pf from 'mineflayer-pathfinder';
-import { isPlayerZombie, shelterEnemy } from './library/threats.js';
+import { Vec3 } from 'vec3';
+import { isPlayerZombie, shelterEnemy, shelterTarget, hasWeapon, isWeaponItem, mobInShelterCells } from './library/threats.js';
+import { siteNeeds } from './library/shelter.js';
+import { attackEntity, defendInPlace, equipHighestAttack } from './library/skills.js';
+import { burrowAway } from './library/burrow.js';
+import { nightPhase, isWall } from './library/night.js';
+import { walkableExit, stairOut, quickDig, WALK_EXIT, DIG_OUT } from './library/walk_exit.js';
 import { safeError } from './safe_error.js';
-import { isGiverGoal } from './agenda_driver.js';
+import { isGiverGoal, say } from './agenda_driver.js';
 import { placesToLeave } from './respawn_relocate.js';
 import { waitText } from './library/wait_text.js';
 export { waitText }; // #588 re-review nit 2: one helper (library/wait_text.js)
@@ -48,7 +54,17 @@ export const ESCAPE_RUN = { away: 64, spawnRadius: 10, trigger: 48, afterDeathMs
     checkMs: 250, maxMs: 60_000, walkFood: 6, tries: 3, pitWithinMs: 3 * 60_000, stallMs: 5000, detourMs: 3000, minGain: 2,
     // #583 nit 3: dueFreshMs spans about six of the agent's 300 ms update ticks (agent.js INTERVAL), so a flag
     // refreshed each tick never lapses between them, and one a hold stopped refreshing lapses in 2 s.
-    dueFreshMs: 2000 };
+    dueFreshMs: 2000,
+    // Soak 12 (B(ii), the lead): nightHostile: at night, a respawn with a hostile this near escapes (no death
+    // spot needed); cornerRange/cornerHits: cornered in the run (a melee mob this near and no gain for
+    // stallMs), armed, it hits back this many times, then runs on.
+    nightHostile: 16, cornerRange: 2, cornerHits: 3 };
+/**
+ * Soak 12 (B(ii) step 5, the lead): the loop breaker. `deaths` deaths within `radius` blocks of the same
+ * respawn point within windowMs: no more escape runs from it (15 runs there ended 0 to 2 blocks out); the
+ * next respawn there burrows one step down and seals, else stays and hits back (cornered).
+ */
+export const LOOP = { deaths: 2, radius: 8, windowMs: 5 * 60_000, samePoint: 2 };
 /** The modes the escape pauses while it runs (self_preservation stays on). */
 export const ESCAPE_PAUSES = ['cowardice', 'self_defense', 'unstuck', 'item_collecting', 'hunting', 'eating', 'torch_placing', 'elbow_room'];
 /** The escape's action label. */
@@ -89,14 +105,84 @@ export function escapeReason(agent, now = Date.now()) {
     if (Number.isFinite(bot.health) && bot.health <= 0) return null; // not respawned yet
     const r = agent._escape ??= { forDeath: null, tries: 0, job: null, endedAt: null };
     if (r.forDeath === last.at && (r.done || r.tries >= ESCAPE_RUN.tries)) return null;
-    const places = placesToLeave(agent, now);
+    // #593 review 2 (the lead's decision): at night, a respawn inside an intact closed shell (the scroll's
+    // surface shelter) with no mob in its cells or the roof cell stays: the night routine's shelter rules
+    // hold there (#592's cornered fight included). The escape runs when the shell is open or a mob is in
+    // or over the cells.
+    if (isNight(agent, now) && closedShellHere(bot)) { r.stayedIn = last.at; return null; }
+    let places = placesToLeave(agent, now);
     const spawn = places.find(p => p.what === 'spawn');
     const deaths = places.filter(p => p.what === 'death spot');
     const near = (p) => hdist(p, here) <= ESCAPE_RUN.trigger || (spawn && hdist(p, spawn.pos) <= ESCAPE_RUN.trigger);
     const zombie = Object.values(bot.entities ?? {}).some(e => e && e !== bot.entity && e.position && isPlayerZombie(e) && near(e.position));
-    if (!deaths.some(d => near(d.pos)) && !zombie) return null;
+    // Soak 12 (B(ii) step 1, death 1 at 15:11): the scroll's respawn point was 158 blocks from death 1, so
+    // no death spot was near and no escape ran; the bot stood there 3.5 min until a zombie came. At night,
+    // a hostile within ESCAPE_RUN.nightHostile of a fresh respawn is reason enough, and the respawn point
+    // itself is a place to get away from.
+    const spawnedAt = respawnPoint(agent, last.at);
+    const night = !!spawnedAt && isNight(agent, now) && hostilesNear(bot, ESCAPE_RUN.nightHostile).length > 0;
+    if (!deaths.some(d => near(d.pos)) && !zombie && !night) return null;
+    if (night) places = [...places, { pos: spawnedAt, what: 'respawn point' }];
     if (nearestOf(here, places) >= ESCAPE_RUN.away) return null;
-    return { places, key: last.at };
+    return { places, key: last.at, night };
+}
+
+/** #593 review 2: the bot's 1x2 cell is a closed shell (walls and roof, a body block allowed) with no hostile in its cells or the roof cell. */
+export function closedShellHere(bot) {
+    const p = bot?.entity?.position;
+    if (!p || typeof bot.blockAt !== 'function') return false;
+    const f = new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
+    let need = null;
+    try { need = siteNeeds(bot, f, { accept: isWall, occupied: true, tolerateBody: true }); } catch { need = null; }
+    if (!need || need.todo?.length) return false;
+    return !mobInShelterCells(bot, f);
+}
+
+/** The night clock's time (the night routine's NightClock, else the server's), or null. */
+function isNight(agent, now) {
+    let t = null;
+    try { t = agent._night?.clock?.timeOfDay?.(now) ?? null; } catch { t = null; }
+    if (!Number.isFinite(t)) t = agent.bot?.time?.timeOfDay;
+    return Number.isFinite(t) && nightPhase(t) !== 'day';
+}
+
+/** Soak 12: where the bot stood at its first tick after the death `deathAt` (its respawn point), or null. */
+export function respawnPoint(agent, deathAt) {
+    const s = agent?._escape?.respawns?.find(x => x.death === deathAt);
+    return s?.pos ?? null;
+}
+
+/** Soak 12: note the respawn point once per death, at the first tick the bot is alive after it. */
+function noteRespawn(agent, now) {
+    const bot = agent?.bot;
+    const last = agent?._death?.last;
+    const here = bot?.entity?.position;
+    if (!here || !last || !Number.isFinite(last.at) || (Number.isFinite(bot.health) && bot.health <= 0) || bot.isAlive === false) return;
+    // #593 review 10: not before the respawn's spawn event (agent.js sets rotnSpawnedAt): the first tick
+    // alive could still hold the death spot's position, which loopAt's 2-block test would take for the spawn.
+    if (Number.isFinite(bot.rotnSpawnedAt) && bot.rotnSpawnedAt < last.at) return;
+    const r = agent._escape;
+    r.respawns ??= [];
+    if (r.respawns.some(x => x.death === last.at)) return;
+    r.respawns = [...r.respawns.filter(x => now - x.at < LOOP.windowMs * 2), { death: last.at, at: now, pos: new Vec3(Math.floor(here.x), Math.floor(here.y), Math.floor(here.z)) }].slice(-10);
+}
+
+/**
+ * Soak 12 (B(ii) step 5): the respawn point of the last death when it is the same spawn as before (a
+ * forced spawn: another respawn within LOOP.windowMs within LOOP.samePoint blocks of it; the world spawn
+ * scatters respawns 10 blocks each way, soak 10) and LOOP.deaths or more recent death spots (within
+ * LOOP.windowMs) lie within LOOP.radius of it: {pos, deaths, minutes}; else null.
+ */
+export function loopAt(agent, now = Date.now()) {
+    const last = agent?._death?.last;
+    const pos = last ? respawnPoint(agent, last.at) : null;
+    if (!pos) return null;
+    const same = (agent._escape?.respawns ?? []).filter(x => now - x.at <= LOOP.windowMs && x.pos.distanceTo(pos) <= LOOP.samePoint);
+    if (same.length < 2) return null;
+    const spots = (agent._death?.recentSpots?.(now) ?? []).filter(s => s?.pos && now - s.at <= LOOP.windowMs && hdist(s.pos, pos) <= LOOP.radius);
+    if (spots.length < LOOP.deaths) return null;
+    const first = Math.min(...spots.map(s => s.at));
+    return { pos, deaths: spots.length, minutes: Math.max(1, Math.round((now - first) / 60_000)) };
 }
 
 /**
@@ -157,14 +243,15 @@ const angleDeg = (a, b) => {
  * runs: at ESCAPE_RUN.walkFood or lower, no sprint (#581 review 7). No progress for stallMs: a 90-degree
  * detour for detourMs, the other side next time (#581 nit 8). ops: setGoal(bot, x, z), sleep(ms), now().
  */
-export async function escapeRun(bot, places, { now = () => Date.now(), sleep = (ms) => new Promise(r => setTimeout(r, ms)), setGoal = null } = {}) {
+export async function escapeRun(bot, places, { now = () => Date.now(), sleep = (ms) => new Promise(r => setTimeout(r, ms)), setGoal = null,
+    hitBack = (b, mob) => attackEntity(b, mob, false, { approach: false, rearm: false }), log = (l) => console.log(l) } = {}) {
     const start = now();
     const far = () => nearestOf(bot.entity.position, places);
     const goTo = setGoal ?? ((b, x, z) => b.pathfinder.setGoal(new pf.goals.GoalNearXZ(x, z, 2)));
     const before = bot.pathfinder?.movements ?? null;
     if (!setGoal) bot.pathfinder.setMovements(escapeMovements(bot));
     let aimed = -Infinity, goal = null, dir = null;
-    let best = far(), bestAt = start, detour = 0, detourUntil = -Infinity, side = 90;
+    let best = far(), bestAt = start, detour = 0, detourUntil = -Infinity, side = 90, hits = 0;
     try {
         for (;;) {
             const d = far();
@@ -177,6 +264,22 @@ export async function escapeRun(bot, places, { now = () => Date.now(), sleep = (
                 if (bot.pathfinder?.movements) bot.pathfinder.movements.allowSprinting = false;
             }
             if (d >= best + ESCAPE_RUN.minGain) { best = d; bestAt = t; }
+            // Soak 12 (B(ii) step 4): cornered (no gain for stallMs, a melee mob within cornerRange), armed:
+            // hit back cornerHits times, then run on (15 runs paused self_defense while a zombie 0.2 to 1.6 m
+            // away hit for 5 every 1.3 s). Unarmed: no fight, as before.
+            if (t - bestAt >= ESCAPE_RUN.stallMs && hits < ESCAPE_RUN.cornerHits) {
+                const here = bot.entity.position;
+                const mob = hasWeapon(bot) ? Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position
+                    && shelterTarget(e) && e.position.distanceTo(here) <= ESCAPE_RUN.cornerRange) : null;
+                if (mob) {
+                    if (!hits) log(`[respawn] cornered by a ${mob.name ?? 'hostile mob'} ${mob.position.distanceTo(here).toFixed(1)} blocks away with no way on: hitting back (at most ${ESCAPE_RUN.cornerHits} hits), then running on`);
+                    for (; hits < ESCAPE_RUN.cornerHits && bot.entities?.[mob.id] && !bot.interrupt_code; hits++) {
+                        try { await hitBack(bot, mob); } catch { /* the run goes on */ }
+                    }
+                    bestAt = now(); aimed = -Infinity; goal = null;
+                    continue;
+                }
+            }
             if (t - bestAt >= ESCAPE_RUN.stallMs && t >= detourUntil) {
                 detour = side; side = -side; detourUntil = t + ESCAPE_RUN.detourMs; bestAt = t; aimed = -Infinity;
             }
@@ -246,23 +349,73 @@ const noteWindow = (agent, now) => {
  * acts (#581 review 1: a swim-up or a low-health move away is never cut), else null. A task giver's
  * goal is paused for it and resumed after (#581 review 4). Never throws.
  */
-export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, log = (l) => console.log(l) } = {}) {
+/**
+ * Soak 12 (C, death 2: it fought holding raw mutton, the club in the off hand): right after a respawn
+ * with a hostile within ESCAPE_RUN.nightHostile, a weapon in the off hand goes to the main hand (the
+ * off-hand rule is for placing blocks; nothing is placed now). Returns whether it moved.
+ */
+export async function preArm(bot, { log = (l) => console.log(l) } = {}) {
+    const off = bot?.inventory?.slots?.[45];
+    if (!isWeaponItem(off) || isWeaponItem(bot.heldItem) || !hostilesNear(bot, ESCAPE_RUN.nightHostile).length) return false;
+    let ok = false;
+    try { ok = await equipHighestAttack(bot, {}); } catch { ok = false; }
+    log(`[respawn] ${off.name} from the off hand into the main hand: a hostile within ${ESCAPE_RUN.nightHostile} blocks${ok ? '' : ' (it did not work)'}`);
+    return ok;
+}
+
+/**
+ * Soak 12 (B(ii) step 5): at a respawn point that keeps killing the bot (loopAt), or one it cannot leave
+ * (enclosed, no dig-out): no run. With a melee mob within ESCAPE_RUN.nightHostile, one burrow step
+ * down that seals behind (burrow.js, a step down first); no step: it stays and hits back in place,
+ * cornered (no health limit). Returns {broke: 'quiet'|'burrowed'|'fought', why?}.
+ */
+export async function breakLoop(bot, { burrow = burrowAway, fight = defendInPlace } = {}) {
+    const here = bot.entity.position;
+    const mob = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && shelterTarget(e) && e.position.distanceTo(here) <= ESCAPE_RUN.nightHostile)
+        .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here))[0];
+    if (!mob) return { broke: 'quiet' };
+    let b = null;
+    try { b = await burrow(bot, mob, { maxSteps: 1, prefer: 'down' }); } catch (err) { b = { steps: 0, why: safeError(err) }; }
+    if (b?.steps > 0) return { broke: 'burrowed', site: b.site ?? null };
+    try { await fight(bot, shelterTarget, () => true); } catch { /* best effort */ }
+    return { broke: 'fought', why: b?.why ?? b?.stopped ?? 'no step' };
+}
+
+export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, log = (l) => console.log(l), walkable = walkableExit, dig = stairOut, breaker = breakLoop, arm = preArm } = {}) {
     const r = agent._escape ??= { forDeath: null, tries: 0, job: null, endedAt: null };
     if (r.job) return 'escaping';
+    try { noteRespawn(agent, now); } catch { /* the escape still runs */ }
     let why = null;
     try { why = escapeReason(agent, now); } catch (err) { log(`[respawn] escape check: ${safeError(err)}`); why = null; }
     noteWindow(agent, now);
+    if (!why && r.stayedIn != null && r.stayedSaid !== r.stayedIn) {
+        r.stayedSaid = r.stayedIn;
+        log(`[respawn] respawned at night in a closed shelter at ${at(agent.bot.entity.position)} with nothing in it or over it: staying, no escape (the night routine's shelter rules)`);
+    }
     if (!why) return null;
     const bot = agent.bot;
     if (bot.modes?.isActive?.('self_preservation')) return 'escaping:wait';
-    if (r.forDeath !== why.key) Object.assign(r, { forDeath: why.key, tries: 0, done: false, arrived: false });
-    r.tries++;
+    if (r.forDeath !== why.key) Object.assign(r, { forDeath: why.key, tries: 0, done: false, arrived: false, enclosed: false });
+    let loop = null;
+    try { loop = loopAt(agent, now); } catch { loop = null; }
+    const breaking = !!loop || !!r.enclosed;
     const deaths = why.places.filter(p => p.what === 'death spot').length;
-    const what = [why.places.some(p => p.what === 'spawn') ? 'the spawn' : null, deaths ? `${deaths} recent death spot${deaths === 1 ? '' : 's'}` : null].filter(Boolean).join(' and ');
+    const what = [why.places.some(p => p.what === 'spawn') ? 'the spawn' : null, why.night ? 'the respawn point' : null,
+        deaths ? `${deaths} recent death spot${deaths === 1 ? '' : 's'}` : null].filter(Boolean).join(' and ');
     const sprint = !(Number.isFinite(bot.food) && bot.food <= ESCAPE_RUN.walkFood);
-    const zombies = hostilesNear(bot).filter(isPlayerZombie).length;
-    log(`[respawn] escape (try ${r.tries} of ${ESCAPE_RUN.tries}): ${sprint ? 'sprinting' : `walking (food ${bot.food})`} at least ${ESCAPE_RUN.away} blocks from ${what}`
-        + `${zombies ? `, ${zombies} player zombie${zombies === 1 ? '' : 's'} near` : ''}; no digging, no pickups, no fights`);
+    if (breaking) {
+        // Soak 12 (B(ii) step 5): said once per respawn point (the lead: one line, said once).
+        const sayKey = loop ? `loop:${at(loop.pos)}` : `enclosed:${why.key}`;
+        const text = loop
+            ? `[respawn] the respawn point at ${at(loop.pos)} has killed me ${loop.deaths} times in ${loop.minutes} min: not running from it again; a step down and sealed, else hitting back`
+            : `[respawn] no walkable way out of ${at(bot.entity.position)} and no dig-out: a step down and sealed, else hitting back`;
+        if (r.loopSaid !== sayKey) { r.loopSaid = sayKey; log(text); try { say(agent, text); } catch { /* the log has it */ } } else log(text);
+    } else {
+        r.tries++;
+        const zombies = hostilesNear(bot).filter(isPlayerZombie).length;
+        log(`[respawn] escape (try ${r.tries} of ${ESCAPE_RUN.tries}): ${sprint ? 'sprinting' : `walking (food ${bot.food})`} at least ${ESCAPE_RUN.away} blocks from ${what}`
+            + `${zombies ? `, ${zombies} player zombie${zombies === 1 ? '' : 's'} near` : ''}; no digging unless walled in, no pickups, no fights unless cornered`);
+    }
     const sp = agent.self_prompter;
     let giverPaused = null;
     if (sp?.isActive?.()) {
@@ -286,7 +439,17 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
             // agent is idle in between: paused before, cowardice was live again when the run began.
             for (const m of ESCAPE_PAUSES) { try { modes?.pause?.(m); } catch { /* not every mode exists */ } }
             bot.rotnSprint = sprint;
-            bot.rotnEscaping = true; // unstuck holds off (modes.js)
+            bot.rotnEscaping = true; // unstuck and the low-health flee hold off (modes.js)
+            await arm(bot, { log }); // soak 12 (C)
+            if (breaking) { result = { breaker: await breaker(bot), ms: 0 }; return; }
+            // Soak 12 (B(ii) step 2, the lead's decision 1): a respawn spot with no walkable way out (the
+            // old hole shelter) is dug out of first, bounded (walk_exit.stairOut); none: the loop breaker.
+            const from = bot.entity.position;
+            if (!walkable(bot, from, { reach: WALK_EXIT.reach })) {
+                const out = await dig(bot, from, { hostiles: hostilesNear(bot, ESCAPE_RUN.nightHostile), maxBlocks: DIG_OUT.maxBlocks });
+                if (!out?.to) { result = { arrived: false, ms: 0, stopped: 'enclosed', why: out?.why ?? 'no result' }; return; }
+                log(`[respawn] dug out of the enclosed respawn spot at ${at(from)}: ${out.dug} block${out.dug === 1 ? '' : 's'}, now at ${at(out.to)}`);
+            }
             result = await run(bot, why.places);
         }, { keepReplan: true }))
         .catch(err => { log(`[respawn] the escape failed: ${safeError(err)}`); return null; })
@@ -301,6 +464,18 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
             const here = bot.entity?.position;
             const far = here ? Math.round(nearestOf(here, why.places)) : 0;
             const secs = Math.round((result?.ms ?? 0) / 1000);
+            if (result?.breaker) {
+                r.done = true;
+                const b = result.breaker;
+                log(`[respawn] ${b.broke === 'burrowed' ? `burrowed a step down to ${b.site ? at(b.site) : '?'} and sealed` : b.broke === 'fought' ? `no step down (${b.why}): hit back in place` : 'no melee mob near: staying'}; the night routine goes on from here`);
+                return;
+            }
+            if (result?.stopped === 'enclosed') {
+                r.enclosed = true; // the loop breaker on the next tick; no try used
+                r.tries = Math.max(0, r.tries - 1);
+                log(`[respawn] no walkable way out of ${here ? at(here) : '?'}, and no dig-out (${result.why})`);
+                return;
+            }
             if (result?.arrived) {
                 r.done = true;
                 r.arrived = true;
@@ -332,9 +507,25 @@ export const isSpawnScroll = (item) => !!item && typeof item.name === 'string' &
  * R6: why the scroll is not used here (a reason), or null when it may be: held, at least SCROLL.away
  * from the spawn square and from every death spot the bot knows, no hostile within SCROLL.quiet.
  */
-export function scrollRefusal(agent, site) {
+// Soak 12 (B(i), the lead): rotn-data: the respawn is exactly the scroll's block (x+0.5, y+0.1, z+0.5) when it
+// and the block above are neither solid nor liquid, with no search nearby; so an open hole cell is a valid
+// spawn, the soak 12 trap. The scroll is never used in a hole shelter, below the surface (a burrow), or in
+// a cell with no walkable way out (walk_exit.walkableExit, the shelter's walls counted as removable).
+// A possible later fallback, left out (the lead): if either of the two cells holds a block, the respawn
+// goes to the world spawn (±10) instead, so filling the scroll's cell would end such a trap.
+export function scrollRefusal(agent, site, { pit = false, below = false } = {}) {
     const bot = agent?.bot;
     if (!bot?.inventory?.items?.().some(isSpawnScroll)) return 'no scroll held';
+    if (pit) return 'a hole shelter: no walkable way out of it (a respawn there could not leave without digging)';
+    if (below) return 'below the surface after a burrow: no walkable way out (a respawn there could not leave without digging)';
+    if (site) {
+        const f = new Vec3(Math.floor(site.x), Math.floor(site.y), Math.floor(site.z));
+        // The shelter's walls (feet and head height on each side) come down in the morning: counted free, but
+        // only a block the bot breaks quickly (#593 review 3: walk_exit.quickDig; never natural rock it cannot).
+        const walls = new Set([new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)]
+            .flatMap(d => [f.plus(d), f.plus(d).offset(0, 1, 0)]).filter(p => quickDig(bot, p)).map(p => `${p.x},${p.y},${p.z}`));
+        if (!walkableExit(bot, f, { reach: WALK_EXIT.reach, free: walls })) return `no walkable way out of ${at(f)} to ${WALK_EXIT.reach} blocks (a respawn there could not leave without digging)`;
+    }
     const spots = [...(agent._death?.spots ?? []), ...(agent._death?.last ? [agent._death.last] : [])].filter(s => s?.pos);
     const places = [...placesToLeave(agent).filter(p => p.what === 'spawn'), ...spots.map(s => ({ pos: s.pos, what: 'death spot' }))];
     const near = places.find(p => placeDistance(site, p) < SCROLL.away);

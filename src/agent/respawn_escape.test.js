@@ -132,7 +132,7 @@ test('soak 10 (R1): the tick: one job owns the bot (cowardice, self_defense, uns
     let release;
     const run = (bot, places) => new Promise(res => { release = () => { bot.entity.position = new Vec3(SPAWN.x + 90, 64, SPAWN.z); res({ arrived: true, far: 70, ms: 12_000 }); }; });
     assert.equal(respawnEscapeTick(a, { now, run, log: (l) => logs.push(l) }), 'escaping');
-    assert.match(logs[0], /^\[respawn\] escape \(try 1 of 3\): sprinting at least 64 blocks from the spawn and 6 recent death spots, 6 player zombies near; no digging, no pickups, no fights$/);
+    assert.match(logs[0], /^\[respawn\] escape \(try 1 of 3\): sprinting at least 64 blocks from the spawn and 6 recent death spots, 6 player zombies near; no digging unless walled in, no pickups, no fights unless cornered$/);
     await flush();
     assert.deepEqual(a.actions.runs, ['action:respawnEscape']);
     // #581 re-review 1: paused once the escape action runs (not before runAction).
@@ -600,4 +600,229 @@ test('soak 11 (F1): no answer on both tries, or the scroll not in hand: the reas
     const h = await useSpawnScroll(hand.bot, { waitMs: 50, step: 10 });
     assert.deepEqual(hand.bot.uses, [], 'never right-clicked with the club in hand');
     assert.match(h.why, /^the scroll was not used up \(try 1: the scroll was not in hand \(held spartanweaponry:club_wood\); try 2: the scroll was not in hand/);
+});
+
+// ---- Soak 12 (rotn-v0.1.18): the death loop at the scroll's respawn point (-70, 65, 87) ----
+// Death 1 (15:11) was 158 blocks from the scroll's respawn point: no death spot near, no escape; the bot
+// stood there 3.5 min until a zombie came. Then 15 deaths within 3 blocks of it: the spot was the night-2
+// hole shelter's cell, the escape never digs (0 to 2 blocks out), self_preservation's low-health flee
+// interrupted 8 runs, and each death started a new "try 1 of 3".
+import { LOOP, loopAt, breakLoop, preArm, respawnPoint } from './respawn_escape.js';
+
+const RESPAWN = new Vec3(-70, 65, 87);
+const NIGHT_T = 15000;
+const zmb = (id, p) => ({ id, type: 'mob', name: 'zombie', position: p, height: 1.95 });
+/** The tick with every world-facing step stubbed: the run, the way-out check, the dig-out, the breaker, the pre-arm. */
+const stubs = (over = {}) => {
+    const s = { runs: [], digs: [], breaks: 0, logs: [] };
+    s.opts = { log: (l) => s.logs.push(l), run: (bot, places) => { s.runs.push(places.map(p => p.what)); return Promise.resolve({ arrived: true, ms: 1 }); },
+        walkable: () => new Vec3(0, 0, 0), dig: (bot, from) => { s.digs.push(from); return Promise.resolve({ to: null, dug: 0, why: 'stub' }); },
+        breaker: () => { s.breaks++; return Promise.resolve({ broke: 'fought', why: 'no step' }); }, arm: () => Promise.resolve(false), ...over };
+    return s;
+};
+
+test('soak 12 (B(ii) step 1): at night, a fresh respawn with a hostile within 16 escapes from the respawn point (no death spot near); by day, or with nothing near, not', async () => {
+    const now = 1_000_000;
+    const a = agentAt(RESPAWN.offset(0.5, 0, 0.5), { deaths: [[16, 64, -46]], now, lastAgo: 6_000 });
+    a.bot.time.timeOfDay = NIGHT_T;
+    const s = stubs();
+    assert.equal(respawnEscapeTick(a, { now, ...s.opts }), null, 'nothing near yet');
+    assert.ok(respawnPoint(a, a._death.last.at)?.equals(RESPAWN), 'the respawn point is noted');
+    a.bot.entities[9] = zmb(9, RESPAWN.offset(6, 0, 3));
+    assert.equal(respawnEscapeTick(a, { now: now + 1000, ...s.opts }), 'escaping');
+    await flush(); await flush();
+    assert.deepEqual(s.runs, [['spawn', 'death spot', 'respawn point']]);
+    assert.match(s.logs[0], /^\[respawn\] escape \(try 1 of 3\): sprinting at least 64 blocks from the spawn and the respawn point and 1 recent death spot;/);
+    // By day: the same zombie is no reason (soak 10's rule as before).
+    const day = agentAt(RESPAWN.offset(0.5, 0, 0.5), { deaths: [[16, 64, -46]], now, lastAgo: 6_000, entities: { 9: zmb(9, RESPAWN.offset(6, 0, 3)) } });
+    assert.equal(respawnEscapeTick(day, { now, ...stubs().opts }), null);
+});
+
+test('soak 12 (B(ii) step 2): a respawn spot with no walkable way out is dug out of first (bounded), then the run; no dig-out: the loop breaker, no try used', async () => {
+    const now = 1_000_000;
+    const mk = () => { const a = agentAt(RESPAWN.offset(0.5, 0, 0.5), { deaths: [[16, 64, -46]], now, lastAgo: 6_000, entities: { 9: zmb(9, RESPAWN.offset(2, 2, 0)) } }); a.bot.time.timeOfDay = NIGHT_T; return a; };
+    const ok = mk();
+    const s = stubs({ walkable: () => null, dig: (bot, from, opts) => { s.digs.push(opts); return Promise.resolve({ to: RESPAWN.offset(3, 2, 0), dug: 4 }); } });
+    respawnEscapeTick(ok, { now, ...s.opts });
+    await flush(); await flush();
+    assert.equal(s.digs.length, 1);
+    assert.equal(s.digs[0].maxBlocks, 6);
+    assert.equal(s.digs[0].hostiles.length, 1, 'away from the zombie');
+    assert.ok(s.logs.includes('[respawn] dug out of the enclosed respawn spot at -70, 65, 87: 4 blocks, now at -67, 67, 87'), s.logs.join('\n'));
+    assert.equal(s.runs.length, 1, 'then the run');
+    const shut = mk();
+    const t = stubs({ walkable: () => null });
+    respawnEscapeTick(shut, { now, ...t.opts });
+    await flush(); await flush();
+    assert.equal(t.runs.length, 0);
+    assert.equal(shut._escape.tries, 0, 'no try used');
+    assert.ok(t.logs.some(l => /no walkable way out of .* and no dig-out \(stub\)/.test(l)), t.logs.join('\n'));
+    respawnEscapeTick(shut, { now: now + 500, ...t.opts });
+    await flush(); await flush();
+    assert.equal(t.breaks, 1, 'the loop breaker');
+    assert.equal(shut._escape.done, true);
+    assert.equal(respawnEscapeTick(shut, { now: now + 1000, ...t.opts }), null, 'done for this death');
+});
+
+test('soak 12 (B(ii) step 5): 2 deaths within 8 blocks of the same respawn point within 5 min: no more runs from it; the loop breaker, said once', async () => {
+    assert.deepEqual(LOOP, { deaths: 2, radius: 8, windowMs: 5 * 60_000, samePoint: 2 });
+    const now = 1_000_000;
+    const a = agentAt(RESPAWN.offset(0.5, 0, 0.5), { deaths: [[16, 64, -46]], now, lastAgo: 6_000 });
+    a.bot.time.timeOfDay = NIGHT_T;
+    const s = stubs();
+    const die = (at, p) => { a._death.died({ pos: p, dimension: 'overworld', now: at }); a._death.pending = null; a.bot.entity.position = RESPAWN.offset(0.5, 0, 0.5); };
+    respawnEscapeTick(a, { now, ...s.opts }); // the respawn after death 1: noted, nothing near
+    a.bot.entities[9] = zmb(9, RESPAWN.offset(1, 0, 1));
+    die(now + 200_000, RESPAWN.offset(1, -1, 1)); // death 2 at the respawn point
+    respawnEscapeTick(a, { now: now + 205_000, ...s.opts });
+    await flush(); await flush();
+    assert.equal(s.runs.length, 1, 'one death there: still the run');
+    assert.equal(loopAt(a, now + 205_000), null);
+    die(now + 230_000, RESPAWN.offset(-1, -2, 2)); // death 3, 25 s later
+    respawnEscapeTick(a, { now: now + 235_000, ...s.opts });
+    await flush(); await flush();
+    assert.equal(s.runs.length, 1, 'no run');
+    assert.equal(s.breaks, 1, 'the loop breaker');
+    const said = '[respawn] the respawn point at -70, 65, 87 has killed me 2 times in 1 min: not running from it again; a step down and sealed, else hitting back';
+    assert.ok(s.logs.includes(said), s.logs.join('\n'));
+    // The world spawn scatters respawns (soak 10): two deaths there at different respawn points are no loop.
+    const ring = agentAt(SPAWN.offset(2, 0, 3), { now });
+    respawnEscapeTick(ring, { now, ...stubs().opts });
+    await flush(); await flush(); // its escape run ends
+    // Two deaths within 8 blocks of the second respawn point (one of soak 10's and this one), but the first
+    // respawn was 9 blocks away: not the same spawn.
+    ring._death.died({ pos: SPAWN.offset(-5, 0, 6), dimension: 'overworld', now: now + 20_000 }); ring._death.pending = null;
+    ring.bot.entity.position = SPAWN.offset(-7, 0, 8);
+    respawnEscapeTick(ring, { now: now + 25_000, ...stubs().opts });
+    assert.ok(respawnPoint(ring, ring._death.last.at), 'the second respawn point is noted');
+    assert.equal(loopAt(ring, now + 25_000), null, 'not the same respawn point');
+});
+
+test('soak 12 (B(ii) step 5): the loop breaker burrows a step down; no step: it stays and hits back (cornered, no health limit); nothing near: it stays', async () => {
+    const z = zmb(9, new Vec3(1.5, 64, 0.5));
+    const bot = { entity: { position: new Vec3(0.5, 64, 0.5) }, entities: { 9: z } };
+    let fought = null;
+    const dug = await breakLoop(bot, { burrow: (b, m, o) => Promise.resolve({ steps: 1, site: new Vec3(0, 63, 0), o }), fight: () => { fought = true; } });
+    assert.deepEqual([dug.broke, fought], ['burrowed', null]);
+    const stuck = await breakLoop(bot, { burrow: (b, m, o) => { assert.deepEqual(o, { maxSteps: 1, prefer: 'down' }); return Promise.resolve({ steps: 0, stopped: 'cornered', why: 'down: stone' }); },
+        fight: (b, isEnemy, keep) => { fought = keep(z); } });
+    assert.deepEqual([stuck.broke, stuck.why, fought], ['fought', 'down: stone', true]);
+    assert.deepEqual(await breakLoop({ entity: bot.entity, entities: {} }), { broke: 'quiet' });
+});
+
+test('soak 12 (B(ii) step 4): cornered in the run (no gain for stallMs, a melee mob within 2), armed: 3 hits back, then it runs on; unarmed: no hit', async () => {
+    const run = async (items) => {
+        const a = agentAt(SPAWN.offset(2, 0, 3), { now: 1_000_000, items });
+        a.bot.inventory.slots = [];
+        a.bot.entities[9] = zmb(9, a.bot.entity.position.offset(1, 0, 0));
+        let c = 0; const hits = []; const logs = [];
+        const r = await escapeRun(a.bot, placesToLeave(a, 1_000_000), { now: () => c, sleep: (ms) => { c += ms; return Promise.resolve(); }, setGoal: () => {},
+            hitBack: (b, m) => { hits.push(m.id); return Promise.resolve(true); }, log: (l) => logs.push(l) });
+        return { r, hits, logs };
+    };
+    const armed = await run([{ name: 'stone_sword', metadata: 0, count: 1 }]);
+    assert.deepEqual(armed.hits, [9, 9, 9]);
+    assert.match(armed.logs[0], /^\[respawn\] cornered by a zombie 1\.0 blocks away with no way on: hitting back \(at most 3 hits\), then running on$/);
+    assert.equal(armed.r.stopped, 'time', 'then it ran on to its cap');
+    const bare = await run([]);
+    assert.deepEqual(bare.hits, []);
+});
+
+test('soak 12 (C): right after a respawn with a hostile within 16, the club goes from the off hand to the main hand (death 2 fought holding mutton); nothing near: not', async () => {
+    const club = { name: 'spartanweaponry:club_wood', metadata: 48, count: 1, type: 1 };
+    const mutton = { name: 'animania:raw_prime_mutton', metadata: 0, count: 1, type: 2, slot: 36 };
+    const mk = (entities) => {
+        const slots = new Array(46).fill(null);
+        slots[45] = club; slots[36] = mutton;
+        const bot = { entity: { position: new Vec3(0.5, 64, 0.5) }, entities, heldItem: mutton, quickBarSlot: 0,
+            inventory: { slots, items: () => slots.slice(9, 45).filter(Boolean), firstEmptyInventorySlot: () => slots.findIndex((s, i) => i >= 9 && i < 45 && !s) },
+            moveSlotItem: (from, to) => { slots[to] = { ...slots[from], slot: to }; slots[from] = null; return Promise.resolve(); },
+            equip: (item) => { bot.heldItem = item; return Promise.resolve(); } };
+        return bot;
+    };
+    const logs = [];
+    const near = mk({ 9: zmb(9, new Vec3(5.5, 64, 0.5)) });
+    assert.equal(await preArm(near, { log: (l) => logs.push(l) }), true);
+    assert.equal(near.heldItem.name, 'spartanweaponry:club_wood');
+    assert.deepEqual(logs, ['[respawn] spartanweaponry:club_wood from the off hand into the main hand: a hostile within 16 blocks']);
+    const quiet = mk({});
+    assert.equal(await preArm(quiet, { log: () => {} }), false);
+    assert.equal(quiet.heldItem.name, 'animania:raw_prime_mutton');
+});
+
+test('soak 12 (B(i)): the scroll is never used in a hole shelter, below the surface, or in a cell with no walkable way out; on open ground with its walls, it is', () => {
+    const scroll = { name: 'lifescroll:spawnscroll', metadata: 0, count: 1 };
+    const site = new Vec3(150, 64, -62);
+    const a = agentAt(site, { now: Date.now(), deaths: [], items: [scroll] });
+    const reg = minecraftData('1.12.2');
+    const ground = (extra = {}) => (p) => {
+        const q = p.floored();
+        const v = extra[`${q.x},${q.y},${q.z}`] ?? (q.y < 64 ? 'dirt' : 'air');
+        return { name: v, boundingBox: reg.blocksByName[v]?.boundingBox ?? 'block', position: q };
+    };
+    a.bot.blockAt = ground();
+    assert.equal(scrollRefusal(a, site), null, 'open ground');
+    assert.match(scrollRefusal(a, site, { pit: true }), /^a hole shelter: no walkable way out of it/);
+    assert.match(scrollRefusal(a, site, { below: true }), /^below the surface after a burrow/);
+    // Its walls come down in the morning (counted free when the bot breaks them quickly: dirt by hand);
+    // #593 review 3: natural rock it cannot break quickly (stone, no pickaxe) is no way out.
+    const walls = (name) => { const w = {}; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1]) w[`${150 + dx},${64 + dy},${-62 + dz}`] = name; return w; };
+    a.bot.blockAt = ground(walls('dirt'));
+    assert.equal(scrollRefusal(a, site), null, 'a closed dirt shelter on open ground');
+    a.bot.blockAt = ground(walls('stone'));
+    assert.match(scrollRefusal(a, site), /^no walkable way out of 150, 64, -62/, 'stone walls, no pickaxe');
+    const sunk = {};
+    for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) for (const dy of [0, 1, 2]) if (Math.abs(x) + Math.abs(z) > 0) sunk[`${150 + x},${64 + dy},${-62 + z}`] = 'dirt';
+    a.bot.blockAt = ground(sunk);
+    assert.match(scrollRefusal(a, site), /^no walkable way out of 150, 64, -62 to 8 blocks/);
+});
+
+// #593 review 2 (the lead's decision): at night, a respawn in an intact closed shell (the scroll's surface
+// shelter) with no mob in or over its cells stays (the night routine's shelter rules); the escape runs
+// when the shell is open or a mob is in or over the cells.
+test('#593 review 2: at night a respawn inside an intact closed shell, a zombie outside: no escape (said once); a wall open, or a zombie in the roof cell: the escape', () => {
+    const reg = minecraftData('1.12.2');
+    const now = 1_000_000;
+    const site = RESPAWN;
+    const shell = (open = []) => {
+        const cells = {};
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1]) cells[`${site.x + dx},${site.y + dy},${site.z + dz}`] = 'cobblestone';
+        cells[`${site.x},${site.y + 2},${site.z}`] = 'cobblestone';
+        for (const k of open) delete cells[k];
+        return (p) => { const q = p.floored(); const v = cells[`${q.x},${q.y},${q.z}`] ?? (q.y < site.y ? 'dirt' : 'air'); return { name: v, metadata: 0, boundingBox: reg.blocksByName[v]?.boundingBox ?? 'block', position: q }; };
+    };
+    const mk = (blockAt, mobPos) => {
+        const a = agentAt(site.offset(0.5, 0, 0.5), { deaths: [[16, 64, -46]], now, lastAgo: 6_000, entities: { 9: zmb(9, mobPos) } });
+        Object.assign(a.bot, { blockAt });
+        a.bot.time.timeOfDay = NIGHT_T;
+        return a;
+    };
+    const closed = mk(shell(), site.offset(5.5, 0, 0.5));
+    const s = stubs();
+    assert.equal(respawnEscapeTick(closed, { now, ...s.opts }), null, 'stays');
+    respawnEscapeTick(closed, { now: now + 300, ...s.opts });
+    assert.deepEqual(s.logs, ['[respawn] respawned at night in a closed shelter at -70, 65, 87 with nothing in it or over it: staying, no escape (the night routine\'s shelter rules)']);
+    assert.equal(s.runs.length, 0);
+    const open = mk(shell([`${site.x + 1},${site.y},${site.z}`, `${site.x + 1},${site.y + 1},${site.z}`]), site.offset(5.5, 0, 0.5));
+    const o = stubs();
+    assert.equal(respawnEscapeTick(open, { now, ...o.opts }), 'escaping', 'a wall open');
+    const over = mk(shell(), site.offset(0.5, 2, 0.5));
+    const v = stubs();
+    assert.equal(respawnEscapeTick(over, { now, ...v.opts }), 'escaping', 'a zombie in the roof cell');
+});
+
+// #593 review 10: the first tick alive could still hold the death spot's position; the respawn point is
+// noted only after the respawn's spawn event (agent.js: bot.rotnSpawnedAt).
+test('#593 review 10: the respawn point is noted only after the spawn event that follows the death', async () => {
+    const now = 1_000_000;
+    const a = agentAt(RESPAWN.offset(0.5, 0, 0.5), { deaths: [[16, 64, -46]], now, lastAgo: 6_000 });
+    a.bot.rotnSpawnedAt = now - 60_000; // the spawn before this death
+    a.bot.entity.position = new Vec3(16.5, 64, -45.5); // still the death spot
+    respawnEscapeTick(a, { now, ...stubs().opts });
+    assert.equal(respawnPoint(a, a._death.last.at), null, 'not yet');
+    await flush(); await flush(); // the escape that tick started (at the death spot) ends
+    a.bot.rotnSpawnedAt = now + 100;
+    a.bot.entity.position = RESPAWN.offset(0.5, 0, 0.5);
+    respawnEscapeTick(a, { now: now + 200, ...stubs().opts });
+    assert.ok(respawnPoint(a, a._death.last.at)?.equals(RESPAWN));
 });
