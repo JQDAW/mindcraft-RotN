@@ -118,7 +118,7 @@ The windows come from the journal: the night routine's `sunset is near` and `mor
 - **The Scroll of New Life try** (`driver.log:3271`–`3273`):
   - 21:31:58: `setting the respawn point here at -168, 68, -85 with the Scroll of New Life (once): far from the spawn and every death spot, no hostile near`.
   - 21:32:00: `the Scroll of New Life was not used (the scroll was not used up (no answer from the server))`.
-  - The spot is 130 blocks (horizontal) from the night-1 shelter that the bot logged as 0 blocks from the spawn, and 131 from death 1. The server log has no `lifescroll` or `SoNL` line after its start-up lines; the only server line about it is the bot's own chat at 21:32:00 (`server.log:775`). The scroll stayed in the inventory through the deaths (`held: lifescroll:spawnscroll` at 21:49:13).
+  - The spot is 130 blocks (horizontal) from the night-1 shelter that the bot logged as 0 blocks from the spawn, and 131 from death 1. The server log has no `lifescroll` or `SoNL` line after its start-up lines; the only server lines about it are the bot's own chat at 21:31:58 and 21:32:00 (`server.log:774`–`775`). The scroll stayed in the inventory through the deaths (`held: lifescroll:spawnscroll` at 21:49:13).
 - **Death 2** (`driver.log:3285`–`3324`, `server.log:787`):
   - 21:38:34: `zombie is digging the shelter at -168, 69, -86`; `no weapon, health 20, and a zombie in reach at -169, 68, -86, and no way to back away: the opening is free and 49 blocks held: repairing first`; `the shelter is open at -168, 69, -86: repairing`.
   - 21:38:35 and 21:38:40: `hurt 6` twice `(by zombie)`; `[survival] weapon dirt (cell)` (21:38:39).
@@ -198,6 +198,7 @@ The windows come from the journal: the night routine's `sunset is near` and `mor
 | Time | Food | What happened |
 | --- | --- | --- |
 | 20:37–20:58 | 20 | day 1 |
+| 20:59:04–21:02:04 | 19 | night 1 |
 | 21:03–21:04 | 18 | night 1 |
 | 21:04:30–21:17:30 | 12 | after death 1, no food held |
 | 21:18:30–21:22:30 | 11 → 9 | day 2 |
