@@ -43,7 +43,10 @@ import { placesToLeave } from './respawn_relocate.js';
  * stallMs turns the aim 90 degrees for detourMs (#581 nit 8: water, a cliff, a wall).
  */
 export const ESCAPE_RUN = { away: 64, spawnRadius: 10, trigger: 48, afterDeathMs: 3 * 60_000, hostileRange: 32, aimMs: 1000, turnDeg: 30, ahead: 16,
-    checkMs: 250, maxMs: 60_000, walkFood: 6, tries: 3, pitWithinMs: 3 * 60_000, stallMs: 5000, detourMs: 3000, minGain: 2, dueFreshMs: 2000 };
+    checkMs: 250, maxMs: 60_000, walkFood: 6, tries: 3, pitWithinMs: 3 * 60_000, stallMs: 5000, detourMs: 3000, minGain: 2,
+    // #583 nit 3: dueFreshMs spans about six of the agent's 300 ms update ticks (agent.js INTERVAL), so a flag
+    // refreshed each tick never lapses between them, and one a hold stopped refreshing lapses in 2 s.
+    dueFreshMs: 2000 };
 /** The modes the escape pauses while it runs (self_preservation stays on). */
 export const ESCAPE_PAUSES = ['cowardice', 'self_defense', 'unstuck', 'item_collecting', 'hunting', 'eating', 'torch_placing', 'elbow_room'];
 /** The escape's action label. */
@@ -231,6 +234,7 @@ export function escapeWindow(agent, now = Date.now()) {
 const noteWindow = (agent, now) => {
     if (!agent?._escape) return;
     agent._escape.due = escapeWindow(agent, now);
+    // #583 nit 2: the window by the tick's (injectable) now; dueUntil by the wall clock runAsAction reads.
     agent._escape.dueUntil = agent._escape.due ? Date.now() + ESCAPE_RUN.dueFreshMs : 0;
 };
 

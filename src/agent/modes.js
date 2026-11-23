@@ -739,6 +739,7 @@ const modes_list = [
                 say(agent, `Hunting ${target.name} for food!`);
                 // #422 review 1: bounded (HUNT.maxMs), and over once the day is (dusk) or a threat comes.
                 const end = await huntAnimal(bot, target, { keepGoing: keepHunting, equip: (b) => skills.equipHighestAttack(b) });
+                try { await skills.rearmWeapon(bot); } catch { /* soak 11 (A3): the weapon back in the off hand */ }
                 // Soak 2: an animal the hunt could not get (stuck, time, or stopped by the unstuck
                 // reflex: #431 review 7, not by a fight) is left alone a while.
                 const byUnstuck = end === 'interrupted' && agent.rotnLastInterrupt?.by === 'unstuck' && agent.rotnLastInterrupt?.of === `mode:${this.name}`;

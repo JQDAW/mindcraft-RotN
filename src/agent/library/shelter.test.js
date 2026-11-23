@@ -1592,3 +1592,60 @@ test('soak 11 (B5): the block did not stay and the held stack did not shrink: th
     const r2 = await buildShelter(g.bot, { site: new Vec3(0, 64, 0), keepSoft: true });
     assert.match(r2.line, /held dirt in slot 36: 2 before, 2 after \(the slot was resynced between the tries\)/);
 });
+
+// Soak 11 (A1): the caller's abort stops a repair between cells (and between a cell's placements).
+test('soak 11 (A1): buildShelter with an abort stops before the next cell and says why', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, placed } = fakeBot({ cobble: 10, set: shellAt({ '1,64,0': 'air', '1,65,0': 'air', '-1,64,0': 'air' }) });
+    let calls = 0;
+    const abort = () => (++calls > 1 ? 'hit by a zombie' : null);
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true, abort });
+    assert.equal(r.aborted, 'hit by a zombie');
+    assert.equal(r.closed, false);
+    assert.ok(placed.length <= 1, `stopped early: ${placed.join(' ')}`);
+    // No abort: the same repair closes.
+    const ok = fakeBot({ cobble: 10, set: shellAt({ '1,64,0': 'air', '1,65,0': 'air', '-1,64,0': 'air' }) });
+    const r2 = await buildShelter(ok.bot, { site: new Vec3(0, 64, 0), keepSoft: true, abort: () => null });
+    assert.equal(r2.closed, true, ok.bot.output);
+    assert.equal(r2.aborted, undefined);
+});
+
+// Soak 11 (A4): 21:04 the zombie dug the hole's shaft from above: standing over the open cell, it held it.
+test('soak 11 (A4): a mob standing on or just over an open cell, in its column, holds it; one beside the column does not', () => {
+    const site = new Vec3(0, 61, 0);
+    const at = (x, y, z) => { const { bot } = holeShelter(); bot.entities[7].position = new Vec3(x, y, z); return bot; };
+    const shaft = [new Vec3(0, 63, 0)]; // the roof cell of the hole, open
+    assert.deepEqual(heldCells(at(0.5, 64, 0.5), site, shaft).map(h => key(h.cell)), ['0,63,0'], 'standing on it');
+    assert.deepEqual(heldCells(at(0.5, 65.2, 0.5), site, shaft).map(h => key(h.cell)), ['0,63,0'], 'just over it (falling, or on a block above)');
+    assert.deepEqual(heldCells(at(0.5, 66, 0.5), site, shaft), [], 'two blocks up: not yet');
+    assert.deepEqual(heldCells(at(1.5, 64, 0.5), site, shaft), [], 'beside the column');
+});
+
+// Soak 11 death 4 (21:57:06, G): the zombie dug the pocket's roof and dropped into the bot's own cell;
+// the repair "closed the shelter at -117, 64, -29" with it inside, and the bot died sealed in with it.
+test('soak 11 (G1): a shelter with a hostile body in the bot\'s two cells is never counted closed', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, placed } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+    bot.entities = { 1: bot.entity, 7: { name: 'zombie', type: 'mob', position: new Vec3(0.8, 64, 0.2), height: 1.95 } };
+    const r = await buildShelter(bot);
+    assert.deepEqual(placed, ['1,64,0'], 'the wall is still placed');
+    assert.equal(r.closed, false, r.line);
+    assert.equal(r.inside?.name, 'zombie');
+    assert.match(r.line, /^Shelter at 0, 64, 0 is not closed: zombie is inside it, at 0, 64, 0; placed 1\.$/);
+    // A passive animal in the cell does not stop it closing (shelterEnemy).
+    const p = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+    p.bot.entities = { 1: p.bot.entity, 8: { name: 'chicken', type: 'mob', position: new Vec3(0.8, 64, 0.2), height: 0.7 } };
+    assert.equal((await buildShelter(p.bot)).closed, true);
+});
+
+// #584 nit 8: a stop fillCell saw between its tries ended that cell only; the loop went on (its own check
+// clear again) and could close the shelter while the result still said "aborted".
+test('#584 nit 8: a stop seen inside a cell ends the build there; no later cell is placed', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, placed } = fakeBot({ cobble: 10, set: shellAt({ '1,64,0': 'air', '1,65,0': 'air', '-1,64,0': 'air' }) });
+    let calls = 0;
+    const abort = () => (++calls === 2 ? 'hit by a zombie' : null); // only fillCell's check sees it
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true, abort });
+    assert.equal(r.aborted, 'hit by a zombie');
+    assert.deepEqual(placed, [], `no later cell: ${placed.join(' ')}`);
+});
