@@ -3405,6 +3405,35 @@ test('#580 re-review nit 1: the same zombie breaches again after the repair clos
     assert.deepEqual(burrows, [], 'repaired first again, no burrow');
 });
 
+// Soak 11 night 1 (B3): the routine chose the same site (the bot's own hole) for 3 tries, the hole and
+// 4 quiet retries; a cell whose block did not stay is now remembered for the night.
+test('soak 11 (B3): a cell whose block did not stay is remembered: the next build avoids it, and a failed hole is not dug there again', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    const ROOF = SITE.offset(0, 2, 0);
+    const builds = [];
+    o.buildShelter = (bot, opts = {}) => {
+        builds.push(opts);
+        if (opts.site) return Promise.resolve({ closed: false, feet: opts.site, placed: 0, line: 'roof did not stay', stuck: [opts.site.offset(0, 2, 0)] });
+        return Promise.resolve({ closed: false, feet: SITE, placed: 0, line: 'Shelter at 0, 64, 0 is not closed', stuck: [ROOF] });
+    };
+    const HOLE = new Vec3(5, 61, 0), P = new Vec3(5, 64, 0);
+    o.digPit = (bot, { progress }) => { progress.P = P; return Promise.resolve(HOLE); };
+    let now = 0;
+    const run = async () => { now += RETRY_MS + 1; nightTick(agent, { now, ops: o }); await settle(agent); };
+    await run(); // try 1: the roof cell does not stay
+    assert.ok(nightState(agent).badCells.has('0,66,0'));
+    assert.ok(agent.chat.includes('[night] the block at 0, 66, 0 does not stay: that site is left for the night; another next'), agent.chat.join('\n'));
+    await run(); // the hole: its roof does not stay either
+    assert.ok(nightState(agent).pitProgress.bad.has('5, 64, 0'), 'the hole is not dug there again');
+    assert.ok(agent.chat.includes('[night] the block at 5, 63, 0 does not stay: that hole is left for the night; another next'), agent.chat.join('\n'));
+    await run(); await run(); // try 2 (after its wait): told to avoid both cells
+    const last = builds.filter(b => !b.site).at(-1);
+    assert.equal(builds.filter(b => !b.site).length, 2);
+    assert.ok(last.avoid?.has('0,66,0') && last.avoid.has('5,63,0'), JSON.stringify(builds) + ' | ' + agent.chat.join(' | '));
+});
+
 // Soak 11 (rotn-v0.1.17, 21:04, A1, A2, A3, the lead): a zombie dug the hole shelter's shaft from above;
 // the repair started, went on under it for 9 s while it hit the armed bot (the club in the inventory,
 // dirt in the hand), and the bot died holding dirt, so the club dropped.
@@ -3639,4 +3668,28 @@ test('#584 review 2: the fight first only for a mob the fight in place reaches, 
     await breachAt(over);
     assert.deepEqual(over.o.repairs, []);
     assert.ok(over.agent.chat.some(l => /fighting it from the shelter first/.test(l)), over.agent.chat.join('\n'));
+});
+
+// #586 review 1: the failed hole's P went into pitProgress.bad, but pitProgress.P stayed set, and digPit
+// resumes the hole while P is set (pit.js): the quiet retry dug and roofed the same hole again.
+test('#586 review 1: a hole whose roof did not stay is not resumed on the next try; the next hole is dug elsewhere', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    o.buildShelter = (bot, opts = {}) => Promise.resolve(opts.site
+        ? { closed: false, feet: opts.site, placed: 0, line: 'roof did not stay', stuck: [opts.site.offset(0, 2, 0)] }
+        : { closed: false, feet: SITE, placed: 0, line: 'Shelter at 0, 64, 0 is not closed' });
+    const P1 = new Vec3(5, 64, 0), P2 = new Vec3(9, 64, 0);
+    const dug = [];
+    // As the real digPit: it resumes while progress.P is set, and never digs a P in progress.bad.
+    o.digPit = (bot, { progress }) => {
+        const P = progress.P ?? (progress.bad?.has('5, 64, 0') ? P2 : P1);
+        progress.P = P;
+        dug.push(`${P.x}, ${P.y}, ${P.z}`);
+        return Promise.resolve(P.offset(0, -3, 0));
+    };
+    let now = 0;
+    for (let k = 0; k < 14 && dug.length < 2; k++) { now += RETRY_MS + 1; nightTick(agent, { now, ops: o }); await settle(agent); }
+    assert.deepEqual(dug, ['5, 64, 0', '9, 64, 0'], agent.chat.join('\n'));
+    assert.deepEqual([...nightState(agent).pitProgress.bad], ['5, 64, 0', '9, 64, 0'], 'both left for the night');
 });
