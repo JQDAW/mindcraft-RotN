@@ -193,7 +193,7 @@ test('soak 10 (R6): useSpawnScroll right-clicks it once, by skill (the guard let
     const bot = { heldItem: club, inventory: { items: () => items.filter(i => i.count > 0) },
         equip: (i) => { bot.heldItem = i; return Promise.resolve(); },
         activateItem: () => { seen.push(bot.rotnScrollBySkill); if (bot.heldItem === scroll) scroll.count--; } };
-    assert.deepEqual(await useSpawnScroll(bot, { waitMs: 300 }), { used: true });
+    assert.deepEqual(await useSpawnScroll(bot, { waitMs: 300 }), { used: true, by: 'the stack shrank', tries: 1 });
     assert.deepEqual(seen, [true]);
     assert.equal(bot.rotnScrollBySkill, false);
     assert.equal(bot.heldItem, club, 'the club back in hand');
@@ -507,4 +507,97 @@ test('#581 follow-up 3: in the gap between tries, before the next tick, a comman
     a.actions.runAction = () => { ran++; return Promise.resolve({ message: 'ran', interrupted: false }); };
     assert.match(await getCommand('!moveAway').perform(a, 10), /^Not now: the respawn escape is running/);
     assert.equal(ran, 0);
+});
+
+// Soak 11 (F1): 21:31:58 the scroll was used in the same second as an eat; the server log has no
+// lifescroll line (the use never reached it), and the skill said only "no answer from the server".
+const scrollBot = ({ answer = 'shrink', onTry = 1, eating = false, chatLine = 'Your spawnpoint is now 55, 76, -27!', position = 'system', scrolls = 1 } = {}) => {
+    const scroll = { name: 'lifescroll:spawnscroll', count: scrolls, slot: 37 };
+    const club = { name: 'spartanweaponry:club_wood', count: 1, slot: 36 };
+    const items = [scroll, club];
+    const listeners = new Set();
+    const bot = { heldItem: club, usingHeldItem: eating, uses: [], inventory: { items: () => items.filter(i => i.count > 0) },
+        equip: (i) => { bot.heldItem = i; return Promise.resolve(); },
+        on: (ev, f) => { if (ev === 'messagestr') listeners.add(f); },
+        removeListener: (ev, f) => listeners.delete(f),
+        say: (line, pos) => listeners.forEach(f => f(line, pos)),
+        activateItem: () => {
+            bot.uses.push({ eating: bot.usingHeldItem, held: bot.heldItem?.name });
+            if (bot.uses.length < onTry) return;
+            if (answer === 'shrink') scroll.count--;
+            else if (answer === 'chat') setTimeout(() => bot.say(chatLine, position), 5);
+            else if (answer === 'both') { bot.say(chatLine, position); scroll.count--; }
+        } };
+    return { bot, scroll, club, listeners };
+};
+
+test('soak 11 (F1): the scroll waits until an eat is over (and 1 s after it), then is used; seen by the shrink; still eating after the wait: not used', async () => {
+    const { bot } = scrollBot({ eating: true });
+    setTimeout(() => { bot.usingHeldItem = false; bot.rotnAteAt = Date.now(); }, 60);
+    const r = await useSpawnScroll(bot, { waitMs: 300, afterEatMs: 100, settleMs: 2000, step: 10 });
+    assert.deepEqual(r, { used: true, by: 'the stack shrank', tries: 1 });
+    assert.deepEqual(bot.uses, [{ eating: false, held: 'lifescroll:spawnscroll' }], 'never used while eating');
+    // #587 nit 2: still eating when settleMs is up: not used now (the next shelter tries again).
+    const busy = scrollBot({ eating: true });
+    assert.deepEqual(await useSpawnScroll(busy.bot, { waitMs: 50, settleMs: 40, step: 10 }), { used: false, why: 'still eating after 0 s' });
+    assert.deepEqual(busy.bot.uses, []);
+});
+
+// #587 review 1: "<griefer> your spawnpoint is now 0, 0, 0" counted as the scroll's use, with the scroll still held.
+test('#587 review 1: only a shrinking stack counts; a player\'s chat, a whisper, or the server\'s own line alone never does (the server\'s line is a hint in the journal)', async () => {
+    const player = scrollBot({ answer: 'chat', chatLine: '<griefer> your spawnpoint is now 0, 0, 0', position: 'chat' });
+    const p = await useSpawnScroll(player.bot, { waitMs: 50, step: 10 });
+    assert.equal(p.used, false);
+    assert.equal(player.scroll.count, 1);
+    const whisper = scrollBot({ answer: 'chat', chatLine: 'griefer whispers to you: Your spawnpoint is now 0, 0, 0!', position: 'system' });
+    assert.equal((await useSpawnScroll(whisper.bot, { waitMs: 50, step: 10 })).used, false);
+    // The server's exact line, but no shrink: not used; the journal says the server answered, and no retry.
+    const sys = scrollBot({ answer: 'chat' });
+    const r = await useSpawnScroll(sys.bot, { waitMs: 50, step: 10 });
+    assert.equal(r.used, false);
+    assert.match(r.why, /^the scroll was not used up \(try 1: the stack did not shrink in 0 s \(held lifescroll:spawnscroll in slot 37\); no try 2: the server answered try 1; the server said "Your spawnpoint is now 55, 76, -27!"; other chat seen: none\)$/);
+    assert.equal(sys.bot.uses.length, 1);
+    // A shrink with the server's line: used, and both said.
+    const both = scrollBot({ answer: 'both' });
+    assert.deepEqual(await useSpawnScroll(both.bot, { waitMs: 50, step: 10 }), { used: true, by: 'the stack shrank and the server said so', tries: 1 });
+    assert.equal(both.listeners.size, 0, 'the listener is removed');
+});
+
+test('soak 11 (F1): a first try with no answer gets one retry (one scroll held; never with two); a throw or a stop ends that try', async () => {
+    const retry = scrollBot({ onTry: 2 });
+    assert.deepEqual(await useSpawnScroll(retry.bot, { waitMs: 50, step: 10 }), { used: true, by: 'the stack shrank', tries: 2 });
+    assert.equal(retry.bot.uses.length, 2);
+    assert.equal(retry.bot.heldItem, retry.club, 'the club back in hand');
+    // #587 nit 5: two scrolls held: no retry (a late answer to try 1 would spend a second one).
+    const two = scrollBot({ onTry: 2, scrolls: 2 });
+    const t2 = await useSpawnScroll(two.bot, { waitMs: 50, step: 10 });
+    assert.equal(t2.used, false);
+    assert.equal(two.bot.uses.length, 1);
+    assert.match(t2.why, /no try 2: 2 scrolls held \(a late answer could spend two\)/);
+    // #587 nit 3: an equip that throws ends try 1 only.
+    const thrown = scrollBot({ onTry: 1 });
+    let equips = 0;
+    const equip = thrown.bot.equip;
+    thrown.bot.equip = (i, w) => (++equips === 1 ? Promise.reject(new Error('window click refused')) : equip(i, w));
+    assert.deepEqual(await useSpawnScroll(thrown.bot, { waitMs: 50, step: 10 }), { used: true, by: 'the stack shrank', tries: 2 });
+    // #587 nit 4: a stop during the wait ends it.
+    const stop = scrollBot({ onTry: 9 });
+    setTimeout(() => { stop.bot.interrupt_code = true; }, 20);
+    const started = Date.now();
+    const s = await useSpawnScroll(stop.bot, { waitMs: 5000, step: 10 });
+    assert.ok(Date.now() - started < 1000, 'not the whole 5 s');
+    assert.match(s.why, /try 1: stopped/);
+});
+
+test('soak 11 (F1): no answer on both tries, or the scroll not in hand: the reason says which, with the chat seen', async () => {
+    const none = scrollBot({ onTry: 9 });
+    none.bot.on = (ev, f) => { if (ev === 'messagestr') setTimeout(() => f('[Server] hello', 'chat'), 5); };
+    const r = await useSpawnScroll(none.bot, { waitMs: 50, step: 10 });
+    assert.equal(r.used, false);
+    assert.equal(r.why, 'the scroll was not used up (try 1: the stack did not shrink in 0 s (held lifescroll:spawnscroll in slot 37); try 2: the stack did not shrink in 0 s (held lifescroll:spawnscroll in slot 37); other chat seen: "[Server] hello")');
+    const hand = scrollBot();
+    hand.bot.equip = () => Promise.resolve(); // the equip does not take
+    const h = await useSpawnScroll(hand.bot, { waitMs: 50, step: 10 });
+    assert.deepEqual(hand.bot.uses, [], 'never right-clicked with the club in hand');
+    assert.match(h.why, /^the scroll was not used up \(try 1: the scroll was not in hand \(held spartanweaponry:club_wood\); try 2: the scroll was not in hand/);
 });

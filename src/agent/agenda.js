@@ -269,7 +269,8 @@ export const WEAPON_RESERVE_STEP = {
     // ctx.foodDue (Fix H): the food reserve is due now; the weapon then comes first by day too.
     // Soak 10 (W2): with no weapon and the logs for a club held, at any time (the club right after the logs step).
     due: (s, ctx = {}) => beforeNight(s) || (!!ctx.foodDue && !foodFirst(s)) || clubLogs(s),
-    whenNow: (s) => (beforeNight(s) ? 'before night' : clubLogs(s) ? 'no weapon, logs held' : 'no weapon, before food'),
+    // Soak 11 (E1): the logs held come first, before night too: a new window, so a fresh budget (weaponWanted).
+    whenNow: (s) => (clubLogs(s) ? 'no weapon, logs held' : beforeNight(s) ? 'before night' : 'no weapon, before food'),
     // Soak 10 (W1): a weapon with a kill's worth of hits left (threats.WEAPON.killHits); a crude axe never counts.
     done: (s) => (typeof s.weaponReady === 'function' ? s.weaponReady() !== false : s.hasWeapon?.() !== false),
     // Soak 10 (W2): with the logs held, the driver crafts the club itself (no model call; agenda_driver autoCraftTick).
@@ -407,6 +408,10 @@ export class Agenda {
         // agenda.json (weaponOff is not: a restart rebuilds it from the saved spent budget), so a
         // budget spent by day still gets its fresh dusk budget after a restart.
         this.weaponWindow = null;
+        // Soak 11 (E2): when its budget ran out (a death after it gives a fresh one). #587 nit 8: saved in
+        // agenda.json, and kept when a restart rebuilds weaponOff from the spent budget.
+        this.weaponOffAt = null;
+        this.weaponDusk = null; // #587 nit 7: whether it was last judged before night
         this.finished = false; // "agenda done": only the reserve runs
         this.active = false;
         this.done_at = {}; // step id -> when it was first seen done
@@ -441,6 +446,7 @@ export class Agenda {
             this.finished = data.finished === true;
             this.standing = data.standing && typeof data.standing.key === 'string' ? data.standing : null;
             this.weaponWindow = typeof data.weaponWindow === 'string' ? data.weaponWindow : null;
+            this.weaponOffAt = Number.isFinite(data.weaponOffAt) ? data.weaponOffAt : null;
             this.existed = true;
             this.loadState = 'present';
         } catch (err) {
@@ -456,7 +462,7 @@ export class Agenda {
         try {
             mkdirSync(path.dirname(this.file), { recursive: true });
             const tmp = `${this.file}.tmp`;
-            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, standing: this.standing, weaponWindow: this.weaponWindow, updated_at: this.now() }, null, 2));
+            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, standing: this.standing, weaponWindow: this.weaponWindow, weaponOffAt: this.weaponOffAt, updated_at: this.now() }, null, 2));
             renameSync(tmp, this.file);
             this.existed = true; // a later spawn (a respawn) must not autostart it either
         } catch (err) {
@@ -526,7 +532,7 @@ export class Agenda {
     /** A reserve's budget is spent: the shelter reserve and the weapon until the night is past; food for FOOD_RETRY_MS. */
     reserveStuck(id) {
         if (id === this.food?.id) this.foodOffUntil = this.now() + FOOD_RETRY_MS;
-        else if (id === this.weapon?.id) this.weaponOff = true;
+        else if (id === this.weapon?.id) { this.weaponOff = true; if (this.weaponOffAt === null) { this.weaponOffAt = this.now(); this.save(); } }
         else this.reserveOff = true;
     }
 
@@ -541,7 +547,7 @@ export class Agenda {
         try { due = !!r.due(state, { foodDue }); } catch { due = false; }
         if (!due) {
             if (!readOnly) {
-                this.weaponOff = false; delete this.spent[r.id]; // #468 review 5: a query changes no budget
+                this.weaponOff = false; this.weaponOffAt = null; delete this.spent[r.id]; // #468 review 5: a query changes no budget
                 if (this.weaponWindow !== null) { this.weaponWindow = null; this.save(); }
             }
             return null;
@@ -551,8 +557,24 @@ export class Agenda {
         let window = null;
         try { window = r.whenNow?.(state) ?? null; } catch { window = null; }
         if (!readOnly && window) {
-            if (this.weaponWindow && this.weaponWindow !== window && window === 'before night') { this.weaponOff = false; delete this.spent[r.id]; }
+            // Soak 11 (E1): the logs for a club now held (a new window) gives a fresh budget too, before night as
+            // by day: 21:25 the bot held 33 logs and no weapon, its budget spent on the search for logs, and the
+            // reserve stayed off until the night (the driver's auto-craft never ran).
+            const fresh = () => { this.weaponOff = false; this.weaponOffAt = null; delete this.spent[r.id]; };
+            if (this.weaponWindow && this.weaponWindow !== window && (window === 'before night' || window === 'no weapon, logs held')) fresh();
+            // #587 nit 7: with the logs held all day the window stays 'no weapon, logs held' into the dusk;
+            // the dusk still gives a fresh budget (the soak 3 dusk weapon, #470).
+            let dusk = false;
+            try { dusk = beforeNight(state); } catch { dusk = false; }
+            if (dusk && this.weaponDusk === false) fresh();
+            this.weaponDusk = dusk;
             if (this.weaponWindow !== window) { this.weaponWindow = window; this.save(); } // #502 nit 4: kept across a restart
+        }
+        // Soak 11 (E2): a death after the budget was spent (a lost weapon) gives a fresh budget.
+        if (this.weaponOff && !readOnly) {
+            let since = Infinity;
+            try { since = state.sinceDeathMs?.() ?? Infinity; } catch { since = Infinity; }
+            if (Number.isFinite(since) && this.now() - since > (this.weaponOffAt ?? Infinity)) { this.weaponOff = false; this.weaponOffAt = null; delete this.spent[r.id]; }
         }
         if (this.weaponOff) return null;
         let done = false;

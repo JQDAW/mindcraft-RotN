@@ -559,6 +559,9 @@ export async function fillCell(bot, target, interior, mode, reasons = null) {
         // Soak 11 (B2): never into the bot's own box (the server refuses it): wait for it to settle out
         // of the cell (SETTLE.maxMs), else say so and leave the cell.
         for (let waited = 0; botBoxIn(bot, target) && waited < SETTLE.maxMs && !bot.interrupt_code; waited += 100) await sleep(100); // #586 nit 5
+        // #586 re-review nit 1: a stop ends the wait but does not mark the cell stuck (a stuck cell rules
+        // the site out for the night).
+        if (bot.interrupt_code) { if (reasons) reasons.stopped = true; why('stopped'); return false; }
         if (botBoxIn(bot, target)) {
             if (reasons) (reasons.stuck ??= new Set()).add(key(target));
             why(`the bot's own body is in it (at ${exactAt(bot)}${isLiquid(bot.blockAt(bot.entity.position.floored())) ? ', in water' : ''})`);
@@ -882,7 +885,6 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     log(bot, line);
     // Soak 11 (B3): the cells whose block did not stay (or held the bot's own body), for the caller to remember.
     const stuck = closed ? [] : [...(reasons.stuck ?? [])].map(k => { const [x, y, z] = k.split(',').map(Number); return new Vec3(x, y, z); });
-    if (stuck.length) Object.assign(searched, { stuck });
     if (reasons.aborted) return { closed, feet, placed, missing, soft, line, aborted: reasons.aborted, ...(stuck.length ? { stuck } : {}) };
     // Round 9 B (fix d): dirt walls can be dug by any zombie; keep dirt ready, so a repair only places.
     if (closed && soft > 0) {

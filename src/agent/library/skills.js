@@ -63,14 +63,19 @@ export async function rearmWeapon(bot) {
     const items = bot?.inventory?.items?.() ?? [];
     const best = items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0] ?? null;
     const off = bot?.inventory?.slots?.[45] ?? null;
-    if (WEAPON_HAND.offHand && (!off || isWeaponItem(off))) {
+    // #584 re-review (a): a full-inventory fight swaps the club into a hotbar slot and that slot's item
+    // (dirt, say) into the off hand; equipping the weapon to the off hand swaps them back. Only a
+    // shield there is kept (then the weapon goes to the main hand).
+    const shield = !!off && !isWeaponItem(off) && /shield/.test(off.name ?? '');
+    if (WEAPON_HAND.offHand && !shield) {
+        const offWeapon = !!off && isWeaponItem(off);
         // #584 nit 5: a better weapon in the inventory takes the off hand's place.
-        if (off && !(best && weaponOrder(attackPath(bot))(best, off) < 0)) return true;
-        if (!best || typeof bot.equip !== 'function') return !!off;
+        if (offWeapon && !(best && weaponOrder(attackPath(bot))(best, off) < 0)) return true;
+        if (!best || typeof bot.equip !== 'function') return offWeapon;
         await bot.equip(best, 'off-hand');
         return true;
     }
-    // The main hand (or the off hand holds something else, a shield or a torch, which stays).
+    // The main hand (with the flag off, or a shield in the off hand, which stays).
     if (bot?.heldItem && isWeaponItem(bot.heldItem)) return true;
     if (!best || typeof bot.equip !== 'function') return false;
     await bot.equip(best, 'hand');
@@ -91,8 +96,8 @@ export async function equipHighestAttack(bot, fight = {}) {
         const full = (bot.inventory.firstEmptyInventorySlot?.() ?? null) === null;
         if (full) {
             // #584 review 3: with no free slot stowCarried cannot move it, and the bot fist-fought while
-            // counted armed (hasWeapon counts the off hand). bot.equip swaps it into the main hand (the
-            // held item goes to the off hand); rearmWeapon puts things back after the fight.
+            // counted armed (hasWeapon counts the off hand). bot.equip moves it into a hotbar slot and that
+            // slot's item into the off hand (a swap); rearmWeapon swaps them back after the fight.
             if (fight.equipFailed) return false;
             try {
                 await bot.equip(off, 'hand');
