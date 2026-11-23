@@ -932,7 +932,7 @@ async function pitShelter(bot, ops, progress) {
     const feet = await ops.digPit(bot, { progress });
     // #431 review 4: a dig that timed out says so (not "no place"). Soak 8: noPlace, no cell for a hole.
     if (!feet) return { closed: false, feet: null, line: progress.why ?? 'found no place to dig a hole shelter', noPlace: !!progress.noPlace };
-    return ops.buildShelter(bot, { site: feet, keepSoft: true });
+    return ops.buildShelter(bot, { site: feet, keepSoft: true, floodCheck: true }); // #586 review 2: a fresh hole only
 }
 
 /** The bot is at (or next to) cell c. */
@@ -1295,7 +1295,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.badCells ??= new Set();
                 for (const c of r.stuck ?? []) n.badCells.add(key3(c));
                 const P = pit ? n.pitProgress?.P : null;
-                if (P) (n.pitProgress.bad ??= new Set()).add(`${P.x}, ${P.y}, ${P.z}`);
+                // #586 review 1: and no resume of it (digPit resumes while progress.P is set), as pit.js's timeout does.
+                if (P) { (n.pitProgress.bad ??= new Set()).add(`${P.x}, ${P.y}, ${P.z}`); n.pitProgress.P = null; }
                 line(agent, `[night] ${r.flooded ? `water came into the shelter at ${at(r.feet)}` : `the block at ${(r.stuck ?? []).map(at).join('; ')} does not stay`}: that ${pit ? 'hole' : 'site'} is left for the night; another next`);
             }
             if (r?.closed) {

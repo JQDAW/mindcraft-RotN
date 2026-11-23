@@ -1527,10 +1527,16 @@ test('soak 11 (Q3): a shelter with water in the bot\'s cells is given up (floode
     t.mock.method(console, 'log', () => {});
     const f = holeShelter({ dirt: 4, set: { '0,61,0': 'water' } });
     delete f.bot.entities[7];
-    const r = await buildShelter(f.bot, { site: new Vec3(0, 61, 0), keepSoft: true });
+    const r = await buildShelter(f.bot, { site: new Vec3(0, 61, 0), keepSoft: true, floodCheck: true });
     assert.deepEqual([r.closed, r.flooded, r.stuck.map(key)], [false, true, ['0,61,0', '0,62,0']]);
     assert.match(r.line, /^Giving up the shelter at 0, 61, 0: water came into it \(water at 0, 61, 0\)\.$/);
     assert.deepEqual(f.placed, []);
+    // #586 review 2: a repair of the shelter the bot is in (no floodCheck) still repairs with water at its feet.
+    const rep = holeShelter({ dirt: 4, set: { '0,61,0': 'water' } });
+    delete rep.bot.entities[7];
+    const r2 = await buildShelter(rep.bot, { site: new Vec3(0, 61, 0), keepSoft: true, tolerateBody: true });
+    assert.equal(r2.flooded, undefined, r2.line);
+    assert.ok(rep.placed.length > 0 && r2.closed, `repaired: ${rep.placed.join(' ')} | ${r2.line}`);
 });
 
 test('soak 11 (B3): chooseSite skips a site that needs a cell to avoid; buildShelter takes another', async (t) => {

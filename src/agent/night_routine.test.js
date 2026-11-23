@@ -3669,3 +3669,27 @@ test('#584 review 2: the fight first only for a mob the fight in place reaches, 
     assert.deepEqual(over.o.repairs, []);
     assert.ok(over.agent.chat.some(l => /fighting it from the shelter first/.test(l)), over.agent.chat.join('\n'));
 });
+
+// #586 review 1: the failed hole's P went into pitProgress.bad, but pitProgress.P stayed set, and digPit
+// resumes the hole while P is set (pit.js): the quiet retry dug and roofed the same hole again.
+test('#586 review 1: a hole whose roof did not stay is not resumed on the next try; the next hole is dug elsewhere', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    o.buildShelter = (bot, opts = {}) => Promise.resolve(opts.site
+        ? { closed: false, feet: opts.site, placed: 0, line: 'roof did not stay', stuck: [opts.site.offset(0, 2, 0)] }
+        : { closed: false, feet: SITE, placed: 0, line: 'Shelter at 0, 64, 0 is not closed' });
+    const P1 = new Vec3(5, 64, 0), P2 = new Vec3(9, 64, 0);
+    const dug = [];
+    // As the real digPit: it resumes while progress.P is set, and never digs a P in progress.bad.
+    o.digPit = (bot, { progress }) => {
+        const P = progress.P ?? (progress.bad?.has('5, 64, 0') ? P2 : P1);
+        progress.P = P;
+        dug.push(`${P.x}, ${P.y}, ${P.z}`);
+        return Promise.resolve(P.offset(0, -3, 0));
+    };
+    let now = 0;
+    for (let k = 0; k < 14 && dug.length < 2; k++) { now += RETRY_MS + 1; nightTick(agent, { now, ops: o }); await settle(agent); }
+    assert.deepEqual(dug, ['5, 64, 0', '9, 64, 0'], agent.chat.join('\n'));
+    assert.deepEqual([...nightState(agent).pitProgress.bad], ['5, 64, 0', '9, 64, 0'], 'both left for the night');
+});

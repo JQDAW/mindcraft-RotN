@@ -468,7 +468,7 @@ export function mobIn(bot, cell) {
  */
 async function placeOnce(bot, target, interior, mode, why = () => {}, note = null) {
     const item = mode.items(bot)[0];
-    if (!item) { why('no block left to place'); return false; }
+    if (!item) { mode.outOfBlocks = true; why('no block left to place'); return false; } // #586 nit 3: a flag, not the text
     const mob = mobIn(bot, target);
     if (mob) {
         // #204 nit: say why the cell stays open, instead of a placement that fails without a word.
@@ -558,7 +558,7 @@ export async function fillCell(bot, target, interior, mode, reasons = null) {
         if (stop) { if (reasons) reasons.aborted = stop; why(`stopped: ${stop}`); return false; }
         // Soak 11 (B2): never into the bot's own box (the server refuses it): wait for it to settle out
         // of the cell (SETTLE.maxMs), else say so and leave the cell.
-        for (let waited = 0; botBoxIn(bot, target) && waited < SETTLE.maxMs; waited += 100) await sleep(100);
+        for (let waited = 0; botBoxIn(bot, target) && waited < SETTLE.maxMs && !bot.interrupt_code; waited += 100) await sleep(100); // #586 nit 5
         if (botBoxIn(bot, target)) {
             if (reasons) (reasons.stuck ??= new Set()).add(key(target));
             why(`the bot's own body is in it (at ${exactAt(bot)}${isLiquid(bot.blockAt(bot.entity.position.floored())) ? ', in water' : ''})`);
@@ -698,7 +698,7 @@ async function pickaxeFor(bot, level) {
  * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], soft: number, line: string}>}
  *   line: what it logged; soft: the dirt blocks in its walls and roof.
  */
-export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [], avoid = null, abort = null } = {}) {
+export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [], avoid = null, abort = null, floodCheck = false } = {}) {
     // #470 review 2: skip: cells a mob holds, left out of a repair (the bot has no weapon to hit it out).
     const skipKeys = new Set(skip.map(key));
     // Soak 8 (night 2): noPlace: the search found no site at all (not a site short of blocks or a
@@ -706,9 +706,10 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     const sturdyTally = new Map(), softTally = new Map();
     const searched = { noPlace: false, refused: null };
     const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, soft: 0, line, ...searched }; };
-    // Soak 11 (Q3, the lead): a shelter (a hole) with water in the bot's two cells is given up, not sealed:
-    // the caller remembers the site (B3).
-    if (site) {
+    // Soak 11 (Q3, the lead): a fresh hole with water in the bot's two cells is given up, not sealed: the
+    // caller remembers the site (B3). #586 review 2: only pitShelter's roofing of a new hole (floodCheck);
+    // a repair of the shelter the bot is in still repairs (siteProblem accepts water at its feet, #296).
+    if (site && floodCheck) {
         const f = new Vec3(Math.floor(site.x), Math.floor(site.y), Math.floor(site.z));
         const wet = [f, f.offset(0, 1, 0)].find(c => isLiquid(bot.blockAt(c)));
         if (wet) {
@@ -758,7 +759,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
             plan = soft;
             // Dirt first; logs and planks only once no dirt is left (S2).
             const wallsFrom = (b) => (repairWood && softItems(b).length === 0 ? woodItems(b) : pick.ok ? items(b) : softItems(b));
-            mode = { items: (b) => wallItems(b, wallsFrom(b), diggers), accept: isWall, abort };
+            mode = { items: (b) => wallItems(b, wallsFrom(b), diggers), accept: isWall, abort, dirt: true };
             if (repairWood && countOf(softItems(bot)) < soft.blocks) log(bot, `No dirt left for all of the repair: ${countOf(softItems(bot))} dirt, then logs or planks (they break by hand in the morning).`);
             log(bot, `Building the shelter with dirt too${pick.ok ? '' : ' (no pickaxe: dirt can be dug out by hand)'}; mobs can dig through dirt.`);
         } else {
@@ -835,10 +836,12 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
                 const prop = propFor(roof, (q) => mode.accept(bot.blockAt(q)), (q) => isEmpty(bot.blockAt(q)));
                 if (prop && await fillCell(bot, prop, interior, mode, reasons)) placed++;
             }
+            mode.outOfBlocks = false;
             if (await fillCell(bot, pos, interior, mode, reasons)) placed++;
             // Soak 11 (C1): out of blocks part-way with dirt piles left (20:51: "no block left to place"
-            // with 36 piles held): craft more from them and try the cell again.
-            else if (reasons.get(key(pos)) === 'no block left to place' && !bot.interrupt_code) {
+            // with 36 piles held): craft more from them and try the cell again. #586 nits 3 and 4: by
+            // placeOnce's flag (the reason may carry " (hit N times)"), and only where dirt is placed.
+            else if (mode.outOfBlocks && mode.dirt && !bot.interrupt_code) {
                 const left = wallsAndRoof(feet).filter(q => !mode.accept(bot.blockAt(q))).length;
                 await craftMore(bot, 'dirt', left, craft);
                 if (mode.items(bot).length) {
