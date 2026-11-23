@@ -1365,3 +1365,22 @@ test('#584 nit 6: the weapon reserve\'s auto-craft puts the crafted club in the 
     await finished;
     assert.deepEqual(order, ['action:craftRecipe:spartanweaponry:club_wood', 'craft', 'rearm']);
 });
+
+test('#587 re-review nit 4: whether the weapon reserve was last judged before night is saved, so a restart by day still gets the dusk\'s fresh budget', (t) => {
+    const items = [stack('log', 1, 4), stack('dirt', 0, SHELTER_HOLD)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: 1000 };
+    agent.bot.food = 20;
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    agent.agenda.spent.weapon = { attempts: 3, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
+    // A restart by day: the saved weaponDusk (false) comes back, not null.
+    const again = new Agenda('FRCFLD', { dir: path.dirname(agent.agenda.file), weapon: WEAPON_RESERVE_STEP });
+    again.load();
+    assert.equal(again.weaponDusk, false);
+    agent.agenda = again;
+    agent.agenda.start();
+    agent.agenda.reserveStuck('weapon'); // rebuilt from the spent budget, as after a restart
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'weapon', 'the dusk: a fresh budget');
+});

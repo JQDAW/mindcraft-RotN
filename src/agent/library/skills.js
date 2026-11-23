@@ -2231,7 +2231,7 @@ export async function pickupKillDrops(bot, at, { radius = KILL_DROPS.radius, max
 export function killDropsText(r, radius = KILL_DROPS.radius, maxMs = KILL_DROPS.maxMs) {
     if (!r) return 'the drop not checked';
     if (r.picked.length) return `picked up ${r.picked.map(p => `${p.count} ${p.name}`).join(', ')}`;
-    if (!r.seen) return `no drop seen within ${radius} blocks in ${(maxMs / 1000).toFixed(0)} s`;
+    if (!r.seen) return `no drop seen within ${radius} blocks in ${maxMs < 1000 ? `${Math.round(maxMs)} ms` : `${+(maxMs / 1000).toFixed(1)} s`}`; // #587 nit 1
     return `${r.seen} drop${r.seen === 1 ? '' : 's'} left: ${r.refused ?? 'not picked up'}`;
 }
 

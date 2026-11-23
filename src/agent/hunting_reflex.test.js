@@ -552,7 +552,7 @@ test('soak 11 (H1): after a kill the hunt waits for the drop where the animal di
     agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: false }; };
     await hunt(agent);
     for (let i = 0; i < 100 && !lines.some(l => /^\[reflex\] hunting animania:cow_holstein: /.test(l)); i++) await new Promise(r => setTimeout(r, 20));
-    assert.ok(lines.includes('[reflex] hunting animania:cow_holstein: killed; no drop seen within 4 blocks in 0 s'), lines.join('\n'));
+    assert.ok(lines.includes('[reflex] hunting animania:cow_holstein: killed; no drop seen within 4 blocks in 50 ms'), lines.join('\n'));
 });
 
 test('soak 11 (H1): pickupKillDrops picks up only drops near the kill spot, through the pickup refusals, and counts what came in', async () => {

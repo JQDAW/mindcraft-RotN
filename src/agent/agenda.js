@@ -411,7 +411,7 @@ export class Agenda {
         // Soak 11 (E2): when its budget ran out (a death after it gives a fresh one). #587 nit 8: saved in
         // agenda.json, and kept when a restart rebuilds weaponOff from the spent budget.
         this.weaponOffAt = null;
-        this.weaponDusk = null; // #587 nit 7: whether it was last judged before night
+        this.weaponDusk = null; // #587 nit 7: whether it was last judged before night; #587 re-review nit 4: saved
         this.finished = false; // "agenda done": only the reserve runs
         this.active = false;
         this.done_at = {}; // step id -> when it was first seen done
@@ -447,6 +447,7 @@ export class Agenda {
             this.standing = data.standing && typeof data.standing.key === 'string' ? data.standing : null;
             this.weaponWindow = typeof data.weaponWindow === 'string' ? data.weaponWindow : null;
             this.weaponOffAt = Number.isFinite(data.weaponOffAt) ? data.weaponOffAt : null;
+            this.weaponDusk = typeof data.weaponDusk === 'boolean' ? data.weaponDusk : null;
             this.existed = true;
             this.loadState = 'present';
         } catch (err) {
@@ -462,7 +463,7 @@ export class Agenda {
         try {
             mkdirSync(path.dirname(this.file), { recursive: true });
             const tmp = `${this.file}.tmp`;
-            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, standing: this.standing, weaponWindow: this.weaponWindow, weaponOffAt: this.weaponOffAt, updated_at: this.now() }, null, 2));
+            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, standing: this.standing, weaponWindow: this.weaponWindow, weaponOffAt: this.weaponOffAt, weaponDusk: this.weaponDusk, updated_at: this.now() }, null, 2));
             renameSync(tmp, this.file);
             this.existed = true; // a later spawn (a respawn) must not autostart it either
         } catch (err) {
@@ -567,7 +568,7 @@ export class Agenda {
             let dusk = false;
             try { dusk = beforeNight(state); } catch { dusk = false; }
             if (dusk && this.weaponDusk === false) fresh();
-            this.weaponDusk = dusk;
+            if (this.weaponDusk !== dusk) { this.weaponDusk = dusk; this.save(); } // #587 re-review nit 4: a restart inside the dusk keeps it
             if (this.weaponWindow !== window) { this.weaponWindow = window; this.save(); } // #502 nit 4: kept across a restart
         }
         // Soak 11 (E2): a death after the budget was spent (a lost weapon) gives a fresh budget.
