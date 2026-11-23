@@ -1655,3 +1655,23 @@ test('#584 nit 8: a stop seen inside a cell ends the build there; no later cell 
     assert.equal(r.aborted, 'hit by a zombie');
     assert.deepEqual(placed, [], `no later cell: ${placed.join(' ')}`);
 });
+
+// #586 re-review nit 1: a stop during the wait for the bot's own box marked the cell stuck, and the night
+// routine kept it in badCells: a stop could rule a site out for the night.
+test('#586 re-review nit 1: a stop while the bot\'s own box is in the cell is not a stuck cell', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SETTLE };
+    Object.assign(SETTLE, { maxMs: 500 });
+    t.after(() => Object.assign(SETTLE, saved));
+    const f = holeShelter({ dirt: 4, set: { '1,61,0': 'dirt', '1,62,0': 'dirt', '0,63,0': 'air' } });
+    delete f.bot.entities[7];
+    f.bot.entity.position = new Vec3(0.5, 61.6, 0.5); // its box reaches the roof cell
+    // The roof is the only open cell: abort is asked at the loop's top, then in fillCell just before the
+    // wait for the bot's box; the stop comes 100 ms into that wait.
+    let asks = 0;
+    const abort = () => { if (++asks === 2) setTimeout(() => { f.bot.interrupt_code = true; }, 100); return null; };
+    const r = await buildShelter(f.bot, { site: new Vec3(0, 61, 0), keepSoft: true, tolerateBody: true, abort });
+    assert.equal(r.closed, false);
+    assert.equal(r.stuck, undefined, JSON.stringify(r.stuck));
+    assert.doesNotMatch(r.line, /the bot's own body is in it/);
+});
