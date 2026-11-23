@@ -332,9 +332,54 @@ In RotN 3.3.4, `minecraft:crafting_table` is FastWorkbench 1.7.4's block: Run A'
 
   Before, it cleared the next collect's targets, so a cancel saw nothing to stop. Only the current, not abandoned run clears the targets and says it finished.
 - **Known edges (#573 review), harmless for Mindcraft:**
-  - **An `append: true` collect started while a cancel is pending** gets a new run. The collect being cancelled is then no longer the current run, so its end does not resolve the cancel: the cancel waits its full `cancelTimeout`, then clears the targets, the appended collect's included. Mindcraft never appends.
+  - **An `append: true` collect started while a cancel is pending** gets a new run. The collect being cancelled is then no longer the current run, so its end does not resolve the cancel: the cancel waits until the appended collect finishes or its full `cancelTimeout` runs out, and on the timeout it clears the targets, the appended collect's included. Mindcraft never appends.
   - **An abandoned run caught mid-dig** (the cancel timed out while its dig or drop wait ran) can still add its block's drop to the targets, which the next collect shares, so the next collect may pick that item up too.
 - **Unchanged:** a block's dig and the drop wait; a collect with nothing to cancel; the callback form of `cancelTask`.
+
+## Dig time by the Forge rule (#593 review)
+
+mineflayer's `bot.dig` waits `block.digTime(heldItemType, …)` and then sends STOP_DESTROY. prismarine-block computes that time from minecraft-data's vanilla tables (`registry.materials[material][itemId]` for the speed, `block.harvestTools` for the harvest check). No modded tool is in them, so every modded tool dug at hand speed: a `pyrotech:flint_pickaxe` on stone waited 7.5 s, where the server takes 0.6 s. Pathfinder's dig costs, `bestHarvestTool` and mineflayer-tool's `equipForBlock` read the same `digTime`.
+
+**The server (Forge 1.12.2):** read from the vanilla bytecode with Forge 14.23.5.2860's binpatches applied; the full plan is in `/home/rv/forge-dig-time-plan.md` on the CX33.
+- Progress = break speed × (ticks since START + 1).
+  - A STOP at progress ≥ 0.7 breaks the block.
+  - An earlier STOP becomes the one "delayed destroy", which the server finishes at progress 1.0, at its own speed. A second early STOP while one is pending is ignored.
+  - After a STOP that leaves the block standing, the server sends the real block back at once.
+- mineflayer does not wait for the server: it predicts air and resolves `dig()`. So the bot must wait the server's time. Up to 30% short still breaks at the STOP; shorter, `dig()` returns while the block is still there.
+- Break speed is `digSpeed / hardness / (canHarvestBlock ? 30 : 100)`.
+  - `digSpeed` is the tool's speed when one of its tool classes is the block's harvest tool, else 1. Then come efficiency, haste, fatigue, water, ÷5 off the ground, and Forge's `BreakSpeed` event.
+  - A cancelled event gives speed 0: the block never breaks.
+- **Tool Progression** (`prevent_block_destruction=true` on this pack) cancels that event when the block names a harvest tool and the main hand has no level in that class, or a level below the block's.
+
+**`src/dig-time.js`:**
+- **`forgeDigTime(state, tool, opts)`**, per block state from the dump:
+  - hardness < 0 → `Infinity`;
+  - a tool required and a harvest tool named: the tool's level in that class must be ≥ the harvest level, else `Infinity` (Tool Progression);
+  - a tool required and no harvest tool named (web): the item's vanilla harvest check, ×100 when it fails;
+  - speed: the tool's `speed[harvestTool]` when it has that class; for an item with no tool classes (swords, shears, non-tools), prismarine's vanilla material speed; otherwise 1;
+  - then prismarine's modifiers, rounded up to whole ticks of 50 ms, as prismarine does.
+- **`dumpDigSources(rd, registry)`** gives `stateOf(block)` (rotn-data's `getBlock`, the state for the block's metadata) and `toolOf(itemType)` (`getItem`'s `toolClasses` and `speed`).
+  - A dumped hardness 0 counts only when rotn-data lists it as real, when minecraft-data's vanilla value is 0 too, or for a modded block that is not solid. Most dumped zeros of solid blocks are misreads (sponge, `stone_slab2`), and a wrong 0 would send STOP at once.
+- **`attachDigTime(bot, sources)`**, called by `initBot` after the collision shapes (`bot.forge.digTime` is its report):
+  - On the first loaded column it replaces `digTime` on the `Block` class this bot's world builds (prismarine-chunk's, made for `bot.registry`). That reaches `bot.dig`/`bot.digTime`, pathfinder and mineflayer-tool.
+  - It changes no registry map, minecraft-data, or any other `Block` class.
+  - A block the dump does not know (no state, no believable hardness) keeps prismarine's own time and is logged once.
+  - On failure `initBot` only warns, and the vanilla times stay.
+
+**What changes for callers:**
+- Digs with real tools are 5–12× faster.
+- Pathfinder and `bestHarvestTool` pick modded tools.
+- A block Tool Progression keeps from the held tool is `Infinity`:
+  - `bot.dig` throws `dig time for … is Infinity` at once (no packet is sent);
+  - pathfinder's cost for breaking it is `Infinity`, so the move is dropped.
+
+**Known limits:**
+- **Mod `BreakSpeed` hooks other than Tool Progression are not modelled.** BWM `HCStrata` and `HCStumping`, and Quark "Axes break leaves", are off on this pack. Better With Addons and Inspirations were not decoded. The rest act through enchantments, potion effects, Carry On, or other dimensions.
+- **Blocks whose hardness depends on the world** have one value per state in the dump.
+- **A tool on a block whose harvest tool it lacks digs at speed 1**, even where vanilla 1.12 gives its speed by material (a pickaxe on rock, an axe on wood). That is slower than the server, which is safe.
+- **A server below about 14 TPS** makes a correct estimate too short for the 0.7 rule.
+- **Tool Progression levels are as dumped.** Where the dump's level is too high (rotn-data is checking `redstone_ore`), the rule says `Infinity` for a tool that can break the block.
+- **Later option, not done:** a mineflayer patch so `dig()` resolves when the server sends air (with a time limit) instead of on its local air prediction. It would cover lag and unmodelled hooks, but it changes when `dig()` resolves or fails, for collectblock and skills alike.
 
 ## Other protocol changes
 
@@ -560,7 +605,22 @@ What different setups do:
   - A spawn whose metadata uses AquaAcrobatics' unknown serializer 14 (`entity-metadata-aqua-pose.json`) is applied with `forge.metadataError`.
   - `e2e-initbot` checks through `initBot` that the fake server's FML spawn reaches `bot.entities` as `other`, that vanilla `entity_teleport` and `rel_entity_move` update it, and that `entity_destroy` removes it.
 - `exit-contract.test.js`: the agent side (`recordAgentExit`): kicks with and without a bridge, `cleanKill` before and after a kick, startup errors, and no reason file.
-- `collectblock-patch.test.js`: the installed, patched collectblock with a fake bot. It covers an item picked up, never picked up (timeout), turned invalid, gone from `bot.entities` or replaced, and gone during the walk; a cancel during the pickup wait, and a new collect after it; 15 stop-loop cancels sharing one wait, with no new `error` listener, no MaxListeners warning, one `pathfinder.stop` and one timeout; and no listener left after a stopped or failed walk. Against stock 1.6.0, the first 9 fail or hang (cancelled by the test timeout). The two #570-review tests cover an abandoned collect whose walk ends later: during the next collect it keeps that collect's targets, sends no `collectBlock_finished` and reports no pickup, and a cancel still stops the next collect; and an abandoned block collect does not dig (its fake bot has everything a dig needs, so on #570's version it fails at the dig count, #573 review). Both fail against #570's version.
+- `collectblock-patch.test.js`: the installed, patched collectblock with a fake bot. It covers an item picked up, never picked up (timeout), turned invalid, gone from `bot.entities` or replaced, and gone during the walk; a cancel during the pickup wait, and a new collect after it; 15 stop-loop cancels sharing one wait, with no new `error` listener, no MaxListeners warning, one `pathfinder.stop` and one timeout; and no listener left after a stopped or failed walk. Against stock 1.6.0, the first 9 fail or hang (cancelled by the test timeout). The two #570-review tests cover an abandoned collect whose walk ends later: during the next collect it keeps that collect's targets, sends no `collectBlock_finished` and reports no pickup, and a cancel still stops the next collect; and an abandoned block collect does not dig (its fake bot has everything a dig needs, so on #570's version it fails at the dig count, #573 review).
+- `dig-time.test.js`: the Forge dig-time rule on the real 3.3.4 dump and the real 1.12.2 prismarine-registry, prismarine-block and prismarine-chunk.
+  - **The rule:**
+    - flint pickaxe on stone 600 ms, stone pickaxe 600 ms, wooden pickaxe 1150 ms;
+    - the hand or an axe on stone `Infinity`; an oak log by hand 3000 ms;
+    - `brick_block` at hardness 36 (level 1); a web by hand and with a sword;
+    - efficiency, haste, fatigue, off the ground, hardness -1 and 0, rounding.
+  - **Believable zeros:** sponge keeps prismarine's time.
+  - **Regression:** where the dump agrees with minecraft-data, every vanilla tool digs every vanilla block in prismarine's exact time (over 1500 pairs).
+  - **Install:**
+    - only the world's `Block` class changes; a fresh class and another chunk class keep 7500 ms;
+    - a second install does nothing; the listener is removed;
+    - a throwing `stateOf` keeps prismarine's time.
+  - **mineflayer's real digging plugin:** `bot.dig` by hand on stone rejects at once, with no packet and no hang.
+  - **mineflayer-pathfinder:** `bestHarvestTool` picks the flint pickaxe, and a hand-only dig through stone costs `Infinity`.
+  - `e2e-initbot.test.js` checks the install through `initBot`.
 - `prismarine-auth-patch.test.js`: the real patched methods, with stubbed fetch, caches and MSAL, and fake tokens. Each reduced output is checked exactly and has nothing token-like. All 7 tests fail against stock 3.1.1.
 - `auth-diagnostics.test.js`: the real `fetchProfile` with a stubbed fetch (429, a network error, a 2xx with `error`). The line has the status and class, and nothing token-like, no body text and no address; the error is rethrown unchanged.
 - `driver-exit.test.js`: the exit decision and the logging before join.

@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, requireRotnData, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, requireRotnData, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachDigTime, dumpDigSources, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting } from '../../packages/forge-bridge/index.js';
 import { loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -221,6 +221,14 @@ export function initBot(username, { onMsaCode, loadRotnData: loadRd = () => load
                         });
                     } catch (e) {
                         console.warn(`[forge-bridge] collision shapes not applied, modded blocks stay full cubes: ${e.message}`);
+                    }
+                    // #593 review: dig times by the Forge 1.12 rule from the dump (modded tools at their speed;
+                    // a block Tool Progression keeps from the held tool is Infinity), for bot.dig, pathfinder and
+                    // equipForBlock. Installed on the world's Block class when the first column loads.
+                    try {
+                        forge.digTime = attachDigTime(bot, dumpDigSources(rd, bot.registry), { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                    } catch (e) {
+                        console.warn(`[forge-bridge] Forge dig times not installed, digging keeps prismarine's vanilla times: ${e.message}`);
                     }
                     mcdata = bot.registry; // the helpers see the extended maps (same object, refreshed for clarity)
                     // Lead exception (Request 7, this one line in net-forge's initBot; rotn-data): RotN crafting recipes.
