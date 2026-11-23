@@ -425,19 +425,37 @@ const modes_list = [
         backoff_ms: 10_000, // after an eat that did not happen: 10 s, then 20 s
         max_fails: 3, // a food that fails this often is not tried again
         check_ms: food.CONSUME_CHECK_MS, // after a consume that threw, judge the eat this long later
+        cut_ms: 3_000, // soak 12 (A3): after a cut eat (no food or count change), the next try after this
+        cut_wait: false, // the wait now is a cut eat's (an emergency eat with nothing near does not wait for it)
         wait_until: -Infinity,
         fails: {},
         given_up: new Set(),
         update: function (agent) {
             const bot = agent.bot;
-            if (Date.now() < this.wait_until) return;
+            if (Date.now() < this.wait_until) {
+                // Soak 12 (the lead): a cut eat's wait never holds off an emergency eat (food EAT_NOW_AT or
+                // lower) with no hostile mob within EAT_SAFE.distance.
+                let free = false;
+                try { free = this.cut_wait && Number.isFinite(bot.food) && bot.food <= food.EAT_NOW_AT && !threats.shelterEatBlock(bot, { withHurt: false }); } catch { free = false; }
+                if (!free) return;
+            }
+            this.cut_wait = false;
             let threatened = false;
             // Soak 4 (rotn-v0.1.7): in a closed night shelter a mob outside is no threat to eating; a
             // zombie at the corner kept the bot from eating at food 12 all morning (it waited for 6).
             // Soak 6 (b): a melee mob that is not close and has not hurt the bot lately does not put
             // off an eat (threats.blocksEating), and an unstuck walk or a fight (EAT_BETWEEN) is no
             // work to wait for: eating gets its turn between fights.
-            try { threatened = bot.rotnSheltered === true ? false : threats.blocksEating(bot); } catch { threatened = false; }
+            // Soak 12 (A2, death 1): in the shelter the in-shelter rule (threats.shelterEatBlock, as the
+            // fight's eat between fights): open, a hostile within EAT_SAFE.distance or a hurt within
+            // EAT_SAFE.hurtMs; closed, a hostile inside it (in its cells or the roof cell) or that hurt.
+            // It ate 9 times with the zombie in its cell, 0.6 m away, because a closed shelter was safe.
+            try {
+                const sheltered = bot.rotnSheltered;
+                threatened = sheltered
+                    ? !!threats.shelterEatBlock(bot, sheltered === true ? { closedAt: agent._night?.site ?? bot.entity.position.floored() } : {})
+                    : threats.blocksEating(bot);
+            } catch { threatened = false; }
             // #508 review 3: never a flee (cowardice); only an unstuck walk or a fight is cut for it.
             const between = agent.isIdle() || EAT_BETWEEN.includes(agent.actions?.currentActionLabel ?? '');
             if (!food.wantsToEat(bot.food, { idle: between, threatened })) return;
@@ -457,6 +475,14 @@ const modes_list = [
                 if (r.ate) {
                     delete this.fails[key];
                     console.log(`[reflex] ate ${key} at food ${r.before}${r.threw ? ' (the eat timed out, but it went through)' : ''}`);
+                    return;
+                }
+                if (r.cut) {
+                    // Soak 12 (A3): cut short (a held-item change, a hit): no failure of that food (3 would
+                    // give it up for good), a short wait.
+                    this.wait_until = Date.now() + this.cut_ms;
+                    this.cut_wait = true;
+                    console.warn(`[reflex] eating: the eat of ${key} was cut after ${r.ms} ms (no food or count change, food ${r.before}); trying again in ${this.cut_ms / 1000} s`);
                     return;
                 }
                 const n = this.fails[key] = (this.fails[key] ?? 0) + 1;

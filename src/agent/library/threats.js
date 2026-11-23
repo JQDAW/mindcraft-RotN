@@ -769,15 +769,35 @@ export function blocksEating(bot, { now = Date.now() } = {}) {
  * shelter now, or null: a hostile mob within EAT_SAFE.distance, or (withHurt) a hurt within
  * EAT_SAFE.hurtMs that the world did not do.
  */
-export function shelterEatBlock(bot, { now = Date.now(), withHurt = true } = {}) {
+export function shelterEatBlock(bot, { now = Date.now(), withHurt = true, closedAt = null } = {}) {
     const here = bot?.entity?.position;
-    if (here) {
+    if (closedAt) {
+        // Soak 12 (A2): in a closed shelter a mob outside its walls is no threat to eating (soak 4: a zombie
+        // at the corner kept the bot from eating all morning); one inside it (death 1: the zombie in the
+        // bot's cell, 0.6 m away, while it ate 9 times) is.
+        const inside = mobInShelterCells(bot, closedAt);
+        if (inside) return `${shortName(inside) ?? 'a hostile mob'} inside the shelter`;
+    } else if (here) {
         const near = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && shelterEnemy(e))
             .map(e => ({ e, d: e.position.distanceTo(here) })).filter(x => x.d <= EAT_SAFE.distance).sort((a, b) => a.d - b.d)[0];
         if (near) return `${shortName(near.e) ?? 'a hostile mob'} ${round1(near.d)} blocks away`;
     }
     const ago = now - (bot?.lastDamageTime ?? -Infinity);
     if (withHurt && ago <= EAT_SAFE.hurtMs && !worldDamage(bot)) return `hurt ${round1(ago / 1000)} s ago`;
+    return null;
+}
+
+/**
+ * Soak 12 (A2): a hostile mob whose body is in the bot's two shelter cells at `site` (its feet), or whose
+ * feet are in the roof cell over them (Epic Siege Mod's bridge step puts a zombie there), or null.
+ */
+export function mobInShelterCells(bot, site) {
+    const s = { x: Math.floor(site.x), y: Math.floor(site.y), z: Math.floor(site.z) };
+    for (const e of Object.values(bot?.entities ?? {})) {
+        const p = e?.position;
+        if (!p || e === bot.entity || !shelterEnemy(e) || Math.floor(p.x) !== s.x || Math.floor(p.z) !== s.z) continue;
+        if (p.y > s.y - (e.height ?? 1.8) && p.y < s.y + 3) return e;
+    }
     return null;
 }
 

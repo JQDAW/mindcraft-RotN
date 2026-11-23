@@ -16,7 +16,7 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, SCROLL_LABEL, shelterShell, isFullDay, replanHold, placeableDirt } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
-import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon } from './library/skills.js';
+import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon, SHELTER_FIGHT } from './library/skills.js';
 import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
@@ -111,6 +111,7 @@ export function nightState(agent) {
         clears: [], // G3 gate B: when a block in the bot's space was broken from inside (SPACE_CLEAR)
         tolerated: false, // a block in the bot's space that does not suffocate it is kept (it came back too often)
         clearSaid: false, // the clear was said in chat this shelter (then only logged)
+        keepSaid: null, // soak 12 (A4): the kept mob block's last line (said once per change)
         leaveFrom: null, // the deadly shelter left with a mob near: 'open' until the bot is out of this cell
         exitTries: 0, // round 10 B: morning tries at digging out of this shelter (EXIT_TRIES)
         exitAt: null, // when the next try may start
@@ -152,7 +153,7 @@ export function resetNight(agent, why) {
     Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, badCells: null, ...GROUND_CLEAR, groundSkip: [] });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
-    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0, ...MORNING_CLEAR });
+    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0, ...MORNING_CLEAR });
     n.gen++;
 }
 
@@ -174,7 +175,7 @@ export function leaveShelterFor(agent, why) {
     if (n.site) n.lastShelter = n.site.clone?.() ?? n.site; // #479 nit 3
     console.log(`[night] ${why} takes over: the shelter's rules are off until it is done`);
     Object.assign(n, { state: 'building', attempts: 0, nextAt: 0, site: null, digAt: null, repairStall: null });
-    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, ...MORNING_CLEAR });
+    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, ...MORNING_CLEAR });
     return true;
 }
 
@@ -713,11 +714,22 @@ export function closeMob(bot, site, { exposed = true } = {}) {
         if (!e || e === bot.entity || !e.position || !shelterEnemy(e)) continue;
         const inCell = cells.some(c => Math.floor(e.position.x) === c.x && Math.floor(e.position.z) === c.z
             && e.position.y > c.y - (e.height ?? 1.8) && e.position.y < c.y + 1); // as shelter.js mobIn
-        if (!inCell && !(exposed && shelterTarget(e) && inMeleeReach(bot, e))) continue;
+        // Soak 12 (A1, rotn-data): Epic Siege Mod's bridge step teleports a zombie onto its scaffolding
+        // in the bot's head cell, into the roof cell (feet at site.y + 2), without checking that cell:
+        // it is over the bot, and drops into its cell when the block under it goes. A melee one within the
+        // in-shelter fight's reach counts (inRoof).
+        const inRoof = !inCell && shelterTarget(e) && inRoofCell(e, site) && inShelterReach(bot, e);
+        if (!inCell && !inRoof && !(exposed && shelterTarget(e) && inMeleeReach(bot, e))) continue;
         const d = e.position.distanceTo(here);
-        if (!best || d < best.d) best = { mob: e, inCell, d };
+        if (!best || d < best.d) best = { mob: e, inCell, inRoof, d };
     }
     return best;
+}
+
+/** Soak 12 (A1): a mob whose feet are in the roof cell over the bot's head (site.y + 2, the same column). */
+export function inRoofCell(e, site) {
+    const p = e?.position;
+    return !!p && !!site && Math.floor(p.x) === site.x && Math.floor(p.z) === site.z && p.y >= site.y + 1.5 && p.y < site.y + 3;
 }
 
 /** Soak 11 (A3): the jobs that put a block in the hand; the weapon goes back after them. */
@@ -772,7 +784,8 @@ function closeNow(bot, n, ops) {
 function mobInCellNow(agent, n, ops, when) {
     if (!n.site) return null;
     const close = (ops.closeMob ?? closeMob)(agent.bot, n.site, { exposed: false });
-    return close?.inCell ? closeQuarters(agent, n, ops, { when }) : null;
+    // Soak 12 (A1): a melee mob in the roof cell over the bot, in reach (ESM's bridge step), counts too.
+    return close?.inCell || close?.inRoof ? closeQuarters(agent, n, ops, { when }) : null;
 }
 
 /**
@@ -837,10 +850,16 @@ function closeQuarters(agent, n, ops, { when = 'morning: ' } = {}) {
     const { close, todo } = closeNow(bot, n, ops);
     if (!close) { n.handFight = false; return null; }
     const { mob, inCell } = close;
+    // Soak 12 (A1): a melee mob in the roof cell over the bot, within the fight's reach (closeMob), is as
+    // close as one in its cell.
+    const inRoof = !inCell && !!close.inRoof;
     const name = mob.name ?? 'hostile mob';
     const health = Math.round(bot.health ?? 0);
-    const said = (k, text) => { if (n.closeSaid === k) console.log(text); else { n.closeSaid = k; line(agent, text); } };
-    const lead = `[night] ${when}${aMob(name)} ${inCell ? `in the bot's cell at ${at(n.site)}` : `${close.d.toFixed(1)} blocks away, in its reach`}: not leaving past it`;
+    // Soak 12 (F): said once per decision (k), then nothing: the 14 identical lines of death 1 were this
+    // logged on every 300 ms tick; a change of health alone is no new decision (the hurt lines carry it).
+    const said = (k, text) => { if (n.closeSaid !== k) { n.closeSaid = k; line(agent, text); } };
+    const where = inCell ? `in the bot's cell at ${at(n.site)}` : inRoof ? `in the roof cell over the bot at ${at(n.site.offset(0, 2, 0))}` : `${close.d.toFixed(1)} blocks away, in its reach`;
+    const lead = `[night] ${when}${aMob(name)} ${where}: not leaving past it`;
     const held = todo.length ? (ops.heldCells?.(bot, n.site, todo) ?? []) : [];
     // #514 review 1: the re-seal is tried once per mob and opening; a failed one (no blocks, a
     // placement that fails) falls through to (ii)-(iv), so the repair does not hold the fight off.
@@ -856,10 +875,16 @@ function closeQuarters(agent, n, ops, { when = 'morning: ' } = {}) {
     const melee = shelterTarget(mob);
     const armed = (ops.hasWeapon ?? hasWeapon)(bot);
     const max = maxHitOf(mob);
-    if (melee && armed && Number.isFinite(bot.health) && bot.health > max) {
-        n.handFight = false;
-        if (bot.rotnSheltered !== true) bot.rotnSheltered = 'open';
-        said(`fight:${mob.id}`, `${lead}; armed, health ${health} above the ${max} it may hit for: fighting it from the shelter`);
+    // Soak 12 (A1, the lead): a melee mob in the bot's cells (or over it in the roof cell, in reach) leaves
+    // no room to back away: it is cornered. Armed, the fight in place runs at any health (n.handFight
+    // waives threats.fightRefusal in modes.fightInShelter); unarmed, the burrow once, then hitting back.
+    const cornered = inCell || inRoof;
+    if (melee && armed && (cornered || (Number.isFinite(bot.health) && bot.health > max))) {
+        n.handFight = cornered;
+        // Death 1 (15:11:03): rotnSheltered stayed true in the closed shelter, so self_defense (which
+        // fights in place) stayed quiet (modes.shelterQuiet) and no swing came. 'open' lets it act.
+        bot.rotnSheltered = 'open';
+        said(`fight:${mob.id}`, `${lead}; armed, ${cornered ? `cornered: fighting it from the shelter at any health (health ${health}, it may hit for ${max})` : `health ${health} above the ${max} it may hit for: fighting it from the shelter`}`);
         return 'night:inside';
     }
     if (ops.burrowAway && n.closeBurrowTried !== (mob.id ?? name)) {
@@ -1074,6 +1099,60 @@ function startBuilding(n, now) {
 }
 
 /**
+ * Soak 12 (A4, rotn-data): a hostile mob within this of a block in the bot's space, over it (its feet
+ * from half a block to 3 blocks above the block, within 1.5 blocks of its column sideways), may be
+ * standing on it: Epic Siege Mod's bridge step puts its scaffolding into the bot's head cell from the
+ * column next to it (feet 2 above the bot's) and teleports the zombie onto it, into the roof cell.
+ */
+export const MOB_OVER = { side: 1.5, low: 0.5, high: 3 };
+export function mobOverBlock(bot, pos) {
+    const cx = pos.x + 0.5, cz = pos.z + 0.5;
+    let best = null;
+    for (const e of Object.values(bot?.entities ?? {})) {
+        const p = e?.position;
+        if (!p || e === bot.entity || !shelterEnemy(e)) continue;
+        if (Math.abs(p.x - cx) > MOB_OVER.side || Math.abs(p.z - cz) > MOB_OVER.side) continue;
+        if (p.y < pos.y + MOB_OVER.low || p.y > pos.y + MOB_OVER.high) continue;
+        const d = Math.hypot(p.x - cx, p.z - cz);
+        if (!best || d < best.d) best = { mob: e, d };
+    }
+    return best?.mob ?? null;
+}
+
+/**
+ * Soak 12 (A4, death 1 at 15:11:00, the lead's decision): a block in the bot's space that is not a full
+ * cube (Epic Siege Mod's scaffolding: solid, no suffocation, decays by itself in about 2 min) is never
+ * broken while a hostile mob is over it (mobOverBlock: breaking it let the zombie on it drop into the
+ * bot's cell 3 s later), nor while the shell (checked with the block allowed) is open: the open cells are
+ * repaired first. Looked at again on the next tick. Returns the tick's result while kept, else null
+ * (the clear as before: nothing over it and the shell closed).
+ */
+function keepMobBlock(agent, n, ops, found) {
+    if (found.fullCube !== false || found.hurts || !found.pos) return null;
+    const bot = agent.bot;
+    const over = (ops.mobOver ?? mobOverBlock)(bot, found.pos);
+    const open = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody: true })?.todo ?? [];
+    if (!over && !open.length) return null;
+    const cell = found.pos.y > n.site.y ? 'head' : 'feet';
+    const what = /(^|:)scaffolding$/.test(found.block ?? '') ? 'a mob placed it from above' : 'not a full cube, no suffocation';
+    const why = [over ? `${aMob(over.name ?? 'hostile mob')} at ${at(over.position.floored())} is over it` : null,
+        open.length ? `the shelter is open at ${open.map(at).join('; ')}` : null].filter(Boolean).join(', and ');
+    const key = `${key3(found.pos)}|${over?.id ?? ''}|${open.map(key3).join(';')}`;
+    if (n.keepSaid !== key) { // soak 12 (F): once per change
+        n.keepSaid = key;
+        line(agent, `[night] ${found.block} in the ${cell} cell at ${at(found.pos)}: ${what}; keeping it while ${why} (it is solid and decays by itself)${open.length ? ': repairing first' : ''}`);
+    }
+    n.checkedAt = -Infinity; // looked at again on the next tick
+    if (open.length) {
+        startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody: true }), (r) => {
+            if (r?.closed) console.log(`[night] the repair closed the shelter at ${at(n.site)} around the ${found.block}`);
+            n.checkedAt = -Infinity;
+        });
+    }
+    return 'night:inside';
+}
+
+/**
  * G3 gate B: what the bot does about a problem in the shelter it is in, when that problem is not
  * deadly. A solid block in its two cells (a pillaring zombie's scaffolding) is broken from inside,
  * bounded by SPACE_CLEAR; after that, a block that neither suffocates it nor hurts on contact is kept
@@ -1086,6 +1165,8 @@ function keepShelter(agent, n, ops, found, now) {
     const bot = agent.bot;
     if (found?.kind === 'unloaded') return 'night:inside';
     if (found?.kind !== 'body') return null;
+    const kept = keepMobBlock(agent, n, ops, found);
+    if (kept) return kept;
     n.clears = n.clears.filter(t => now - t < SPACE_CLEAR.windowMs);
     if (n.clears.length < SPACE_CLEAR.maxClears && ops.clearSpace) {
         n.clears.push(now);
@@ -1307,7 +1388,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.pit = pit;
                 n.digAt = null; // digging seen at an earlier shelter is not this one's
                 n.repairStall = null;
-                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false, scrollTried: false });
+                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false, scrollTried: false });
                 n.checkedAt = null; // set by the next tick, on its clock
                 bot.rotnSheltered = true;
                 // Gate2 B: where the bot was and what it stood on, for the line if it is ever out of it.
@@ -1685,12 +1766,25 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             const same = (a, b) => !!a && !!b && (a === b || (a.id != null && a.id === b.id));
             const fightable = !!one && (same(inReach, one) || held.some(h => same(h.mob, one)));
             if (armed && !other && one && !low(one) && fightable && one.position && bot.entity.position.distanceTo(one.position) <= FIGHT_FIRST.range) {
-                bot.rotnSheltered = 'open';
-                n.handFight = false;
-                const text = `[night] armed, health ${Math.round(bot.health)} above the ${maxHitOf(one)} ${aMob(one.name ?? 'hostile mob')} may hit for, and the only melee mob near: fighting it from the shelter first, then the repair`;
-                const said = `fight:${one.id ?? ''}`;
-                if (n.fightFirstSaid === said) console.log(text); else { n.fightFirstSaid = said; line(agent, text); }
-                return 'night:inside';
+                // Soak 12 (D4): said only when the fight in place can reach it (modes.fightInShelter takes only a
+                // mob inShelterReach); 14:44:03 said "fighting it from the shelter first" of a zombie above the
+                // hole, and no fight came. Out of its reach: said why, and the #580 order below.
+                if ((ops.inShelterReach ?? inShelterReach)(bot, one)) {
+                    bot.rotnSheltered = 'open';
+                    n.handFight = false;
+                    // Soak 12 (F): once per mob, then nothing (14:30:22-23: the same line 4 times).
+                    const said = `fight:${one.id ?? ''}`;
+                    if (n.fightFirstSaid !== said) {
+                        n.fightFirstSaid = said;
+                        line(agent, `[night] armed, health ${Math.round(bot.health)} above the ${maxHitOf(one)} ${aMob(one.name ?? 'hostile mob')} may hit for, and the only melee mob near: fighting it from the shelter first, then the repair`);
+                    }
+                    return 'night:inside';
+                }
+                const said = `far:${one.id ?? ''}`;
+                if (n.fightFirstSaid !== said) {
+                    n.fightFirstSaid = said;
+                    line(agent, `[night] ${aMob(one.name ?? 'hostile mob')} at ${at(one.position.floored())} is the only melee mob near, but out of the shelter fight's reach (${bot.entity.position.distanceTo(one.position).toFixed(1)} blocks, it reaches ${SHELTER_FIGHT.reach}): not fighting it first`);
+                }
             }
             if (reaching) {
                 bot.rotnSheltered = 'open';
