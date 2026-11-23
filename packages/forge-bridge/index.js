@@ -22,6 +22,7 @@ export { assertOutsideGitWorkTrees, prepareSecretFolder, findGitWorkTree, realLo
 export { decideAgentExit, readExitReason, writeExitReason, recordAgentExit, createRequestedRestartGuard, createCrashLoopGuard, crashSignature, attachSpawnTimeoutReason, SPAWN_TIMEOUT_CATEGORY, REQUESTED_RESTART } from './src/exit-contract.js';
 export { extendRegistry, applyProperties } from './src/registry-extension.js';
 export { applyCollisionShapes, dumpShapesByMeta, validateCollisionOverrides, loadCollisionOverrides, hazardBlockIds, partialHazardBlockIds, liquidBlockIds, stateHazard, DYNAMIC_LEAVES_BOX, HAZARD_KINDS } from './src/collision.js';
+export { attachDigTime, installDigTime, forgeDigTime, dumpDigSources, believableZero, pickState, originalDigTime, TICK_MS as DIG_TICK_MS } from './src/dig-time.js';
 export { HORDES_CHANNEL, HORDES_DISC, HORDE_START_KEY, HORDE_END_KEY, decodeHordes, hordeEvent, attachHordeEvents } from './src/hordes.js';
 export { spawnFmlEntity, attachFmlEntities, fmlEntityName, fmlEntityTable, looksLiving, LIVING_METADATA } from './src/fml-entities.js';
 export { requireRotnData, rotnDataRefusal, ROTN_DATA_CATEGORY } from './src/rotn-data-required.js';

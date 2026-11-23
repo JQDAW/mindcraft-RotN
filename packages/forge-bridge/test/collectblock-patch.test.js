@@ -300,7 +300,7 @@ test('#570 review: a block collect given up by the cancel timeout does not dig w
     bot.dig = () => { digs++; dug = true; return Promise.resolve(); };
     bot.tool.equipForBlock = () => Promise.resolve();
     bot.pathfinder.movements = { safeToBreak: () => true };
-    // The drop wait counts 10 physicsTicks.
+    // The drop wait counts 10 physicsTicks: the hook sends 12 ticks for each physicsTick subscription.
     bot.on('newListener', (name) => {
         if (name === 'physicsTick') setImmediate(() => { for (let i = 0; i < 12; i++) bot.emit('physicsTick'); });
     });
