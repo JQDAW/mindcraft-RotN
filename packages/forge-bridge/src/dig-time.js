@@ -247,7 +247,7 @@ export function attachDigTime(bot, sources, { log = () => {} } = {}) {
         const key = `${b.name}:${b.metadata}`;
         if (unknown.size < 1000 && !unknown.has(key)) {
             unknown.add(key);
-            log(`dig time: ${key} is not in the dump, prismarine's vanilla dig time is used (logged once)`);
+            log(`dig time: ${key} is not in the dump, or its dumped hardness 0 is not used: prismarine's vanilla dig time (logged once)`);
         }
     };
     const onColumn = (pos) => {
