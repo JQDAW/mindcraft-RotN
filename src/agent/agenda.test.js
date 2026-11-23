@@ -1261,3 +1261,38 @@ test('soak 11 (E2): a death after the weapon reserve was spent gives it a fresh 
     assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), 'weapon');
     assert.equal(agent.agenda.weaponOff, false);
 });
+
+test('#587 nit 8: a death before the weapon reserve went off gives no fresh budget; when it went off is saved and kept through a restart', (t) => {
+    const items = [stack('pyrotech:rock', 0, 6), stack('dirt', 0, SHELTER_HOLD)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    agent.bot.food = 20;
+    const deathAt = Date.now() - 60_000; // before it went off
+    agent.bot.rotnLastDeathAt = () => deathAt;
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    agent.agenda.spent.weapon = { attempts: 3, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
+    const offAt = agent.agenda.weaponOffAt;
+    assert.ok(Number.isFinite(offAt) && offAt > deathAt);
+    assert.notEqual(agendaTick(agent, { now: 2 * TICK_MS }), 'weapon', 'the death came before: still off');
+    // A restart: weaponOffAt comes back from agenda.json.
+    const again = new Agenda('FRCFLD', { dir: path.dirname(agent.agenda.file), weapon: WEAPON_RESERVE_STEP });
+    again.load();
+    assert.equal(again.weaponOffAt, offAt);
+});
+
+test('#587 nit 6 and 7: with the logs for a club held all day, a weapon reserve spent by day is off until the dusk (said so), and the dusk gives it a fresh budget', (t) => {
+    const items = [stack('log', 1, 4), stack('dirt', 0, SHELTER_HOLD)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: 1000 };
+    agent.bot.food = 20;
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    assert.equal(WEAPON_RESERVE_STEP.whenNow(agendaState(agent.bot)), 'no weapon, logs held');
+    agent.agenda.spent.weapon = { attempts: 3, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
+    assert.match(agent.said.at(-1), /^agenda step weapon stuck: .*; going on without it until the dusk$/);
+    assert.notEqual(agendaTick(agent, { now: 2 * TICK_MS }), 'weapon');
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    assert.equal(WEAPON_RESERVE_STEP.whenNow(agendaState(agent.bot)), 'no weapon, logs held', 'the same window at dusk');
+    assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), 'weapon', 'the dusk: a fresh budget');
+});
