@@ -411,3 +411,29 @@ test('#584 nit 5: rearmWeapon swaps a worse weapon in the off hand for a better 
     assert.equal(await skills.rearmWeapon(bot), true);
     assert.deepEqual(seen, []);
 });
+
+// #584 re-review (a): with a full inventory bot.equip(club, 'hand') swaps the club into a hotbar slot
+// and that slot's dirt into the off hand; rearmWeapon then saw a non-weapon there and left the club in
+// the main hand, a build put dirt in hand, and the club sat in the inventory (dropped on death).
+test('#584 re-review (a): a full-inventory fight, then a build: the club ends in the off hand (swapped back), never in the inventory', T, async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, slots } = weaponBot({ inventory: [{ name: 'dirt', count: 16 }], offHand: { name: 'spartanweaponry:club_wood' }, full: true });
+    let sel = 0; // the selected hotbar slot (36 + sel)
+    bot.heldItem = slots[36];
+    // As mineflayer: an item outside the hotbar is swapped into the selected hotbar slot; 'off-hand' swaps with slot 45.
+    bot.equip = (item, where) => {
+        const from = slots.indexOf(item);
+        const to = where === 'off-hand' ? 45 : (from >= 36 && from < 45 ? from : 36 + sel);
+        if (where === 'hand' && from >= 36 && from < 45) sel = from - 36;
+        [slots[to], slots[from]] = [slots[from], slots[to]];
+        bot.heldItem = slots[36 + sel];
+        return Promise.resolve();
+    };
+    await skills.defendSelf(bot, 9, () => true);
+    assert.equal(bot.hitWith, 'spartanweaponry:club_wood', 'fought with the club');
+    assert.equal(slots[45]?.name, 'spartanweaponry:club_wood', 'swapped back into the off hand after the fight');
+    // A build takes the dirt in hand: the club stays in the off hand (kept on death).
+    await bot.equip(bot.inventory.items().find(i => i.name === 'dirt'), 'hand');
+    assert.equal(bot.heldItem?.name, 'dirt');
+    assert.equal(slots[45]?.name, 'spartanweaponry:club_wood');
+});

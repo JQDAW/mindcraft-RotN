@@ -1296,3 +1296,22 @@ test('#587 nit 6 and 7: with the logs for a club held all day, a weapon reserve 
     assert.equal(WEAPON_RESERVE_STEP.whenNow(agendaState(agent.bot)), 'no weapon, logs held', 'the same window at dusk');
     assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), 'weapon', 'the dusk: a fresh budget');
 });
+
+test('#584 nit 6: the weapon reserve\'s auto-craft puts the crafted club in the off hand at once (a day death would drop it from the inventory)', async (t) => {
+    const items = [stack('log', 1, 4), stack('dirt', 0, SHELTER_HOLD)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: 1000 };
+    agent.bot.food = 20;
+    const order = [];
+    let done;
+    const finished = new Promise(r => { done = r; });
+    agent.actions = { executing: false, currentActionLabel: '', runAction: async (label, fn) => { order.push(label); await fn(); done(); } };
+    const step = agent.agenda.weaponWanted(agendaState(agent.bot));
+    assert.equal(step?.id, 'weapon');
+    assert.equal(autoCraftTick(agent, step, agendaState(agent.bot), {
+        craft: () => { order.push('craft'); return Promise.resolve('crafted'); },
+        rearmAfter: () => { order.push('rearm'); return Promise.resolve(true); },
+    }), 'weapon');
+    await finished;
+    assert.deepEqual(order, ['action:craftRecipe:spartanweaponry:club_wood', 'craft', 'rearm']);
+});

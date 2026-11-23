@@ -366,7 +366,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
  * that is running (the next tick tries). Returns the step id while its craft runs, else null (the
  * step goes on as usual: the model gets its goal). `craft` is for tests.
  */
-export function autoCraftTick(agent, step, state, { craft = null } = {}) {
+export function autoCraftTick(agent, step, state, { craft = null, rearmAfter = null } = {}) {
     const a = step?.autoCraft;
     const tries = agent._agenda_auto ??= {};
     // #579 review 1: the step is tracked before anything else, so another step in between gives the
@@ -386,7 +386,14 @@ export function autoCraftTick(agent, step, state, { craft = null } = {}) {
     // agent._agenda_step is left as it is: a craft that did not end the step hands it to the model as usual.
     say(agent, `agenda step ${step.id}: crafting ${formatName(a.item)} (try ${tries[step.id]} of ${AUTO_CRAFT.tries})`);
     const run = craft ?? (async (bot, item) => (await import('./library/skills.js')).craftRecipe(bot, item, 1));
-    Promise.resolve(agent.actions.runAction(label, () => run(agent.bot, a.item)))
+    // #584 nit 6: a crafted weapon goes to the off hand at once (in the inventory a day death drops it).
+    const rearm = rearmAfter ?? (async (bot) => (await import('./library/skills.js')).rearmWeapon(bot));
+    const craftAndRearm = async () => {
+        const r = await run(agent.bot, a.item);
+        try { await rearm(agent.bot); } catch (err) { console.warn(`[agenda] after crafting ${a.item}: ${safeError(err)}`); }
+        return r;
+    };
+    Promise.resolve(agent.actions.runAction(label, craftAndRearm))
         .catch(err => console.warn(`[agenda] crafting ${a.item}: ${safeError(err)}`));
     return step.id;
 }
