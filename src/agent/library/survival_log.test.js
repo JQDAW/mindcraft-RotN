@@ -684,3 +684,42 @@ test('#594 re-review 2: the swing line\'s health before is the mob\'s health at 
     const swings = logs.filter(l => l.startsWith('[survival] swing '));
     assert.deepEqual(swings, ['[survival] swing zombie with hand first: health 19 -> gone']);
 });
+
+// #594 nit 1: at a spawn or respawn the server sends the loaded chunks' entities again, stuck arrows too;
+// they would read as fresh for 2.5 s. Arrow spawns in the first ARROW.freshMs after the bot's spawn are not counted.
+test('#594 nit 1: an old stuck arrow sent again right after the bot\'s respawn is no shot; one shot later is', async () => {
+    const { noteBotSpawn, noteArrowSpawn, noteSwing, dropSource, bindSurvivalLog } = await import('./survival_log.js');
+    const here = new Vec3(0.5, 64, 0.5);
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: here.offset(1.5, 0, 0), height: 1.95 };
+    const skeleton = { id: 3, name: 'skeleton', type: 'mob', position: here.offset(0, 0, 6), height: 1.99 };
+    const old = { id: 4, name: 'arrow', type: 'object', position: here.offset(0.4, 0, 0) };
+    const bot = { entity: { position: here }, entities: { 2: zombie, 3: skeleton, 4: old } };
+    const state = { swings: new Map() };
+    noteBotSpawn(state, 10_000); // the respawn packet
+    noteArrowSpawn(state, old, 10_200); // the chunk's arrow, sent after it
+    noteSwing(state.swings, zombie, 11_000);
+    assert.equal(dropSource(bot, state, 11_050), 'zombie', 'not the old arrow');
+    const shot = { id: 5, name: 'arrow', type: 'object', position: here.offset(0.3, 1, 0) };
+    bot.entities[5] = shot;
+    noteArrowSpawn(state, shot, 13_000); // past ARROW.freshMs after the spawn: a real shot
+    assert.equal(dropSource(bot, state, 13_300), 'skeleton/arrow');
+    // #597 review 1: the server's order is the respawn packet, the chunks and their entities (old arrows), then
+    // the first health update (mineflayer's 'spawn'). An arrow between 'respawn' and 'spawn' is not fresh;
+    // the later 'spawn' does not move the window (the earliest wins).
+    const on = {};
+    const wired = { on: (ev, f) => { (on[ev] ??= []).push(f); } };
+    const st = bindSurvivalLog(wired, { eatAt: 12 });
+    assert.ok(on.respawn && on.login && on.spawn, 'respawn, login and spawn are wired');
+    const t0 = Date.now();
+    on.respawn.forEach(f => f());
+    const between = { id: 7, name: 'arrow', type: 'object', position: here.offset(0.4, 0, 0) };
+    noteArrowSpawn(st, between, t0 + 300); // sent with the chunks, before the health update
+    const respawnAt = st.spawnedAt;
+    on.spawn.forEach(f => f()); // the first health update, later
+    assert.equal(st.spawnedAt, respawnAt, 'the earliest wins');
+    assert.equal(st.arrowSpawns?.has(7) ?? false, false, 'the arrow between respawn and spawn is not fresh');
+    // A spawn long after any respawn or login (a fallback) does start a window.
+    const lone = {};
+    noteBotSpawn(lone, 50_000, { fallback: true });
+    assert.equal(lone.spawnedAt, 50_000);
+});
