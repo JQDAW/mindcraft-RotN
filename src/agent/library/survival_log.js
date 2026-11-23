@@ -126,13 +126,22 @@ export function hurtSource(bot, { swings = null, now = Date.now() } = {}) {
  * spawned within ARROW.freshMs (2.5 s: a stuck arrow stops counting then; #594 re-review 1), or one that
  * went from the world within ARROW.range in the last ARROW.goneMs (an arrow that hits is removed about
  * 50 ms after the health packet). Its drop is named after the nearest ranged mob (threats.threatFor(e).ranged)
- * as "<mob>/arrow"; else hurtSource. Arrows the server sends in the first ARROW.freshMs after the bot's own
- * spawn or respawn (the chunks' stuck arrows, sent again) are not counted as fresh (#594 nit 1).
+ * as "<mob>/arrow"; else hurtSource. Arrows the server sends in the first ARROW.freshMs after the bot's
+ * respawn packet or login (the chunks' stuck arrows, sent again before the first health update, so before
+ * mineflayer's 'spawn') are not counted as fresh (#594 nit 1, #597 review 1).
  */
 export const ARROW = { range: 2.5, goneMs: 500, mobRange: 24, freshMs: 2500 };
 const isArrow = (e) => /(arrow|bolt|dart)$/.test(String(e?.name ?? ''));
-/** #594 nit 1: the bot's own spawn or respawn (mineflayer's 'spawn'): the entities sent after it are old, not shot. */
-export function noteBotSpawn(state, now = Date.now()) { state.spawnedAt = now; }
+/**
+ * #594 nit 1, #597 review 1: the start of the bot's respawn or login: the entities the server sends right
+ * after it are old, not shot. mineflayer's 'respawn' (the respawn packet) and 'login' start the window;
+ * its 'spawn' (the first health update, after the entities) only starts one when none began within
+ * ARROW.freshMs before it: the earliest time wins.
+ */
+export function noteBotSpawn(state, now = Date.now(), { fallback = false } = {}) {
+    if (fallback && now - (state.spawnedAt ?? -Infinity) < ARROW.freshMs) return;
+    state.spawnedAt = now;
+}
 /** #594 re-review 1: an arrow's spawn time (entitySpawn), kept ARROW.freshMs: only a fresh arrow is a shot. */
 export function noteArrowSpawn(state, e, now = Date.now()) {
     if (!isArrow(e) || e?.id == null) return;
@@ -297,7 +306,10 @@ export function bindSurvivalLog(bot, { eatAt }) {
     const state = { swings: new Map() };
     const check = () => { try { foodCheck(state, bot, Date.now(), eatAt); } catch { /* never breaks the bot */ } };
     bot.on('entitySwingArm', (e) => { try { noteSwing(state.swings, e); } catch { /* never breaks the bot */ } });
-    bot.on('spawn', () => { try { noteBotSpawn(state); } catch { /* never breaks the bot */ } }); // #594 nit 1
+    // #594 nit 1, #597 review 1: the respawn packet and the login start the old-arrows window; 'spawn' only as a fallback.
+    bot.on('respawn', () => { try { noteBotSpawn(state); } catch { /* never breaks the bot */ } });
+    bot.on('login', () => { try { noteBotSpawn(state); } catch { /* never breaks the bot */ } });
+    bot.on('spawn', () => { try { noteBotSpawn(state, Date.now(), { fallback: true }); } catch { /* never breaks the bot */ } });
     bot.on('entitySpawn', (e) => { try { noteArrowSpawn(state, e); } catch { /* never breaks the bot */ } }); // soak 12 (G)
     bot.on('entityGone', (e) => { try { noteArrowGone(state, bot, e); } catch { /* never breaks the bot */ } });
     bot.on('health', () => { try { hurtCheck(state, bot, Date.now()); } catch { /* never breaks the bot */ } });

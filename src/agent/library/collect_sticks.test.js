@@ -448,6 +448,19 @@ test('#595 review 2: a block Tool Progression keeps from the held tool: "needs a
     assert.match(bot.output, /Collected 2 stick\./);
 });
 
+// #597 review 3: a second forbidden block of the same name is not said again and uses an attempt (bounded).
+test('#597 review 3: two forbidden blocks of one name: said once; the first uses no attempt, the second does', T, async (t) => {
+    fast(t);
+    const bot = fakeBot({ bushes: [{ x: -4, sticks: 2 }, { x: -6, sticks: 2 }], trees: [{ x: 10, branch: DARK_OAK, sticks: 2 }] });
+    const dig = bot.dig;
+    const tried = [];
+    bot.dig = (b) => { if (bot.blockAt(b.position)?.name === BUSH) { tried.push(b.position.x); return Promise.reject(new Error(`dig time for ${BUSH} is Infinity`)); } return dig(b); };
+    assert.equal(await skills.collectBlock(bot, 'stick', 1), false, bot.output);
+    assert.equal(tried.length, 2, `both bushes tried: ${tried}`);
+    assert.equal((bot.output.match(/needs a better tool \(Tool Progression\)/g) ?? []).length, 1, bot.output);
+    assert.deepEqual(bot.log.digs.filter(d => d.name === DARK_OAK), [], 'its one attempt went to the second bush');
+});
+
 test('#595 review 2: breakBlockAt says a block needs a better tool (Tool Progression) and returns false; any other dig error still throws', async () => {
     const block = { name: 'stone', position: new Vec3(1, 64, 0), canHarvest: () => true };
     const mk = (err) => ({ output: '', game: { gameMode: 'survival' }, entity: { position: new Vec3(0.5, 64, 0.5) }, modes: { isOn: () => false },
@@ -455,5 +468,12 @@ test('#595 review 2: breakBlockAt says a block needs a better tool (Tool Progres
     const bot = mk(new Error('dig time for stone is Infinity'));
     assert.equal(await skills.breakBlockAt(bot, 1, 64, 0), false);
     assert.match(bot.output, /Cannot break the block at x:1\.0, y:64\.0, z:0\.0: stone needs a better tool \(Tool Progression\)/);
+    // #597 review 2: hardness below 0 (bedrock) is Infinity too: no tool breaks it, and it is said so.
+    const rock = mk(new Error('dig time for bedrock is Infinity'));
+    Object.assign(block, { name: 'bedrock', hardness: -1 });
+    assert.equal(await skills.breakBlockAt(rock, 1, 64, 0), false);
+    assert.match(rock.output, /bedrock cannot be broken \(no tool breaks it\); leave it and pick another block\./);
+    assert.doesNotMatch(rock.output, /better tool/);
+    Object.assign(block, { name: 'stone', hardness: 1.5 });
     await assert.rejects(skills.breakBlockAt(mk(new Error('the server closed')), 1, 64, 0), /the server closed/);
 });

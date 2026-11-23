@@ -1719,7 +1719,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 // in this collect (no raw "dig time … is Infinity"), the target given up; the next is tried. The
                 // first such block of a name uses no attempt (no packet went out); later ones of that name do.
                 const name = toolProgressionBlock(err);
-                if (!tooHard.has(name)) { tooHard.add(name); log(bot, `Failed to collect ${blockType}: ${betterToolText(name)}`); i--; }
+                if (!tooHard.has(name)) { tooHard.add(name); log(bot, `Failed to collect ${blockType}: ${betterToolText(name, block)}`); i--; }
                 if (block?.position) givenUp.push(block.position.clone ? block.position.clone() : block.position);
                 if (bot.interrupt_code) break;
                 continue;
@@ -2756,8 +2756,14 @@ export function toolProgressionBlock(err) {
     const m = /dig time for (.+) is Infinity/.exec(String(err?.message ?? err ?? ''));
     return m ? m[1] : null;
 }
-/** The LLM-facing text for it (#595 review 2). */
-export const betterToolText = (name) => `${name} needs a better tool (Tool Progression): the tool you have cannot break it; get a higher-tier one first.`;
+/**
+ * The LLM-facing text for it (#595 review 2). #597 review 2: the Forge rule also gives Infinity for a block
+ * of hardness below 0 (bedrock, a barrier): no tool breaks it, and it is said so.
+ */
+export const unbreakableBlock = (block) => (Number.isFinite(block?.hardness) && block.hardness < 0) || block?.diggable === false;
+export const betterToolText = (name, block = null) => (unbreakableBlock(block)
+    ? `${name} cannot be broken (no tool breaks it); leave it and pick another block.`
+    : `${name} needs a better tool (Tool Progression): the tool you have cannot break it; get a higher-tier one first.`);
 
 export async function breakBlockAt(bot, x, y, z) {
     /**
@@ -2802,7 +2808,7 @@ export async function breakBlockAt(bot, x, y, z) {
         catch (err) {
             const name = toolProgressionBlock(err);
             if (!name) throw err;
-            log(bot, `Cannot break the block at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)}: ${betterToolText(name)}`);
+            log(bot, `Cannot break the block at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)}: ${betterToolText(name, block)}`);
             return false;
         }
         log(bot, `Broke ${block.name} at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)}.`);

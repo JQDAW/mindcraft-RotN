@@ -695,18 +695,31 @@ test('#594 nit 1: an old stuck arrow sent again right after the bot\'s respawn i
     const old = { id: 4, name: 'arrow', type: 'object', position: here.offset(0.4, 0, 0) };
     const bot = { entity: { position: here }, entities: { 2: zombie, 3: skeleton, 4: old } };
     const state = { swings: new Map() };
-    noteBotSpawn(state, 10_000);
-    noteArrowSpawn(state, old, 10_200); // the chunk's arrow, sent with the respawn
+    noteBotSpawn(state, 10_000); // the respawn packet
+    noteArrowSpawn(state, old, 10_200); // the chunk's arrow, sent after it
     noteSwing(state.swings, zombie, 11_000);
     assert.equal(dropSource(bot, state, 11_050), 'zombie', 'not the old arrow');
     const shot = { id: 5, name: 'arrow', type: 'object', position: here.offset(0.3, 1, 0) };
     bot.entities[5] = shot;
     noteArrowSpawn(state, shot, 13_000); // past ARROW.freshMs after the spawn: a real shot
     assert.equal(dropSource(bot, state, 13_300), 'skeleton/arrow');
-    // bindSurvivalLog wires 'spawn'.
+    // #597 review 1: the server's order is the respawn packet, the chunks and their entities (old arrows), then
+    // the first health update (mineflayer's 'spawn'). An arrow between 'respawn' and 'spawn' is not fresh;
+    // the later 'spawn' does not move the window (the earliest wins).
     const on = {};
     const wired = { on: (ev, f) => { (on[ev] ??= []).push(f); } };
     const st = bindSurvivalLog(wired, { eatAt: 12 });
-    on.spawn.forEach(f => f());
-    assert.ok(Number.isFinite(st.spawnedAt));
+    assert.ok(on.respawn && on.login && on.spawn, 'respawn, login and spawn are wired');
+    const t0 = Date.now();
+    on.respawn.forEach(f => f());
+    const between = { id: 7, name: 'arrow', type: 'object', position: here.offset(0.4, 0, 0) };
+    noteArrowSpawn(st, between, t0 + 300); // sent with the chunks, before the health update
+    const respawnAt = st.spawnedAt;
+    on.spawn.forEach(f => f()); // the first health update, later
+    assert.equal(st.spawnedAt, respawnAt, 'the earliest wins');
+    assert.equal(st.arrowSpawns?.has(7) ?? false, false, 'the arrow between respawn and spawn is not fresh');
+    // A spawn long after any respawn or login (a fallback) does start a window.
+    const lone = {};
+    noteBotSpawn(lone, 50_000, { fallback: true });
+    assert.equal(lone.spawnedAt, 50_000);
 });
