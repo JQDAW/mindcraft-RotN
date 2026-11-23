@@ -15,7 +15,7 @@ import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
 import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath, isWeaponItem } from "./threats.js";
-import { logAte, fightJournal, swingLine, logWeapon } from "./survival_log.js";
+import { logAte, fightJournal, swingLine, logWeapon, mobName } from "./survival_log.js";
 import { waitText } from './wait_text.js';
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -900,7 +900,11 @@ export const ATTACK_HIT = { approach: 3, near: 2, again: 1 };
  * health) and the bot gets no closer by a block for stallMs: mineflayer-pvp ignores bot.attack's
  * result, and with Better Combat a mob in reach but out of sight gets nothing (net-forge #541).
  */
-export const DEFEND_PROGRESS = { stallMs: 10_000 };
+export const DEFEND_PROGRESS = { stallMs: 10_000, hitMs: 700, swingLineMs: 1000 };
+// Soak 12 (D1, 14:45:53-14:46:17): a fight in the open ran 24 s with no hit on a zombie burning in the
+// morning sun: every sun hurt counted as progress. Now only a hurt (or a health drop) within hitMs of a
+// hit the bot sent counts. (D2): its swings are journaled like the shelter fight's, at most one line
+// every swingLineMs.
 // markUnreachable and isUnreachable live in threats.js since soak 6 (threatPlan uses them).
 export { markUnreachable, isUnreachable };
 
@@ -957,7 +961,9 @@ async function attackEntityOnce(bot, entity, kill=true, { approach = true } = {}
         let best = bot.entity.position.distanceTo(entity.position);
         let health = healthOf(entity);
         let progressAt = Date.now();
+        let lastAt = entity.position.clone?.() ?? entity.position; // soak 12 (E): where its drop falls
         while (world.getNearbyEntities(bot, 24).includes(entity)) {
+            lastAt = entity.position.clone?.() ?? entity.position;
             await new Promise(resolve => setTimeout(resolve, ATTACK_PROGRESS.tickMs));
             if (bot.interrupt_code) {
                 bot.pvp.stop();
@@ -977,7 +983,11 @@ async function attackEntityOnce(bot, entity, kill=true, { approach = true } = {}
             }
         }
         log(bot, `Successfully killed ${entity.name}.`);
-        await pickupNearbyItems(bot);
+        // Soak 12 (E, 14:51:18): !attack killed the ewe and said "Picked up 0 items." at once, before the
+        // drop fell (it comes after the death animation). The hunt's kill pickup (soak 11 H1): wait for
+        // the drop where it died, pick it up, and say what.
+        const drops = !bot.interrupt_code ? await pickupKillDrops(bot, lastAt) : null;
+        log(bot, `Its drop: ${killDropsText(drops)}.`);
         return true;
     }
 }
@@ -1010,7 +1020,30 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
     let fought = null; // the mob last attacked (soak 6: fights interrupted again and again on it)
     // (g): the stall guard (DEFEND_PROGRESS): a hurt, a health drop or a block closer is progress.
     let progress = { id: null, at: Date.now(), best: Infinity, health: null };
-    const onHurt = (e) => { if (e?.id != null && e.id === progress.id) progress.at = Date.now(); };
+    // Soak 12 (D1, D2): the hits the bot sends (mineflayer-pvp calls bot.attack), for the stall guard and the swing lines.
+    const swing = { at: -Infinity, prev: null, before: null, target: null, pending: false, lineAt: -Infinity };
+    const origAttack = typeof bot.attack === 'function' ? bot.attack : null;
+    if (origAttack) {
+        bot.attack = function (target, ...rest) {
+            const stamp = () => {
+                const now = Date.now();
+                swing.prev = Number.isFinite(swing.at) ? now - swing.at : null;
+                // #594 re-review 2: the mob's health at the real send (after a Better Combat wait, not at the call).
+                Object.assign(swing, { at: now, before: healthOf(target), target, pending: true });
+            };
+            // #594 review 1: only a hit that went out counts. Better Combat's path resolves {sent: false,
+            // reason: 'sight'|'reach'} for a mob in reach but out of sight, which mineflayer-pvp keeps calling
+            // every cooldown: stamped on the call, every sun-fire hurt was progress and the guard never fired.
+            // A promise: stamped when it resolves sent (at the real send, after a cooldown wait); vanilla's
+            // undefined return: at once.
+            const r = origAttack.call(this, target, ...rest);
+            if (r && typeof r.then === 'function') return r.then((x) => { if (attackSent(x)) stamp(); return x; });
+            stamp();
+            return r;
+        };
+    }
+    const hitRecently = (slack = 0) => Date.now() - swing.at <= DEFEND_PROGRESS.hitMs + slack;
+    const onHurt = (e) => { if (e?.id != null && e.id === progress.id && hitRecently()) progress.at = Date.now(); };
     bot.on?.('entityHurt', onHurt);
     try {
         while (enemy) {
@@ -1035,9 +1068,17 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
             bot.pvp.attack(enemy);
             attacked = true;
             await new Promise(resolve => setTimeout(resolve, 500));
+            // Soak 12 (D2): the last hit sent, journaled at most every swingLineMs (its mob's health before it and now).
+            if (swing.pending && Date.now() - swing.lineAt >= DEFEND_PROGRESS.swingLineMs) {
+                swing.pending = false;
+                swing.lineAt = Date.now();
+                const t = swing.target;
+                console.log(swingLine(t ? mobName(t) : 'unknown', bot.heldItem?.name, swing.prev, swing.before, !t || !bot.entities?.[t.id] ? 'gone' : healthOf(t)));
+            }
             if (bot.entities?.[fought.id] && progress.id === fought.id) {
                 const d = bot.entity.position.distanceTo(fought.position), h = healthOf(fought);
-                if (d <= progress.best - 1 || (h !== null && progress.health !== null && h < progress.health)) progress.at = Date.now();
+                // Soak 12 (D1): a health drop counts only with a hit sent just before it (not the sun's fire).
+                if (d <= progress.best - 1 || (h !== null && progress.health !== null && h < progress.health && hitRecently(500))) progress.at = Date.now();
                 progress.best = Math.min(progress.best, d);
                 if (h !== null) progress.health = h;
                 if (Date.now() - progress.at >= DEFEND_PROGRESS.stallMs && !bot.interrupt_code) {
@@ -1063,6 +1104,7 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
         if (!enemy) outcome = 'gone'; // no enemy left in range (killed when the first one is dead or gone from the world)
     } finally {
         bot.removeListener?.('entityHurt', onHurt);
+        if (origAttack) bot.attack = origAttack;
         journal.end(outcome);
         // Soak 6 (the eel loop): the third fight in a row on one mob that ends interrupted gives it up.
         const n = noteFightEnd(bot, fought, outcome);

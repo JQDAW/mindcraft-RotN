@@ -39,7 +39,8 @@ export const FOOD_LOG_MS = 60_000;
 export const FOOD_UPDATE_MS = 500;
 export const FIGHT_OUTCOMES = ['killed', 'gone', 'stopped', 'capped', 'interrupted', 'died'];
 
-const token = (s) => String(s ?? 'unknown').replace(/[^\w:.-]/g, '_') || 'unknown';
+// Soak 12 (G): '/' kept for a drop's "<mob>/arrow" (entity and item names hold none).
+const token = (s) => String(s ?? 'unknown').replace(/[^\w:./-]/g, '_') || 'unknown';
 /** A mob's name for the journal: its entity type; a player is "player" (never a username). */
 export const mobName = (e) => (e?.type === 'player' ? 'player' : token(e?.name));
 const num = (n) => (Number.isFinite(n) ? String(Math.round(n * 10) / 10) : 'unknown');
@@ -69,7 +70,8 @@ export function logWeapon(bot, where) {
     console.log(weaponLine(item, where));
     return true;
 }
-export const hurtLine = (amount, before, after, source) => `${SURVIVAL_TAG} hurt ${num(amount)} health ${num(before)}->${num(after)} (by ${token(source)})`;
+export const hurtLine = (amount, before, after, source) => `${SURVIVAL_TAG} hurt ${num(amount)} health ${num(before)}->${num(after)} (by ${Array.isArray(source)
+    ? source.map(x => `${token(x.source)} ${num(x.amount)}`).join(', ') : token(source)})`;
 export const HURT = { minDrop: 4, windowMs: 2000, mobRange: 5, swingMs: 1000, fallingRange: 4, detailRange: 16, detailMobs: 3 };
 /** A falling block or a falling Dynamic Trees tree (entity names). */
 const FALLING = /falling/;
@@ -119,6 +121,50 @@ export function hurtSource(bot, { swings = null, now = Date.now() } = {}) {
     return 'unknown';
 }
 
+/**
+ * Soak 12 (G): an arrow (or a bolt or dart) within ARROW.range of the bot now, or one that went from the
+ * world within ARROW.range in the last ARROW.goneMs (an arrow that hits is removed at once): the drop
+ * is named after the nearest ranged mob (threats.threatFor(e).ranged) as "<mob>/arrow". Else hurtSource.
+ */
+export const ARROW = { range: 2.5, goneMs: 500, mobRange: 24, freshMs: 2500 };
+const isArrow = (e) => /(arrow|bolt|dart)$/.test(String(e?.name ?? ''));
+/** #594 re-review 1: an arrow's spawn time (entitySpawn), kept ARROW.freshMs: only a fresh arrow is a shot. */
+export function noteArrowSpawn(state, e, now = Date.now()) {
+    if (!isArrow(e) || e?.id == null) return;
+    const m = state.arrowSpawns ??= new Map();
+    m.set(e.id, now);
+    for (const [id, at] of m) if (now - at > ARROW.freshMs) m.delete(id);
+}
+export function noteArrowGone(state, bot, e, now = Date.now()) {
+    const p = bot?.entity?.position;
+    if (p && isArrow(e) && e.position && e.position.distanceTo(p) <= ARROW.range) state.arrowAt = now;
+}
+export function dropSource(bot, state = {}, now = Date.now()) {
+    const p = bot?.entity?.position;
+    // #594 review 2 and re-review 1: a stuck arrow lies about 60 s, and a skeleton's misses land around the
+    // bot, so a near arrow alone would claim every hit. An arrow's velocity reads 0 here (mineflayer sets
+    // none for objects, and the 1.12.2 tracker sends arrows no velocity), and its destroy comes about 50 ms
+    // after the health packet: a shot is an arrow near the bot that spawned within ARROW.freshMs, or one
+    // gone near it within ARROW.goneMs.
+    const fresh = (e) => now - (state.arrowSpawns?.get(e.id) ?? -Infinity) <= ARROW.freshMs;
+    const arrow = !!p && (now - (state.arrowAt ?? -Infinity) <= ARROW.goneMs
+        || Object.values(bot.entities ?? {}).some(e => e && e !== bot.entity && e.position && isArrow(e) && fresh(e) && e.position.distanceTo(p) <= ARROW.range));
+    if (arrow) {
+        const shooter = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(p) <= ARROW.mobRange && threatFor(e)?.ranged)
+            .sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];
+        return `${shooter ? mobName(shooter) : 'unknown'}/arrow`;
+    }
+    return hurtSource(bot, { swings: state.swings, now });
+}
+/** Soak 12 (G): the window's drops by source ([{source, amount}], largest first) when more than one source; else null. */
+export function sourcesOf(drops) {
+    const by = new Map();
+    for (const d of drops) if (d.source) by.set(d.source, (by.get(d.source) ?? 0) + d.amount);
+    if (by.size > 1) by.delete('unknown'); // a drop with nothing named, next to a named one: not a source of its own
+    if (by.size < 2) return by.size === 1 ? [...by.keys()][0] : null;
+    return [...by].map(([source, amount]) => ({ source, amount })).sort((a, b) => b.amount - a.amount);
+}
+
 /** Note an entity's arm swing (the attack animation) for hurtSource. */
 export function noteSwing(swings, entity, now = Date.now()) {
     if (!entity || entity.id == null) return;
@@ -141,13 +187,15 @@ export function hurtCheck(state, bot, now = Date.now()) {
     state.lastHealth = h;
     // Soak 5 (00:59:54, "hurt 18.5 by zombie"): several zombies' hits in one window read as one
     // hit. Each drop is kept for the detail line.
-    const drop = h < last ? { at: now, amount: last - h } : null;
+    // Soak 12 (G): each drop gets its own source (deaths 10-11: an arrow's 1.9 and a zombie's 5 in one
+    // window, the line said "by zombie", the server "shot by Skeleton").
+    const drop = h < last ? { at: now, amount: last - h, source: dropSource(bot, state, now) } : null;
     let w = state.hurt;
     if (!w || h > w.from) { state.hurt = { from: h, at: now }; state.drops = []; return null; }
     if (now - w.at > HURT.windowMs) { w = state.hurt = { from: last, at: now }; state.drops = []; }
     if (drop) (state.drops ??= []).push(drop);
     if (w.from - h < HURT.minDrop) return null;
-    const text = hurtLine(w.from - h, w.from, h, hurtSource(bot, { swings: state.swings, now }));
+    const text = hurtLine(w.from - h, w.from, h, sourcesOf(state.drops ?? []) ?? hurtSource(bot, { swings: state.swings, now }));
     const detail = hurtDetail(bot, state.drops ?? [], { swings: state.swings, now, start: w.at });
     state.hurt = { from: h, at: now };
     state.drops = [];
@@ -167,7 +215,7 @@ export function hurtDetail(bot, drops, { swings = null, now = Date.now(), start 
     const where = p ? `${num(p.x)},${num(p.y)},${num(p.z)}` : 'unknown';
     const vy = bot?.entity?.velocity?.y;
     const ground = bot?.entity?.onGround === true ? 'ground' : bot?.entity?.onGround === false ? 'air' : 'unknown';
-    const ds = drops.length ? drops.map(d => `${num(d.amount)}@+${num((d.at - start) / 1000)}s`).join(',') : 'none';
+    const ds = drops.length ? drops.map(d => `${num(d.amount)}@+${num((d.at - start) / 1000)}s${d.source ? `=${token(d.source)}` : ''}`).join(',') : 'none';
     const near = p ? Object.values(bot.entities ?? {})
         .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(p) <= HURT.detailRange && (mayHurt(e) || FALLING.test(e.name ?? '')))
         .sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))
@@ -243,6 +291,8 @@ export function bindSurvivalLog(bot, { eatAt }) {
     const state = { swings: new Map() };
     const check = () => { try { foodCheck(state, bot, Date.now(), eatAt); } catch { /* never breaks the bot */ } };
     bot.on('entitySwingArm', (e) => { try { noteSwing(state.swings, e); } catch { /* never breaks the bot */ } });
+    bot.on('entitySpawn', (e) => { try { noteArrowSpawn(state, e); } catch { /* never breaks the bot */ } }); // soak 12 (G)
+    bot.on('entityGone', (e) => { try { noteArrowGone(state, bot, e); } catch { /* never breaks the bot */ } });
     bot.on('health', () => { try { hurtCheck(state, bot, Date.now()); } catch { /* never breaks the bot */ } });
     bot.on('health', check);
     bot.on('physicsTick', check);

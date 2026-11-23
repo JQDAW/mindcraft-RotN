@@ -73,7 +73,7 @@ export function walkableExit(bot, from, { reach = WALK_EXIT.reach, maxNodes = WA
  * liquid (the dig would let it in), or (#593 review 1) one with a falling block right above it (gravel
  * or sand over the roof drops down the dug column).
  */
-export const DIG_OUT = { maxBlocks: 6, side: 3, rise: 4, maxMs: 1000, unknownPickaxeHardness: 2 };
+export const DIG_OUT = { maxBlocks: 6, side: 3, rise: 4, maxMs: 1000 };
 const TOOL_NAME = /_(pickaxe|shovel|axe|spade|mattock|hoe)$/;
 /**
  * #593 re-review 1: the dig time of block b with `tool` (an item, or null: the hand), in ms.
@@ -82,9 +82,10 @@ const TOOL_NAME = /_(pickaxe|shovel|axe|spade|mattock|hoe)$/;
  *   block's harvest tool class when the tool has that class, else 1. A tool the block requires (Tool
  *   Progression) that is missing or below its tier: Infinity (burrow.digEquip would not dig it).
  *   prismarine-block's digTime knows only vanilla item ids (a flint pickaxe on stone read 7.5 s).
- * - A pickaxe rotn-data does not know (crafttweaker:stone_pickaxe today): the rule before #593 review 5,
- *   any pickaxe digs a block of hardness at most DIG_OUT.unknownPickaxeHardness quickly.
- * - Else (a vanilla id rotn-data does not know, or no dump entry): prismarine's block.digTime; with
+ * - A tool rotn-data does not know (no real item today: every *_pickaxe in items.json has toolClasses;
+ *   crafttweaker:stone_pickaxe is a recipe id, #593 re-review): a block that requires a tool, Infinity (as
+ *   burrow.digEquip/allowedTool refuse it); else the hand's time from the dump (speed 1).
+ * - A block with no dump entry: prismarine's block.digTime (vanilla ids only); with
  *   none, the pit's hand rule.
  */
 export function toolDigMs(bot, b, tool) {
@@ -101,9 +102,8 @@ export function toolDigMs(bot, b, tool) {
             const speed = has ? (data.speed?.[cls] ?? 1) : 1;
             return st.hardness * (canHarvest ? 1.5 : 5) / Math.max(speed, 1e-6) * 1000;
         }
-        const id = registryName(tool.name) ?? tool.name;
-        if (/_pickaxe$/.test(id) && !String(id).startsWith('minecraft:'))
-            return st.hardness <= DIG_OUT.unknownPickaxeHardness && (!st.toolRequired || st.harvestTool === 'pickaxe') ? 0 : Infinity;
+        // A tool rotn-data does not know: as the hand.
+        return st.toolRequired ? Infinity : st.hardness * 1.5 * 1000;
     }
     if (typeof b?.digTime === 'function') { try { return b.digTime(tool?.type ?? null, false, false, false, [], bot.entity?.effects ?? {}); } catch { return Infinity; } }
     return !tool && handDiggable(b) && (st?.hardness ?? Infinity) <= PIT.maxHardness ? 0 : Infinity;
