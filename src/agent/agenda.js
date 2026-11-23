@@ -318,11 +318,12 @@ export function foodFirstAfterDeath(s) {
  * SHELTER_LEAD_MIN). Inside it food gets at most ONE run (Agenda.foodBeforeBlocks): until food is
  * held, that run ends, or its budget is spent; then the blocks win for the rest of the window.
  */
-// #588 re-review nit 2: startMs, the wait for a picked run to start, is above the driver's longest food
-// backoff (BACKOFF_MS doubling: 0, 30, 60 s for the 3 attempts) plus a tick; startSlackMs, from the
-// driver's own start (recordAttempt) to its self-prompter running. #588 nit 1: the driver passes the
-// bound from its own budget (state.foodStartMs: stepBudget().attempts, BACKOFF_MS, TICK_MS); startMs
-// is the fallback with no driver (it assumes STEP_ATTEMPTS 3).
+// The wait for a picked food run to start (#588 re-review nit 2, #590 review): the driver passes it
+// (state.foodStartMs, agenda_driver.foodStartMs): its longest food backoff (BACKOFF_MS doubling over
+// stepBudget().attempts runs) plus a tick and FOOD_START_SLACK_MS, never below startMs (the backoff
+// clock starts only once a self-prompter loop still finishing a long command is idle) and never above
+// half the blocks' window (RESERVE_LEAD_MIN). With no driver (tests, !agenda) startMs itself.
+// startSlackMs: from the driver's own start (recordAttempt) to its self-prompter running.
 export const FOOD_BEFORE_NIGHT = { minPerHunger: 2, startMs: 120_000, startSlackMs: 10_000 };
 /** #588 nit 1: the wait for a picked food run to start: the driver's bound, else FOOD_BEFORE_NIGHT.startMs. */
 const startBound = (s) => { let ms = null; try { ms = s.foodStartMs?.() ?? null; } catch { ms = null; } return Number.isFinite(ms) && ms > 0 ? ms : FOOD_BEFORE_NIGHT.startMs; };
