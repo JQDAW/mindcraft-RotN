@@ -15,7 +15,7 @@ import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
 import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath, isWeaponItem } from "./threats.js";
-import { logAte, fightJournal, swingLine, logWeapon } from "./survival_log.js";
+import { logAte, fightJournal, swingLine, logWeapon, mobName } from "./survival_log.js";
 import { waitText } from './wait_text.js';
 import { foodKey } from "./food.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
@@ -1025,10 +1025,21 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
     const origAttack = typeof bot.attack === 'function' ? bot.attack : null;
     if (origAttack) {
         bot.attack = function (target, ...rest) {
-            const now = Date.now();
-            swing.prev = Number.isFinite(swing.at) ? now - swing.at : null;
-            Object.assign(swing, { at: now, before: healthOf(target), target, pending: true });
-            return origAttack.call(this, target, ...rest);
+            const before = healthOf(target);
+            const stamp = () => {
+                const now = Date.now();
+                swing.prev = Number.isFinite(swing.at) ? now - swing.at : null;
+                Object.assign(swing, { at: now, before, target, pending: true });
+            };
+            // #594 review 1: only a hit that went out counts. Better Combat's path resolves {sent: false,
+            // reason: 'sight'|'reach'} for a mob in reach but out of sight, which mineflayer-pvp keeps calling
+            // every cooldown: stamped on the call, every sun-fire hurt was progress and the guard never fired.
+            // A promise: stamped when it resolves sent (at the real send, after a cooldown wait); vanilla's
+            // undefined return: at once.
+            const r = origAttack.call(this, target, ...rest);
+            if (r && typeof r.then === 'function') return r.then((x) => { if (attackSent(x)) stamp(); return x; });
+            stamp();
+            return r;
         };
     }
     const hitRecently = (slack = 0) => Date.now() - swing.at <= DEFEND_PROGRESS.hitMs + slack;
@@ -1062,7 +1073,7 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
                 swing.pending = false;
                 swing.lineAt = Date.now();
                 const t = swing.target;
-                console.log(swingLine(t?.name ?? 'unknown', bot.heldItem?.name, swing.prev, swing.before, !t || !bot.entities?.[t.id] ? 'gone' : healthOf(t)));
+                console.log(swingLine(t ? mobName(t) : 'unknown', bot.heldItem?.name, swing.prev, swing.before, !t || !bot.entities?.[t.id] ? 'gone' : healthOf(t)));
             }
             if (bot.entities?.[fought.id] && progress.id === fought.id) {
                 const d = bot.entity.position.distanceTo(fought.position), h = healthOf(fought);

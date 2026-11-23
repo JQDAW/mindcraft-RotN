@@ -126,7 +126,7 @@ export function hurtSource(bot, { swings = null, now = Date.now() } = {}) {
  * world within ARROW.range in the last ARROW.goneMs (an arrow that hits is removed at once): the drop
  * is named after the nearest ranged mob (threats.threatFor(e).ranged) as "<mob>/arrow". Else hurtSource.
  */
-export const ARROW = { range: 2.5, goneMs: 500, mobRange: 24 };
+export const ARROW = { range: 2.5, goneMs: 500, mobRange: 24, minSpeed: 0.01 };
 const isArrow = (e) => /(arrow|bolt|dart)$/.test(String(e?.name ?? ''));
 export function noteArrowGone(state, bot, e, now = Date.now()) {
     const p = bot?.entity?.position;
@@ -134,8 +134,11 @@ export function noteArrowGone(state, bot, e, now = Date.now()) {
 }
 export function dropSource(bot, state = {}, now = Date.now()) {
     const p = bot?.entity?.position;
+    // #594 review 2: only an arrow in flight (moving) or one just gone (a hit removes it); a stuck arrow
+    // lies about 60 s, and a skeleton's misses land around the bot: it would claim every hit.
+    const flying = (e) => { const v = e.velocity; return !!v && Math.hypot(v.x ?? 0, v.y ?? 0, v.z ?? 0) > ARROW.minSpeed; };
     const arrow = !!p && (now - (state.arrowAt ?? -Infinity) <= ARROW.goneMs
-        || Object.values(bot.entities ?? {}).some(e => e && e !== bot.entity && e.position && isArrow(e) && e.position.distanceTo(p) <= ARROW.range));
+        || Object.values(bot.entities ?? {}).some(e => e && e !== bot.entity && e.position && isArrow(e) && flying(e) && e.position.distanceTo(p) <= ARROW.range));
     if (arrow) {
         const shooter = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(p) <= ARROW.mobRange && threatFor(e)?.ranged)
             .sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];

@@ -570,6 +570,25 @@ test('soak 12 (D1): hurts and health drops with no hit the bot sent (the sun\'s 
     clearInterval(sun);
     assert.ok(Date.now() - t0 < 4000, `ended by the stall guard in ${Date.now() - t0} ms`);
     assert.match(burning.output, /Stopped fighting the zombie: no hit landed and no closer for 1\.2 s/);
+
+    // #594 review 1: mineflayer-pvp keeps calling bot.attack, and Better Combat refuses each ({sent: false,
+    // reason: 'sight'}, the mob in reach but out of sight): no hit went out, so the sun's hurts are still no progress.
+    const on2 = {};
+    const bc = openFight(logs);
+    Object.assign(bc, { on: (ev, f) => { (on2[ev] ??= []).push(f); }, removeListener: (ev, f) => { on2[ev] = (on2[ev] ?? []).filter(x => x !== f); } });
+    const z2 = bc.entities[1];
+    z2.metadata = { 7: 20 };
+    let refused = 0;
+    bc.attack = () => { refused++; return Promise.resolve({ sent: false, path: 'bettercombat', reason: 'sight' }); };
+    bc.pvp.attack = (e) => { bc.attack(e); };
+    const sun2 = setInterval(() => { z2.metadata[7] = Math.max(1, z2.metadata[7] - 1); (on2.entityHurt ?? []).forEach(f => f(z2)); }, 400);
+    t.after(() => clearInterval(sun2));
+    const t1 = Date.now();
+    assert.equal(await skills.defendSelf(bc, 8, (e) => e.name === 'zombie'), true);
+    clearInterval(sun2);
+    assert.ok(refused >= 2, `pvp swung ${refused} times`);
+    assert.ok(Date.now() - t1 < 4000, `ended by the stall guard in ${Date.now() - t1} ms`);
+    assert.match(bc.output, /Stopped fighting the zombie: no hit landed and no closer for 1\.2 s/);
 });
 
 // Soak 12 (D2): the open fight's swings are journaled like the shelter fight's, at most one a second.
@@ -606,13 +625,13 @@ test('#579 nit 3: equipHighestAttack with only bark and a crude axe takes neithe
 // near the bot (or one just gone, as one that hits is) names the nearest ranged mob.
 test('soak 12 (G): each drop is named: an arrow\'s by the nearest ranged mob ("skeleton/arrow"), a swing\'s by its mob; the hurt line names every source when there is more than one', async (t) => {
     const { hurtCheck, noteSwing, noteArrowGone, dropSource, ARROW } = await import('./survival_log.js');
-    assert.deepEqual(ARROW, { range: 2.5, goneMs: 500, mobRange: 24 });
+    assert.deepEqual(ARROW, { range: 2.5, goneMs: 500, mobRange: 24, minSpeed: 0.01 });
     const lines = [];
     t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
     const here = new Vec3(-70.3, 62, 88.1);
     const zombie = { id: 2, name: 'zombie', type: 'mob', position: here.offset(1.8, 0, 0), height: 1.95 };
     const skeleton = { id: 3, name: 'skeleton', type: 'mob', position: here.offset(0, 0, 1.3), height: 1.99 };
-    const arrow = { id: 4, name: 'arrow', type: 'object', position: here.offset(0.3, 1, 0) };
+    const arrow = { id: 4, name: 'arrow', type: 'object', position: here.offset(0.3, 1, 0), velocity: new Vec3(0.6, -0.1, 0) }; // in flight
     const bot = { health: 15, food: 12, entity: { position: here, velocity: { y: 0 }, onGround: true }, entities: { 2: zombie, 3: skeleton, 4: arrow } };
     const state = { swings: new Map() };
     hurtCheck(state, bot, 0);
@@ -627,6 +646,11 @@ test('soak 12 (G): each drop is named: an arrow\'s by the nearest ranged mob ("s
     noteArrowGone(s2, bot, arrow, 1000);
     assert.equal(dropSource(bot, s2, 1300), 'skeleton/arrow');
     assert.equal(dropSource(bot, s2, 1600), 'skeleton', 'past goneMs: the old rule (no swing: the nearest hostile, 1.3 m)');
+    // #594 review 2: a stuck arrow (no velocity) near the bot claims nothing: the zombie's swing is the source.
+    const s4 = { swings: new Map() };
+    const stuck = { ...bot, entities: { 2: zombie, 3: skeleton, 4: { ...arrow, velocity: new Vec3(0, 0, 0) } } };
+    noteSwing(s4.swings, zombie, 2000);
+    assert.equal(dropSource(stuck, s4, 2050), 'zombie');
     // One source only: the line as before.
     const s3 = { swings: new Map() };
     const solo = { ...bot, health: 20, entities: { 2: zombie } };
