@@ -1413,6 +1413,9 @@ test('#588 nit 1: H3\'s wait for its food run to start comes from the driver\'s 
     settings.agenda_step_attempts = undefined;
     assert.equal(foodStartMs(), BACKOFF_MS * 2 + TICK_MS + 10_000, '3 runs: the 60 s wait before the third');
     assert.ok(foodStartMs() <= FOOD_BEFORE_NIGHT.startMs, 'the fallback covers 3 runs');
+    settings.agenda_step_attempts = 4;
+    assert.equal(foodStartMs(), BACKOFF_MS * 4 + TICK_MS + 10_000, '4 runs: the 120 s wait before the fourth');
+    assert.ok(foodStartMs() > FOOD_BEFORE_NIGHT.startMs, 'past the 3-run fallback: why it is computed');
     settings.agenda_step_attempts = 5;
     assert.equal(foodStartMs(), BACKOFF_MS * 8 + TICK_MS + 10_000, '5 runs: the 240 s wait before the fifth');
     // The agenda uses the bound the state carries.
@@ -1435,4 +1438,20 @@ test('#588 nit 2: one wait formatter for the scroll and the kill-drop lines', as
     assert.deepEqual([waitText(50), waitText(999), waitText(1000), waitText(1500), waitText(5000)], ['50 ms', '999 ms', '1 s', '1.5 s', '5 s']);
     assert.equal(killDropsText({ picked: [], seen: 0, refused: null }, 4, 3000), 'no drop seen within 4 blocks in 3 s');
     assert.equal(killDropsText({ picked: [], seen: 0, refused: null }, 4, 50), 'no drop seen within 4 blocks in 50 ms');
+});
+
+test('#588 nit 1: with 4 attempts the driver\'s backoff before the last food run is 120 s, and H3 keeps its one run through it', (t) => {
+    const saved = settings.agenda_step_attempts;
+    t.after(() => { settings.agenda_step_attempts = saved; });
+    settings.agenda_step_attempts = 4;
+    let clock = 0;
+    const agent = hFixAgent(t, [stack('spartanweaponry:club_wood', 0, 1)], { food: 8, timeOfDay: dayAt(7.5) });
+    agent.agenda.now = () => clock;
+    agent.agenda.spent.food = { attempts: 3, llm_ms: 0 }; // three runs today: the fourth waits BACKOFF_MS * 4
+    assert.equal(agendaTick(agent, { now: 0 }), 'food');
+    clock = 4 * BACKOFF_MS - 5_000; // past the 3-run fallback (120 s minus 5 s), the backoff not over
+    assert.equal(agendaTick(agent, { now: clock }), 'food');
+    clock = 4 * BACKOFF_MS + 1_000;
+    assert.equal(agendaTick(agent, { now: clock }), 'food', 'the backoff is over: its run');
+    assert.equal(agent.self_prompter.isActive(), true);
 });
