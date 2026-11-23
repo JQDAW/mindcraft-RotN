@@ -11,8 +11,8 @@
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { handDiggable, dumpState } from './night.js';
-import { digRule, digEquip } from './burrow.js';
-import { allowedTool } from './rotn_sources.js';
+import { digEquip } from './burrow.js';
+import { getItem, registryName } from '../../../packages/rotn-data/index.js';
 import { isLiquid, isFalling } from './shelter.js';
 import { goToGoal } from './skills.js';
 import { digWithin, digBudget, PIT } from './pit.js';
@@ -68,23 +68,50 @@ export function walkableExit(bot, from, { reach = WALK_EXIT.reach, maxNodes = WA
 }
 
 /**
- * The lead's decision 1 (#593 review 5): a block the bot breaks within DIG_OUT.maxMs with what it holds:
- * its real dig time (prismarine's block.digTime, the harvest tier included: rotn-data's tool rule,
- * burrow.digRule) with the best tool it carries that may break it, or the hand. Never a falling
- * block, one next to a liquid (the dig would let it in), or (#593 review 1) one with a falling block
- * right above it (gravel or sand over the roof drops down the dug column). A block whose dig time is
- * unknown falls back to the pit's rule (hand-diggable, hardness at most PIT.maxHardness).
+ * The lead's decision 1 (#593 review 5): a block the bot breaks within DIG_OUT.maxMs with what it holds,
+ * by its dig time with the best tool it carries, or the hand. Never a falling block, one next to a
+ * liquid (the dig would let it in), or (#593 review 1) one with a falling block right above it (gravel
+ * or sand over the roof drops down the dug column).
  */
-export const DIG_OUT = { maxBlocks: 6, side: 3, rise: 4, maxMs: 1000 };
+export const DIG_OUT = { maxBlocks: 6, side: 3, rise: 4, maxMs: 1000, unknownPickaxeHardness: 2 };
+const TOOL_NAME = /_(pickaxe|shovel|axe|spade|mattock|hoe)$/;
+/**
+ * #593 re-review 1: the dig time of block b with `tool` (an item, or null: the hand), in ms.
+ * - A block in rotn-data's dump, and the hand or a tool rotn-data knows: the vanilla rule from the dump,
+ *   hardness * (can harvest ? 1.5 : 5) / speed s, where speed is rotn-data's speed[class] for the
+ *   block's harvest tool class when the tool has that class, else 1. A tool the block requires (Tool
+ *   Progression) that is missing or below its tier: Infinity (burrow.digEquip would not dig it).
+ *   prismarine-block's digTime knows only vanilla item ids (a flint pickaxe on stone read 7.5 s).
+ * - A pickaxe rotn-data does not know (crafttweaker:stone_pickaxe today): the rule before #593 review 5,
+ *   any pickaxe digs a block of hardness at most DIG_OUT.unknownPickaxeHardness quickly.
+ * - Else (a vanilla id rotn-data does not know, or no dump entry): prismarine's block.digTime; with
+ *   none, the pit's hand rule.
+ */
+export function toolDigMs(bot, b, tool) {
+    const st = dumpState(b);
+    const data = tool ? getItem(registryName(tool.name)) : null;
+    if (st && Number.isFinite(st.hardness)) {
+        if (st.hardness < 0 || (st.toolRequired && !st.harvestTool)) return Infinity;
+        if (!tool || data?.toolClasses) {
+            const cls = st.harvestTool;
+            const level = cls ? data?.toolClasses?.[cls] : undefined;
+            const has = Number.isInteger(level) && level >= 0;
+            const canHarvest = !st.toolRequired || (has && level >= (st.harvestLevel ?? 0));
+            if (st.toolRequired && !canHarvest) return Infinity;
+            const speed = has ? (data.speed?.[cls] ?? 1) : 1;
+            return st.hardness * (canHarvest ? 1.5 : 5) / Math.max(speed, 1e-6) * 1000;
+        }
+        const id = registryName(tool.name) ?? tool.name;
+        if (/_pickaxe$/.test(id) && !String(id).startsWith('minecraft:'))
+            return st.hardness <= DIG_OUT.unknownPickaxeHardness && (!st.toolRequired || st.harvestTool === 'pickaxe') ? 0 : Infinity;
+    }
+    if (typeof b?.digTime === 'function') { try { return b.digTime(tool?.type ?? null, false, false, false, [], bot.entity?.effects ?? {}); } catch { return Infinity; } }
+    return !tool && handDiggable(b) && (st?.hardness ?? Infinity) <= PIT.maxHardness ? 0 : Infinity;
+}
+/** The best dig time of b with the hand or any tool the bot carries (ms). */
 export function digMs(bot, b) {
-    const rule = digRule(b);
-    if (rule === false) return Infinity;
-    if (typeof b?.digTime !== 'function') return handDiggable(b) && (dumpState(b)?.hardness ?? Infinity) <= PIT.maxHardness ? 0 : Infinity;
-    const effects = bot.entity?.effects ?? {};
-    const time = (item) => { try { return b.digTime(item?.type ?? null, false, false, false, [], effects); } catch { return Infinity; } };
-    if (rule) { const tool = allowedTool(bot, rule); return tool ? time(tool) : Infinity; } // a tool it requires, of its tier
-    const tools = (bot.inventory?.items?.() ?? []).filter(i => /_(pickaxe|shovel|axe|spade|mattock)$/.test(i.name ?? ''));
-    return Math.min(time(null), ...tools.map(time));
+    const tools = (bot.inventory?.items?.() ?? []).filter(i => TOOL_NAME.test(i.name ?? '') || !!getItem(registryName(i.name))?.toolClasses);
+    return Math.min(toolDigMs(bot, b, null), ...tools.map(t => toolDigMs(bot, b, t)));
 }
 export function quickDig(bot, p) {
     if (typeof bot?.blockAt !== 'function') return false;

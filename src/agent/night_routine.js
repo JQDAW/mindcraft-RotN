@@ -1411,9 +1411,12 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // hand within GATHER.radius first, at most GATHER.maxMs, stopped by a hostile coming near. Once
         // per night; never a walk back to the death spot for the drops.
         if (!n.gatherTried && ops.gatherDirt && ops.repairBlocks && ops.shelterNeed && now - (agent._death?.last?.at ?? -Infinity) <= GATHER.afterDeathMs) {
-            const blocks = ops.repairBlocks(bot);
-            const need = ops.shelterNeed(bot);
-            if (Number.isFinite(need) && blocks < need && !ops.hostileNear?.(bot, GATHER.hostileRange)) {
+            // #593 re-review 3: the cheap checks first; the site search (chooseSite) once per death.
+            const blocks = !ops.hostileNear?.(bot, GATHER.hostileRange) ? ops.repairBlocks(bot) : Infinity;
+            const deathAt = agent._death?.last?.at;
+            if (Number.isFinite(blocks) && n.gatherNeed?.death !== deathAt) n.gatherNeed = { death: deathAt, need: ops.shelterNeed(bot) };
+            const need = n.gatherNeed?.death === deathAt ? n.gatherNeed.need : null;
+            if (Number.isFinite(need) && blocks < need) {
                 n.gatherTried = true;
                 const piles = Math.min(GATHER.maxPiles, GATHER.perDirt * (need - blocks));
                 line(agent, `[night] respawned with ${blocks} shelter block${blocks === 1 ? '' : 's'}, and the dirt shelter here needs ${need}: digging ${piles} dirt piles by hand within ${GATHER.radius} blocks first (at most ${GATHER.maxMs / 1000} s)`);

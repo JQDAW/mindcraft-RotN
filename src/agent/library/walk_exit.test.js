@@ -87,9 +87,27 @@ test('soak 12 (the lead\'s decision 1): only quick blocks: stone not without a p
     const p = stairOutPlan(wet.bot, HOLE);
     assert.ok(!p || p.dig.every(c => quickDig(wet.bot, c)), 'no dug block next to water');
     assert.equal(stairOutPlan(hole().bot, HOLE, { maxBlocks: 2 }), null, 'a 2-block budget is too little from 3 deep');
-    // #593 review 5: the real dig time decides (clay 1.5 s by hand: no), not a hardness bucket.
-    assert.equal(quickDig(hole({ ground: 'clay' }).bot, HOLE.offset(1, 0, 0)), false);
-    assert.equal(stairOutPlan(hole({ ground: 'clay' }).bot, HOLE), null);
+    // #593 review 5: the dig time decides (a melon block, hardness 1, 1.5 s by hand: no; clay 0.9 s: yes), not a hardness bucket.
+    assert.equal(quickDig(hole({ ground: 'melon_block' }).bot, HOLE.offset(1, 0, 0)), false);
+    assert.equal(stairOutPlan(hole({ ground: 'melon_block' }).bot, HOLE), null);
+    assert.equal(quickDig(hole({ ground: 'clay' }).bot, HOLE.offset(1, 0, 0)), true);
+});
+
+// #593 re-review 1: prismarine's digTime knows only vanilla ids: a flint pickaxe on stone read 7.5 s, so
+// stone was never a quick dig with the pack's pickaxes. rotn-data's tool data now (speed 3.8: 0.6 s).
+test('#593 re-review 1: stone with the pack\'s pickaxes: pyrotech:flint_pickaxe by rotn-data\'s speed (about 0.6 s); crafttweaker:stone_pickaxe (no rotn-data entry) by the old rule; by hand, never', async () => {
+    const { toolDigMs } = await import('./walk_exit.js');
+    const stone = { name: 'stone', metadata: 0 };
+    const bot = { inventory: { items: () => [] } };
+    assert.ok(Math.abs(toolDigMs(bot, stone, { name: 'pyrotech:flint_pickaxe' }) - 1.5 * 1.5 / 3.8 * 1000) < 1);
+    assert.equal(toolDigMs(bot, stone, { name: 'crafttweaker:stone_pickaxe' }), 0, 'the old rule: any pickaxe, hardness at most 2');
+    assert.equal(toolDigMs(bot, stone, null), Infinity, 'a pickaxe is required (Tool Progression)');
+    assert.equal(toolDigMs(bot, { name: 'obsidian', metadata: 0 }, { name: 'crafttweaker:stone_pickaxe' }), Infinity, 'the old rule\'s hardness bound');
+    for (const name of ['pyrotech:flint_pickaxe', 'crafttweaker:stone_pickaxe']) {
+        const w = hole({ ground: 'stone', items: [{ name, metadata: 0, count: 1, type: 9999 }] });
+        assert.equal(quickDig(w.bot, HOLE.offset(1, 0, 0)), true, name);
+        assert.ok(stairOutPlan(w.bot, HOLE), `${name}: a dig-out from a stone hole`);
+    }
 });
 
 // #593 review 1 (blocking): gravel over the hole's roof dropped down the column the dig-out opened.

@@ -3931,7 +3931,8 @@ test('soak 12 (B(ii) step 6), #593 review 7: right after a respawn with fewer sh
         o.gathers = [];
         let held = blocks;
         o.repairBlocks = () => held;
-        o.shelterNeed = () => need;
+        o.needs = 0;
+        o.shelterNeed = () => { o.needs++; return need; };
         o.hostileNear = () => hostile;
         o.gatherDirt = (bot, opts) => { o.gathers.push(opts); held = need; return Promise.resolve({ got: opts.piles, why: null }); };
         for (let k = 0; k < 4; k++) { nightTick(agent, { now: k, ops: o }); await settle(agent); }
@@ -3943,7 +3944,11 @@ test('soak 12 (B(ii) step 6), #593 review 7: right after a respawn with fewer sh
     assert.equal(g.o.gathers[0].stop(), null, 'its stop: nothing near');
     assert.ok(g.agent.chat.includes('[night] respawned with 1 shelter block, and the dirt shelter here needs 5: digging 16 dirt piles by hand within 8 blocks first (at most 45 s)'), g.agent.chat.join('\n'));
     assert.ok(g.o.builds.length >= 1, 'then the shelter');
-    assert.equal((await run({ hostile: { name: 'zombie', position: new Vec3(5, 64, 0) } })).o.gathers.length, 0, 'a hostile within 16');
+    const near = await run({ hostile: { name: 'zombie', position: new Vec3(5, 64, 0) } });
+    assert.equal(near.o.gathers.length, 0, 'a hostile within 16');
+    assert.equal(near.o.needs, 0, '#593 re-review 3: no site search with a hostile near');
+    const enough = await run({ blocks: 3, need: 3 });
+    assert.equal(enough.o.needs, 1, '#593 re-review 3: the site search once per death, not every tick');
     assert.equal((await run({ blocks: 3, need: 3 })).o.gathers.length, 0, 'blocks enough');
     assert.equal((await run({ need: null })).o.gathers.length, 0, 'no dirt shelter fits here');
     assert.equal((await run({ deathAgo: 10 * 60_000 })).o.gathers.length, 0, 'no fresh respawn');
