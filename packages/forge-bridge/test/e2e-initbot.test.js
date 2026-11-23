@@ -17,6 +17,7 @@ import { pinnedModList, syntheticRegistries, tmpFile, PING_FIXTURE, FIXTURES } f
 import { readCapture } from '../src/capture.js';
 import { joinFakeWorld, MODDED } from './fake-world.js';
 import { encodeEntitySpawn } from '../src/channels.js';
+import { forgeDigTime, pickState } from '../src/dig-time.js';
 
 // Race a promise against a timeout that is always cleared (no lingering timer).
 function within(ms, promise, what) {
@@ -132,6 +133,14 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.equal(moddedBlock.boundingBox, 'empty');
     assert.deepEqual(moddedBlock.shapes, []);
     assert.equal(bot.forge.collision.fromDump, 2);
+    // #593 review: initBot installs the Forge dig-time rule from the dump on the world's Block class.
+    assert.equal(bot.forge.digTime?.installed, true, 'installed when the first column loaded');
+    const stoneBelow = bot.blockAt(bot.entity.position.offset(0, -1, 0));
+    assert.equal(bot.digTime(stoneBelow), Infinity, 'stone by hand: Tool Progression, the server never breaks it (was 7500)');
+    assert.equal(stoneBelow.digTime(5003, false, false, false, [], {}), Infinity, 'the crude axe has no pickaxe level');
+    const rockState = pickState(catalog.getBlock('pyrotech:rock'), moddedBlock.metadata);
+    assert.equal(moddedBlock.digTime(null, false, false, false, [], {}), forgeDigTime(rockState, null), 'a modded block by the dump\'s state for its metadata');
+    assert.ok(Number.isFinite(moddedBlock.digTime(null, false, false, false, [], {})));
     assert.deepEqual(bot.forge.registryReport.added, { blocks: 2, items: 2, entities: 1, biomes: 1 });
     // rotn-data request 4: Mindcraft's name helpers read bot.registry, so they know modded names.
     assert.equal(getBlockId('pyrotech:rock'), 4001);
