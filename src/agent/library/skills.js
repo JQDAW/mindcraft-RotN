@@ -2139,8 +2139,9 @@ export async function pickupNearbyItems(bot, { allow = null } = {}) {
  * lies there (the pickup refusals hold: a death spot, a hostile near), and say what came in.
  * Returns { picked: [{name, count}], seen, refused } (seen: drops within radius; refused: a reason).
  */
-export const KILL_DROPS = { radius: 4, maxMs: 3000, settleMs: 300, step: 100 };
-export async function pickupKillDrops(bot, at, { radius = KILL_DROPS.radius, maxMs = KILL_DROPS.maxMs, settleMs = KILL_DROPS.settleMs, step = KILL_DROPS.step, pickup = pickupNearbyItems } = {}) {
+// pickup: null for pickupNearbyItems (the tests set their own, as they set HUNT).
+export const KILL_DROPS = { radius: 4, maxMs: 3000, settleMs: 300, step: 100, pickup: null };
+export async function pickupKillDrops(bot, at, { radius = KILL_DROPS.radius, maxMs = KILL_DROPS.maxMs, settleMs = KILL_DROPS.settleMs, step = KILL_DROPS.step, pickup = KILL_DROPS.pickup ?? pickupNearbyItems } = {}) {
     const near = (e) => e?.name === 'item' && !!e.position && !!at && e.position.distanceTo(at) <= radius;
     const drops = () => Object.values(bot.entities ?? {}).filter(near);
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));

@@ -589,6 +589,9 @@ test('soak 11 (H2): a pig, cow or sheep in range is hunted before a nearer rabbi
     const doe = { id: 3, name: 'animania:doe_cottontail', type: 'mob', position: new Vec3(3.5, 64, 0.5), height: 0.5, metadata: { 7: 3 } };
     const sow = { id: 4, name: 'animania:sow_large_white', type: 'mob', position: new Vec3(12.5, 64, 0.5), height: 0.9, metadata: { 7: 10 } };
     assert.deepEqual([meatRank(doe), meatRank(sow), meatRank({ name: 'rabbit' }), meatRank(cow(1, 1))], [1, 0, 1, 0]);
+    // #588 nit 2: every rabbit breed by name; a goat doe keeps the default rank.
+    for (const breed of ['cottontail', 'dutch', 'havana', 'jack', 'lop', 'rex', 'new_zealand', 'chinchilla']) assert.equal(meatRank({ name: `animania:doe_${breed}` }), 1, breed);
+    assert.deepEqual([meatRank({ name: 'animania:doe_alpine' }), meatRank({ name: 'animania:doe_kiko' })], [0, 0], 'goat does are not rabbits');
     const both = huntAgent({ animals: [doe, sow] });
     assert.equal(huntTarget(both.bot)?.id, 4, 'the sow, though the rabbit is nearer');
     assert.deepEqual(nearbyHuntable(both.bot), ['animania:sow_large_white', 'animania:doe_cottontail']);
@@ -619,4 +622,42 @@ test('soak 11 (H2): a pig, cow or sheep in range is hunted before a nearer rabbi
     const prompt = FOOD_RESERVE_STEP.goalNow({ food: () => 9, foodHeld: () => 0, huntable: () => ['animania:sow_large_white'], forageable: () => [], hasWeapon: () => true }, {});
     assert.match(prompt, /a kill is food only once its meat is in your inventory/);
     assert.match(prompt, /Raw meat is safe \(1 hunger each, a rabbit 2; never raw chicken\)/);
+});
+
+// #588 nit 5: the reflex's line when the drop is picked up, and when a pickup refusal keeps it.
+test('#588 nit 5: after a kill the hunting reflex says what it picked up, or why the drop was left (a recent death spot)', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (l) => lines.push(String(l)));
+    const saved = { ...KILL_DROPS }, savedHunt = { ...HUNT };
+    Object.assign(HUNT, { checkMs: 10 });
+    t.after(() => { Object.assign(KILL_DROPS, saved); Object.assign(HUNT, savedHunt); });
+    const hunted = (setup) => {
+        const items = [];
+        const agent = huntAgent({ animals: [cow(1, 3)], items });
+        agent.bot.pvp = { attack: () => {
+            delete agent.bot.entities[1];
+            agent.bot.entities[50] = { id: 50, name: 'item', type: 'object', position: new Vec3(3.5, 64, 0.5) }; // the drop, where it died
+        }, stop() {} };
+        agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: false }; };
+        setup?.(agent, items);
+        return agent;
+    };
+    const lineOf = async (agent) => {
+        lines.length = 0;
+        await hunt(agent);
+        for (let i = 0; i < 100 && !lines.some(l => /^\[reflex\] hunting animania:cow_holstein: /.test(l)); i++) await new Promise(r => setTimeout(r, 20));
+        return lines.find(l => /^\[reflex\] hunting animania:cow_holstein: /.test(l));
+    };
+    // Picked up: the pickup (the real one walks to it) brings 3 beef in.
+    Object.assign(KILL_DROPS, { maxMs: 200, step: 10, settleMs: 10 });
+    const got = hunted((agent, items) => {
+        KILL_DROPS.pickup = (bot, { allow }) => { if (allow(bot.entities[50])) { items.push({ name: 'beef', count: 3, metadata: 0 }); delete bot.entities[50]; } return Promise.resolve(); };
+    });
+    assert.equal(await lineOf(got), '[reflex] hunting animania:cow_holstein: killed; picked up 3 beef');
+    // Refused: the drop lies within the radius of a recent death spot.
+    const kept = hunted((agent) => {
+        KILL_DROPS.pickup = (bot, { allow }) => { allow(bot.entities[50]); return Promise.resolve(); };
+        agent.bot.rotnDeathSpots = (now) => [{ pos: { x: 3, y: 64, z: 0 }, at: now - 1000, dimension: 'overworld' }];
+    });
+    assert.match(await lineOf(kept), /^\[reflex\] hunting animania:cow_holstein: killed; 1 drop left: within \d+ blocks of where you died recently/);
 });

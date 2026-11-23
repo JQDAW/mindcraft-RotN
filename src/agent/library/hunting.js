@@ -80,7 +80,10 @@ export function retaliationRisk(bot, target, { radius = HUNT.retaliationRadius }
  * soak 11 cottontail kill left no food. A pig, cow or sheep in range comes before a rabbit; then the
  * nearest. 0: worth a hunt first; 1: a rabbit.
  */
-export const meatRank = (e) => (/^(animania:doe_|rabbit$)/.test(e?.name ?? '') ? 1 : 0);
+// #588 nit 2: the rabbit breeds by name (rotn-data); a goat doe (animania:doe_alpine, doe_kiko) is not a rabbit.
+export const RABBIT_BREEDS = ['cottontail', 'dutch', 'havana', 'jack', 'lop', 'rex', 'new_zealand', 'chinchilla'];
+const RABBIT = new RegExp(`^(animania:doe_(${RABBIT_BREEDS.join('|')})|rabbit)$`);
+export const meatRank = (e) => (RABBIT.test(e?.name ?? '') ? 1 : 0);
 const huntOrder = (here) => (a, b) => (meatRank(a) - meatRank(b)) || (a.position.distanceTo(here) - b.position.distanceTo(here));
 
 export function huntTarget(bot, { bases = [], radius = HUNT.radius, skipped = [] } = {}) {

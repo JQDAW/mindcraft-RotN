@@ -311,15 +311,18 @@ export function foodFirstAfterDeath(s) {
  * back at 22:06 at food 6, and the night began at food 4 with nothing to eat (food 0 kills at once).
  * Before night, with no food held, when food would reach EAT_NOW_AT by sunset at the working rate
  * (minPerHunger: about 1 every 2 min with walks, digging and sprints), the food reserve comes before
- * the shelter blocks; the weapon stays ahead of both (2 logs). The last shelterMin minutes before
- * sunset are the shelter blocks' again (the hole shelter needs a roof).
+ * the shelter blocks; the weapon stays ahead of both (2 logs).
+ * #588 review 1 (the lead's decision): the night routine takes over at SHELTER_LEAD_MIN, so the
+ * agenda's turn before night is only the shelter blocks' window (RESERVE_LEAD_MIN down to
+ * SHELTER_LEAD_MIN). Inside it food gets at most ONE run (Agenda.foodBeforeBlocks): until food is
+ * held, that run ends, or its budget is spent; then the blocks win for the rest of the window.
  */
-export const FOOD_BEFORE_NIGHT = { minPerHunger: 2, shelterMin: 4 };
+export const FOOD_BEFORE_NIGHT = { minPerHunger: 2, startMs: 60_000 };
 /** Whether food comes before the shelter blocks now (FOOD_BEFORE_NIGHT). */
 export function foodRunsOutBeforeNight(s) {
     let m = Infinity, food = null, held = 0;
     try { m = s.minutesToSunset?.() ?? Infinity; food = s.food?.(); held = s.foodHeld?.() ?? 0; } catch { return false; }
-    if (!Number.isFinite(m) || m <= FOOD_BEFORE_NIGHT.shelterMin || !Number.isFinite(food) || held > 0) return false;
+    if (!Number.isFinite(m) || m <= 0 || !Number.isFinite(food) || held > 0) return false;
     return food - m / FOOD_BEFORE_NIGHT.minPerHunger <= EAT_NOW_AT;
 }
 
@@ -480,13 +483,44 @@ export class Agenda {
 
     /** Whether a step id is one of the reserves (the shelter blocks, the weapon, the food). */
     isReserveId(id) { return id != null && (id === this.reserve?.id || id === this.weapon?.id || id === this.food?.id); }
+    /**
+     * #588 review 1 (the lead): whether food comes before the shelter blocks now (H3,
+     * foodRunsOutBeforeNight), for at most one food run inside the blocks' window: once food was
+     * picked for it, only while that run goes on (state.foodRunning); after it, the blocks win until
+     * the window is over (reset outside it).
+     */
+    foodBeforeBlocks(state, { readOnly = false } = {}) {
+        let window = false;
+        try { window = beforeNight(state); } catch { window = false; }
+        if (!window) { if (!readOnly) this.h3Run = null; return false; }
+        if (!foodRunsOutBeforeNight(state)) return false;
+        if (!this.h3Run) return true; // no food run yet in this window
+        if (this.h3Run.ended) return false;
+        let running = false;
+        try { running = !!state.foodRunning?.(); } catch { running = false; }
+        if (running) { if (!readOnly) this.h3Run.seen = true; return true; }
+        // Picked, its run not started yet (the driver may judge again first): still food, for at most
+        // FOOD_BEFORE_NIGHT.startMs; a run seen and now over: the blocks for the rest of the window.
+        if (!this.h3Run.seen && this.now() - this.h3Run.at < FOOD_BEFORE_NIGHT.startMs) return true;
+        if (!readOnly) this.h3Run.ended = true;
+        return false;
+    }
+    /** H3's one food run in this window was picked (#588 review 1). */
+    foodBeforeBlocksRan() { this.h3Run ??= { at: this.now(), seen: false, ended: false }; }
+
     /** A reserve, if one is wanted now: the shelter reserve first, then the weapon, then food (G4 #5). */
     anyReserveWanted(state) {
         // Soak 7 (d): after a death, hungry with nothing to eat: food first (FOOD_AFTER_DEATH).
         const first = foodFirstAfterDeath(state) ? this.foodWanted(state) : null;
         if (first) return first;
         // Soak 11 (H3): food would run low by sunset with none held: the weapon, then food, then the blocks.
-        if (foodRunsOutBeforeNight(state)) return this.weaponWanted(state, { foodDue: this.foodDue(state) }) ?? this.foodWanted(state) ?? this.reserveWanted(state);
+        if (this.foodBeforeBlocks(state)) {
+            const w = this.weaponWanted(state, { foodDue: this.foodDue(state) });
+            if (w) return w;
+            const f = this.foodWanted(state);
+            if (f) { this.foodBeforeBlocksRan(); return f; }
+            return this.reserveWanted(state);
+        }
         return this.reserveWanted(state) ?? this.weaponWanted(state, { foodDue: this.foodDue(state) }) ?? this.foodWanted(state);
     }
     /** A reserve's budget is spent: the shelter reserve and the weapon until the night is past; food for FOOD_RETRY_MS. */
@@ -707,9 +741,17 @@ export class Agenda {
         const foodDue = this.foodDue(state, { standing: blocked });
         // Soak 7 (d): after a death, hungry with nothing to eat: food before the other reserves.
         const first = foodFirstAfterDeath(state) ? this.foodWanted(state, { standing: blocked, readOnly }) : null;
-        // Soak 11 (H3): food would run low by sunset with none held: the weapon, then food, then the blocks.
-        const pick = first ?? (foodRunsOutBeforeNight(state)
-            ? this.weaponWanted(state, { readOnly, foodDue }) ?? this.foodWanted(state, { standing: blocked, readOnly }) ?? this.reserveWanted(state, { readOnly })
+        // Soak 11 (H3): food would run low by sunset with none held: the weapon, then food (one run, #588
+        // review 1), then the blocks.
+        const h3 = () => {
+            const w = this.weaponWanted(state, { readOnly, foodDue });
+            if (w) return w;
+            const f = this.foodWanted(state, { standing: blocked, readOnly });
+            if (f) { if (!readOnly) this.foodBeforeBlocksRan(); return f; }
+            return this.reserveWanted(state, { readOnly });
+        };
+        const pick = first ?? (this.foodBeforeBlocks(state, { readOnly })
+            ? h3()
             : this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly, foodDue }) ?? this.foodWanted(state, { standing: blocked, readOnly }))
             ?? step;
         return { step: pick, newlyDone, waiting: blocked };
