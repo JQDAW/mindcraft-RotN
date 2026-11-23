@@ -5,7 +5,7 @@
 - `result.json` marks it not-gate (`gateValid: false`) for two reasons:
   - the S-run reason from #436;
   - the step-7 runner's reasons: there is no `ROTN_G4_ACCEPT` marker, so conditions (a) and (d) fail. Conditions (b), (c) and (e) hold.
-- **The first soak on rotn-v0.1.18.** `agenda_done` and `food_floor` passed (both failed in soak 11): the agenda was done at 13:35:3x, and food never went below 12. The run went the full 120 min with no process restart and no agent exit (`no_crash` passed).
+- **The first soak on rotn-v0.1.18.** `agenda_done` and `food_floor` passed (both failed in soak 11): the agenda was done at 13:35:3x, and the sampled lowest food was 12; one eat came at food 11 (14:51:00, `driver.log:3201`–`3202`), between two once-a-minute samples. The run went the full 120 min with no process restart and no agent exit (`no_crash` passed).
 - **No death for the first 109 min.** The bot came through nights 1 and 2. It killed a spider (14:04:32) and, from inside the night-2 shelter, a zombie with the club (14:30:31).
 - **16 deaths in the last 11 min, all reported** (server causes, `server.log`):
   - **Death 1** (15:11:12, `slain by Zombie`), in the night-3 shelter at 16, 64, -46. Three seconds after the bot broke a scaffolding block inside its 1x2 space, a zombie was in the bot's cell. The bot logged `fighting it from the shelter` 14 times, but no `fight start` or `swing` line. The `lost` line lists 344 dirt piles, 42 logs and the club (`club_wood:41`), but the club was in the off hand again after the respawn.
@@ -55,7 +55,7 @@ Every address is redacted (`<ip>`): the CX23's, the dev server's and the test se
 | `peak_memory` | PASS | 624 MiB (target 850) |
 | `usd_per_hour` | PASS | USD 0.034265/h: USD 0.068589 over 120 min, 203 completions (target 0.05) |
 | `agenda_done` | PASS | `agenda done` at 13:35:3x (`server.log:498`), 14 min after the join |
-| `food_floor` | PASS | lowest food 12, from 126 food lines (floor 6) |
+| `food_floor` | PASS | lowest food 12, from 126 food lines (floor 6). The check reads the food lines; one eat came at food 11 between two of them (14:51:00, `driver.log:3201`) |
 | `ate_when_low` | **FAIL** | 1 of 13 `low` lines had no eat after it: 15:14:46 (food 12, health 20), 4 s after death 2, with nothing held (the escape ran next). The other 12 were each followed by an eat within 37 s |
 | `deaths_reported` | PASS | each of 16 deaths reported |
 
@@ -181,7 +181,7 @@ The windows come from the journal: the night routine's `sunset is near` line and
 | 1 | 2 | 15:14:46 (3817) | 2 | interrupted by self_preservation at 2 blocks (15:15:06), death 1 s later | 20 |
 | 2 | 3 | 15:15:11 (3843) | 3 | interrupted at 1 block (15:15:32) | 21 |
 | 3 | 4 | 15:15:37 (3871) | 4 | ended with a death at 0 blocks (15:16:02) | 25 |
-| 4 | 5 | 15:16:05 (3908) | 5 | ended with a death at 1 block (15:16:25) | 20 |
+| 4 | 5 | 15:16:05 (3908) | 5 | ended with a death at 1 block (15:16:26, `driver.log:3936`; the death at 15:16:25) | 21 |
 | 5 | 6 | 15:16:29 (3944) | 6 | interrupted at 1 block (15:16:50) | 21 |
 | 6 | 7 | 15:16:55 (3978) | 7 | interrupted at 1 block (15:17:15) | 20 |
 | 7 | 8 | 15:17:19 (4006) | 8 | interrupted at 1 block (15:17:41) | 22 |
@@ -231,7 +231,7 @@ The windows come from the journal: the night routine's `sunset is near` line and
 | --- | --- | --- |
 | 13:21:53–13:41:54 | 20 | day 1, night 1 |
 | 13:42:54–14:06:55 | 19 → 13 | night 1, day 2 (one point each 4 min) |
-| 14:07:33–15:11:07 | 12 ↔ 13 | 12 `low` lines at food 12, each followed by an eat (back to 13, except the mutton eats during death 1) |
+| 14:07:33–15:11:07 | 11 ↔ 13 | 12 `low` lines at food 12, each followed by an eat (back to 13, except the mutton eats during death 1); between samples, food 11 at 14:51:00 (`ate rustic:wildberries:0 food 11->12`) |
 | 15:12:07–15:14:07 | 13 | after death 1 (the last mutton eat at 15:11:18 gave 12 → 13) |
 | 15:14:46–15:21:46 | 12 | the death loop; no eat |
 
@@ -265,7 +265,7 @@ This section only points at the lines above:
 - the scroll's respawn point is the night-2 hole shelter cell, which the bot could not leave at morning (`still enclosed: dig a way out`, 14:44:56); every later death came within 3 blocks of it;
 - no respawn escape ran after death 1 (night: the night routine ran instead, with 0 dirt), so the bot stayed at the respawn point for 3.5 min;
 - the escapes did not get farther than 2 blocks from the spawn; 8 were interrupted by self_preservation, each followed by a death and another `try 1 of 3`;
-- death 1: a zombie in the bot's cell 3 s after the scaffolding was broken from inside; 14 `fighting it from the shelter` lines with no fight or swing line; 8 mutton eats at `12->12` while hit;
+- death 1: a zombie in the bot's cell 3 s after the scaffolding was broken from inside; 14 `fighting it from the shelter` lines with no fight or swing line; 8 mutton eats at `12->12` while hit; health went 5 -> 2 -> 0 (15:11:11–15:11:12) with no `hurt` line for those two hits; the eating reflex still ran after the death (`ate animania:raw_prime_mutton:0 food 12->12` at 15:11:16, while waiting for the respawn); after the respawn the pickaxe check logged `inventory: none` with `held: animania:raw_prime_mutton` (15:11:18);
 - death 2's fight held `animania:raw_prime_mutton` with the club in the off hand;
 - deaths 10 and 11: the server says `shot by Skeleton`, the bot's hurt lines say `by zombie`;
 - the `lost` lines name the off-hand club for deaths 1 to 13 (`club_wood:41` … `:125`), and after death 1 up to 112 rocks and 48 dirt piles each.
