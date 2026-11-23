@@ -317,6 +317,8 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
 
 /** R6: the Scroll of New Life. away: from the spawn square and every death spot; quiet: no hostile this near. */
 // Soak 11 (F1): waitMs 5 s (2 s before), one retry, and the use only once an eat is over (afterEatMs after it, settleMs at most).
+/** #587 review 1: the server's own line after a scroll use (a hint for the journal, never the proof). */
+export const SCROLL_SAID = /^Your spawnpoint is now -?\d+, -?\d+, -?\d+!$/;
 export const SCROLL = { item: 'lifescroll:spawnscroll', away: 100, quiet: 16, waitMs: 5000, tries: 2, afterEatMs: 1000, settleMs: 5000 };
 export const isSpawnScroll = (item) => !!item && typeof item.name === 'string' && /(^|:)spawnscroll$/.test(item.name) && /lifescroll/.test(item.name);
 
@@ -347,47 +349,57 @@ export async function useSpawnScroll(bot, { waitMs = SCROLL.waitMs, settleMs = S
     // Soak 11 (F1): 21:31:58 the use started in the same second as an eat, and the server log has no
     // lifescroll line: the use never reached it. First the eat (or any held-item use) is over, and
     // SCROLL.afterEatMs has passed since the last one (food.eatFood's rotnAteAt), for at most settleMs.
-    for (let waited = 0; waited < settleMs; waited += step) {
-        const eating = !!bot.usingHeldItem || Date.now() - (bot.rotnAteAt ?? -Infinity) < afterEatMs;
-        if (!eating) break;
+    const eatingNow = () => !!bot.usingHeldItem || Date.now() - (bot.rotnAteAt ?? -Infinity) < afterEatMs;
+    for (let waited = 0; waited < settleMs && eatingNow(); waited += step) {
         if (bot.interrupt_code) return { used: false, why: 'stopped before the use' };
         await sleep(step);
     }
+    // #587 nit 2: still eating after settleMs: not now (the next shelter tries again).
+    if (eatingNow()) return { used: false, why: `still eating after ${(settleMs / 1000).toFixed(0)} s` };
     const before = count();
     const held = bot.heldItem;
-    // The server's answer: the stack shrinks, or its chat line "Your spawnpoint is now ...".
+    // #587 review 1 (the lead): the use counts ONLY when the stack shrinks. Any player can type "your
+    // spawnpoint is now ..." (and on 1.12 /tell and /say arrive as 'system' too), so the server's line
+    // is only a hint for the journal: a 'system' line that is exactly SCROLL_SAID.
     const chat = [];
-    let said = false;
-    const onChat = (text) => {
+    let said = null;
+    const onChat = (text, position) => {
         const line = String(text ?? '');
-        if (/your spawn ?point is now/i.test(line)) said = true;
+        if (position === 'system' && SCROLL_SAID.test(line.trim())) said = line.trim();
         else if (chat.length < 3) chat.push(line.slice(0, 80));
     };
     bot.on?.('messagestr', onChat);
     bot.rotnScrollBySkill = true;
     const notes = [];
+    const hint = () => (said ? `; the server said "${said}"` : '');
     try {
         for (let t = 1; t <= tries; t++) {
             if (bot.interrupt_code) { notes.push(`try ${t}: stopped`); break; }
+            // #587 nit 5: a late answer to try 1 plus a retry could spend a second scroll: with more than
+            // one held (or the server's line seen), no retry.
+            if (t > 1 && (count() > 1 || said)) { notes.push(`no try ${t}: ${said ? 'the server answered try 1' : `${count()} scrolls held (a late answer could spend two)`}`); break; }
             const scroll = bot.inventory.items().find(isSpawnScroll);
             if (!scroll) break;
-            await bot.equip(scroll, 'hand');
-            if (!isSpawnScroll(bot.heldItem)) { notes.push(`try ${t}: the scroll was not in hand (held ${bot.heldItem?.name ?? 'nothing'})`); continue; }
-            bot.activateItem();
-            for (let waited = 0; waited < waitMs && !said && count() >= before; waited += step) await sleep(step);
-            try { bot.deactivateItem?.(); } catch { /* best effort */ }
-            if (count() < before || said) {
-                const by = count() < before ? (said ? 'the stack shrank and the chat said so' : 'the stack shrank') : 'the chat line (the stack did not shrink yet)';
-                return { used: true, by, tries: t };
+            // #587 nit 3: a throw ends this try only.
+            try {
+                await bot.equip(scroll, 'hand');
+                if (!isSpawnScroll(bot.heldItem)) { notes.push(`try ${t}: the scroll was not in hand (held ${bot.heldItem?.name ?? 'nothing'})`); continue; }
+                bot.activateItem();
+                // #587 nit 4: a stop ends the wait.
+                for (let waited = 0; waited < waitMs && count() >= before && !bot.interrupt_code; waited += step) await sleep(step);
+                try { bot.deactivateItem?.(); } catch { /* best effort */ }
+            } catch (err) {
+                notes.push(`try ${t}: ${safeError(err)}`);
+                continue;
             }
-            notes.push(`try ${t}: no answer in ${(waitMs / 1000).toFixed(0)} s (held ${bot.heldItem?.name ?? 'nothing'} in slot ${bot.heldItem?.slot ?? '?'})`);
+            if (count() < before) return { used: true, by: said ? 'the stack shrank and the server said so' : 'the stack shrank', tries: t };
+            if (bot.interrupt_code) { notes.push(`try ${t}: stopped`); break; }
+            notes.push(`try ${t}: the stack did not shrink in ${(waitMs / 1000).toFixed(0)} s (held ${bot.heldItem?.name ?? 'nothing'} in slot ${bot.heldItem?.slot ?? '?'})`);
         }
-    } catch (err) {
-        notes.push(safeError(err));
     } finally {
         bot.rotnScrollBySkill = false;
         bot.removeListener?.('messagestr', onChat);
         if (held && !isSpawnScroll(held)) { try { await bot.equip(held, 'hand'); } catch { /* best effort */ } }
     }
-    return { used: false, why: `the scroll was not used up (${notes.join('; ') || 'no try'}; chat seen: ${chat.length ? chat.map(c => `"${c}"`).join(', ') : 'none'})` };
+    return { used: false, why: `the scroll was not used up (${notes.join('; ') || 'no try'}${hint()}; other chat seen: ${chat.length ? chat.map(c => `"${c}"`).join(', ') : 'none'})` };
 }
