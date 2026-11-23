@@ -3268,7 +3268,7 @@ test('soak 10 (R6): in a closed night shelter the scroll is used once, as the ro
     assert.deepEqual(uses, [1]);
     assert.ok(labels.includes('action:spawnScroll'), labels.join(','));
     assert.ok(agent.chat.includes('[night] setting the respawn point here at 0, 64, 0 with the Scroll of New Life (once): far from the spawn and every death spot, no hostile near'));
-    assert.ok(agent.chat.includes('[night] the respawn point is now 0, 64, 0: a death within 32 blocks of it raises no player zombie'));
+    assert.ok(agent.chat.includes('[night] the respawn point is now 0, 64, 0: a death within 32 blocks of it raises no player zombie (seen by the stack)'), agent.chat.join('\n'));
     nightTick(agent, { now: CHECK_MS + 2, ops: o });
     await settle(agent);
     assert.deepEqual(uses, [1], 'once a shelter');
