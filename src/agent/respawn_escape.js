@@ -321,6 +321,8 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
 
 /** R6: the Scroll of New Life. away: from the spawn square and every death spot; quiet: no hostile this near. */
 // Soak 11 (F1): waitMs 5 s (2 s before), one retry, and the use only once an eat is over (afterEatMs after it, settleMs at most).
+/** #587 nit 1: a wait in words ("50 ms" under a second, "5 s" from one up; toFixed(0) said "0 s"). */
+export const waitText = (ms) => (ms < 1000 ? `${Math.round(ms)} ms` : `${+(ms / 1000).toFixed(1)} s`);
 /** #587 review 1: the server's own line after a scroll use (a hint for the journal, never the proof). */
 export const SCROLL_SAID = /^Your spawnpoint is now -?\d+, -?\d+, -?\d+!$/;
 export const SCROLL = { item: 'lifescroll:spawnscroll', away: 100, quiet: 16, waitMs: 5000, tries: 2, afterEatMs: 1000, settleMs: 5000 };
@@ -359,12 +361,13 @@ export async function useSpawnScroll(bot, { waitMs = SCROLL.waitMs, settleMs = S
         await sleep(step);
     }
     // #587 nit 2: still eating after settleMs: not now (the next shelter tries again).
-    if (eatingNow()) return { used: false, why: `still eating after ${(settleMs / 1000).toFixed(0)} s` };
+    if (eatingNow()) return { used: false, why: `still eating after ${waitText(settleMs)}` };
     const before = count();
     const held = bot.heldItem;
     // #587 review 1 (the lead): the use counts ONLY when the stack shrinks. Any player can type "your
     // spawnpoint is now ..." (and on 1.12 /tell and /say arrive as 'system' too), so the server's line
-    // is only a hint for the journal: a 'system' line that is exactly SCROLL_SAID.
+    // is only a hint for the journal: a 'system' line that is exactly SCROLL_SAID. #587 nit 2: such a line
+    // not from the scroll (an op's /tellraw) can only stop the retry; it never marks the scroll used.
     const chat = [];
     let said = null;
     const onChat = (text, position) => {
@@ -398,12 +401,12 @@ export async function useSpawnScroll(bot, { waitMs = SCROLL.waitMs, settleMs = S
             }
             if (count() < before) return { used: true, by: said ? 'the stack shrank and the server said so' : 'the stack shrank', tries: t };
             if (bot.interrupt_code) { notes.push(`try ${t}: stopped`); break; }
-            notes.push(`try ${t}: the stack did not shrink in ${(waitMs / 1000).toFixed(0)} s (held ${bot.heldItem?.name ?? 'nothing'} in slot ${bot.heldItem?.slot ?? '?'})`);
+            notes.push(`try ${t}: the stack did not shrink in ${waitText(waitMs)} (held ${bot.heldItem?.name ?? 'nothing'} in slot ${bot.heldItem?.slot ?? '?'})`);
         }
     } finally {
         bot.rotnScrollBySkill = false;
         bot.removeListener?.('messagestr', onChat);
         if (held && !isSpawnScroll(held)) { try { await bot.equip(held, 'hand'); } catch { /* best effort */ } }
     }
-    return { used: false, why: `the scroll was not used up (${notes.join('; ') || 'no try'}${hint()}; other chat seen: ${chat.length ? chat.map(c => `"${c}"`).join(', ') : 'none'})` };
+    return { used: false, why: `the scroll was not used up (${notes.join('; ') || 'no try'}${hint()}; other chat seen (player text, quoted): ${chat.length ? chat.map(c => JSON.stringify(c)).join(', ') : 'none'})` };
 }

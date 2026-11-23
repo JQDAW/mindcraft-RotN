@@ -739,13 +739,16 @@ const modes_list = [
                 say(agent, `Hunting ${target.name} for food!`);
                 // #422 review 1: bounded (HUNT.maxMs), and over once the day is (dusk) or a threat comes.
                 const end = await huntAnimal(bot, target, { keepGoing: keepHunting, equip: (b) => skills.equipHighestAttack(b) });
-                try { await skills.rearmWeapon(bot); } catch { /* soak 11 (A3): the weapon back in the off hand */ }
+                // Soak 11 (H1): after a kill, its drop picked up here (within the hunt), and said.
+                const diedAt = target.position?.clone?.() ?? target.position ?? null;
+                const drops = end === 'killed' && !bot.interrupt_code ? await skills.pickupKillDrops(bot, diedAt) : null;
+                try { await skills.rearmWeapon(bot); } catch { /* soak 11 (A3): the weapon back in the off hand, after the pickup */ }
                 // Soak 2: an animal the hunt could not get (stuck, time, or stopped by the unstuck
                 // reflex: #431 review 7, not by a fight) is left alone a while.
                 const byUnstuck = end === 'interrupted' && agent.rotnLastInterrupt?.by === 'unstuck' && agent.rotnLastInterrupt?.of === `mode:${this.name}`;
                 const skip = end === 'stuck' || end === 'time' || byUnstuck;
                 if (skip) skipAnimal(bot, target.id);
-                console.log(`[reflex] hunting ${target.name}: ${end}${skip ? ` (left alone for ${HUNT.skipMs / 60_000} min)` : ''}`);
+                console.log(`[reflex] hunting ${target.name}: ${end}${skip ? ` (left alone for ${HUNT.skipMs / 60_000} min)` : ''}${drops ? `; ${skills.killDropsText(drops)}` : ''}`);
             });
         }
     },

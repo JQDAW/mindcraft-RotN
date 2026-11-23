@@ -539,7 +539,7 @@ test('soak 11 (F1): the scroll waits until an eat is over (and 1 s after it), th
     assert.deepEqual(bot.uses, [{ eating: false, held: 'lifescroll:spawnscroll' }], 'never used while eating');
     // #587 nit 2: still eating when settleMs is up: not used now (the next shelter tries again).
     const busy = scrollBot({ eating: true });
-    assert.deepEqual(await useSpawnScroll(busy.bot, { waitMs: 50, settleMs: 40, step: 10 }), { used: false, why: 'still eating after 0 s' });
+    assert.deepEqual(await useSpawnScroll(busy.bot, { waitMs: 50, settleMs: 40, step: 10 }), { used: false, why: 'still eating after 40 ms' });
     assert.deepEqual(busy.bot.uses, []);
 });
 
@@ -555,7 +555,7 @@ test('#587 review 1: only a shrinking stack counts; a player\'s chat, a whisper,
     const sys = scrollBot({ answer: 'chat' });
     const r = await useSpawnScroll(sys.bot, { waitMs: 50, step: 10 });
     assert.equal(r.used, false);
-    assert.match(r.why, /^the scroll was not used up \(try 1: the stack did not shrink in 0 s \(held lifescroll:spawnscroll in slot 37\); no try 2: the server answered try 1; the server said "Your spawnpoint is now 55, 76, -27!"; other chat seen: none\)$/);
+    assert.match(r.why, /^the scroll was not used up \(try 1: the stack did not shrink in 50 ms \(held lifescroll:spawnscroll in slot 37\); no try 2: the server answered try 1; the server said "Your spawnpoint is now 55, 76, -27!"; other chat seen \(player text, quoted\): none\)$/);
     assert.equal(sys.bot.uses.length, 1);
     // A shrink with the server's line: used, and both said.
     const both = scrollBot({ answer: 'both' });
@@ -594,7 +594,7 @@ test('soak 11 (F1): no answer on both tries, or the scroll not in hand: the reas
     none.bot.on = (ev, f) => { if (ev === 'messagestr') setTimeout(() => f('[Server] hello', 'chat'), 5); };
     const r = await useSpawnScroll(none.bot, { waitMs: 50, step: 10 });
     assert.equal(r.used, false);
-    assert.equal(r.why, 'the scroll was not used up (try 1: the stack did not shrink in 0 s (held lifescroll:spawnscroll in slot 37); try 2: the stack did not shrink in 0 s (held lifescroll:spawnscroll in slot 37); other chat seen: "[Server] hello")');
+    assert.equal(r.why, 'the scroll was not used up (try 1: the stack did not shrink in 50 ms (held lifescroll:spawnscroll in slot 37); try 2: the stack did not shrink in 50 ms (held lifescroll:spawnscroll in slot 37); other chat seen (player text, quoted): "[Server] hello")');
     const hand = scrollBot();
     hand.bot.equip = () => Promise.resolve(); // the equip does not take
     const h = await useSpawnScroll(hand.bot, { waitMs: 50, step: 10 });

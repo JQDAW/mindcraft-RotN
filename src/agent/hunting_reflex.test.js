@@ -12,7 +12,7 @@ import { __modeForTest, __resetThreatLease } from './modes.js';
 import { executeCommand } from './commands/index.js';
 import { NIGHT_START, NightClock } from './library/night.js';
 import { HUNT } from './library/hunting.js';
-import { ATTACK_PROGRESS, isUnreachable, markUnreachable } from './library/skills.js';
+import { ATTACK_PROGRESS, isUnreachable, markUnreachable, KILL_DROPS, pickupKillDrops, killDropsText } from './library/skills.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -536,4 +536,128 @@ test('#502 nit 3: rotnUnreachable drops expired entries when one is marked or lo
     assert.deepEqual([...bot.rotnUnreachable.keys()], [2], 'and gone from the map');
     markUnreachable(bot, { id: 3 }, 1000 + ATTACK_PROGRESS.skipMs);
     assert.deepEqual([...bot.rotnUnreachable.keys()], [3], 'marking prunes the expired ones');
+});
+
+// Soak 11 (H1): 22:08:51 "hunting animania:doe_cottontail: killed", then the model's next command at
+// once, and the night began with 0 food held: nothing said whether the meat was picked up.
+test('soak 11 (H1): after a kill the hunt waits for the drop where the animal died and says what it picked up, or that none was seen', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (l) => lines.push(String(l)));
+    const saved = { ...KILL_DROPS }, savedHunt = { ...HUNT };
+    Object.assign(KILL_DROPS, { maxMs: 50, step: 10, settleMs: 10 });
+    Object.assign(HUNT, { checkMs: 10 });
+    t.after(() => { Object.assign(KILL_DROPS, saved); Object.assign(HUNT, savedHunt); });
+    const agent = huntAgent({ animals: [cow(1, 3)] });
+    agent.bot.pvp = { attack: () => { delete agent.bot.entities[1]; }, stop() {} };
+    agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: false }; };
+    await hunt(agent);
+    for (let i = 0; i < 100 && !lines.some(l => /^\[reflex\] hunting animania:cow_holstein: /.test(l)); i++) await new Promise(r => setTimeout(r, 20));
+    assert.ok(lines.includes('[reflex] hunting animania:cow_holstein: killed; no drop seen within 4 blocks in 50 ms'), lines.join('\n'));
+});
+
+test('soak 11 (H1): pickupKillDrops picks up only drops near the kill spot, through the pickup refusals, and counts what came in', async () => {
+    const at = new Vec3(3.5, 64, 0.5);
+    const items = [];
+    const drop = (id, x, extra = {}) => ({ id, name: 'item', type: 'object', position: new Vec3(x, 64, 0.5), ...extra });
+    const bot = { entity: { position: new Vec3(0.5, 64, 0.5) }, entities: { 5: drop(5, 4), 6: drop(6, 20) }, inventory: { items: () => items } };
+    const allowed = [];
+    const pickup = (b, { allow }) => { for (const e of Object.values(b.entities)) if (allow(e)) { allowed.push(e.id); items.push({ name: 'rabbit', count: 1 }); } return Promise.resolve(); };
+    const r = await pickupKillDrops(bot, at, { maxMs: 50, step: 10, settleMs: 0, pickup });
+    assert.deepEqual(allowed, [5], 'not the drop 16 blocks away');
+    assert.deepEqual(r, { picked: [{ name: 'rabbit', count: 1 }], seen: 1, refused: null });
+    assert.equal(killDropsText(r), 'picked up 1 rabbit');
+    // None within reach in the wait: nothing tried.
+    const empty = { entity: bot.entity, entities: {}, inventory: { items: () => [] } };
+    const none = await pickupKillDrops(empty, at, { maxMs: 30, step: 10, pickup: () => { throw new Error('no pickup'); } });
+    assert.deepEqual(none, { picked: [], seen: 0, refused: null });
+    assert.equal(killDropsText(none, 4, 3000), 'no drop seen within 4 blocks in 3 s');
+    // A drop the refusals keep (a zombie near it): left, and said why.
+    const zombie = { id: 9, name: 'zombie', type: 'mob', position: new Vec3(5, 64, 0.5), height: 1.95 };
+    const kept = { entity: bot.entity, entities: { 5: drop(5, 4), 9: zombie }, inventory: { items: () => [] } };
+    const k = await pickupKillDrops(kept, at, { maxMs: 30, step: 10, settleMs: 0, pickup: (b, { allow }) => { Object.values(b.entities).forEach(allow); return Promise.resolve(); } });
+    assert.equal(k.seen, 1);
+    assert.ok(k.refused, 'a refusal named');
+    assert.match(killDropsText(k), /^1 drop left: /);
+});
+
+// Soak 11 (H2, rotn-data's soak 11 Animania food answer): a cottontail drops 0-2 rabbit (none in a
+// quarter of kills); a regular pig, cow or sheep 2-8 vanilla meat, a prime one 1-4 prime meat. Raw
+// meat is safe (only raw chicken gives Hunger); the prime meats are 1 hunger, the rabbit 2.
+test('soak 11 (H2): a pig, cow or sheep in range is hunted before a nearer rabbit, and named first; the meats every breed drops count as safe food', async () => {
+    const { huntTarget, nearbyHuntable, meatRank } = await import('./library/hunting.js');
+    const { foodValue, avoidReason, heldFoodHunger } = await import('./library/food.js');
+    const doe = { id: 3, name: 'animania:doe_cottontail', type: 'mob', position: new Vec3(3.5, 64, 0.5), height: 0.5, metadata: { 7: 3 } };
+    const sow = { id: 4, name: 'animania:sow_large_white', type: 'mob', position: new Vec3(12.5, 64, 0.5), height: 0.9, metadata: { 7: 10 } };
+    assert.deepEqual([meatRank(doe), meatRank(sow), meatRank({ name: 'rabbit' }), meatRank(cow(1, 1))], [1, 0, 1, 0]);
+    // #588 nit 2: every rabbit breed by name; a goat doe keeps the default rank.
+    for (const breed of ['cottontail', 'dutch', 'havana', 'jack', 'lop', 'rex', 'new_zealand', 'chinchilla']) assert.equal(meatRank({ name: `animania:doe_${breed}` }), 1, breed);
+    assert.deepEqual([meatRank({ name: 'animania:doe_alpine' }), meatRank({ name: 'animania:doe_kiko' })], [0, 0], 'goat does are not rabbits');
+    const both = huntAgent({ animals: [doe, sow] });
+    assert.equal(huntTarget(both.bot)?.id, 4, 'the sow, though the rabbit is nearer');
+    assert.deepEqual(nearbyHuntable(both.bot), ['animania:sow_large_white', 'animania:doe_cottontail']);
+    const rabbitOnly = huntAgent({ animals: [doe] });
+    assert.equal(huntTarget(rabbitOnly.bot)?.id, 3, 'a rabbit when there is nothing else');
+    // What each breed drops (vanilla meat from regular breeds, prime meat from prime ones): safe food.
+    const meats = { 'minecraft:rabbit': 2, 'minecraft:porkchop': 1, 'minecraft:beef': 1, 'minecraft:mutton': 1,
+        'animania:raw_prime_pork': 1, 'animania:raw_prime_beef': 1, 'animania:raw_prime_mutton': 1, 'animania:raw_prime_rabbit': 1, 'animania:raw_prime_chicken': 1 };
+    for (const [name, hunger] of Object.entries(meats)) {
+        const item = { name, metadata: 0, count: 1 };
+        assert.equal(foodValue(item)?.hunger, hunger, name);
+        assert.equal(avoidReason(item), null, `${name} is safe raw`);
+    }
+    assert.ok(avoidReason({ name: 'minecraft:chicken', metadata: 0 }), 'raw chicken: Hunger 30% of the time');
+    // Raw chicken only when starving (food 5 or lower, EMERGENCY_FOOD), and never before safe meat.
+    const { chooseFood } = await import('./library/food.js');
+    const inv = (...names) => ({ inventory: { items: () => names.map(name => ({ name, metadata: 0, count: 1 })) } });
+    assert.equal(chooseFood(inv('minecraft:chicken')), null, 'not hungry enough');
+    assert.equal(chooseFood(inv('minecraft:chicken'), { emergency: true })?.name, 'minecraft:chicken', 'starving: eaten');
+    assert.equal(chooseFood(inv('minecraft:chicken', 'minecraft:porkchop'), { emergency: true })?.name, 'minecraft:porkchop', 'safe raw meat first');
+    assert.equal(chooseFood(inv('minecraft:beef'))?.name, 'minecraft:beef', 'raw beef eaten as it is');
+    // The night's "food worth N hunger held" counts them.
+    const held = { inventory: { items: () => [{ name: 'minecraft:porkchop', metadata: 0, count: 5 }, { name: 'animania:raw_prime_beef', metadata: 0, count: 2 }] } };
+    assert.equal(heldFoodHunger(held), 7);
+    // The food step's texts say so.
+    const { FOOD_RESERVE_STEP } = await import('./agenda.js');
+    assert.match(FOOD_RESERVE_STEP.goal, /hunt a wild pig, cow or sheep near you \(2 to 8 meat each; a rabbit drops 0 to 2, a young animal nothing\)/);
+    const prompt = FOOD_RESERVE_STEP.goalNow({ food: () => 9, foodHeld: () => 0, huntable: () => ['animania:sow_large_white'], forageable: () => [], hasWeapon: () => true }, {});
+    assert.match(prompt, /a kill is food only once its meat is in your inventory/);
+    assert.match(prompt, /Raw meat is safe \(1 hunger each, a rabbit 2; never raw chicken\)/);
+});
+
+// #588 nit 5: the reflex's line when the drop is picked up, and when a pickup refusal keeps it.
+test('#588 nit 5: after a kill the hunting reflex says what it picked up, or why the drop was left (a recent death spot)', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (l) => lines.push(String(l)));
+    const saved = { ...KILL_DROPS }, savedHunt = { ...HUNT };
+    Object.assign(HUNT, { checkMs: 10 });
+    t.after(() => { Object.assign(KILL_DROPS, saved); Object.assign(HUNT, savedHunt); });
+    const hunted = (setup) => {
+        const items = [];
+        const agent = huntAgent({ animals: [cow(1, 3)], items });
+        agent.bot.pvp = { attack: () => {
+            delete agent.bot.entities[1];
+            agent.bot.entities[50] = { id: 50, name: 'item', type: 'object', position: new Vec3(3.5, 64, 0.5) }; // the drop, where it died
+        }, stop() {} };
+        agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: false }; };
+        setup?.(agent, items);
+        return agent;
+    };
+    const lineOf = async (agent) => {
+        lines.length = 0;
+        await hunt(agent);
+        for (let i = 0; i < 100 && !lines.some(l => /^\[reflex\] hunting animania:cow_holstein: /.test(l)); i++) await new Promise(r => setTimeout(r, 20));
+        return lines.find(l => /^\[reflex\] hunting animania:cow_holstein: /.test(l));
+    };
+    // Picked up: the pickup (the real one walks to it) brings 3 beef in.
+    Object.assign(KILL_DROPS, { maxMs: 200, step: 10, settleMs: 10 });
+    const got = hunted((agent, items) => {
+        KILL_DROPS.pickup = (bot, { allow }) => { if (allow(bot.entities[50])) { items.push({ name: 'beef', count: 3, metadata: 0 }); delete bot.entities[50]; } return Promise.resolve(); };
+    });
+    assert.equal(await lineOf(got), '[reflex] hunting animania:cow_holstein: killed; picked up 3 beef');
+    // Refused: the drop lies within the radius of a recent death spot.
+    const kept = hunted((agent) => {
+        KILL_DROPS.pickup = (bot, { allow }) => { allow(bot.entities[50]); return Promise.resolve(); };
+        agent.bot.rotnDeathSpots = (now) => [{ pos: { x: 3, y: 64, z: 0 }, at: now - 1000, dimension: 'overworld' }];
+    });
+    assert.match(await lineOf(kept), /^\[reflex\] hunting animania:cow_holstein: killed; 1 drop left: within \d+ blocks of where you died recently/);
 });

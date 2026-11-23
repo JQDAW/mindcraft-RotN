@@ -26,7 +26,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { SHELTER_LEAD_MIN, dirtPileRecipes, isFullDay } from './library/night.js';
-import { foodShortfall, FOOD_TARGET, EMERGENCY_FOOD, EAT_AT, emergencyFoodText, NEVER_EAT_TEXT } from './library/food.js';
+import { foodShortfall, FOOD_TARGET, EMERGENCY_FOOD, EAT_AT, EAT_NOW_AT, emergencyFoodText, NEVER_EAT_TEXT } from './library/food.js';
 import { HUNT_MIN_FOOD } from './library/hunting.js';
 
 /**
@@ -306,6 +306,30 @@ export function foodFirstAfterDeath(s) {
     return Number.isFinite(since) && since <= FOOD_AFTER_DEATH.windowMs && Number.isFinite(food) && food <= EAT_AT && held <= 0;
 }
 
+/**
+ * Soak 11 (H3, the lead): 22:03:42, 9 min before sunset, the before-night shelter blocks came before
+ * food at food 7-8 with no food held (the 4 min after the 21:57 death had gone on the club); food came
+ * back at 22:06 at food 6, and the night began at food 4 with nothing to eat (food 0 kills at once).
+ * Before night, with no food held, when food would reach EAT_NOW_AT by sunset at the working rate
+ * (minPerHunger: about 1 every 2 min with walks, digging and sprints), the food reserve comes before
+ * the shelter blocks; the weapon stays ahead of both (2 logs).
+ * #588 review 1 (the lead's decision): the night routine takes over at SHELTER_LEAD_MIN, so the
+ * agenda's turn before night is only the shelter blocks' window (RESERVE_LEAD_MIN down to
+ * SHELTER_LEAD_MIN). Inside it food gets at most ONE run (Agenda.foodBeforeBlocks): until food is
+ * held, that run ends, or its budget is spent; then the blocks win for the rest of the window.
+ */
+// #588 re-review nit 2: startMs, the wait for a picked run to start, is above the driver's longest food
+// backoff (BACKOFF_MS doubling: 0, 30, 60 s for the 3 attempts) plus a tick; startSlackMs, from the
+// driver's own start (recordAttempt) to its self-prompter running.
+export const FOOD_BEFORE_NIGHT = { minPerHunger: 2, startMs: 120_000, startSlackMs: 10_000 };
+/** Whether food comes before the shelter blocks now (FOOD_BEFORE_NIGHT). */
+export function foodRunsOutBeforeNight(s) {
+    let m = Infinity, food = null, held = 0;
+    try { m = s.minutesToSunset?.() ?? Infinity; food = s.food?.(); held = s.foodHeld?.() ?? 0; } catch { return false; }
+    if (!Number.isFinite(m) || m <= 0 || !Number.isFinite(food) || held > 0) return false;
+    return food - m / FOOD_BEFORE_NIGHT.minPerHunger <= EAT_NOW_AT;
+}
+
 /** After the food reserve's budget is spent, it is not asked again for this long (G4 #5). */
 export const FOOD_RETRY_MS = 10 * 60_000;
 /**
@@ -333,7 +357,7 @@ export const FOOD_RESERVE_STEP = {
     id: 'food', short: 'keep food for the day and the night', reserve: true, when: 'food',
     due: (s, ctx) => foodShort(s, ctx) !== null,
     done: () => false, // done when no longer due (enough held)
-    goal: `Food: on this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: food 0 kills you at once, at any health. Long walks cost hunger. Keep food worth at least ${FOOD_TARGET.night} hunger before night. Gather ripe wild food first with !forage (wildberry bushes, wild herbs, HarvestCraft gardens); only while you hold a weapon, else hunt a wild cow, pig, sheep or rabbit near you and pick up the meat (raw meat gives 1 hunger; eat it raw if needed); with no weapon, do not hunt: make a weapon first. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh unless your food is ${EMERGENCY_FOOD} or lower, and then only these, in this order: ${emergencyFoodText()}; never ${NEVER_EAT_TEXT}. Keep the bread for last.`,
+    goal: `Food: on this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: food 0 kills you at once, at any health. Long walks cost hunger. Keep food worth at least ${FOOD_TARGET.night} hunger before night. Gather ripe wild food first with !forage (wildberry bushes, wild herbs, HarvestCraft gardens); only while you hold a weapon, else hunt a wild pig, cow or sheep near you (2 to 8 meat each; a rabbit drops 0 to 2, a young animal nothing) and pick up the meat (raw meat is safe: 1 hunger each, a rabbit 2, never raw chicken; eat it raw when hungry); with no weapon, do not hunt: make a weapon first. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh unless your food is ${EMERGENCY_FOOD} or lower, and then only these, in this order: ${emergencyFoodText()}; never ${NEVER_EAT_TEXT}. Keep the bread for last.`,
     goalNow: (s, ctx) => {
         const target = foodShort(s, ctx) ?? FOOD_TARGET.day;
         const held = s.foodHeld?.() ?? 0;
@@ -358,9 +382,9 @@ export const FOOD_RESERVE_STEP = {
             ? `You hold no weapon: gather ripe wild food with !forage${crops.length ? '' : ' (berry bushes, wild herbs, HarvestCraft gardens; look around nearby, do not walk far)'}; hunting waits until you hold a weapon. `
             : animals.length
             ? `Near you: ${animals.slice(0, 3).join(', ')}: kill one with !attack("${animals[0]}") and pick up what it drops. `
-            : crops.length ? 'No wild animal is near. ' : 'No ripe wild food and no wild animal is near: try !forage once you see berry bushes, herbs or HarvestCraft gardens; or look for an animal (cows, pigs, sheep, rabbits; on this pack mostly Animania ones such as animania:cow_holstein or animania:sow_old_spot) with !searchForEntity, away from fences and houses, then !attack it. ';
+            : crops.length ? 'No wild animal is near. ' : 'No ripe wild food and no wild animal is near: try !forage once you see berry bushes, herbs or HarvestCraft gardens; or look for an animal (pigs, cows and sheep first, a rabbit only if there is nothing else; on this pack mostly Animania ones such as animania:cow_holstein or animania:sow_old_spot) with !searchForEntity, away from fences and houses, then !attack it. ';
         return `Food: you hold food worth ${held} hunger${Number.isFinite(food) ? ` and your food is ${food} of 20` : ''}. On this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: get to at least ${target}. Food 0 kills you at once on this pack, at any health, and long walks cost hunger: stay near. `
-            + wild + near + 'Raw meat gives 1 hunger each; eat it raw if needed. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player (the bot refuses those). '
+            + wild + near + 'Raw meat is safe (1 hunger each, a rabbit 2; never raw chicken): eat it raw when hungry. A pig, cow or sheep drops 2 to 8 meat, a rabbit 0 to 2 (often none): a kill is food only once its meat is in your inventory. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player (the bot refuses those). '
             + (emergency ? `At food ${EMERGENCY_FOOD} or lower, with no other food, eat only these, in this order: ${emergencyFoodText()}; never ${NEVER_EAT_TEXT}.`
                 : 'Do not eat raw chicken or rotten flesh; keep the bread for last.');
     },
@@ -390,7 +414,7 @@ export class Agenda {
         // Soak 11 (E2): when its budget ran out (a death after it gives a fresh one). #587 nit 8: saved in
         // agenda.json, and kept when a restart rebuilds weaponOff from the spent budget.
         this.weaponOffAt = null;
-        this.weaponDusk = null; // #587 nit 7: whether it was last judged before night
+        this.weaponDusk = null; // #587 nit 7: whether it was last judged before night; #587 re-review nit 4: saved
         this.finished = false; // "agenda done": only the reserve runs
         this.active = false;
         this.done_at = {}; // step id -> when it was first seen done
@@ -426,6 +450,7 @@ export class Agenda {
             this.standing = data.standing && typeof data.standing.key === 'string' ? data.standing : null;
             this.weaponWindow = typeof data.weaponWindow === 'string' ? data.weaponWindow : null;
             this.weaponOffAt = Number.isFinite(data.weaponOffAt) ? data.weaponOffAt : null;
+            this.weaponDusk = typeof data.weaponDusk === 'boolean' ? data.weaponDusk : null;
             this.existed = true;
             this.loadState = 'present';
         } catch (err) {
@@ -441,7 +466,7 @@ export class Agenda {
         try {
             mkdirSync(path.dirname(this.file), { recursive: true });
             const tmp = `${this.file}.tmp`;
-            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, standing: this.standing, weaponWindow: this.weaponWindow, weaponOffAt: this.weaponOffAt, updated_at: this.now() }, null, 2));
+            writeFileSync(tmp, JSON.stringify({ version: 2, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, standing: this.standing, weaponWindow: this.weaponWindow, weaponOffAt: this.weaponOffAt, weaponDusk: this.weaponDusk, updated_at: this.now() }, null, 2));
             renameSync(tmp, this.file);
             this.existed = true; // a later spawn (a respawn) must not autostart it either
         } catch (err) {
@@ -468,11 +493,56 @@ export class Agenda {
 
     /** Whether a step id is one of the reserves (the shelter blocks, the weapon, the food). */
     isReserveId(id) { return id != null && (id === this.reserve?.id || id === this.weapon?.id || id === this.food?.id); }
+    /**
+     * #588 review 1 (the lead): whether food comes before the shelter blocks now (H3,
+     * foodRunsOutBeforeNight), for at most one food run inside the blocks' window: once food was
+     * picked for it, only while that run goes on (state.foodRunning); after it, the blocks win until
+     * the window is over (reset outside it).
+     */
+    foodBeforeBlocks(state, { readOnly = false } = {}) {
+        let window = false;
+        try { window = beforeNight(state); } catch { window = false; }
+        if (!window) { if (!readOnly) this.h3Run = null; return false; }
+        if (!foodRunsOutBeforeNight(state)) return false;
+        if (!this.h3Run) return true; // no food run yet in this window
+        if (this.h3Run.ended) return false;
+        let running = false;
+        try { running = !!state.foodRunning?.(); } catch { running = false; }
+        if (running) { if (!readOnly) this.h3Run.seen = true; return true; }
+        // Picked, its run not started yet (the driver may judge again first, or wait out its backoff):
+        // still food, for at most FOOD_BEFORE_NIGHT.startMs; started by the driver (recordAttempt), for
+        // startSlackMs until its self-prompter runs; a run seen and now over: the blocks for the rest of
+        // the window. #588 re-review nit 5: a self-prompter paused mid-run (a task, an E3 hold) reads as
+        // over too: the blocks then, as for a run that ended.
+        const now = this.now();
+        const waiting = !this.h3Run.seen && (this.h3Run.started != null
+            ? now - this.h3Run.started < FOOD_BEFORE_NIGHT.startSlackMs
+            : now - this.h3Run.at < FOOD_BEFORE_NIGHT.startMs);
+        if (waiting) return true;
+        if (!readOnly) this.h3Run.ended = true;
+        return false;
+    }
+    /**
+     * H3's one food run in this window was picked (#588 review 1). #588 re-review nit 4: not saved in
+     * agenda.json: a restart inside the window may give food one more run there (rare, and bounded by
+     * the food budget).
+     */
+    foodBeforeBlocksRan() { this.h3Run ??= { at: this.now(), started: null, seen: false, ended: false }; }
+
     /** A reserve, if one is wanted now: the shelter reserve first, then the weapon, then food (G4 #5). */
     anyReserveWanted(state) {
         // Soak 7 (d): after a death, hungry with nothing to eat: food first (FOOD_AFTER_DEATH).
         const first = foodFirstAfterDeath(state) ? this.foodWanted(state) : null;
-        return first ?? this.reserveWanted(state) ?? this.weaponWanted(state, { foodDue: this.foodDue(state) }) ?? this.foodWanted(state);
+        if (first) return first;
+        // Soak 11 (H3): food would run low by sunset with none held: the weapon, then food, then the blocks.
+        if (this.foodBeforeBlocks(state)) {
+            const w = this.weaponWanted(state, { foodDue: this.foodDue(state) });
+            if (w) return w;
+            const f = this.foodWanted(state);
+            if (f) { this.foodBeforeBlocksRan(); return f; }
+            return this.reserveWanted(state);
+        }
+        return this.reserveWanted(state) ?? this.weaponWanted(state, { foodDue: this.foodDue(state) }) ?? this.foodWanted(state);
     }
     /** A reserve's budget is spent: the shelter reserve and the weapon until the night is past; food for FOOD_RETRY_MS. */
     reserveStuck(id) {
@@ -512,7 +582,7 @@ export class Agenda {
             let dusk = false;
             try { dusk = beforeNight(state); } catch { dusk = false; }
             if (dusk && this.weaponDusk === false) fresh();
-            this.weaponDusk = dusk;
+            if (this.weaponDusk !== dusk) { this.weaponDusk = dusk; this.save(); } // #587 re-review nit 4: a restart inside the dusk keeps it
             if (this.weaponWindow !== window) { this.weaponWindow = window; this.save(); } // #502 nit 4: kept across a restart
         }
         // Soak 11 (E2): a death after the budget was spent (a lost weapon) gives a fresh budget.
@@ -605,6 +675,8 @@ export class Agenda {
     /** One more self-prompter run for a step (saved: a crash loop cannot reset it). */
     recordAttempt(id) {
         if (id === this.food?.id) this.foodDay.runs++; // #422 review 8: the food reserve's runs per day
+        // #588 re-review nit 2: H3's food run starts here (the driver's own start, after its backoff).
+        if (id === this.food?.id && this.h3Run && this.h3Run.started == null) this.h3Run.started = this.now();
         const b = this.spentOn(id);
         this.spent[id] = { ...b, attempts: b.attempts + 1 }; // keeps the reserve's need and refresh
         this.save();
@@ -708,8 +780,19 @@ export class Agenda {
         const foodDue = this.foodDue(state, { standing: blocked });
         // Soak 7 (d): after a death, hungry with nothing to eat: food before the other reserves.
         const first = foodFirstAfterDeath(state) ? this.foodWanted(state, { standing: blocked, readOnly }) : null;
-        const pick = first ?? this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly, foodDue })
-            ?? this.foodWanted(state, { standing: blocked, readOnly }) ?? step;
+        // Soak 11 (H3): food would run low by sunset with none held: the weapon, then food (one run, #588
+        // review 1), then the blocks.
+        const h3 = () => {
+            const w = this.weaponWanted(state, { readOnly, foodDue });
+            if (w) return w;
+            const f = this.foodWanted(state, { standing: blocked, readOnly });
+            if (f) { if (!readOnly) this.foodBeforeBlocksRan(); return f; }
+            return this.reserveWanted(state, { readOnly });
+        };
+        const pick = first ?? (this.foodBeforeBlocks(state, { readOnly })
+            ? h3()
+            : this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly, foodDue }) ?? this.foodWanted(state, { standing: blocked, readOnly }))
+            ?? step;
         return { step: pick, newlyDone, waiting: blocked };
     }
 

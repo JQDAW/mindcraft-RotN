@@ -10,7 +10,8 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, SHELTER_HOLD, REPAIR_SPARE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD, FOOD_AFTER_DEATH, CLUB } from './agenda.js';
+import * as NIGHT_CONST from './library/night.js';
+import { FOOD_BEFORE_NIGHT, foodRunsOutBeforeNight, Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, SHELTER_HOLD, REPAIR_SPARE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS, STUCK_RETRY, WEAPON_RESERVE_STEP, WEAPON_FIRST, NO_WEAPON_FOOD, FOOD_AFTER_DEATH, CLUB } from './agenda.js';
 import { Vec3 } from 'vec3';
 import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
@@ -1224,6 +1225,55 @@ test('#579 re-review nit: a finished agenda, the club lost three times: each tim
     assert.equal(agent.self_prompter.prompt, '', 'never the model\'s');
 });
 
+// Soak 11 (H3): 22:03:42 (about 8 min before sunset) the shelter blocks came before food at food 7-8
+// with nothing to eat; food came back at food 6, and night 4 began at food 4 with no food.
+test('soak 11 (H3): before night with no food held, when food would reach 6 by sunset, food comes before the shelter blocks; the weapon stays first', (t) => {
+    assert.deepEqual(FOOD_BEFORE_NIGHT, { minPerHunger: 2, startMs: 120_000, startSlackMs: 10_000 });
+    const club = () => stack('spartanweaponry:club_wood', 0, 1);
+    const at = (food, min, items = [club()]) => hFixAgent(t, items, { food, timeOfDay: dayAt(min) });
+    // 7 min before sunset, armed, food 9 (9 - 3.5 = 5.5): food first.
+    const hungry = at(9, 7);
+    assert.equal(hungry.agenda.judge(agendaState(hungry.bot), { readOnly: true }).step.id, 'food', '!agenda shows it');
+    assert.equal(agendaTick(hungry, { now: 0 }), 'food');
+    // Food 12 (12 - 3.5 = 8.5): the shelter blocks first, as before.
+    assert.equal(agendaTick(at(12, 7), { now: 0 }), 'shelter_blocks');
+    // Food held: as before.
+    assert.equal(agendaTick(at(9, 7, [club(), stack('bread', 0, 1)]), { now: 0 }), 'shelter_blocks');
+    // Unarmed: the weapon stays ahead (2 logs), food after it, the blocks last.
+    assert.equal(agendaTick(at(9, 7, []), { now: 0 }), 'weapon');
+    // The rule itself.
+    const s = (food, m, held = 0) => ({ food: () => food, minutesToSunset: () => m, foodHeld: () => held });
+    assert.equal(foodRunsOutBeforeNight(s(9, 7)), true);
+    assert.equal(foodRunsOutBeforeNight(s(10, 7)), false, '10 - 3.5 = 6.5');
+    assert.equal(foodRunsOutBeforeNight(s(9, 7, 2)), false, 'food held');
+    assert.equal(foodRunsOutBeforeNight(s(9, 0)), false, 'night');
+});
+
+// Soak 11 night 4, replayed (H3): after the 21:57 death the club was made (21:58-22:03); at 22:03:42,
+// about 8 min before the 22:12 sunset, food 8 with no food held, the agenda chose the shelter blocks;
+// food came back at 22:06 at food 6, and the bot sealed in at food 4 with nothing to eat (death 5:
+// starved in the sealed side pocket).
+test('soak 11 night 4 replay (H3, #588 review 1): club held, no food, food 8, 7.5 min before sunset (the blocks\' window, before the night routine takes over at 6): food for ONE run, then the blocks for the rest of the window, whatever the food', (t) => {
+    const { SHELTER_LEAD_MIN } = NIGHT_CONST;
+    assert.ok(7.5 > SHELTER_LEAD_MIN && 7.5 <= RESERVE_LEAD_MIN, 'inside the blocks\' window');
+    const agent = hFixAgent(t, [stack('spartanweaponry:club_wood', 0, 1)], { food: 8, timeOfDay: dayAt(7.5) });
+    assert.equal(agendaTick(agent, { now: 0 }), 'food', '22:03:42: food, not the shelter blocks');
+    assert.equal(agent.self_prompter.isActive(), true, 'its run started');
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'food', 'the run goes on');
+    // The run ends (no food found; at food 4 too weak to hunt): the blocks win for the rest of the window.
+    agent.self_prompter.stop();
+    agent.bot.food = 4;
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'shelter_blocks');
+    assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), 'shelter_blocks', 'not food again in this window');
+    // A new window (the next day's dusk): food may have its one run again.
+    agent.bot.time = { timeOfDay: 1000 };
+    agendaTick(agent, { now: 4 * TICK_MS });
+    agent.self_prompter.stop();
+    agent.bot.time = { timeOfDay: dayAt(7.5) };
+    agent.bot.inventory.items = () => [stack('spartanweaponry:club_wood', 0, 1)]; // the blocks used up
+    assert.equal(agent.agenda.foodBeforeBlocks(agendaState(agent.bot), { readOnly: true }), true);
+});
+
 // Soak 11 night 2 (E): 21:16 to 21:24 the weapon reserve ran with 0 logs (its budget spent on the
 // search for logs, reflex interrupts restarting the runs); 21:25 the bot held 33 logs and no weapon,
 // but the spent reserve stayed off until the night, and the club was never crafted.
@@ -1314,4 +1364,43 @@ test('#584 nit 6: the weapon reserve\'s auto-craft puts the crafted club in the 
     }), 'weapon');
     await finished;
     assert.deepEqual(order, ['action:craftRecipe:spartanweaponry:club_wood', 'craft', 'rearm']);
+});
+
+test('#587 re-review nit 4: whether the weapon reserve was last judged before night is saved, so a restart by day still gets the dusk\'s fresh budget', (t) => {
+    const items = [stack('log', 1, 4), stack('dirt', 0, SHELTER_HOLD)];
+    const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
+    agent.bot.time = { timeOfDay: 1000 };
+    agent.bot.food = 20;
+    assert.equal(agendaTick(agent, { now: 0 }), 'weapon');
+    agent.agenda.spent.weapon = { attempts: 3, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'stuck');
+    // A restart by day: the saved weaponDusk (false) comes back, not null.
+    const again = new Agenda('FRCFLD', { dir: path.dirname(agent.agenda.file), weapon: WEAPON_RESERVE_STEP });
+    again.load();
+    assert.equal(again.weaponDusk, false);
+    agent.agenda = again;
+    agent.agenda.start();
+    agent.agenda.reserveStuck('weapon'); // rebuilt from the spent budget, as after a restart
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'weapon', 'the dusk: a fresh budget');
+});
+
+// #588 re-review nit 2: with 2 food runs already that day the driver waits 60 s (BACKOFF_MS doubling)
+// before starting the next; the 60 s grace ended H3 before its one run started.
+test('#588 re-review nit 2: H3\'s one food run survives the driver\'s backoff (counted from the driver\'s own start), then the blocks', (t) => {
+    let clock = 0;
+    const agent = hFixAgent(t, [stack('spartanweaponry:club_wood', 0, 1)], { food: 8, timeOfDay: dayAt(7.5) });
+    agent.agenda.now = () => clock;
+    agent.agenda.spent.food = { attempts: 2, llm_ms: 0 }; // two food runs today: the next waits BACKOFF_MS * 2
+    assert.equal(agendaTick(agent, { now: 0 }), 'food');
+    assert.equal(agent.self_prompter.isActive(), false, 'the backoff: not started yet');
+    clock = 30_000;
+    assert.equal(agendaTick(agent, { now: clock }), 'food');
+    clock = 2 * BACKOFF_MS + 1000;
+    assert.equal(agendaTick(agent, { now: clock }), 'food', 'still food when the backoff is over');
+    assert.equal(agent.self_prompter.isActive(), true, 'its run started');
+    assert.ok(agent.agenda.h3Run.started != null, 'counted from the driver\'s start');
+    agent.self_prompter.stop();
+    clock += 20_000;
+    assert.equal(agendaTick(agent, { now: clock }), 'shelter_blocks', 'its one run over: the blocks');
 });
