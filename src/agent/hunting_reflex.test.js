@@ -661,3 +661,31 @@ test('#588 nit 5: after a kill the hunting reflex says what it picked up, or why
     });
     assert.match(await lineOf(kept), /^\[reflex\] hunting animania:cow_holstein: killed; 1 drop left: within \d+ blocks of where you died recently/);
 });
+
+// Soak 12 (E, 14:51:18): the model's !attack killed the ewe and said "Picked up 0 items." at once, before the
+// drop fell (after the death animation). Its kill now waits for the drop where the animal died, as the hunt's.
+test('soak 12 (E): !attack waits for the kill\'s drop where the animal died, picks it up and says what', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...ATTACK_PROGRESS }, savedDrops = { ...KILL_DROPS };
+    Object.assign(ATTACK_PROGRESS, { stallMs: 2000, tickMs: 20 });
+    const items = [];
+    Object.assign(KILL_DROPS, { maxMs: 500, step: 10, settleMs: 10, pickup: (b, { allow }) => {
+        for (const e of Object.values(b.entities)) if (allow(e)) { delete b.entities[e.id]; items.push({ name: 'animania:raw_prime_mutton', metadata: 0, count: 2 }); }
+        return Promise.resolve();
+    } });
+    t.after(() => { Object.assign(ATTACK_PROGRESS, saved); Object.assign(KILL_DROPS, savedDrops); });
+    const ewe = { id: 6, name: 'animania:ewe_dorset', type: 'mob', position: new Vec3(2.5, 64, 0.5), height: 1, metadata: { 7: 6 } };
+    const agent = huntAgent({ animals: [ewe], items });
+    agent.bot.equip = () => Promise.resolve();
+    let hits = 0;
+    agent.bot.pvp = { attack() { if (++hits === 1) setTimeout(() => {
+        delete agent.bot.entities[6];
+        // The drop falls 150 ms after the death, where it died.
+        setTimeout(() => { agent.bot.entities[50] = { id: 50, name: 'item', type: 'object', position: new Vec3(2.5, 64, 0.5) }; }, 150);
+    }, 30); }, stop() {} };
+    agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }));
+    await executeCommand(agent, '!attack("animania:ewe_dorset")');
+    assert.match(agent.bot.output, /Successfully killed animania:ewe_dorset\./);
+    assert.match(agent.bot.output, /Its drop: picked up 2 animania:raw_prime_mutton\./);
+    assert.doesNotMatch(agent.bot.output, /Picked up 0 items/);
+});

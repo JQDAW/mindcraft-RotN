@@ -232,7 +232,8 @@ test('soak 2: a hurt line when health falls by 4 or more within 2 s, with the li
     bot.health = 13; assert.equal(hurtCheck(state, bot, 5000), null, 'a quiet window starts again from the last health seen (15): 2 is not enough');
     bot.entities = {};
     // Starving: food 0 (Hunger Overhaul's 200 damage).
-    bot.food = 0; bot.health = 0; assert.equal(hurtCheck(state, bot, 5100), '[survival] hurt 15 health 15->0 (by starving)');
+    // Soak 12 (G): each drop has its source: the 2 at 5000 came with the slime near, the 13 from starving.
+    bot.food = 0; bot.health = 0; assert.equal(hurtCheck(state, bot, 5100), '[survival] hurt 15 health 15->0 (by starving 13, slime 2)');
     // A fall, with no mob near.
     const fall = { health: 20, food: 10, entity: { position: here, velocity: { y: -1.2 } }, entities: {} };
     const s2 = {};
@@ -240,7 +241,7 @@ test('soak 2: a hurt line when health falls by 4 or more within 2 s, with the li
     fall.health = 12; assert.equal(hurtCheck(s2, fall, 100), '[survival] hurt 8 health 20->12 (by fall)');
     // Soak 5: each hurt line is followed by its detail line.
     assert.equal(lines.length, 6);
-    assert.equal(lines[1], '[survival] hurt-detail drops 2@+0.5s,3@+0.9s at 0,64,0 vy 0 unknown cause none near slime@2m');
+    assert.equal(lines[1], '[survival] hurt-detail drops 2@+0.5s=unknown,3@+0.9s=slime at 0,64,0 vy 0 unknown cause none near slime@2m');
 });
 
 test('#432 review 1: a single hit, a fall or starving after a quiet spell is caught (the window starts from the last health seen)', async (t) => {
@@ -344,7 +345,7 @@ test('soak 5: a landing after a big drop is a fall (damage_record), even with a 
     hurtCheck(state, bot, 1000);
     Object.assign(bot, { health: 3, lastDamageCause: 'fall', lastDamageTime: 1100 });
     assert.equal(hurtCheck(state, bot, 1100), '[survival] hurt 17 health 20->3 (by fall)', 'the landing, not the zombie near');
-    assert.equal(lines.at(-1), '[survival] hurt-detail drops 17@+0.1s at 8.5,61,-117.5 vy 0 ground cause fall near zombie@2m');
+    assert.equal(lines.at(-1), '[survival] hurt-detail drops 17@+0.1s=fall at 8.5,61,-117.5 vy 0 ground cause fall near zombie@2m');
     // An old fall record does not count.
     assert.equal(hurtSource({ ...bot, lastDamageTime: 1100 - 5000 }, { now: 1100 }), 'zombie');
     // A falling tree right over the bot.
@@ -541,10 +542,71 @@ test('(g): defendSelf ends a fight in which the mob takes no hurt and the bot ge
     Object.assign(hitting, { on: ev2.on, removeListener: ev2.removeListener });
     const zombie = hitting.entities[1];
     let hurts = 0;
-    hitting.pvp.attack = () => { setTimeout(() => { ev2.emit('entityHurt', zombie); if (++hurts >= 6) delete hitting.entities[1]; }, 50); };
+    // Soak 12 (D1): as mineflayer-pvp does, each swing is a bot.attack; the hurt 50 ms after it is its hit.
+    hitting.attack = () => Promise.resolve();
+    hitting.pvp.attack = (e) => { hitting.attack(e); setTimeout(() => { ev2.emit('entityHurt', zombie); if (++hurts >= 6) delete hitting.entities[1]; }, 50); };
     assert.equal(await skills.defendSelf(hitting, 8, (e) => e.name === 'zombie'), true);
     assert.ok(hurts >= 6, `fought on past stallMs while it was hurt: ${hurts}`);
     assert.doesNotMatch(hitting.output, /Stopped fighting/);
+});
+
+// Soak 12 (D1, 14:45:53-14:46:17): the open fight ran 24 s with no hit landing on a zombie burning in the
+// morning sun: each sun hurt (and its health drop) counted as progress, so the stall guard never fired.
+test('soak 12 (D1): hurts and health drops with no hit the bot sent (the sun\'s fire) are no progress: the stall guard ends the fight', async (t) => {
+    const logs = capture(t);
+    const saved = { ...skills.DEFEND_PROGRESS };
+    t.after(() => Object.assign(skills.DEFEND_PROGRESS, saved));
+    Object.assign(skills.DEFEND_PROGRESS, { stallMs: 1200 });
+    const on = {};
+    const burning = openFight(logs);
+    Object.assign(burning, { on: (ev, f) => { (on[ev] ??= []).push(f); }, removeListener: (ev, f) => { on[ev] = (on[ev] ?? []).filter(x => x !== f); } });
+    const zombie = burning.entities[1];
+    zombie.metadata = { 7: 20 };
+    burning.attack = () => Promise.resolve(); // never called: pvp's swing does not reach it (out of sight, out of reach)
+    const sun = setInterval(() => { zombie.metadata[7] = Math.max(1, zombie.metadata[7] - 1); (on.entityHurt ?? []).forEach(f => f(zombie)); }, 400);
+    t.after(() => clearInterval(sun));
+    const t0 = Date.now();
+    assert.equal(await skills.defendSelf(burning, 8, (e) => e.name === 'zombie'), true);
+    clearInterval(sun);
+    assert.ok(Date.now() - t0 < 4000, `ended by the stall guard in ${Date.now() - t0} ms`);
+    assert.match(burning.output, /Stopped fighting the zombie: no hit landed and no closer for 1\.2 s/);
+
+    // #594 review 1: mineflayer-pvp keeps calling bot.attack, and Better Combat refuses each ({sent: false,
+    // reason: 'sight'}, the mob in reach but out of sight): no hit went out, so the sun's hurts are still no progress.
+    const on2 = {};
+    const bc = openFight(logs);
+    Object.assign(bc, { on: (ev, f) => { (on2[ev] ??= []).push(f); }, removeListener: (ev, f) => { on2[ev] = (on2[ev] ?? []).filter(x => x !== f); } });
+    const z2 = bc.entities[1];
+    z2.metadata = { 7: 20 };
+    let refused = 0;
+    bc.attack = () => { refused++; return Promise.resolve({ sent: false, path: 'bettercombat', reason: 'sight' }); };
+    bc.pvp.attack = (e) => { bc.attack(e); };
+    const sun2 = setInterval(() => { z2.metadata[7] = Math.max(1, z2.metadata[7] - 1); (on2.entityHurt ?? []).forEach(f => f(z2)); }, 400);
+    t.after(() => clearInterval(sun2));
+    const t1 = Date.now();
+    assert.equal(await skills.defendSelf(bc, 8, (e) => e.name === 'zombie'), true);
+    clearInterval(sun2);
+    assert.ok(refused >= 2, `pvp swung ${refused} times`);
+    assert.ok(Date.now() - t1 < 4000, `ended by the stall guard in ${Date.now() - t1} ms`);
+    assert.match(bc.output, /Stopped fighting the zombie: no hit landed and no closer for 1\.2 s/);
+});
+
+// Soak 12 (D2): the open fight's swings are journaled like the shelter fight's, at most one a second.
+test('soak 12 (D2): defendSelf journals its swings (the held item, the mob\'s health before and after), at most one line every DEFEND_PROGRESS.swingLineMs', async (t) => {
+    const logs = capture(t);
+    assert.deepEqual([skills.DEFEND_PROGRESS.hitMs, skills.DEFEND_PROGRESS.swingLineMs], [700, 1000]);
+    const bot = openFight(logs);
+    const zombie = bot.entities[1];
+    zombie.metadata = { 7: 20 };
+    let hits = 0;
+    const attack = () => { zombie.metadata[7] -= 3; return Promise.resolve(); };
+    bot.attack = attack;
+    bot.pvp.attack = (e) => { bot.attack(e); if (++hits >= 6) delete bot.entities[1]; };
+    assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
+    const swings = logs.filter(l => l.startsWith('[survival] swing '));
+    assert.ok(swings.length >= 2 && swings.length <= 4, `${swings.length} lines for 6 swings in about 3 s:\n${swings.join('\n')}`);
+    assert.match(swings[0], /^\[survival\] swing zombie with hand (first|\+\d+ ms): health \d+ -> \d+$/);
+    assert.equal(bot.attack, attack, 'bot.attack is put back after the fight');
 });
 
 // #579 nit 3: soak 10 held hitwithaxe:bark at night ("[survival] weapon hitwithaxe:bark"): bark alone is no weapon.
@@ -556,4 +618,69 @@ test('#579 nit 3: equipHighestAttack with only bark and a crude axe takes neithe
     bot.equip = (item) => { equipped = item; return Promise.resolve(); };
     assert.equal(await skills.equipHighestAttack(bot), false);
     assert.equal(equipped, null);
+});
+
+// Soak 12 (G, death 10 at 15:18:09): "drops 1.9@+1.1s,5@+1.8s ... skeleton@1.3m,zombie@1.8m/swung-0s"; the
+// hurt line said "by zombie", the server "shot by Skeleton". Each drop now has its own source; an arrow
+// near the bot (or one just gone, as one that hits is) names the nearest ranged mob.
+test('soak 12 (G): each drop is named: an arrow\'s by the nearest ranged mob ("skeleton/arrow"), a swing\'s by its mob; the hurt line names every source when there is more than one', async (t) => {
+    const { hurtCheck, noteSwing, noteArrowGone, noteArrowSpawn, dropSource, ARROW } = await import('./survival_log.js');
+    assert.deepEqual(ARROW, { range: 2.5, goneMs: 500, mobRange: 24, freshMs: 2500 });
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
+    const here = new Vec3(-70.3, 62, 88.1);
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: here.offset(1.8, 0, 0), height: 1.95 };
+    const skeleton = { id: 3, name: 'skeleton', type: 'mob', position: here.offset(0, 0, 1.3), height: 1.99 };
+    // #594 re-review 1: on this server an arrow's velocity reads 0 (mineflayer sets none for objects; the tracker sends arrows none).
+    const arrow = { id: 4, name: 'arrow', type: 'object', position: here.offset(0.3, 1, 0), velocity: new Vec3(0, 0, 0) };
+    const bot = { health: 15, food: 12, entity: { position: here, velocity: { y: 0 }, onGround: true }, entities: { 2: zombie, 3: skeleton, 4: arrow } };
+    const state = { swings: new Map() };
+    hurtCheck(state, bot, 0);
+    noteArrowSpawn(state, arrow, 700); // shot 400 ms before it hit
+    // The health packet first (end of the hit tick); the arrow's destroy about 50 ms later.
+    bot.health = 13.1; assert.equal(hurtCheck(state, bot, 1100), null, '1.9 alone: no line yet');
+    noteArrowGone(state, bot, arrow, 1150);
+    delete bot.entities[4];
+    noteSwing(state.swings, zombie, 1750);
+    bot.health = 8.1;
+    assert.equal(hurtCheck(state, bot, 1800), '[survival] hurt 6.9 health 15->8.1 (by zombie 5, skeleton/arrow 1.9)');
+    assert.match(lines.at(-1), /^\[survival\] hurt-detail drops 1\.9@\+1\.1s=skeleton\/arrow,5@\+1\.8s=zombie at /);
+    // An arrow that hit is removed at once: one gone within ARROW.range in the last 500 ms still counts.
+    const s2 = { swings: new Map() };
+    noteArrowGone(s2, bot, arrow, 1000);
+    assert.equal(dropSource(bot, s2, 1300), 'skeleton/arrow');
+    assert.equal(dropSource(bot, s2, 1600), 'skeleton', 'past goneMs: the old rule (no swing: the nearest hostile, 1.3 m)');
+    // #594 review 2, re-review 1: a stuck arrow that spawned 10 s ago, lying near the bot, claims nothing: the zombie's swing is.
+    const s4 = { swings: new Map() };
+    const stuck = { ...bot, entities: { 2: zombie, 3: skeleton, 4: { ...arrow } } };
+    noteArrowSpawn(s4, arrow, 2050 - 10_000);
+    noteSwing(s4.swings, zombie, 2000);
+    assert.equal(dropSource(stuck, s4, 2050), 'zombie');
+    // A fresh arrow (spawned 300 ms ago) near the bot is the shot, velocity 0 or not.
+    noteArrowSpawn(s4, { ...arrow, id: 5 }, 1750);
+    const shot = { ...bot, entities: { 2: zombie, 3: skeleton, 5: { ...arrow, id: 5 } } };
+    assert.equal(dropSource(shot, s4, 2050), 'skeleton/arrow');
+    // An arrow whose spawn the bot did not see (it logged in after) is no shot.
+    assert.equal(dropSource({ ...bot, entities: { 2: zombie, 3: skeleton, 6: { ...arrow, id: 6 } } }, s4, 2050), 'zombie');
+    // One source only: the line as before.
+    const s3 = { swings: new Map() };
+    const solo = { ...bot, health: 20, entities: { 2: zombie } };
+    hurtCheck(s3, solo, 0);
+    noteSwing(s3.swings, zombie, 50);
+    solo.health = 15;
+    assert.equal(hurtCheck(s3, solo, 100), '[survival] hurt 5 health 20->15 (by zombie)');
+});
+
+// #594 re-review 2: the swing line's "before" health is read at the real send, not at the bot.attack call
+// (a Better Combat cooldown wait lets fire or another hit change it in between).
+test('#594 re-review 2: the swing line\'s health before is the mob\'s health at the send (after a cooldown wait)', async (t) => {
+    const logs = capture(t);
+    const bot = openFight(logs);
+    const zombie = bot.entities[1];
+    zombie.metadata = { 7: 20 };
+    bot.attack = () => { zombie.metadata[7] = 19; return new Promise(r => setTimeout(() => r({ sent: true, path: 'bettercombat' }), 30)); }; // fire during the wait
+    bot.pvp.attack = (e) => { bot.attack(e).then(() => { delete bot.entities[1]; }); };
+    assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
+    const swings = logs.filter(l => l.startsWith('[survival] swing '));
+    assert.deepEqual(swings, ['[survival] swing zombie with hand first: health 19 -> gone']);
 });

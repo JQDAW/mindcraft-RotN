@@ -95,15 +95,17 @@ test('soak 12 (the lead\'s decision 1): only quick blocks: stone not without a p
 
 // #593 re-review 1: prismarine's digTime knows only vanilla ids: a flint pickaxe on stone read 7.5 s, so
 // stone was never a quick dig with the pack's pickaxes. rotn-data's tool data now (speed 3.8: 0.6 s).
-test('#593 re-review 1: stone with the pack\'s pickaxes: pyrotech:flint_pickaxe by rotn-data\'s speed (about 0.6 s); crafttweaker:stone_pickaxe (no rotn-data entry) by the old rule; by hand, never', async () => {
+test('#593 re-review 1: stone with the pickaxes: pyrotech:flint_pickaxe by rotn-data\'s speed (about 0.6 s), minecraft:stone_pickaxe too; by hand, never; a tool rotn-data does not know is the hand (#593 re-review nit)', async () => {
     const { toolDigMs } = await import('./walk_exit.js');
     const stone = { name: 'stone', metadata: 0 };
     const bot = { inventory: { items: () => [] } };
     assert.ok(Math.abs(toolDigMs(bot, stone, { name: 'pyrotech:flint_pickaxe' }) - 1.5 * 1.5 / 3.8 * 1000) < 1);
-    assert.equal(toolDigMs(bot, stone, { name: 'crafttweaker:stone_pickaxe' }), 0, 'the old rule: any pickaxe, hardness at most 2');
+    assert.ok(Math.abs(toolDigMs(bot, stone, { name: 'stone_pickaxe' }) - 1.5 * 1.5 / 4 * 1000) < 1);
     assert.equal(toolDigMs(bot, stone, null), Infinity, 'a pickaxe is required (Tool Progression)');
-    assert.equal(toolDigMs(bot, { name: 'obsidian', metadata: 0 }, { name: 'crafttweaker:stone_pickaxe' }), Infinity, 'the old rule\'s hardness bound');
-    for (const name of ['pyrotech:flint_pickaxe', 'crafttweaker:stone_pickaxe']) {
+    // An unknown tool: Infinity where a tool is required (allowedTool would refuse it), the hand's time otherwise.
+    assert.equal(toolDigMs(bot, stone, { name: 'nosuchmod:odd_pickaxe' }), Infinity);
+    assert.equal(toolDigMs(bot, { name: 'melon_block', metadata: 0 }, { name: 'nosuchmod:odd_pickaxe' }), 1500, 'a melon block: 1.5 s, as by hand');
+    for (const name of ['pyrotech:flint_pickaxe', 'minecraft:stone_pickaxe']) {
         const w = hole({ ground: 'stone', items: [{ name, metadata: 0, count: 1, type: 9999 }] });
         assert.equal(quickDig(w.bot, HOLE.offset(1, 0, 0)), true, name);
         assert.ok(stairOutPlan(w.bot, HOLE), `${name}: a dig-out from a stone hole`);
