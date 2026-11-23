@@ -91,6 +91,13 @@ export async function equipHighestAttack(bot, fight = {}) {
     const best = (items) => items.filter(isWeapon).sort(order)[0] ?? null;
     // A weapon in the off hand (which threats.hasWeapon counts) is moved into the inventory when
     // it is better than any there, so it can be held in the main hand (#238 review 1 and nit 3).
+    // Soak 12 (C, death 2): the fight held raw mutton with the club in the off hand, and nothing said why
+    // (the texts below went only to the action's output). The way this returns false is logged to the
+    // journal too, once per fight (fight.noWeaponSaid: the first one; later calls see its after-effects).
+    const noWeapon = (why) => {
+        if (!fight.noWeaponSaid) { fight.noWeaponSaid = why; console.log(`[survival] no weapon in hand: ${why}; holding ${bot.heldItem?.name ?? 'nothing'}`); }
+        return false;
+    };
     const off = bot.inventory.slots?.[45];
     const inInventory = best(bot.inventory.items());
     if (isWeapon(off) && (!inInventory || order(off, inInventory) < 0)) {
@@ -99,24 +106,27 @@ export async function equipHighestAttack(bot, fight = {}) {
             // #584 review 3: with no free slot stowCarried cannot move it, and the bot fist-fought while
             // counted armed (hasWeapon counts the off hand). bot.equip moves it into a hotbar slot and that
             // slot's item into the off hand (a swap); rearmWeapon swaps them back after the fight.
-            if (fight.equipFailed) return false;
+            if (fight.equipFailed) return noWeapon(`an earlier equip of the ${off.name} failed this fight`);
             try {
                 await bot.equip(off, 'hand');
                 return true;
             } catch (err) {
                 fight.equipFailed = true;
                 log(bot, `Could not take the ${off.name} from the off hand into the main hand (${safeError(err)}); fighting with ${bot.heldItem?.name ?? 'bare hands'} for the rest of this fight.`);
-                return false;
+                return noWeapon(`the ${off.name} could not be taken from the off hand (${safeError(err)})`);
             }
         }
         const moved = await stowCarried(bot, isWeapon, { resyncMs: 0 });
         if (!moved.length) log(bot, `Could not take the ${off.name} from the off hand.`); // #238 nit 2
+        // Soak 12 (C): the moved stack may show in the inventory a tick later: read it back (2 ticks at most).
+        for (let k = 0; moved.length && k < EQUIP_READBACK.tries && !best(bot.inventory.items()); k++) await new Promise(r => setTimeout(r, EQUIP_READBACK.stepMs));
+        if (!moved.length && !best(bot.inventory.items())) return noWeapon(`the ${off.name} in the off hand did not move into the inventory`);
     }
     let weapon = best(bot.inventory.items());
     if (!weapon)
         weapon = bot.inventory.items().find(item => item.name.includes('pickaxe') || item.name.includes('shovel')) ?? null;
-    if (!weapon) return false;
-    if (fight.equipFailed) return false; // fighting with what is in hand (#296 review 2)
+    if (!weapon) return noWeapon(isWeapon(off) ? `the ${off.name} moved out of the off hand, but no weapon is in the inventory` : 'none held');
+    if (fight.equipFailed) return noWeapon(`an earlier equip failed this fight`); // fighting with what is in hand (#296 review 2)
     if (bot.heldItem === weapon || (weapon.slot != null && bot.heldItem?.slot === weapon.slot)) return true;
     try {
         await bot.equip(weapon, 'hand');
@@ -124,9 +134,12 @@ export async function equipHighestAttack(bot, fight = {}) {
     } catch (err) {
         fight.equipFailed = true;
         log(bot, `Could not take the ${weapon.name} in hand (${safeError(err)}); fighting with ${bot.heldItem?.name ?? 'bare hands'} for the rest of this fight.`);
-        return false;
+        return noWeapon(`the ${weapon.name} could not be taken in hand (${safeError(err)})`);
     }
 }
+
+/** Soak 12 (C): after the off-hand weapon is moved, how long equipHighestAttack waits for it to show (2 ticks). */
+export const EQUIP_READBACK = { tries: 2, stepMs: 50 };
 
 // The ingredients of one craft, keyed by canonical name: "planks:0" when the recipe pins
 // a variant, "planks" when any will do (metadata null). mcdata's helper drops the meta,

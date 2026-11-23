@@ -3892,3 +3892,136 @@ test('#592 review nit 6: armed, a zombie in the roof cell over the bot, the shel
     assert.equal(nightState(s.agent).handFight, true);
     assert.match(s.agent.chat.at(-1), /in the roof cell over the bot at 0, 66, 0: not leaving past it; armed, cornered/);
 });
+
+// #592 re-review nit 2: after a cornered fight in a closed shelter, rotnSheltered stayed 'open' while ESM's
+// scaffolding stayed in the bot's space (keepShelter returned before the "closed again" line).
+test('#592 re-review nit 2: the fight over, the shell closed with the scaffolding kept (a mob still over it) and nothing cornered: the closed shelter\'s rules are back (rotnSheltered true)', async (t) => {
+    quiet(t);
+    const s = scaffoldSetup();
+    nightTick(s.agent, { now: 0, ops: s.o });
+    await settle(s.agent);
+    s.state.body = true;
+    s.agent.bot.rotnSheltered = 'open'; // the fight in place opened it
+    nightState(s.agent).handFight = true;
+    s.agent.bot.entities = { 7: { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 66, 0.5), height: 1.95 } }; // at the bridge spot, over the block
+    nightTick(s.agent, { now: 300, ops: s.o });
+    await settle(s.agent);
+    assert.deepEqual(s.o.clears, [], 'kept');
+    assert.equal(s.agent.bot.rotnSheltered, true);
+    assert.equal(nightState(s.agent).handFight, false);
+    // A zombie in the roof cell (cornered): not closed again (the fight).
+    s.agent.bot.rotnSheltered = 'open';
+    s.agent.bot.entities = { 7: { id: 7, name: 'zombie', type: 'mob', position: new Vec3(0.5, 66, 0.5), height: 1.95 } };
+    nightTick(s.agent, { now: 600, ops: s.o });
+    await settle(s.agent);
+    assert.equal(s.agent.bot.rotnSheltered, 'open');
+});
+
+// ---- Soak 12 PR 2: the respawn trap (B(ii) step 6, D3) ----
+// Death 1 lost 344 dirt piles; after the respawn three shelter tries and a hole failed on "0 dirt" and
+// the bot stood at the respawn point for 3.5 min until a zombie came.
+test('soak 12 (B(ii) step 6): right after a respawn with fewer than 3 shelter blocks and nothing hostile within 16: dirt piles by hand first (once a night), then the shelter; a hostile near, or blocks held: no gather', async (t) => {
+    quiet(t);
+    const { GATHER } = await import('./night_routine.js');
+    assert.deepEqual(GATHER, { minBlocks: 3, piles: 12, radius: 8, maxMs: 45_000, hostileRange: 16, afterDeathMs: 180_000 });
+    const run = async ({ blocks = 0, hostile = null, deathAgo = 5_000 } = {}) => {
+        const agent = fakeAgent({ t: NIGHT });
+        agent._death = { last: { at: -deathAgo } };
+        const o = ops();
+        o.gathers = [];
+        let held = blocks;
+        o.repairBlocks = () => held;
+        o.hostileNear = () => hostile;
+        o.gatherDirt = (bot, opts) => { o.gathers.push(opts); held = 3; return Promise.resolve({ why: null }); };
+        for (let k = 0; k < 4; k++) { nightTick(agent, { now: k, ops: o }); await settle(agent); }
+        return { agent, o };
+    };
+    const g = await run();
+    assert.equal(g.o.gathers.length, 1);
+    assert.equal(g.o.gathers[0].stop(), null, 'its stop: nothing near');
+    assert.ok(g.agent.chat.includes('[night] respawned with 0 shelter blocks (a dirt shelter needs 3): digging up to 12 dirt piles by hand within 8 blocks first (at most 45 s)'), g.agent.chat.join('\n'));
+    assert.ok(g.o.builds.length >= 1, 'then the shelter');
+    assert.equal((await run({ hostile: { name: 'zombie', position: new Vec3(5, 64, 0) } })).o.gathers.length, 0, 'a hostile within 16');
+    assert.equal((await run({ blocks: 3 })).o.gathers.length, 0, 'blocks enough');
+    assert.equal((await run({ deathAgo: 10 * 60_000 })).o.gathers.length, 0, 'no fresh respawn');
+});
+
+test('soak 12 (B(ii) step 6): the gather stops at GATHER.maxMs or on its stop, and clears its own interrupt', async () => {
+    const { gatherDirtPiles } = await import('./night_routine.js');
+    const bot = { interrupt_code: false };
+    let calls = 0;
+    const collect = () => { calls++; return new Promise(r => { const poll = setInterval(() => { if (bot.interrupt_code) { clearInterval(poll); r(false); } }, 10); }); };
+    let near = false;
+    setTimeout(() => { near = true; }, 300);
+    const r = await gatherDirtPiles(bot, { stop: () => (near ? 'a hostile mob within 16 blocks' : null), collect });
+    assert.deepEqual([calls, r.why, bot.interrupt_code], [1, 'a hostile mob within 16 blocks', false]);
+});
+
+// Soak 12 (D3): morning 3 at -69, 65, 87: a zombie on the hole shelter's rim in shade (it never burns or
+// leaves, rotn-data), three leave tries, then "back to work, still enclosed: dig a way out".
+async function holeMorning({ stair, choice = null, opened = null } = {}) {
+    const { MORNING: RULE, EXIT_TRIES } = await import('./night_routine.js');
+    const agent = fakeAgent({ t: NIGHT });
+    const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(2.5, 66, 0.5) };
+    Object.assign(agent.bot, { health: 20, inventory: { items: () => [{ name: 'stone_axe', count: 1 }], slots: [] }, entities: { 2: zombie } });
+    const o = ops();
+    o.hostileNear = () => zombie;
+    o.pitOut = () => Promise.resolve(null);
+    o.awayFromMobs = () => Promise.resolve();
+    o.stairs = [];
+    o.stairOut = (bot, from, opts) => { o.stairs.push(opts); return Promise.resolve(stair); };
+    if (choice) o.morningChoice = (bot, site, { pit }) => (pit ? { action: 'leave', why: 'a hole shelter' } : choice);
+    o.opens = [];
+    o.openToward = (bot, feet, toward) => { o.opens.push(toward); return Promise.resolve(opened); };
+    nightTick(agent, { now: 0, ops: o }); await settle(agent);
+    nightState(agent).pit = true;
+    agent.bot.time.timeOfDay = MORNING;
+    for (let now = 10, k = 0; k < 4 + EXIT_TRIES + Math.ceil(RULE.waitMs / RETRY_MS) && nightState(agent).state !== 'day' && !o.opens.length; k++, now += RETRY_MS) {
+        nightTick(agent, { now, ops: o }); await settle(agent);
+    }
+    return { agent, o, zombie };
+}
+
+test('soak 12 (D3): a hole shelter, a zombie on the rim, the leave tries used: the routine digs a way out itself, away from it (no hand-back still enclosed)', async (t) => {
+    quiet(t);
+    const { agent, o, zombie } = await holeMorning({ stair: { to: new Vec3(-3, 64, 0), dug: 4 } });
+    assert.equal(o.stairs.length, 1, agent.chat.join('\n'));
+    assert.deepEqual(o.stairs[0].hostiles, [zombie]);
+    assert.ok(agent.chat.some(l => /after 3 tries; digging a way out of the hole shelter myself \(at most 6 quick blocks, away from a zombie at 2, 66, 0\)$/.test(l)), agent.chat.join('\n'));
+    assert.ok(agent.chat.includes('[night] morning: dug out of the hole shelter at 0, 64, 0 to -3, 64, 0 (4 blocks); back to work'), agent.chat.join('\n'));
+    assert.ok(!agent.chat.some(l => /still enclosed/.test(l)));
+    assert.equal(nightState(agent).state, 'day');
+});
+
+test('soak 12 (D3): no dig-out: armed and the fight good, the wall toward the zombie is opened and it is fought from the shelter; the fight not good: the hand-back as before', async (t) => {
+    quiet(t);
+    const none = { to: null, dug: 0, why: 'no way out within 6 quick blocks, away from the hostiles' };
+    const fight = await holeMorning({ stair: none, choice: { action: 'fight', why: 'armed, health 20, one zombie near' }, opened: [new Vec3(1, 64, 0), new Vec3(1, 65, 0)] });
+    assert.equal(fight.o.opens.length, 1, fight.agent.chat.join('\n'));
+    await settle(fight.agent);
+    assert.equal(fight.agent.bot.rotnSheltered, 'open', 'the fight in place');
+    assert.ok(fight.agent.chat.some(l => /no dig-out \(no way out within 6 quick blocks, away from the hostiles\); armed, health 20, one zombie near: opening the wall toward a zombie at 2, 66, 0 to fight it from the shelter$/.test(l)), fight.agent.chat.join('\n'));
+    const leave = await holeMorning({ stair: none, choice: { action: 'leave', why: 'no weapon' } });
+    assert.equal(leave.o.opens.length, 0);
+    assert.ok(leave.agent.chat.some(l => /could not leave the shelter at 0, 64, 0 \(no way out within 6 quick blocks, away from the hostiles; no fight: no weapon\); back to work, still enclosed: dig a way out$/.test(l)), leave.agent.chat.join('\n'));
+});
+
+test('soak 12 (B(i)): the night routine tells the scroll check it is in a hole shelter (or below the surface after a burrow): refused there', async (t) => {
+    quiet(t);
+    const run = async (set) => {
+        const agent = fakeAgent({ t: NIGHT });
+        const o = ops();
+        const seen = [], uses = [];
+        o.scrollRefusal = (a, site, opts) => { seen.push(opts); return opts?.pit || opts?.below ? 'no walkable way out' : null; };
+        o.useSpawnScroll = () => { uses.push(1); return Promise.resolve({ used: true }); };
+        nightTick(agent, { now: 0, ops: o });
+        await settle(agent);
+        Object.assign(nightState(agent), set);
+        nightTick(agent, { now: 1, ops: o });
+        await settle(agent);
+        return { seen, uses };
+    };
+    assert.deepEqual(await run({ pit: true }), { seen: [{ pit: true, below: false }], uses: [] });
+    assert.deepEqual(await run({ burrowSteps: 1 }), { seen: [{ pit: false, below: true }], uses: [] });
+    assert.deepEqual(await run({}), { seen: [{ pit: false, below: false }], uses: [1] });
+});

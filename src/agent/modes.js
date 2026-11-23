@@ -27,7 +27,7 @@ import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
 import { mayRepeat, handedToChat } from './chat_repeat.js';
-import { fleeLine, mobName } from './library/survival_log.js';
+import { fleeLine, mobName, ateLine } from './library/survival_log.js';
 
 /**
  * G4 #7 (the soak): the most of the behavior log kept between two LLM messages. It is flushed only
@@ -84,6 +84,7 @@ export const EAT_BETWEEN = ['mode:unstuck', 'mode:self_defense'];
 /** A mob in reach is named in chat at most this often from the shelter (T1: up to 24 lines a minute). */
 export const SHELTER_SAY_MS = 30_000;
 let shelterSaidAt = -Infinity;
+let escapeHoldSaidAt = -Infinity; // soak 12: the low-health hold during the respawn escape, said at most every SHELTER_SAY_MS
 let noWeaponSaidAt = -Infinity;
 let noWeaponSaid = null; // which refusal was said last (no weapon, or low health): a new one is said at once
 
@@ -397,6 +398,13 @@ const modes_list = [
                     holdInShelter(this, agent);
                     return;
                 }
+                // Soak 12 (B(ii) step 3): the respawn escape is itself the flee; its low-health move away
+                // interrupted 8 escapes at the scroll's respawn point, each followed by a death in the same
+                // pit. The hazards above (fire, lava, drowning, a falling block) still act.
+                if (bot.rotnEscaping) {
+                    if (Date.now() - escapeHoldSaidAt >= SHELTER_SAY_MS) { escapeHoldSaidAt = Date.now(); console.log(`[reflex] low health ${Math.round(bot.health * 10) / 10}: the respawn escape is the flee; not moving away over it`); }
+                    return;
+                }
                 claimThreat(this.name, Date.now(), { override: true }); // the low-health flee wins at once (#227 review 2)
                 // G4 #5: the journal's flee line names the nearest hostile mob, when one is near.
                 const near = world.getNearestEntityWhere(bot, (e) => threats.shelterEnemy(e), 16);
@@ -437,6 +445,8 @@ const modes_list = [
             // #592 review nit 3: a cut eat whose food or count change showed later was an eat after all.
             if (this.cut_eat && Date.now() - this.cut_eat.at > this.late_ms) this.cut_eat = null; // too late to be that eat
             if (this.cut_eat && food.lateEat(bot, this.cut_eat)) {
+                // #592 re-review nit 1: the journal's "[survival] ate" line too (the harness's ate_when_low counts only those).
+                console.log(ateLine(this.cut_eat.key, this.cut_eat.before, bot.food));
                 console.log(`[reflex] ate ${this.cut_eat.key} at food ${this.cut_eat.before} (it showed after the eat was judged cut)`);
                 Object.assign(this, { cut_eat: null, cut_wait: false, wait_until: -Infinity });
             }
