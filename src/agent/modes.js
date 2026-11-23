@@ -742,6 +742,7 @@ const modes_list = [
                 // Soak 11 (H1): after a kill, its drop picked up here (within the hunt), and said.
                 const diedAt = target.position?.clone?.() ?? target.position ?? null;
                 const drops = end === 'killed' && !bot.interrupt_code ? await skills.pickupKillDrops(bot, diedAt) : null;
+                try { await skills.rearmWeapon(bot); } catch { /* soak 11 (A3): the weapon back in the off hand, after the pickup */ }
                 // Soak 2: an animal the hunt could not get (stuck, time, or stopped by the unstuck
                 // reflex: #431 review 7, not by a fight) is left alone a while.
                 const byUnstuck = end === 'interrupted' && agent.rotnLastInterrupt?.by === 'unstuck' && agent.rotnLastInterrupt?.of === `mode:${this.name}`;
