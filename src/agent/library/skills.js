@@ -49,6 +49,34 @@ export { weaponRank };
  * failed equip of a fight, no more are tried in it (#296 review 2: each try can wait about 11 s for
  * an unanswered click and its retry, while the bot does not attack).
  */
+/**
+ * Soak 11 (A3, the lead): a build or a repair leaves a block in the main hand (21:04 the bot died
+ * holding dirt; Corpse Complex keeps only the main hand, the off hand and the armour, so the club in
+ * the inventory dropped). Out of fights the weapon is kept in the off hand (WEAPON_HAND.offHand; the
+ * lead, after rotn-data: Corpse Complex keeps the off hand, normal attacks and right-clicks use only
+ * the main hand, and the club has no off-hand restriction); a fight takes it into the main hand
+ * (equipHighestAttack) and it goes back after (here, at the fight's end and after every build or
+ * repair). With offHand false, the main hand. Returns whether a weapon is where it should be.
+ */
+export const WEAPON_HAND = { offHand: true };
+export async function rearmWeapon(bot) {
+    const items = bot?.inventory?.items?.() ?? [];
+    const best = items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0] ?? null;
+    const off = bot?.inventory?.slots?.[45] ?? null;
+    if (WEAPON_HAND.offHand && (!off || isWeaponItem(off))) {
+        // #584 nit 5: a better weapon in the inventory takes the off hand's place.
+        if (off && !(best && weaponOrder(attackPath(bot))(best, off) < 0)) return true;
+        if (!best || typeof bot.equip !== 'function') return !!off;
+        await bot.equip(best, 'off-hand');
+        return true;
+    }
+    // The main hand (or the off hand holds something else, a shield or a torch, which stays).
+    if (bot?.heldItem && isWeaponItem(bot.heldItem)) return true;
+    if (!best || typeof bot.equip !== 'function') return false;
+    await bot.equip(best, 'hand');
+    return true;
+}
+
 export async function equipHighestAttack(bot, fight = {}) {
     // Soak 10 (W1): threats.isWeaponItem, the one weapon rule (never the crude axe or a Hit With Axe bark).
     const isWeapon = (item) => !!item && isWeaponItem(item);
@@ -61,8 +89,22 @@ export async function equipHighestAttack(bot, fight = {}) {
     const inInventory = best(bot.inventory.items());
     if (isWeapon(off) && (!inInventory || order(off, inInventory) < 0)) {
         const full = (bot.inventory.firstEmptyInventorySlot?.() ?? null) === null;
+        if (full) {
+            // #584 review 3: with no free slot stowCarried cannot move it, and the bot fist-fought while
+            // counted armed (hasWeapon counts the off hand). bot.equip swaps it into the main hand (the
+            // held item goes to the off hand); rearmWeapon puts things back after the fight.
+            if (fight.equipFailed) return false;
+            try {
+                await bot.equip(off, 'hand');
+                return true;
+            } catch (err) {
+                fight.equipFailed = true;
+                log(bot, `Could not take the ${off.name} from the off hand into the main hand (${safeError(err)}); fighting with ${bot.heldItem?.name ?? 'bare hands'} for the rest of this fight.`);
+                return false;
+            }
+        }
         const moved = await stowCarried(bot, isWeapon, { resyncMs: 0 });
-        if (!moved.length) log(bot, `Could not take the ${off.name} from the off hand${full ? ': the inventory is full' : ''}.`); // #238 nit 2
+        if (!moved.length) log(bot, `Could not take the ${off.name} from the off hand.`); // #238 nit 2
     }
     let weapon = best(bot.inventory.items());
     if (!weapon)
@@ -838,7 +880,13 @@ export const DEFEND_PROGRESS = { stallMs: 10_000 };
 // markUnreachable and isUnreachable live in threats.js since soak 6 (threatPlan uses them).
 export { markUnreachable, isUnreachable };
 
-export async function attackEntity(bot, entity, kill=true, { approach = true } = {}) {
+export async function attackEntity(bot, entity, kill=true, opts = {}) {
+    // Soak 11 (A3): the weapon back in the off hand after the attack, whichever way it ends; a caller
+    // that hits again soon (avoidEnemies' cornered hits) passes rearm false and rearms at its own end.
+    try { return await attackEntityOnce(bot, entity, kill, opts); } finally { if (opts.rearm !== false) { try { await rearmWeapon(bot); } catch { /* best effort */ } } }
+}
+
+async function attackEntityOnce(bot, entity, kill=true, { approach = true } = {}) {
     /**
      * Attack mob of the given type.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -995,8 +1043,12 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
         // Soak 6 (the eel loop): the third fight in a row on one mob that ends interrupted gives it up.
         const n = noteFightEnd(bot, fought, outcome);
         if (n) console.log(`[survival] giving up on ${fought.name}: ${n} fights in a row on it were interrupted; leaving it alone for ${UNREACHABLE.skipMs / 60_000} min`);
+        // Soak 11 (A3), #584 review 4: the weapon back in the off hand however the fight ends (an
+        // interrupt returns from the loop), after pvp stops; not after an equip the server rejected
+        // (G3 round 7 B: no more equip tries this fight).
+        bot.pvp.stop();
+        if (!fight.equipFailed) { try { await rearmWeapon(bot); } catch { /* best effort */ } }
     }
-    bot.pvp.stop();
     if (attacked)
         log(bot, `Successfully defended self.`);
     else
@@ -1126,6 +1178,9 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
         bot.rotnFightingInPlace = false;
         bot.rotnFightEndedAt = Date.now();
         journal.end(outcome);
+        // Soak 11 (A3): the weapon back in the off hand however the fight in place ends (#584 review 4),
+        // not after a rejected equip.
+        if (!fight.equipFailed) { try { await rearmWeapon(bot); } catch { /* best effort */ } }
     }
     log(bot, swings > 0 ? `Fought from inside the shelter: ${swings} swing${swings === 1 ? '' : 's'}, stopped: ${why}.`
         : outcome === 'gone' ? 'Nothing in reach to fight.' : `No swing went out from inside the shelter, stopped: ${why}.`); // #532 review: say why
@@ -3719,6 +3774,7 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
     let away = null; // the point the walk keeps away from
     let still = 0; // ticks in a row the pathfinder was not moving (reset when the goal is set again)
     let blocked = 0; // the same, never reset by a new goal: the flee is blocked (#497 review 3)
+    let hitCornered = false; // soak 11 (A3): a cornered hit took the weapon into the main hand
     while (enemy) {
         // #444 review 3: away from all the enemies at once, not the nearest one: with a slime close
         // and a skeleton farther the nearest one changed, and so did the way, every tick. Each
@@ -3746,10 +3802,12 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
             break;
         }
         if (enemy && blocked >= AVOID.blockedTicks && bot.entity.position.distanceTo(enemy.position) < 3 && canHit(enemy)) {
-            await attackEntity(bot, enemy, false, { approach: false }); // (g): no walk toward it
+            await attackEntity(bot, enemy, false, { approach: false, rearm: false }); // (g): no walk toward it
+            hitCornered = true;
         }
     }
     bot.pathfinder.stop();
+    if (hitCornered) { try { await rearmWeapon(bot); } catch { /* soak 11 (A3): the weapon back in the off hand */ } }
     const got = firstPoint ? Math.round(bot.entity.position.distanceTo(firstPoint)) : distance;
     log(bot, !firstPoint || got >= distance ? `Moved ${distance} away from enemies.`
         : `Moved away from enemies, but only to ${got} blocks of the ${distance}${bot.interrupt_code ? ' (stopped)' : ''}.`);

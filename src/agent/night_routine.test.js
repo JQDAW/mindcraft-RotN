@@ -2002,7 +2002,9 @@ test('#470 review 2: no weapon, a zombie in one open cell: that cell is left out
     assert.equal(all.agent.bot.rotnSheltered, 'open');
     const armed = heldSetup({ weapon: true });
     await breachAt(armed);
-    assert.deepEqual(armed.o.repairs, [{ site: SITE, skip: [] }], 'with a weapon: the whole repair (and the fight in place)');
+    // #584 review 1: armed but not fighting it first (here no melee mob is counted near): the held cell is
+    // left out as well (a repair under it stops at once, and started again every tick); the rest is repaired.
+    assert.deepEqual(armed.o.repairs, [{ site: SITE, skip: ['1,64,0'] }], 'with a weapon: the other cells repaired (and the fight in place)');
 });
 
 test('#470 review 2: no weapon, held, health 8 or lower: back away (once per shelter); with no way to back away, hit back by hand', async (t) => {
@@ -2087,18 +2089,24 @@ test('soak 5 (death 4): unarmed at full health or armed at health 8 or less, a m
     await breachAt(cornered);
     // handFight is set for the fight while the repair runs; the fake repair closes the shelter, which clears it.
     assert.ok(cornered.agent.chat.includes('[night] health 6, and no way to back away from a zombie in reach at 1, 64, 1: hitting back'), 'cornered: it hits back with its weapon');
-    assert.deepEqual(cornered.o.repairs, [{ site: SITE, skip: [] }], 'armed: no cell left out; the repair goes on');
+    assert.deepEqual(cornered.o.repairs, [{ site: SITE, skip: ['1,64,0'] }], 'armed: the held cell left out (#584 review 1); the repair goes on');
 
-    const nobody = heldSetup({ weapon: true, health: 6 });
+    const nobody = heldSetup({ weapon: true, health: 6, held: 'none' });
     await breachAt(nobody);
-    assert.deepEqual(nobody.labels.filter(l => l === 'action:backAway'), [], 'nothing in reach: no back-away, the repair');
+    assert.deepEqual(nobody.labels.filter(l => l === 'action:backAway'), [], 'nothing in reach or in the opening: no back-away, the repair');
     assert.deepEqual(nobody.o.repairs, [{ site: SITE, skip: [] }]);
+    // #584 review 1: armed at health 6 with the zombie in the opening (not in reach): backed away too, as
+    // the rule says (before, armed, only a mob in reach counted: the repair ran under it and stopped at once).
+    const opening = heldSetup({ weapon: true, health: 6 });
+    await breachAt(opening);
+    assert.deepEqual(opening.labels, ['action:buildShelter', 'action:backAway']);
+    assert.ok(opening.agent.chat.includes('[night] health 6, and a zombie in the opening at 1, 64, 0: backing away into -1, 64, 0'), opening.agent.chat.join('\n'));
 
     const twelve = reach(heldSetup({ weapon: true, health: UNDER }));
     await breachAt(twelve);
     assert.deepEqual(twelve.labels, ['action:buildShelter', 'action:backAway'], `PR 5: armed at health ${UNDER}, a zombie (up to ${ZOMBIE_HIT}): backed away`);
 
-    const spider = heldSetup({ weapon: true, health: 6 });
+    const spider = heldSetup({ weapon: true, health: 6, held: 'none' }); // #584 review 1: only the spider (a zombie in the opening would count)
     spider.o.mobInReach = () => ({ id: 11, name: 'spider', position: new Vec3(1.5, 64, 1.5) });
     await breachAt(spider);
     assert.deepEqual(spider.labels.filter(l => l === 'action:backAway'), [], 'PR 5: armed at health 6, a spider (up to 2): no back-away');
@@ -2107,7 +2115,9 @@ test('soak 5 (death 4): unarmed at full health or armed at health 8 or less, a m
     await breachAt(healthy);
     assert.deepEqual(healthy.labels.filter(l => l === 'action:backAway'), [], `armed at health ${OVER}: no back-away`);
     assert.equal(nightState(healthy.agent).handFight, false);
-    assert.deepEqual(healthy.o.repairs, [{ site: SITE, skip: [] }]);
+    // #584 review 1: the cell the zombie holds is left out (no melee mob is counted near in this setup, so
+    // no fight first); the rest is repaired.
+    assert.deepEqual(healthy.o.repairs, [{ site: SITE, skip: ['1,64,0'] }]);
 });
 
 // #497 review 1: a threat the shelter never hits (a troll, a creeper, a skeleton) in the opening or
@@ -3393,4 +3403,240 @@ test('#580 re-review nit 1: the same zombie breaches again after the repair clos
     await settle(s.agent);
     assert.equal(s.o.repairs.length, 2, s.agent.chat.join('\n'));
     assert.deepEqual(burrows, [], 'repaired first again, no burrow');
+});
+
+// Soak 11 (rotn-v0.1.17, 21:04, A1, A2, A3, the lead): a zombie dug the hole shelter's shaft from above;
+// the repair started, went on under it for 9 s while it hit the armed bot (the club in the inventory,
+// dirt in the hand), and the bot died holding dirt, so the club dropped.
+test('soak 11 (A2): armed above its hit with one melee mob at the breach: the fight first, no repair; gone: the repair; two melee mobs: the #580 order', async (t) => {
+    quiet(t);
+    const { FIGHT_FIRST } = await import('./night_routine.js');
+    assert.deepEqual(FIGHT_FIRST, { range: 4, crowd: 8 });
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5) };
+    const s = heldSetup({ weapon: true, plan: false, held: 'none' });
+    let near = [zombie];
+    s.o.meleeNear = () => near;
+    s.o.mobInReach = () => near[0] ?? null;
+    s.o.repairBlocks = () => 4;
+    await breachAt(s);
+    assert.deepEqual(s.o.repairs, [], 'no repair while it fights');
+    assert.equal(s.agent.bot.rotnSheltered, 'open', 'self_defense fights in place');
+    assert.ok(s.agent.chat.some(l => /^\[night\] armed, health 20 above the [\d.]+ a zombie may hit for, and the only melee mob near: fighting it from the shelter first, then the repair$/.test(l)), s.agent.chat.join('\n'));
+    // Dead or gone: the repair.
+    near = [];
+    nightTick(s.agent, { now: 3 * CHECK_MS, ops: s.o });
+    await settle(s.agent);
+    assert.equal(s.o.repairs.length, 1);
+    // Two melee mobs near: the #580 order (the opening free, a block held: the repair first).
+    const two = heldSetup({ weapon: true, plan: false, held: 'none' });
+    const z2 = { id: 8, name: 'zombie', type: 'mob', position: new Vec3(3.5, 64, 0.5) };
+    two.o.meleeNear = () => [zombie, z2];
+    two.o.mobInReach = () => zombie;
+    two.o.repairBlocks = () => 4;
+    await breachAt(two);
+    assert.equal(two.o.repairs.length, 1, 'repaired');
+    assert.ok(!two.agent.chat.some(l => /fighting it from the shelter first/.test(l)));
+    // At a health its hit may take: not the fight first.
+    const low = heldSetup({ weapon: true, plan: false, held: 'none', health: 3 });
+    low.o.meleeNear = () => [zombie];
+    low.o.mobInReach = () => zombie;
+    low.o.repairBlocks = () => 4;
+    await breachAt(low);
+    assert.ok(!low.agent.chat.some(l => /fighting it from the shelter first/.test(l)));
+});
+
+test('soak 11 (A1): the repair stops when a melee mob in reach hits the bot (or holds an opening it repairs); the next tick decides again', async (t) => {
+    quiet(t);
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5) };
+    const s = heldSetup({ plan: false, held: 'none' });
+    s.o.mobInReach = () => zombie;
+    s.o.repairBlocks = () => 4;
+    const aborts = [];
+    s.o.buildShelter = (bot, opts = {}) => {
+        s.o.builds.push(opts.site ?? null);
+        if (!opts.site) return Promise.resolve({ closed: true, feet: SITE, placed: 10, line: 'Shelter closed' });
+        s.o.repairs.push({ site: opts.site, skip: [] });
+        aborts.push(opts.abort());       // before the hit: nothing
+        bot.health = 14;                  // hit during the repair
+        const why = opts.abort();
+        aborts.push(why);
+        return Promise.resolve({ closed: false, feet: opts.site, placed: 0, line: 'Shelter is not closed', aborted: why });
+    };
+    const burrows = [];
+    s.o.burrowAway = (bot, mob, opts) => { burrows.push(opts); return Promise.resolve({ steps: 1, site: SITE.offset(0, -2, 0), stopped: 'far' }); };
+    await breachAt(s);
+    assert.deepEqual(aborts, [null, 'hit by a zombie']);
+    assert.ok(s.agent.chat.includes('[night] the repair stopped: hit by a zombie; deciding again'), s.agent.chat.join('\n'));
+    // The next tick: unarmed, the repair first was spent on this mob: the burrow.
+    nightTick(s.agent, { now: 3 * CHECK_MS, ops: s.o });
+    await settle(s.agent);
+    assert.equal(burrows.length, 1, s.agent.chat.join('\n'));
+});
+
+test('soak 11 (A3): after a repair the weapon goes to the off hand (Corpse Complex keeps it; the lead, after rotn-data); an off hand holding something else stays and the main hand takes it; WEAPON_HAND.offHand false: the main hand', async (t) => {
+    quiet(t);
+    const { rearmWeapon, WEAPON_HAND } = await import('./library/skills.js');
+    const club = { name: 'spartanweaponry:club_wood', metadata: 0, count: 1, slot: 37 };
+    const dirt = { name: 'dirt', metadata: 0, count: 2, slot: 36 };
+    const s = heldSetup({ plan: false, held: 'none' });
+    const equips = [];
+    const slots = [];
+    Object.assign(s.agent.bot, { heldItem: dirt, inventory: { items: () => [dirt, club].filter(i => slots[45] !== i), slots },
+        equip: (item, dest) => { equips.push(`${item.name}>${dest}`); if (dest === 'hand') s.agent.bot.heldItem = item; else slots[45] = item; return Promise.resolve(); } });
+    assert.equal(WEAPON_HAND.offHand, true, 'the off hand by default');
+    await breachAt(s);
+    assert.ok(s.o.repairs.length >= 1);
+    assert.deepEqual(equips, ['spartanweaponry:club_wood>off-hand'], 'the club in the off hand after the repair');
+    // Already in the off hand: nothing.
+    equips.length = 0;
+    assert.equal(await rearmWeapon(s.agent.bot), true);
+    assert.deepEqual(equips, []);
+    // An off hand holding a shield: it stays, and the club goes to the main hand.
+    const shield = { name: 'shield', metadata: 0, count: 1, slot: 45 };
+    slots[45] = shield;
+    assert.equal(await rearmWeapon(s.agent.bot), true);
+    assert.deepEqual(equips, ['spartanweaponry:club_wood>hand']);
+    // The flag off: the main hand (already there: nothing).
+    WEAPON_HAND.offHand = false;
+    t.after(() => { WEAPON_HAND.offHand = true; });
+    slots[45] = undefined;
+    equips.length = 0;
+    s.agent.bot.heldItem = dirt;
+    assert.equal(await rearmWeapon(s.agent.bot), true);
+    assert.deepEqual(equips, ['spartanweaponry:club_wood>hand']);
+    // No weapon: nothing to do.
+    assert.equal(await rearmWeapon({ inventory: { items: () => [dirt], slots: [] }, heldItem: dirt, equip: () => { throw new Error('no'); } }), false);
+});
+
+// Soak 11 death 2 (21:38:42, D): unarmed, "the opening is free and 49 blocks held: repairing first";
+// the zombie stepped into the opening during the repair, which went on to the death. Now it stops.
+test('soak 11 (D, A1): unarmed, repairing first, the zombie steps into the opening: the repair stops; the next tick burrows', async (t) => {
+    quiet(t);
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5) };
+    const s = heldSetup({ plan: false, held: 'none' });
+    s.o.mobInReach = () => zombie;
+    s.o.repairBlocks = () => 49;
+    let stepIn = false;
+    const heldNone = s.o.heldCells;
+    s.o.heldCells = (bot, site, open) => (stepIn ? open.filter(c => c.equals(s.opening[0])).map(cell => ({ cell, mob: zombie })) : heldNone(bot, site, open));
+    const aborts = [];
+    s.o.buildShelter = (bot, opts = {}) => {
+        s.o.builds.push(opts.site ?? null);
+        if (!opts.site) return Promise.resolve({ closed: true, feet: SITE, placed: 10, line: 'Shelter closed' });
+        s.o.repairs.push({ site: opts.site, skip: [] });
+        stepIn = true; // it steps into the opening during the repair
+        const why = opts.abort();
+        aborts.push(why);
+        return Promise.resolve({ closed: false, feet: opts.site, placed: 0, line: 'Shelter is not closed', ...(why ? { aborted: why } : {}) });
+    };
+    const burrows = [];
+    s.o.burrowAway = (bot, mob, opts) => { burrows.push(opts); return Promise.resolve({ steps: 1, site: SITE.offset(0, -2, 0), stopped: 'far' }); };
+    await breachAt(s);
+    assert.ok(s.agent.chat.some(l => /the opening is free and 49 blocks held: repairing first$/.test(l)), s.agent.chat.join('\n'));
+    assert.deepEqual(aborts, ['a zombie in the opening at 1, 64, 0']);
+    assert.ok(s.agent.chat.includes('[night] the repair stopped: a zombie in the opening at 1, 64, 0; deciding again'));
+    nightTick(s.agent, { now: 3 * CHECK_MS, ops: s.o });
+    await settle(s.agent);
+    assert.equal(burrows.length, 1, s.agent.chat.join('\n'));
+});
+
+// Soak 11 death 4 (21:57, G): the zombie dug the pocket's roof and dropped into the bot's own cell; the
+// repair closed the shelter around it, the morning check said "staying in until it leaves", and the
+// unarmed bot did not swing ("not fighting from the shelter unless cornered") until it died.
+test('soak 11 (G): a hostile inside the bot\'s own cells gets the close-quarters rule at night and in the morning wait (burrow once, then hit back); the repair that placed every cell around it is not counted closed', async (t) => {
+    quiet(t);
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(0.5, 64, 0.5), height: 1.95 };
+    const s = heldSetup({ plan: false, held: 'none' });
+    s.o.burrows = [];
+    s.o.burrowAway = (bot, m, opts) => { s.o.burrows.push(opts); return Promise.resolve({ steps: 0, site: null, stopped: 'cornered', why: 'down: a body in 0, 64, 0, which the step seals' }); };
+    nightTick(s.agent, { now: 0, ops: s.o });
+    await settle(s.agent);
+    assert.equal(nightState(s.agent).state, 'inside');
+    s.agent.bot.entities = { ...(s.agent.bot.entities ?? {}), 7: zombie }; // it dropped into the bot's cell
+    assert.equal(nightTick(s.agent, { now: CHECK_MS + 1, ops: s.o }), 'night:inside');
+    await settle(s.agent);
+    assert.equal(s.o.burrows.length, 1, s.agent.chat.join('\n'));
+    assert.ok(s.agent.chat.includes(`[night] a zombie in the bot's cell at 0, 64, 0: not leaving past it; no weapon, health 20, and it may hit for ${ZOMBIE_HIT}: burrowing away from it (a step down first)`), s.agent.chat.join('\n'));
+    assert.equal(nightTick(s.agent, { now: 2 * CHECK_MS + 2, ops: s.o }), 'night:inside');
+    assert.equal(nightState(s.agent).handFight, true, 'no burrow step: it hits back by hand');
+    assert.equal(s.agent.chat.at(-1), '[night] a zombie in the bot\'s cell at 0, 64, 0: not leaving past it; no weapon, health 20, and no burrow step (down: a body in 0, 64, 0, which the step seals): hitting back by hand');
+    // Killed or gone: the hand fight ends; it comes back (a new burrow try for a new mob).
+    delete s.agent.bot.entities[7];
+    nightTick(s.agent, { now: 2 * CHECK_MS + 3, ops: s.o });
+    assert.equal(nightState(s.agent).handFight, false);
+    s.agent.bot.entities[7] = zombie;
+    // The morning wait (it was morning at 21:57: "staying in until it leaves"): still hitting back.
+    s.agent.bot.time.timeOfDay = MORNING;
+    s.o.hostileNear = () => zombie;
+    assert.equal(nightTick(s.agent, { now: 3 * CHECK_MS + 3, ops: s.o }), 'night:inside');
+    await settle(s.agent);
+    assert.equal(nightState(s.agent).handFight, true);
+    assert.ok(!s.agent.chat.some(l => /staying in until it leaves/.test(l)), s.agent.chat.join('\n'));
+    // The repair that placed every cell with it inside (buildShelter's G1 result): not closed.
+    const r = heldSetup({ plan: false, held: 'none' });
+    r.o.mobInReach = () => null;
+    r.o.buildShelter = (bot, opts = {}) => (opts.site
+        ? Promise.resolve({ closed: false, feet: opts.site, placed: 2, missing: [], line: 'Shelter at 0, 64, 0 is not closed: zombie is inside it, at 0, 64, 0; placed 2.', inside: zombie })
+        : Promise.resolve({ closed: true, feet: SITE, placed: 10, line: 'Shelter closed' }));
+    await breachAt(r);
+    assert.ok(r.agent.chat.includes('[night] the repair placed every cell, but a zombie is inside the shelter: not closed; deciding again'), r.agent.chat.join('\n'));
+    assert.ok(!r.agent.chat.some(l => /the repair closed the shelter/.test(l)));
+});
+
+// #584 review 1: armed, above the hit, two melee mobs, one holding the opening: the repair started under
+// it, stopped at once, and started again every tick, saying "the repair stopped" about 3 times a second.
+test('#584 review 1: armed with two melee mobs and one in the opening: the #580 order (burrow), never a repair under the held cell; a repeated stop is said once; a repair that would stop at once is not started', async (t) => {
+    quiet(t);
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5) };
+    const z2 = { id: 8, name: 'zombie', type: 'mob', position: new Vec3(3.5, 64, 0.5) };
+    const s = heldSetup({ weapon: true, plan: false }); // the zombie holds 1, 64, 0
+    s.o.meleeNear = () => [zombie, z2];
+    s.o.repairBlocks = () => 4;
+    s.o.burrows = [];
+    s.o.burrowAway = (bot, m, opts) => { s.o.burrows.push(opts); return Promise.resolve({ steps: 0, site: null, stopped: 'cornered', why: 'no step' }); };
+    await breachAt(s);
+    for (let k = 2; k < 8; k++) { nightTick(s.agent, { now: k * CHECK_MS + k, ops: s.o }); await settle(s.agent); }
+    assert.equal(s.o.burrows.length, 1, s.agent.chat.join('\n'));
+    assert.ok(s.agent.chat.some(l => /and no way to back away: burrowing away from it \(a step down first\)$/.test(l)), s.agent.chat.join('\n'));
+    assert.ok(s.o.repairs.every(r => r.skip.includes('1,64,0')), JSON.stringify(s.o.repairs));
+    assert.ok(!s.agent.chat.some(l => /the repair stopped/.test(l)));
+    // A repair that stops on every try (hit each time): said once, then only logged.
+    const h = heldSetup({ plan: false, held: 'none' });
+    h.o.repairBlocks = () => 4;
+    h.o.buildShelter = (bot, opts = {}) => (opts.site
+        ? (h.o.repairs.push({ site: opts.site, skip: [] }), Promise.resolve({ closed: false, feet: opts.site, placed: 0, line: 'Shelter is not closed', aborted: 'hit by a zombie' }))
+        : Promise.resolve({ closed: true, feet: SITE, placed: 10, line: 'Shelter closed' }));
+    await breachAt(h);
+    for (let k = 2; k < 6; k++) { nightTick(h.agent, { now: k * CHECK_MS + k, ops: h.o }); await settle(h.agent); }
+    assert.ok(h.o.repairs.length >= 3, `${h.o.repairs.length} repairs`);
+    assert.equal(h.agent.chat.filter(l => l === '[night] the repair stopped: hit by a zombie; deciding again').length, 1, h.agent.chat.join('\n'));
+    // The stop's check before the start: a cell taken between the decision and the start: no repair.
+    const p = heldSetup({ weapon: true, plan: false, held: 'none' });
+    let calls = 0;
+    p.o.heldCells = (bot, site, open) => (++calls % 2 === 0 ? open.filter(c => c.equals(p.opening[0])).map(cell => ({ cell, mob: zombie })) : []);
+    await breachAt(p);
+    assert.deepEqual(p.o.repairs, [], 'not started');
+    assert.ok(p.agent.chat.includes('[night] not repairing now: a zombie in the opening at 1, 64, 0; deciding again'), p.agent.chat.join('\n'));
+});
+
+// #584 review 2: one zombie within 4 blocks that the fight in place cannot reach (above the hole
+// shelter, behind a wall) held the repair off all night (no fight, no repair).
+test('#584 review 2: the fight first only for a mob the fight in place reaches, or one holding or over an opening; else the repair', async (t) => {
+    quiet(t);
+    const above = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(0.5, 67, 0.5) };
+    const s = heldSetup({ weapon: true, plan: false, held: 'none' });
+    s.o.meleeNear = () => [above];
+    s.o.mobInReach = () => null;
+    s.o.repairBlocks = () => 4;
+    await breachAt(s);
+    assert.equal(s.o.repairs.length, 1, s.agent.chat.join('\n'));
+    assert.ok(!s.agent.chat.some(l => /fighting it from the shelter first/.test(l)));
+    // Over (or in) an opening cell: fought first.
+    const over = heldSetup({ weapon: true, plan: false });
+    const z = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 65, 0.5) };
+    over.o.meleeNear = () => [z];
+    over.o.mobInReach = () => null;
+    await breachAt(over);
+    assert.deepEqual(over.o.repairs, []);
+    assert.ok(over.agent.chat.some(l => /fighting it from the shelter first/.test(l)), over.agent.chat.join('\n'));
 });
