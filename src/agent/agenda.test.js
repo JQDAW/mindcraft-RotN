@@ -1228,7 +1228,7 @@ test('#579 re-review nit: a finished agenda, the club lost three times: each tim
 // Soak 11 (H3): 22:03:42 (about 8 min before sunset) the shelter blocks came before food at food 7-8
 // with nothing to eat; food came back at food 6, and night 4 began at food 4 with no food.
 test('soak 11 (H3): before night with no food held, when food would reach 6 by sunset, food comes before the shelter blocks; the weapon stays first', (t) => {
-    assert.deepEqual(FOOD_BEFORE_NIGHT, { minPerHunger: 2, startMs: 60_000 });
+    assert.deepEqual(FOOD_BEFORE_NIGHT, { minPerHunger: 2, startMs: 120_000, startSlackMs: 10_000 });
     const club = () => stack('spartanweaponry:club_wood', 0, 1);
     const at = (food, min, items = [club()]) => hFixAgent(t, items, { food, timeOfDay: dayAt(min) });
     // 7 min before sunset, armed, food 9 (9 - 3.5 = 5.5): food first.
@@ -1383,4 +1383,24 @@ test('#587 re-review nit 4: whether the weapon reserve was last judged before ni
     agent.agenda.reserveStuck('weapon'); // rebuilt from the spent budget, as after a restart
     agent.bot.time = { timeOfDay: dayAt(7) };
     assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'weapon', 'the dusk: a fresh budget');
+});
+
+// #588 re-review nit 2: with 2 food runs already that day the driver waits 60 s (BACKOFF_MS doubling)
+// before starting the next; the 60 s grace ended H3 before its one run started.
+test('#588 re-review nit 2: H3\'s one food run survives the driver\'s backoff (counted from the driver\'s own start), then the blocks', (t) => {
+    let clock = 0;
+    const agent = hFixAgent(t, [stack('spartanweaponry:club_wood', 0, 1)], { food: 8, timeOfDay: dayAt(7.5) });
+    agent.agenda.now = () => clock;
+    agent.agenda.spent.food = { attempts: 2, llm_ms: 0 }; // two food runs today: the next waits BACKOFF_MS * 2
+    assert.equal(agendaTick(agent, { now: 0 }), 'food');
+    assert.equal(agent.self_prompter.isActive(), false, 'the backoff: not started yet');
+    clock = 30_000;
+    assert.equal(agendaTick(agent, { now: clock }), 'food');
+    clock = 2 * BACKOFF_MS + 1000;
+    assert.equal(agendaTick(agent, { now: clock }), 'food', 'still food when the backoff is over');
+    assert.equal(agent.self_prompter.isActive(), true, 'its run started');
+    assert.ok(agent.agenda.h3Run.started != null, 'counted from the driver\'s start');
+    agent.self_prompter.stop();
+    clock += 20_000;
+    assert.equal(agendaTick(agent, { now: clock }), 'shelter_blocks', 'its one run over: the blocks');
 });

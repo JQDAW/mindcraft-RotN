@@ -318,7 +318,10 @@ export function foodFirstAfterDeath(s) {
  * SHELTER_LEAD_MIN). Inside it food gets at most ONE run (Agenda.foodBeforeBlocks): until food is
  * held, that run ends, or its budget is spent; then the blocks win for the rest of the window.
  */
-export const FOOD_BEFORE_NIGHT = { minPerHunger: 2, startMs: 60_000 };
+// #588 re-review nit 2: startMs, the wait for a picked run to start, is above the driver's longest food
+// backoff (BACKOFF_MS doubling: 0, 30, 60 s for the 3 attempts) plus a tick; startSlackMs, from the
+// driver's own start (recordAttempt) to its self-prompter running.
+export const FOOD_BEFORE_NIGHT = { minPerHunger: 2, startMs: 120_000, startSlackMs: 10_000 };
 /** Whether food comes before the shelter blocks now (FOOD_BEFORE_NIGHT). */
 export function foodRunsOutBeforeNight(s) {
     let m = Infinity, food = null, held = 0;
@@ -506,14 +509,25 @@ export class Agenda {
         let running = false;
         try { running = !!state.foodRunning?.(); } catch { running = false; }
         if (running) { if (!readOnly) this.h3Run.seen = true; return true; }
-        // Picked, its run not started yet (the driver may judge again first): still food, for at most
-        // FOOD_BEFORE_NIGHT.startMs; a run seen and now over: the blocks for the rest of the window.
-        if (!this.h3Run.seen && this.now() - this.h3Run.at < FOOD_BEFORE_NIGHT.startMs) return true;
+        // Picked, its run not started yet (the driver may judge again first, or wait out its backoff):
+        // still food, for at most FOOD_BEFORE_NIGHT.startMs; started by the driver (recordAttempt), for
+        // startSlackMs until its self-prompter runs; a run seen and now over: the blocks for the rest of
+        // the window. #588 re-review nit 5: a self-prompter paused mid-run (a task, an E3 hold) reads as
+        // over too: the blocks then, as for a run that ended.
+        const now = this.now();
+        const waiting = !this.h3Run.seen && (this.h3Run.started != null
+            ? now - this.h3Run.started < FOOD_BEFORE_NIGHT.startSlackMs
+            : now - this.h3Run.at < FOOD_BEFORE_NIGHT.startMs);
+        if (waiting) return true;
         if (!readOnly) this.h3Run.ended = true;
         return false;
     }
-    /** H3's one food run in this window was picked (#588 review 1). */
-    foodBeforeBlocksRan() { this.h3Run ??= { at: this.now(), seen: false, ended: false }; }
+    /**
+     * H3's one food run in this window was picked (#588 review 1). #588 re-review nit 4: not saved in
+     * agenda.json: a restart inside the window may give food one more run there (rare, and bounded by
+     * the food budget).
+     */
+    foodBeforeBlocksRan() { this.h3Run ??= { at: this.now(), started: null, seen: false, ended: false }; }
 
     /** A reserve, if one is wanted now: the shelter reserve first, then the weapon, then food (G4 #5). */
     anyReserveWanted(state) {
@@ -661,6 +675,8 @@ export class Agenda {
     /** One more self-prompter run for a step (saved: a crash loop cannot reset it). */
     recordAttempt(id) {
         if (id === this.food?.id) this.foodDay.runs++; // #422 review 8: the food reserve's runs per day
+        // #588 re-review nit 2: H3's food run starts here (the driver's own start, after its backoff).
+        if (id === this.food?.id && this.h3Run && this.h3Run.started == null) this.h3Run.started = this.now();
         const b = this.spentOn(id);
         this.spent[id] = { ...b, attempts: b.attempts + 1 }; // keeps the reserve's need and refresh
         this.save();
