@@ -31,7 +31,7 @@ import { siteNeeds } from './library/shelter.js';
 import { attackEntity, defendInPlace, equipHighestAttack } from './library/skills.js';
 import { burrowAway } from './library/burrow.js';
 import { nightPhase, isWall } from './library/night.js';
-import { walkableExit, stairOut, quickDig, WALK_EXIT, DIG_OUT } from './library/walk_exit.js';
+import { walkableExit, stairOut, quickDig, exitReport, WALK_EXIT, DIG_OUT } from './library/walk_exit.js';
 import { safeError } from './safe_error.js';
 import { isGiverGoal, say } from './agenda_driver.js';
 import { placesToLeave } from './respawn_relocate.js';
@@ -513,7 +513,9 @@ export const isSpawnScroll = (item) => !!item && typeof item.name === 'string' &
 // a cell with no walkable way out (walk_exit.walkableExit, the shelter's walls counted as removable).
 // A possible later fallback, left out (the lead): if either of the two cells holds a block, the respawn
 // goes to the world spawn (±10) instead, so filling the scroll's cell would end such a trap.
-export function scrollRefusal(agent, site, { pit = false, below = false } = {}) {
+// Soak 13 (S1, the lead): explain(text), on a "no walkable way out" refusal, gets walk_exit.exitReport's
+// side-by-side text (which cells blocked the walk), for one [night] line.
+export function scrollRefusal(agent, site, { pit = false, below = false, explain = null } = {}) {
     const bot = agent?.bot;
     if (!bot?.inventory?.items?.().some(isSpawnScroll)) return 'no scroll held';
     if (pit) return 'a hole shelter: no walkable way out of it (a respawn there could not leave without digging)';
@@ -522,9 +524,16 @@ export function scrollRefusal(agent, site, { pit = false, below = false } = {}) 
         const f = new Vec3(Math.floor(site.x), Math.floor(site.y), Math.floor(site.z));
         // The shelter's walls (feet and head height on each side) come down in the morning: counted free, but
         // only a block the bot breaks quickly (#593 review 3: walk_exit.quickDig; never natural rock it cannot).
+        // Soak 13 (S2, the lead): quickly by hand or with the main-hand or off-hand item, what a death keeps
+        // (Corpse Complex drops the rest at the death spot): a pickaxe only in the inventory no longer counts.
         const walls = new Set([new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)]
-            .flatMap(d => [f.plus(d), f.plus(d).offset(0, 1, 0)]).filter(p => quickDig(bot, p)).map(p => `${p.x},${p.y},${p.z}`));
-        if (!walkableExit(bot, f, { reach: WALK_EXIT.reach, free: walls })) return `no walkable way out of ${at(f)} to ${WALK_EXIT.reach} blocks (a respawn there could not leave without digging)`;
+            .flatMap(d => [f.plus(d), f.plus(d).offset(0, 1, 0)]).filter(p => quickDig(bot, p, { kept: true })).map(p => `${p.x},${p.y},${p.z}`));
+        if (!walkableExit(bot, f, { reach: WALK_EXIT.reach, free: walls })) {
+            if (typeof explain === 'function') {
+                try { explain(`the scroll's way out from ${at(f)} (a blocking cell: its block, its dig time by hand or with the items a death keeps, then the best tool carried): ${exitReport(bot, f, { free: walls, reach: WALK_EXIT.reach })}`); } catch { /* the line is best effort */ }
+            }
+            return `no walkable way out of ${at(f)} to ${WALK_EXIT.reach} blocks (a respawn there could not leave without digging)`;
+        }
     }
     const spots = [...(agent._death?.spots ?? []), ...(agent._death?.last ? [agent._death.last] : [])].filter(s => s?.pos);
     const places = [...placesToLeave(agent).filter(p => p.what === 'spawn'), ...spots.map(s => ({ pos: s.pos, what: 'death spot' }))];

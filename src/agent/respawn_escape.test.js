@@ -826,3 +826,86 @@ test('#593 review 10: the respawn point is noted only after the spawn event that
     respawnEscapeTick(a, { now: now + 200, ...stubs().opts });
     assert.ok(respawnPoint(a, a._death.last.at)?.equals(RESPAWN));
 });
+
+// Soak 13 (S2, the lead): after a death Corpse Complex keeps only the main hand, the off hand and the armour;
+// the rest drops at the death spot. A shelter wall counts as free for the scroll's way out only if it breaks
+// within DIG_OUT.maxMs by hand or with the main-hand or off-hand item: a pickaxe only in the inventory no
+// longer counts. S1: a "no walkable way out" refusal also says which cells blocked the walk (explain).
+const S13_SITE = new Vec3(150, 64, -62);
+const s13World = (cells) => {
+    const reg = minecraftData('1.12.2');
+    return (p) => {
+        const q = p.floored();
+        const v = cells[`${q.x},${q.y},${q.z}`] ?? (q.y < 64 ? 'dirt' : 'air');
+        return { name: v, metadata: 0, boundingBox: reg.blocksByName[v]?.boundingBox ?? 'block', position: q };
+    };
+};
+const s13Ring = (name, { open = [] } = {}) => {
+    const w = {};
+    for (const [side, dx, dz] of [['east', 1, 0], ['west', -1, 0], ['south', 0, 1], ['north', 0, -1]]) {
+        if (open.includes(side)) continue;
+        for (const dy of [0, 1]) w[`${S13_SITE.x + dx},${S13_SITE.y + dy},${S13_SITE.z + dz}`] = name;
+    }
+    w[`${S13_SITE.x},${S13_SITE.y + 2},${S13_SITE.z}`] = name; // the roof
+    return w;
+};
+const s13Agent = ({ cells, held = null, off = null, items = [] }) => {
+    const scroll = { name: 'lifescroll:spawnscroll', metadata: 0, count: 1 };
+    const a = agentAt(S13_SITE, { now: Date.now(), deaths: [], items: [scroll, ...items] });
+    a.bot.blockAt = s13World(cells);
+    a.bot.heldItem = held;
+    const slots = new Array(46).fill(null);
+    slots[45] = off;
+    a.bot.inventory.slots = slots;
+    return a;
+};
+
+test('soak 13 (S2): a shelter wall is free for the scroll only if the hand or a held item (what a death keeps) breaks it quickly; a pickaxe in the inventory alone does not count', () => {
+    const pick = { name: 'stone_pickaxe', metadata: 0, count: 1 };
+    const club = { name: 'spartanweaponry:club_wood', metadata: 0, count: 1 };
+    // Sedimentary stone: about 0.63 s with the stone pickaxe, never by hand (rotn-data's dump).
+    const ring = s13Ring('undergroundbiomes:sedimentary_stone');
+    assert.match(scrollRefusal(s13Agent({ cells: ring, held: club, items: [pick, club] }), S13_SITE), /^no walkable way out of 150, 64, -62 to 8 blocks/, 'the pickaxe only in the inventory');
+    assert.equal(scrollRefusal(s13Agent({ cells: ring, held: pick, items: [pick, club] }), S13_SITE), null, 'the pickaxe in the main hand');
+    assert.equal(scrollRefusal(s13Agent({ cells: ring, held: club, off: pick, items: [club] }), S13_SITE), null, 'the pickaxe in the off hand');
+    // Dirt walls: by hand (0.75 s), whatever is held.
+    assert.equal(scrollRefusal(s13Agent({ cells: s13Ring('dirt'), held: club, items: [club] }), S13_SITE), null);
+    // Soak 13's shells: the pack's cobble (hardness 4: 1.5 s with the stone pickaxe, never by hand): refused,
+    // even with the pickaxe in hand; one side open (the morning's dig-out): a walkable way out.
+    const cobble = s13Ring('contenttweaker:chalk_cobble');
+    assert.match(scrollRefusal(s13Agent({ cells: cobble, held: pick, items: [pick] }), S13_SITE), /^no walkable way out/);
+    assert.equal(scrollRefusal(s13Agent({ cells: s13Ring('contenttweaker:chalk_cobble', { open: ['east'] }), held: club, items: [pick, club] }), S13_SITE), null, 'the east side opened');
+});
+
+test('soak 13 (S1): a "no walkable way out" refusal names, side by side, the cells that blocked the walk: block, the time by hand or held, the best tool carried; a step up that leads nowhere', () => {
+    const pick = { name: 'stone_pickaxe', metadata: 0, count: 1 };
+    const club = { name: 'spartanweaponry:club_wood', metadata: 0, count: 1 };
+    const said = [];
+    const explain = (t) => said.push(t);
+    const a = s13Agent({ cells: s13Ring('contenttweaker:chalk_cobble'), held: club, items: [pick, club] });
+    assert.match(scrollRefusal(a, S13_SITE, { explain }), /^no walkable way out/);
+    assert.equal(said.length, 1);
+    assert.match(said[0], /^the scroll's way out from 150, 64, -62 \(a blocking cell: its block, its dig time by hand or with the items a death keeps, then the best tool carried\): /);
+    assert.match(said[0], /east 151,64,-62 contenttweaker:chalk_cobble never \(stone_pickaxe 1500 ms\), 151,65,-62 contenttweaker:chalk_cobble never \(stone_pickaxe 1500 ms\); west 149,64,-62 /);
+    assert.match(said[0], /; north 150,64,-63 contenttweaker:chalk_cobble never \(stone_pickaxe 1500 ms\), 150,65,-63 /);
+    // Night 3's shape: a cut in rock with ground on three sides; the morning's dig-out made a step up to the
+    // north, but the rock goes on above it: refused, and the north side says so.
+    const cut = {};
+    for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) for (const dy of [0, 1, 2, 3]) {
+        if (x === 0 && z === 0 && dy < 2) continue; // the shelter's cell
+        cut[`${S13_SITE.x + x},${S13_SITE.y + dy},${S13_SITE.z + z}`] = 'stone';
+    }
+    cut[`${S13_SITE.x},${S13_SITE.y + 1},${S13_SITE.z - 1}`] = 'air'; // the step up, dug
+    cut[`${S13_SITE.x},${S13_SITE.y + 2},${S13_SITE.z - 1}`] = 'air';
+    cut[`${S13_SITE.x},${S13_SITE.y + 2},${S13_SITE.z}`] = 'air'; // headroom over the cell
+    const said3 = [];
+    const night3 = s13Agent({ cells: cut, held: club, items: [pick, club] });
+    assert.match(scrollRefusal(night3, S13_SITE, { explain: (t) => said3.push(t) }), /^no walkable way out of 150, 64, -62/);
+    assert.match(said3[0], /north a step up to 150,65,-63, but no walk to 8 blocks from there/);
+    assert.match(said3[0], /east 151,64,-62 stone never \(stone_pickaxe \d+ ms\), 151,65,-62 stone never/);
+    // Not called for other refusals, nor when the scroll may be used.
+    const ok = [];
+    scrollRefusal(s13Agent({ cells: s13Ring('dirt'), held: club, items: [club] }), S13_SITE, { explain: (t) => ok.push(t) });
+    scrollRefusal(s13Agent({ cells: {}, held: club }), S13_SITE, { pit: true, explain: (t) => ok.push(t) });
+    assert.deepEqual(ok, []);
+});

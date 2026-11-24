@@ -21,8 +21,8 @@ import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
-import { escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll } from './respawn_escape.js';
-import { stairOut, DIG_OUT } from './library/walk_exit.js';
+import { escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll, isSpawnScroll } from './respawn_escape.js';
+import { stairOut, DIG_OUT, WALK_EXIT } from './library/walk_exit.js';
 import { groundPlan, walkToGround, stepToDry, planText, inWater, GROUND } from './library/shelter_ground.js';
 import { escape } from './library/escape.js';
 import { hasWeapon, shelterEnemy, shelterTarget, threatFor, isPlayerZombie, canFightHard, maxHitOf, inMeleeReach, meleeReach, fightNumbers, fightOdds, hurtingInReach } from './library/threats.js';
@@ -304,6 +304,24 @@ function startJob(agent, n, label, fn, then) {
             n.job = null;
             if (n.gen === gen) then(result, ret);
         });
+}
+
+/**
+ * Soak 13 (S2', the lead): the morning scroll from the opened shelter. reach: the bot at most this far
+ * (horizontally, and 2 up or down) from the shelter's cell after its dig-out; walkMs: the walk back into
+ * the cell, without digging.
+ */
+export const MORNING_SCROLL = { reach: WALK_EXIT.reach, walkMs: 10_000 };
+/** Walk back into `site` (no digging, at most MORNING_SCROLL.walkMs); true when the bot stands in it. */
+export async function walkInto(bot, site) {
+    const inIt = () => bot.entity.position.floored().equals(site);
+    if (inIt()) return true;
+    let timer;
+    try {
+        await Promise.race([goToGoal(bot, new pf.goals.GoalBlock(site.x, site.y, site.z), { canDig: false }).catch(() => null),
+            new Promise(resolve => { timer = setTimeout(resolve, MORNING_SCROLL.walkMs); })]);
+    } finally { clearTimeout(timer); try { bot.pathfinder?.setGoal?.(null); } catch { /* best effort */ } }
+    return inIt();
 }
 
 /**
@@ -1452,7 +1470,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.pit = pit;
                 n.digAt = null; // digging seen at an earlier shelter is not this one's
                 n.repairStall = null;
-                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false, scrollTried: false, digOutTried: false });
+                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false, scrollTried: false, scrollUsed: false, morningScrollTried: false, digOutTried: false });
                 n.checkedAt = null; // set by the next tick, on its clock
                 bot.rotnSheltered = true;
                 // Gate2 B: where the bot was and what it stood on, for the line if it is ever out of it.
@@ -1542,11 +1560,13 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (!isFullDay(t) && !n.scrollTried && n.site && bot.rotnSheltered === true && ops.useSpawnScroll && ops.scrollRefusal) {
             n.scrollTried = true;
             // Soak 12 (B(i)): never in a hole shelter or below the surface (a pocket or a burrow).
-            const why = ops.scrollRefusal(agent, n.site, { pit: !!n.pit, below: (n.burrowSteps ?? 0) > 0 });
+            // Soak 13 (S1): a "no walkable way out" refusal also says which cells blocked the walk (one line).
+            const why = ops.scrollRefusal(agent, n.site, { pit: !!n.pit, below: (n.burrowSteps ?? 0) > 0, explain: (text) => console.log(`[night] ${text}`) });
             if (why) console.log(`[night] the Scroll of New Life is not used at ${at(n.site)}: ${why}`);
             else {
                 line(agent, `[night] setting the respawn point here at ${at(n.site)} with the Scroll of New Life (once): far from the spawn and every death spot, no hostile near`);
                 startJob(agent, n, SCROLL_LABEL, () => ops.useSpawnScroll(bot), (r) => {
+                    if (r?.used) n.scrollUsed = true; // soak 13 (S2'): no second use here in the morning
                     line(agent, r?.used ? `[night] the respawn point is now ${at(n.site)}: a death within 32 blocks of it raises no player zombie (seen by ${r.by ?? 'the stack'}${r.tries > 1 ? `, on try ${r.tries}` : ''})`
                         : `[night] the Scroll of New Life was not used (${r?.why ?? 'no result'})`);
                 });
@@ -1567,6 +1587,36 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
                     burrowSteps: 0, burrowNoneAt: null, digOutTried: false, ...MORNING_CLEAR });
                 line(agent, text);
+            };
+            // Soak 13 (S2', the lead): out of the shelter in the morning, its side now open, the Scroll of New Life
+            // is tried on the shelter's cell before the day's work: a shell with a roof and one open side, left on
+            // foot after a respawn. scrollRefusal with the cells as they are now (its walkable way out, the
+            // distance rules, no hostile near); refused: its line (and S1's), and the next morning tries again.
+            // Used: back into the cell (at most WALK_EXIT.reach away, no digging), then the scroll. Then the hand-back.
+            const outAndScroll = (text) => {
+                const site = n.site;
+                const holds = !!bot.inventory?.items?.().some?.(isSpawnScroll);
+                if (!site || n.pit || (n.burrowSteps ?? 0) > 0 || n.morningScrollTried || n.scrollUsed || !holds || !ops.scrollRefusal || !ops.useSpawnScroll) { handBack(text); return null; }
+                n.morningScrollTried = true;
+                const here = bot.entity.position.floored();
+                if (Math.hypot(here.x - site.x, here.z - site.z) > MORNING_SCROLL.reach || Math.abs(here.y - site.y) > 2) {
+                    console.log(`[night] morning: the Scroll of New Life is not used at ${at(site)}: the bot is at ${at(here)}, more than ${MORNING_SCROLL.reach} blocks from it`);
+                    handBack(text);
+                    return null;
+                }
+                const why = ops.scrollRefusal(agent, site, { explain: (t) => console.log(`[night] morning: ${t}`) });
+                if (why) { console.log(`[night] morning: the Scroll of New Life is not used at ${at(site)}: ${why}`); handBack(text); return null; }
+                line(agent, `[night] morning: setting the respawn point at ${at(site)} with the Scroll of New Life (once), from the opened shelter: a walkable way out, far from the spawn and every death spot, no hostile near`);
+                startJob(agent, n, SCROLL_LABEL, async () => {
+                    const back = await (ops.walkInto ?? walkInto)(bot, site);
+                    if (!back) return { used: false, why: `could not walk back into ${at(site)}` };
+                    return ops.useSpawnScroll(bot);
+                }, (r) => {
+                    line(agent, r?.used ? `[night] the respawn point is now ${at(site)}: a death within 32 blocks of it raises no player zombie (seen by ${r.by ?? 'the stack'}${r.tries > 1 ? `, on try ${r.tries}` : ''})`
+                        : `[night] morning: the Scroll of New Life was not used (${r?.why ?? 'no result'})`);
+                    handBack(text);
+                });
+                return 'night:inside';
             };
             const failedTry = (why) => {
                 n.exitTries = (n.exitTries ?? 0) + 1;
@@ -1608,10 +1658,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             if (walkedOut) {
                 // #435 review 4: a failed way out that could not walk the bot back is no way out.
                 const stranded = n.exitLeftAt && bot.entity.position.floored().equals(n.exitLeftAt);
-                handBack(stranded
-                    ? `[night] morning: a way out of the shelter at ${at(n.site)} failed part-way and the bot is at ${at(n.exitLeftAt)}; back to work, maybe still enclosed: dig a way out`
-                    : `[night] morning: out of the shelter at ${at(n.site)}; back to work`);
-                return null;
+                if (stranded) { handBack(`[night] morning: a way out of the shelter at ${at(n.site)} failed part-way and the bot is at ${at(n.exitLeftAt)}; back to work, maybe still enclosed: dig a way out`); return null; }
+                return outAndScroll(`[night] morning: out of the shelter at ${at(n.site)}; back to work`);
             }
             // #364 review 3: mobs that do not burn wait outside in the day: no opening while one is near.
             // #364 follow-up (b): that wait is no try (3 tries used up by a mob handed back enclosed,
@@ -1691,7 +1739,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                         if (side) await ops.awayFromMobs?.(bot);
                         return side;
                     }, (side) => {
-                        if (side) { handBack(`[night] morning: left the shelter at ${at(side)} on the side away from ${mobText(mob)}; back to work`); return; }
+                        if (side) { outAndScroll(`[night] morning: left the shelter at ${at(side)} on the side away from ${mobText(mob)}; back to work`); return; }
                         n.morningAct = 'leave'; // the next try, RETRY_MS apart (failedTry)
                         const here = bot.entity.position.floored();
                         n.exitLeftAt = here.equals(n.site) ? null : here;
@@ -1714,7 +1762,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             }
             const out = n.pit ? () => ops.pitOut(bot, n.site) : () => ops.digOut(bot, n.site);
             startJob(agent, n, 'action:leaveShelter', out, (side) => {
-                if (side) { handBack(`[night] morning: dug out of the shelter at ${at(side)}; back to work`); return; }
+                if (side) { outAndScroll(`[night] morning: dug out of the shelter at ${at(side)}; back to work`); return; }
                 const here = bot.entity.position.floored();
                 n.exitLeftAt = here.equals(n.site) ? null : here; // #435 review 4: where a failed try left it
                 failedTry(`no safe side of the shelter at ${at(n.site)} to open yet`);
