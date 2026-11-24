@@ -8,15 +8,19 @@
 // - A call is one `[openrouter] usage ...` line. Its reasoning tokens are the `[openrouter] reasoning_tokens N`
 //   line after it, before the next usage line (none: null, openrouter.js prints no line then). A field
 //   openrouter.js prints as `unknown` is null: it adds nothing to a sum and is counted (`unknownUsd`).
-// - A memory summary (lead, 2026-11-24, from soak 14 on): the first usage line after a `[memory] summary
-//   turns <n> kept <k>` marker (skills-rotn #601). Summaries may overlap a command call in the journal; the
-//   marker then takes the next usage line, as the lead set it. A summary call that fails prints no usage
-//   line: an `Error while awaiting response` line (openrouter.js) while a marker waits drops that marker,
-//   counted as `unmatchedMarkers` (#602 review 2), so the next command call is not taken for a summary.
-//   A log with no marker at all (before #601) falls back to the old rule, a prompt under 2,000 tokens,
-//   and says so (`memoryRule`).
-// - `[openrouter] reasoning effort=none for this call` lines (#600) are counted, and the summaries'
-//   reasoning tokens are reported apart from the other calls'.
+// - A memory summary (soak 14): the call whose reply goes to history.js. openrouter.js prints `Received.`
+//   after a call's usage and reasoning lines; the next line from the caller is `Memory updated to:` (or
+//   `[memory] summary returned|failed`) for a summary and `Generated response:` for a command. That pairs
+//   each summary with its own usage line even when a summary and a command call overlap, which they do:
+//   history.js starts the summary and the next command's prompt goes out at once, and the command's
+//   reply usually comes back first. The `[memory] summary turns <n> kept <k>` marker (skills-rotn #601)
+//   was to be the rule (lead, 2026-11-24), but in soak 14 the next usage line after a marker was a
+//   command call 18 times of 22; markers are counted and compared with the summaries found. A call with
+//   no clear pairing (another `Received.` or usage line comes first) falls back to the old rule, a prompt
+//   under 2,000 tokens, and is counted (`unclear`); so does a log with no `Received.` line at all.
+// - `[openrouter] reasoning effort=none for this call` lines (#600) are counted, with the
+//   `the reasoning setting may have been refused` lines (after one, openrouter.js sends no setting).
+//   The summaries' reasoning tokens are reported apart from the other calls'.
 // - Windows: a night runs from `[night] sunset is near` (or `[night] it is night`) to the night's first
 //   `[night] morning` line; the days are the gaps. Day 1 is named from the bot's `<bot> spawned.` line
 //   (the first line if there is none) and also holds anything before it. Every window after the last
@@ -41,8 +45,14 @@ export const EFFORT_LINE = /^\[openrouter\] reasoning (\S+) for this call$/;
 export const USAGE_LINE = /^\[openrouter\] usage prompt_tokens (\S+), completion_tokens (\S+), cost_usd (\S+)$/;
 export const REASONING_LINE = /^\[openrouter\] reasoning_tokens (\S+)$/;
 export const PROVIDER_LINE = /^\[openrouter\] provider ([\w .?-]{0,40}), finish_reason /;
-/** openrouter.js when a request failed: no completion, so no provider or usage line. */
-export const REQUEST_ERROR = /^Error while awaiting response/;
+/** openrouter.js after a call's provider, usage and reasoning lines. */
+export const RECEIVED = /^Received\.$/;
+/** The caller's first line after a memory summary's reply (history.js). */
+export const SUMMARY_END = /^(Memory updated to:|\[memory\] summary (returned|failed)\b)/;
+/** The caller's first line after a command call's reply (agent.js; or a null reply). */
+export const COMMAND_END = /^(Generated response:|Error: Generated response is not a string)/;
+/** openrouter.js when the reasoning setting was refused (it then sends none). */
+export const EFFORT_REFUSED = /^\[openrouter\] the reasoning setting may have been refused\b/;
 export const NIGHT_START = /^\[night\] (sunset is near|it is night): building a shelter/;
 export const NIGHT_END = /^\[night\] morning\b/;
 export const LOOP_START = /^starting self-prompt loop$/;
@@ -69,38 +79,32 @@ export function parseJournal(text) {
 }
 
 /**
- * The calls, in order: {i (line index), t, prompt, completion, usd, reasoning, memory, effort, provider,
- * selfPrompting}, and how many markers found no usage line (unmatchedMarkers).
+ * The calls, in order: {i (line index), t, prompt, completion, usd, reasoning, memory, kind ('summary' |
+ * 'command' | 'unclear'), provider, selfPrompting}; `unclear` calls are summaries by the prompt-size rule.
  */
 export function calls(lines) {
-    const memoryRule = lines.some(l => MEMORY_MARKER.test(l.msg)) ? 'marker' : 'prompt-size';
     const list = [];
-    let pendingMemory = 0; // markers not yet matched to a usage line
-    let unmatchedMarkers = 0;
-    let pendingEffort = null;
     let provider = null;
     let last = null; // the call whose reasoning line may still come
+    let unreceived = null; // the last call whose `Received.` has not come
+    let awaiting = null; // the call whose `Received.` came, waiting for its caller's first line
+    let orphanEnds = 0; // summary end lines with no call waiting
     let looping = false; // inside a self-prompt loop run, by line order (a stop and a call can share a second)
+    const unclear = () => { if (awaiting) { awaiting.kind = 'unclear'; awaiting = null; } };
     lines.forEach(({ t, msg }, i) => {
         if (LOOP_START.test(msg)) { looping = true; return; }
         if (LOOP_STOP.test(msg)) { looping = false; return; }
-        if (MEMORY_MARKER.test(msg)) { pendingMemory++; return; }
-        if (REQUEST_ERROR.test(msg)) {
-            // A failed request prints no usage line: if a summary was waiting, it was (most likely) that one.
-            if (pendingMemory > 0) { pendingMemory--; unmatchedMarkers++; pendingEffort = null; }
-            return;
-        }
-        let m = EFFORT_LINE.exec(msg);
-        if (m) { pendingEffort = m[1]; return; }
-        m = PROVIDER_LINE.exec(msg);
+        if (RECEIVED.test(msg)) { unclear(); awaiting = unreceived; unreceived = null; return; }
+        if (SUMMARY_END.test(msg)) { if (awaiting) { awaiting.kind = 'summary'; awaiting = null; } else orphanEnds++; return; }
+        if (COMMAND_END.test(msg)) { if (awaiting) { awaiting.kind = 'command'; awaiting = null; } return; }
+        let m = PROVIDER_LINE.exec(msg);
         if (m) { provider = m[1]; return; }
         m = USAGE_LINE.exec(msg);
         if (m) {
-            const prompt = num(m[1]);
-            const memory = memoryRule === 'marker' ? pendingMemory > 0 : (prompt !== null && prompt < OLD_SUMMARY_PROMPT_MAX);
-            if (memoryRule === 'marker' && pendingMemory > 0) pendingMemory--;
-            last = { i, t, prompt, completion: num(m[2]), usd: num(m[3]), reasoning: null, memory, effort: memory ? pendingEffort : null, provider, selfPrompting: looping };
-            if (memory) pendingEffort = null;
+            unclear();
+            if (unreceived) unreceived.kind = 'unclear';
+            last = { i, t, prompt: num(m[1]), completion: num(m[2]), usd: num(m[3]), reasoning: null, kind: null, provider, selfPrompting: looping };
+            unreceived = last;
             provider = null;
             list.push(last);
             return;
@@ -108,8 +112,12 @@ export function calls(lines) {
         m = REASONING_LINE.exec(msg);
         if (m && last && last.reasoning === null) last.reasoning = num(m[1]);
     });
-    // Markers still waiting at the end: summaries that never got a usage line (the run stopped first).
-    return { memoryRule, list, unmatchedMarkers: unmatchedMarkers + pendingMemory };
+    unclear();
+    for (const c of list) {
+        if (c.kind === null) c.kind = 'unclear';
+        c.memory = c.kind === 'summary' || (c.kind === 'unclear' && c.prompt !== null && c.prompt < OLD_SUMMARY_PROMPT_MAX);
+    }
+    return { list, unclear: list.filter(c => c.kind === 'unclear').length, orphanEnds };
 }
 
 /**
@@ -176,7 +184,7 @@ export function gateUsage(result) {
 /** The whole breakdown of a driver.log text; `result`: the run's result.json object, for the gate's USD/h. */
 export function soakSpend(text, { result = null } = {}) {
     const lines = parseJournal(text);
-    const { memoryRule, list, unmatchedMarkers } = calls(lines);
+    const { list, unclear, orphanEnds } = calls(lines);
     const mem = list.filter(x => x.memory);
     const rest = list.filter(x => !x.memory);
     const ws = windows(lines).map(w => {
@@ -189,13 +197,14 @@ export function soakSpend(text, { result = null } = {}) {
     const total = tally(list);
     const gate = gateUsage(result);
     return {
-        memoryRule,
+        unclear, orphanEnds,
         markers: lines.filter(l => MEMORY_MARKER.test(l.msg)).length,
-        unmatchedMarkers,
+        summaryEnds: lines.filter(l => SUMMARY_END.test(l.msg)).length,
         effortLines: lines.filter(l => EFFORT_LINE.test(l.msg)).length,
+        effortRefused: lines.filter(l => EFFORT_REFUSED.test(l.msg)).length,
         from: lines[0]?.t ?? null, to: lines[lines.length - 1]?.t ?? null, spanMs: span,
         total, memory: tally(mem), other: tally(rest),
-        memoryWithEffort: mem.filter(x => x.effort !== null).length,
+        summaryPromptsOver: mem.filter(x => x.prompt !== null && x.prompt >= OLD_SUMMARY_PROMPT_MAX).length,
         windows: ws, selfPrompting: selfPrompting(lines, list), providers,
         // One USD/h per README: the gate's when result.json is there; else the journal span's, labelled.
         usdPerHour: gate
@@ -211,8 +220,8 @@ const pct = (a, b) => (b ? `${(100 * a / b).toFixed(1)}%` : '–');
 /** The README tables (Markdown). */
 export function render(r) {
     const o = [];
-    o.push(`Memory summaries counted by: ${r.memoryRule === 'marker' ? `the \`[memory] summary turns\` marker (${r.markers} markers, ${r.unmatchedMarkers} with no usage line)` : `a prompt under ${int(OLD_SUMMARY_PROMPT_MAX)} tokens (no \`[memory] summary turns\` marker in this log)`}.`);
-    o.push(`\`[openrouter] reasoning … for this call\` lines: ${r.effortLines}; summaries after one: ${r.memoryWithEffort} of ${r.memory.calls}.`);
+    o.push(`Memory summaries: each call paired with its caller's first line after \`Received.\` (\`Memory updated to:\` = a summary): ${r.memory.calls} summaries (${r.summaryPromptsOver} with a prompt of ${int(OLD_SUMMARY_PROMPT_MAX)} tokens or more), ${r.summaryEnds} summary end lines, ${r.markers} \`[memory] summary turns\` markers; ${r.unclear} calls not clearly paired (the prompt-size rule for them)${r.orphanEnds ? `; **${r.orphanEnds} summary end lines with no call**` : ''}.`);
+    o.push(`\`[openrouter] reasoning … for this call\` lines: ${r.effortLines}; \`the reasoning setting may have been refused\` lines: ${r.effortRefused}.`);
     o.push('A night runs from `sunset is near` to its first `[night] morning` line; calls go to windows by line order. Day 1 starts at the spawn line; every window after the last night is a Day.');
     o.push('');
     o.push('| Window | Calls | Memory summaries (calls, USD, reasoning tokens) | Completion tokens | Reasoning tokens | USD |');
