@@ -3,7 +3,9 @@
 // throw, must keep the previous memory and log it. Offline: a fake prompter, no LLM.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { History, isMemoryReply } from './history.js';
+import { History, isMemoryReply, summaryChunkSize } from './history.js';
+import settings from './settings.js';
+import process from 'node:process';
 
 function history(reply) {
     const h = Object.create(History.prototype); // no constructor: it makes ./bots/<name>/ dirs
@@ -77,4 +79,33 @@ test('round 5 A rerun: the memory prompt asks for plain text with no asterisks (
     const profile = JSON.parse(readFileSync(new URL('../../profiles/defaults/_default.json', import.meta.url), 'utf8'));
     assert.match(profile.saving_memory, /Write plain text only: no markdown, no asterisks, no bullet points, no headings, and no thinking out loud; start with the memory itself\./);
     assert.ok(!profile.saving_memory.includes('*'), 'the prompt itself shows no asterisk to copy');
+});
+
+// Soak 13 (C2, the lead): with max_messages 15 and upstream's chunk of 5 a summary ran every 5 turns (69 in
+// 2 h, 26% of the calls). Now the chunk is max_messages - 5 (at least 5): every 10 turns at 15, 5 turns kept;
+// each summary call logs "[memory] summary turns <n> kept <k>" (the harness counts summaries by it).
+test('soak 13 C2: at max_messages 15 a summary takes 10 turns and keeps 5, so 25 turns make 2 summaries, not 4; each logs its marker', async (t) => {
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const before = settings.max_messages;
+    settings.max_messages = 15;
+    const cwd = process.cwd();
+    const dir = mkdtempSync(join(tmpdir(), 'rotn-hist-'));
+    t.after(() => { settings.max_messages = before; process.chdir(cwd); rmSync(dir, { recursive: true, force: true }); });
+    process.chdir(dir); // History writes ./bots/<name>/
+    const logged = [];
+    t.mock.method(console, 'log', (...a) => logged.push(a.join(' ')));
+    const summaries = [];
+    const h = new History({ name: 'FRCFLD', prompter: { promptMemSaving: (turns) => { summaries.push(turns.length); return Promise.resolve('memory'); } } });
+    assert.equal(h.summary_chunk_size, 10);
+    for (let i = 0; i < 25; i++) await h.add(i % 2 ? 'FRCFLD' : 'system', `turn ${i}`);
+    assert.deepEqual(summaries, [10, 10]);
+    assert.deepEqual(logged.filter(l => l.startsWith('[memory] summary')), ['[memory] summary turns 10 kept 5', '[memory] summary turns 10 kept 5']);
+    assert.equal(h.turns.length, 5);
+    // The rule: max_messages - 5, never below upstream's 5.
+    assert.equal(summaryChunkSize(15), 10);
+    assert.equal(summaryChunkSize(20), 15);
+    assert.equal(summaryChunkSize(6), 5);
+    assert.equal(summaryChunkSize(undefined), 5);
 });

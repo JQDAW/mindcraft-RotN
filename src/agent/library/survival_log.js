@@ -127,8 +127,10 @@ export function hurtSource(bot, { swings = null, now = Date.now() } = {}) {
  * went from the world within ARROW.range in the last ARROW.goneMs (an arrow that hits is removed about
  * 50 ms after the health packet). Its drop is named after the nearest ranged mob (threats.threatFor(e).ranged)
  * as "<mob>/arrow"; else hurtSource. Arrows the server sends in the first ARROW.freshMs after the bot's
- * respawn packet or login (the chunks' stuck arrows, sent again before the first health update, so before
- * mineflayer's 'spawn') are not counted as fresh (#594 nit 1, #597 review 1).
+ * respawn packet (the chunks' stuck arrows, sent again before the first health update, so before
+ * mineflayer's 'spawn') are not counted as fresh (#594 nit 1, #597 review 1). The first join needs no
+ * window: bindSurvivalLog binds after the first spawn, so the arrows sent at the join reached no listener
+ * (#597 nit).
  */
 export const ARROW = { range: 2.5, goneMs: 500, mobRange: 24, freshMs: 2500 };
 const isArrow = (e) => /(arrow|bolt|dart)$/.test(String(e?.name ?? ''));
@@ -306,7 +308,9 @@ export function bindSurvivalLog(bot, { eatAt }) {
     const state = { swings: new Map() };
     const check = () => { try { foodCheck(state, bot, Date.now(), eatAt); } catch { /* never breaks the bot */ } };
     bot.on('entitySwingArm', (e) => { try { noteSwing(state.swings, e); } catch { /* never breaks the bot */ } });
-    // #594 nit 1, #597 review 1: the respawn packet and the login start the old-arrows window; 'spawn' only as a fallback.
+    // #594 nit 1, #597 review 1: the respawn packet starts the old-arrows window; 'spawn' only as a fallback.
+    // #597 nit: bindSurvivalLog binds after the first spawn (agent.js), so the first join's arrows reached no
+    // listener; the login listener only covers a later re-login on the same bot object.
     bot.on('respawn', () => { try { noteBotSpawn(state); } catch { /* never breaks the bot */ } });
     bot.on('login', () => { try { noteBotSpawn(state); } catch { /* never breaks the bot */ } });
     bot.on('spawn', () => { try { noteBotSpawn(state, Date.now(), { fallback: true }); } catch { /* never breaks the bot */ } });

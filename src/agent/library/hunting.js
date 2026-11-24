@@ -45,6 +45,27 @@ const ANIMANIA_FOOD = /^animania:(cow|sow|ewe|doe)_[a-z_]+$/;
 export const isHuntableAnimal = (e) => !!e?.name
     && ((VANILLA_FOOD.has(e.name) && mc.isHuntable(e)) || ANIMANIA_FOOD.test(e.name));
 
+/**
+ * Soak 13 (C1, the lead): a generic kind the model searches for (!searchForEntity("cow")) also means
+ * the Animania adults hunting treats as that food, so the search and the hunt agree. A chicken has no
+ * Animania food kind (hunting never takes a hen). A rabbit: RABBIT below (the rabbit breeds, read at call time).
+ */
+const ANIMANIA_KIND = { cow: /^animania:cow_/, pig: /^animania:sow_/, sheep: /^animania:ewe_/ };
+/** True when entity e is of the kind asked: its own name, or (for pig, cow, sheep, rabbit) an Animania food adult of that kind. */
+export function matchesKind(e, kind) {
+    const name = e?.name;
+    if (!name || typeof kind !== 'string') return false;
+    const k = kind.trim().toLowerCase();
+    if (name === kind || name === k) return true;
+    if (k === 'rabbit') return RABBIT.test(name);
+    return !!ANIMANIA_KIND[k]?.test(name) && ANIMANIA_FOOD.test(name);
+}
+/** Soak 13 (C1): the animals the bot can see, by name (vanilla's passive animals and every Animania entity). */
+const VANILLA_ANIMALS = new Set(['chicken', 'cow', 'mooshroom', 'pig', 'rabbit', 'sheep', 'horse', 'donkey', 'mule', 'llama', 'wolf', 'ocelot', 'parrot', 'polar_bear']);
+export const isAnimal = (e) => !!e?.name && (VANILLA_ANIMALS.has(e.name) || /^animania:/.test(e.name));
+/** #601 review 1: a kind the model searches for that is an animal (a vanilla animal's name, a generic food kind, or any animania:*); a zombie or a villager is not. */
+export const isAnimalKind = (kind) => typeof kind === 'string' && isAnimal({ name: kind.trim().toLowerCase() });
+
 // The ownership checks (mayBelongToPlayer and its helpers) live in ownership.js (#453 nit 2: no
 // import cycle with threats.js); they are re-exported here for the existing importers.
 export { PLAYER_BUILT, mayBelongToPlayer, nearBase, playerBuiltNear, knownBases, trackBotPlaced } from './ownership.js';
