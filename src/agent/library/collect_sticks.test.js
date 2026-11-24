@@ -463,17 +463,17 @@ test('#597 review 3: two forbidden blocks of one name: said once; the first uses
 
 test('#595 review 2: breakBlockAt says a block needs a better tool (Tool Progression) and returns false; any other dig error still throws', async () => {
     const block = { name: 'stone', position: new Vec3(1, 64, 0), canHarvest: () => true };
-    const mk = (err) => ({ output: '', game: { gameMode: 'survival' }, entity: { position: new Vec3(0.5, 64, 0.5) }, modes: { isOn: () => false },
-        blockAt: () => block, tool: { equipForBlock: () => Promise.resolve() }, heldItem: null, dig: () => Promise.reject(err) });
+    const mk = (err, at = block) => ({ output: '', game: { gameMode: 'survival' }, entity: { position: new Vec3(0.5, 64, 0.5) }, modes: { isOn: () => false },
+        blockAt: () => at, tool: { equipForBlock: () => Promise.resolve() }, heldItem: null, dig: () => Promise.reject(err) });
     const bot = mk(new Error('dig time for stone is Infinity'));
     assert.equal(await skills.breakBlockAt(bot, 1, 64, 0), false);
     assert.match(bot.output, /Cannot break the block at x:1\.0, y:64\.0, z:0\.0: stone needs a better tool \(Tool Progression\)/);
     // #597 review 2: hardness below 0 (bedrock) is Infinity too: no tool breaks it, and it is said so.
-    const rock = mk(new Error('dig time for bedrock is Infinity'));
-    Object.assign(block, { name: 'bedrock', hardness: -1 });
+    // #597 nit: a bedrock block of its own (the shared stone block is not changed).
+    const bedrock = { name: 'bedrock', hardness: -1, position: new Vec3(1, 64, 0), canHarvest: () => true };
+    const rock = mk(new Error('dig time for bedrock is Infinity'), bedrock);
     assert.equal(await skills.breakBlockAt(rock, 1, 64, 0), false);
     assert.match(rock.output, /bedrock cannot be broken \(no tool breaks it\); leave it and pick another block\./);
     assert.doesNotMatch(rock.output, /better tool/);
-    Object.assign(block, { name: 'stone', hardness: 1.5 });
     await assert.rejects(skills.breakBlockAt(mk(new Error('the server closed')), 1, 64, 0), /the server closed/);
 });
