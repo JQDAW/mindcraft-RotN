@@ -16,12 +16,12 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, SCROLL_LABEL, shelterShell, isFullDay, replanHold, placeableDirt } from './library/night.js';
 import { buildShelter, dirtShelterNeed, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
-import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon, SHELTER_FIGHT, collectBlock } from './library/skills.js';
+import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon, SHELTER_FIGHT, collectBlock, pickupNearbyItems } from './library/skills.js';
 import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
 import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
-import { escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll, isSpawnScroll } from './respawn_escape.js';
+import { escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll, isSpawnScroll, SCROLL } from './respawn_escape.js';
 import { stairOut, DIG_OUT, WALK_EXIT } from './library/walk_exit.js';
 import { groundPlan, walkToGround, stepToDry, planText, inWater, GROUND } from './library/shelter_ground.js';
 import { escape } from './library/escape.js';
@@ -322,6 +322,30 @@ export async function walkInto(bot, site) {
             new Promise(resolve => { timer = setTimeout(resolve, MORNING_SCROLL.walkMs); })]);
     } finally { clearTimeout(timer); try { bot.pathfinder?.setGoal?.(null); } catch { /* best effort */ } }
     return inIt();
+}
+
+/**
+ * Soak 13 (S2', the lead): after a morning scroll use, the shell's roof block over the respawn cell comes down
+ * (and is picked up), so a zombie that walks in by day stands in daylight and burns (rotn-data: one in shade
+ * never does). The spawn cell and the one above it stay free. Left as it is, and said why, when: a hostile is
+ * near (hostile()), the column above the roof is not open (no daylight would reach the cell; a falling block
+ * there would drop into it), or the dig fails or runs out of time. Returns {removed, name} or {removed: false, why}.
+ */
+export const UNROOF = { openAbove: 4 };
+export async function unroofSpawn(bot, site, { hostile = () => null } = {}) {
+    const roof = site.offset(0, 2, 0);
+    const b = bot.blockAt?.(roof);
+    if (!b || isEmpty(b)) return { removed: false, why: 'no roof block' };
+    const mob = hostile();
+    if (mob) return { removed: false, why: `${mob.name ? `a ${mob.name}` : 'a hostile mob'} is near` };
+    for (let dy = 1; dy <= UNROOF.openAbove; dy++) {
+        const above = bot.blockAt?.(roof.offset(0, dy, 0));
+        if (above && !isEmpty(above)) return { removed: false, why: `${above.name} at ${at(roof.offset(0, dy, 0))} above it (no daylight would reach the cell${isFalling(above) ? '; it would fall into it' : ''})` };
+    }
+    const r = await digWithin(bot, b, digBudget(bot, b).limitMs, { equip: digEquip(bot, b) });
+    if (r !== true) return { removed: false, why: r === 'timeout' ? `the dig of ${b.name} ran out of time` : `${b.name} could not be dug` };
+    try { await pickupNearbyItems(bot); } catch { /* the drop falls into the cell the bot stands in */ }
+    return { removed: true, name: b.name };
 }
 
 /**
@@ -1610,10 +1634,15 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 startJob(agent, n, SCROLL_LABEL, async () => {
                     const back = await (ops.walkInto ?? walkInto)(bot, site);
                     if (!back) return { used: false, why: `could not walk back into ${at(site)}` };
-                    return ops.useSpawnScroll(bot);
+                    const r = await ops.useSpawnScroll(bot);
+                    // The lead: the roof comes down, so a zombie in the cell by day burns (unroofSpawn).
+                    if (r?.used) r.roof = await (ops.unroofSpawn ?? unroofSpawn)(bot, site, { hostile: () => ops.hostileNear?.(bot, SCROLL.quiet) ?? null });
+                    return r;
                 }, (r) => {
                     line(agent, r?.used ? `[night] the respawn point is now ${at(site)}: a death within 32 blocks of it raises no player zombie (seen by ${r.by ?? 'the stack'}${r.tries > 1 ? `, on try ${r.tries}` : ''})`
                         : `[night] morning: the Scroll of New Life was not used (${r?.why ?? 'no result'})`);
+                    if (r?.roof?.removed) line(agent, `[night] morning: took down the roof block (${r.roof.name}) over the respawn cell at ${at(site)}: a mob that walks in by day stands in daylight`);
+                    else if (r?.used) console.log(`[night] morning: the roof over the respawn cell at ${at(site)} stays (${r?.roof?.why ?? 'no result'})`);
                     handBack(text);
                 });
                 return 'night:inside';
