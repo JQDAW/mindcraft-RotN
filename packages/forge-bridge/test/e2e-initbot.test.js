@@ -68,7 +68,12 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     // The login line says whether the remap is active (captured here, still printed).
     const remapLines = [];
     const realLog = console.log;
-    console.log = (...a) => { if (typeof a[0] === 'string' && a[0].includes('state-id remap')) remapLines.push(a[0]); realLog(...a); };
+    const soak14Lines = []; // soak 14: the respawn-effects and attack-count lines
+    console.log = (...a) => {
+        if (typeof a[0] === 'string' && a[0].includes('state-id remap')) remapLines.push(a[0]);
+        if (typeof a[0] === 'string' && /\[forge-bridge\] (respawn: dropped|attacks \()/.test(a[0])) soak14Lines.push(a[0]);
+        realLog(...a);
+    };
     after(() => { delete catalog.stateMetaRemap; console.log = realLog; });
 
     // One retry of the whole login: under heavy load a loopback connect can fail
@@ -240,9 +245,28 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.ok(Math.hypot(seen.x - afterBlast.x, seen.z - afterBlast.z) > 1.5, 'the server saw the displacement');
     for (const q of server.state.positions) assert.ok([q.x, q.y, q.z].every(Number.isFinite), `finite position ${JSON.stringify(q)}`);
 
+    // Soak 14: initBot counts the attack packets that leave the client (bc_attack is off here: vanilla use_entity).
+    const attacksBefore = server.state.attacks.length;
+    bot.attack(cockatrice);
+    for (let waited = 0; server.state.attacks.length === attacksBefore && waited < 10000; waited += 50) await sleep(50);
+    assert.equal(bot.forge.attackCounts.packets.use_entity, 1, 'one vanilla attack packet counted');
+    assert.equal(bot.forge.attackCounts.packets.bettercombat, 0);
+    // Soak 14: a respawn packet drops the effects of the entity that died (patches/mineflayer), logged by initBot.
+    const fatigue = once(bot, 'entityEffect');
+    server.state.client.write('entity_effect', { entityId: bot.entity.id, effectId: 4, amplifier: 3, duration: 19, hideParticles: 1, reidEffectId: Buffer.from([4]) }); // REID's VarInt tail: 4
+    await within(10000, fatigue, 'entityEffect (Mining Fatigue IV)');
+    assert.equal(bot.entity.effects[4]?.amplifier, 3);
+    const respawned = once(bot, 'respawn');
+    server.state.client.write('respawn', { dimension: 0, difficulty: 2, gamemode: 0, levelType: 'default' });
+    await within(10000, respawned, 'respawn');
+    assert.deepEqual(bot.entity.effects, {}, 'the new player entity has no effects (Mining Fatigue IV and the REID 300 dropped)');
+    assert.deepEqual(soak14Lines.filter(l => l.includes('respawn: dropped')), ['[forge-bridge] respawn: dropped stale effects MiningFatigue:3 300:1 (effect:amplifier; the new player entity has none)']);
+
     // Capture
     bot.quit();
     await sleep(300);
+    // Soak 14: the end of the connection prints the attack counts, numbers only.
+    assert.ok(soak14Lines.includes('[forge-bridge] attacks (end): packets bettercombat 0, use_entity 1; calls bettercombat 0, vanilla 1, waits 0, replaced 0, gone 0, cancelled 0, reach 0, sight 0, misses 0'), soak14Lines.join('\n'));
     const cap = readCapture(captureFile);
     const kinds = new Set(cap.map(l => l.kind));
     for (const k of ['event', 'payload', 'packet']) assert.ok(kinds.has(k), `capture has ${k}`);
