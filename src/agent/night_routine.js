@@ -1184,7 +1184,8 @@ function line(agent, text) {
 
 /**
  * Soak 14 (F1, the lead): food FOOD_RUN.emergencyAt (4) or lower at night with no safe food held (any emergency
- * food is eaten by the reflex at 5): starving is certain (food 0 kills 4 s later, about 8 min away at rest), a
+ * food is eaten by the reflex at 5): starving is certain (food 0 kills 4 s later; about 16 min away at rest, 236 s a
+ * point by the #611 review, and walking for food costs about 0.7 a minute), a
  * night outside is not. Once a night, in the shelter (out by its side, or the hole's stairs) or exposed (at
  * once): one food run (FOOD_RUN.night, the weapon in hand), then a shelter again where it ends. Held below
  * FOOD_RUN.minHealth, and while a mob is in the shelter's cells (said once).
@@ -1201,7 +1202,7 @@ function nightFoodEmergency(agent, n, ops, now) {
     }
     n.foodEmergencyTried = true;
     const inside = n.state === 'inside' && n.site;
-    line(agent, `[night] food ${bot.food} and no food held: starving is certain in about ${bot.food * 2} min, a night outside is not: out for food (at most ${FOOD_RUN.night.maxMs / 60_000} min)`);
+    line(agent, `[night] food ${bot.food} and no food held: starving is certain in about ${bot.food * 4} min at rest, a night outside is not: out for food (at most ${FOOD_RUN.night.maxMs / 60_000} min)`);
     startJob(agent, n, 'action:nightFood', async () => {
         if (inside) {
             const out = await (n.pit ? ops.pitOut?.(bot, n.site) : ops.digOut?.(bot, n.site));

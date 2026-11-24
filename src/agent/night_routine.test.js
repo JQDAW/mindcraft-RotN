@@ -1837,8 +1837,8 @@ test('G4 #5, soak 14 (F1): at dusk the night routine logs the food for the night
     o.foodRun = (bot, opts) => { runs.push(opts); return Promise.resolve({ points: 2.8, why: 'time' }); };
     nightTick(agent, { now: 0, ops: o });
     await settle(agent);
-    // need = 7 + 0.5 x 26 - 14 = 6; 2 bread are 8.4 points.
-    assert.ok(logs.includes('[night] food for the night: food 14 (+0 saturation), held 8.4 points, the night needs about 6: enough'), logs.join('\n'));
+    // need = 7 + 0.3 x 26 - 14 = 0.8 (#611 review); 2 bread are 8.4 points.
+    assert.ok(logs.includes('[night] food for the night: food 14 (+0 saturation), held 8.4 points, the night needs about 0.8: enough'), logs.join('\n'));
     assert.deepEqual(runs, [], 'enough: no run');
     const poor = fakeAgent({ t: DUSK });
     Object.assign(poor.bot, { food: 9, foodSaturation: 1, inventory: { items: () => [] } });
@@ -1847,9 +1847,9 @@ test('G4 #5, soak 14 (F1): at dusk the night routine logs the food for the night
     poor.actions.runAction = (label, fn) => { labels.push(label); return run(label, fn); };
     nightTick(poor, { now: 0, ops: o });
     await settle(poor);
-    assert.ok(logs.includes('[night] food for the night: food 9 (+1 saturation), held 0 points, the night needs about 10: short by 10: a food run first (at most 3 min)'), logs.join('\n'));
+    assert.ok(logs.includes('[night] food for the night: food 9 (+1 saturation), held 0 points, the night needs about 4.8: short by 4.8: a food run first (at most 3 min)'), logs.join('\n'));
     assert.equal(runs.length, 1);
-    assert.deepEqual([runs[0].maxMs, runs[0].forage, runs[0].hunt, runs[0].need], [180_000, 24, 32, 10]);
+    assert.deepEqual([runs[0].maxMs, runs[0].forage, runs[0].hunt, runs[0].need], [180_000, 24, 32, 4.8]);
     assert.equal(typeof runs[0].stop, 'function');
     assert.ok(logs.includes('[night] the food run ended: +2.8 points (time); building the shelter here'), logs.join('\n'));
     assert.ok(!logs.some(l => /staying sealed/.test(l)), 'never "sealed" (soak 14 night 3)');
@@ -4265,7 +4265,7 @@ test('soak 14 (F1): at night in the shelter, food 4 and nothing held: out by its
     assert.equal(o.digs, 1, 'out by the shelter\'s side');
     assert.equal(runs.length, 1);
     assert.deepEqual([runs[0].maxMs, runs[0].forage, runs[0].hunt], [240_000, 16, 16]);
-    assert.ok(agent.chat.includes('[night] food 4 and no food held: starving is certain in about 8 min, a night outside is not: out for food (at most 4 min)'), agent.chat.join('\n'));
+    assert.ok(agent.chat.includes('[night] food 4 and no food held: starving is certain in about 16 min at rest, a night outside is not: out for food (at most 4 min)'), agent.chat.join('\n'));
     assert.ok(agent.chat.includes('[night] the night food run ended: +1.1 points (time); sheltering again here'), agent.chat.join('\n'));
     assert.equal(nightState(agent).state, 'building');
     nightTick(agent, { now: 3, ops: o });
@@ -4330,14 +4330,14 @@ test('soak 14 (F1, night 3): sunset at food 2 with nothing held: the food run fi
     o.foodRun = (bot, opts) => { runs.push(opts); return Promise.resolve({ points: 0, why: 'no ripe wild food and no animal to hunt within 32 blocks' }); };
     nightTick(agent, { now: 0, ops: o });
     await settle(agent);
-    assert.ok(logs.includes('[night] food for the night: food 2 (+0 saturation), held 0 points, the night needs about 16: short by 16: a food run first (at most 3 min)'), logs.join('\n'));
+    assert.ok(logs.includes('[night] food for the night: food 2 (+0 saturation), held 0 points, the night needs about 12.8: short by 12.8: a food run first (at most 3 min)'), logs.join('\n'));
     assert.equal(runs.length, 1);
     assert.ok(!logs.some(l => /sealed/.test(l)));
     const night = fakeAgent({ t: NIGHT });
     Object.assign(night.bot, { food: 12, foodSaturation: 0, health: 20, inventory: { items: () => [] } });
     nightTick(night, { now: 0, ops: { ...ops(), foodRun: o.foodRun } });
     await settle(night);
-    assert.ok(logs.includes('[night] food for the night: food 12 (+0 saturation), held 0 points, the night needs about 8: short by 8: night already: food 4 or lower with none held sends the bot out for food'), logs.join('\n'));
+    assert.ok(logs.includes('[night] food for the night: food 12 (+0 saturation), held 0 points, the night needs about 2.8: short by 2.8: night already: food 4 or lower with none held sends the bot out for food'), logs.join('\n'));
     assert.equal(runs.length, 1, 'no run at night (the emergency rule instead)');
 });
 

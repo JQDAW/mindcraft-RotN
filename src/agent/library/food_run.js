@@ -14,8 +14,8 @@ import * as skills from './skills.js';
  * sunset: at `sunset is near`, before the shelter: at most 3 min, ripe food within 24, animals within 32;
  * ends at a hostile within hostileRange, or night. night: the night emergency: at most 4 min, within 16;
  * hostiles do not end it (it is night: self_defense fights them, the weapon in hand), health below
- * minHealth does. emergencyAt: the food level of the night emergency (food 0 is about 8 min away at rest,
- * and kills 4 s later). rounds: at most this many forage or hunt tries in one run.
+ * minHealth does. emergencyAt: the food level of the night emergency (food 0 is about 16 min away at rest,
+ * 236 s a point by the #611 review, and kills 4 s later; walking for food costs about 0.7 points a minute). rounds: at most this many forage or hunt tries in one run.
  */
 export const FOOD_RUN = {
     sunset: { maxMs: 3 * 60_000, forage: 24, hunt: 32 },

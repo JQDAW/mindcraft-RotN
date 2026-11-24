@@ -581,7 +581,7 @@ test('G4 #5: the soak\'s case (agenda done, nothing held, food 12, by day): the 
     const p = agent.self_prompter.prompt;
     // Soak 13 (C3a): the step wants food held; the bar does not count (the model read "food 13 ... at least 12" as met).
     // Soak 14 (F1): in food points (hunger + saturation), the drain rotn-data measured, and the eat rule.
-    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 points in your inventory; this step wants food worth at least 12 points held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack food falls about 1 point every 2 minutes, even resting \(a night costs about 13\), and starving kills\. .*The bot eats by itself at food 8 or lower, the least valuable food first: keep the rest\. /);
+    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 points in your inventory; this step wants food worth at least 12 points held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack food falls about 1 point every 4 minutes at rest \(a sealed night costs about 7\) and about 1 every 1\.5 minutes while walking, and starving kills\. .*The bot eats by itself at food 8 or lower, the least valuable food first: keep the rest\. /);
     assert.doesNotMatch(p, /get to at least/);
     assert.match(p, /Near you: animania:cow_holstein: kill one with !attack\("animania:cow_holstein"\)/);
     assert.doesNotMatch(p, /sow_old_spot/, 'a named animal is never offered');
@@ -600,13 +600,13 @@ test('G4 #5: during the agenda only an urgent need; before night the night\'s ne
     // Food 12 and nothing held: food first.
     const hungry = foodAgent(t, [], { food: 12, finished: false });
     assert.equal(agendaTick(hungry, { now: 0 }), 'food');
-    // Before night: the shelter blocks first, then food (soak 14: the night's need, 7 + 13 - food = 8 points at food 12).
+    // Before night: the shelter blocks first, then food (soak 14: the night's need, 7 + 0.3 x 26 - food = 6.8 points at food 8).
     const pick = stack('stone_pickaxe', 0, 1);
     const dusk = foodAgent(t, [pick, stack('bread', 0, 1)], { food: 18, finished: true, timeOfDay: dayAt(7) });
     assert.equal(agendaTick(dusk, { now: 0 }), 'shelter_blocks');
-    const ready = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 1)], { food: 12, finished: true, timeOfDay: dayAt(7) });
-    assert.equal(agendaTick(ready, { now: 0 }), 'food', 'blocks held, 4.2 points held of 8: food');
-    const fed = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 2)], { food: 12, finished: true, timeOfDay: dayAt(7) });
+    const ready = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 1)], { food: 8, finished: true, timeOfDay: dayAt(7) });
+    assert.equal(agendaTick(ready, { now: 0 }), 'food', 'blocks held, 4.2 points held of 6.8: food');
+    const fed = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 2)], { food: 8, finished: true, timeOfDay: dayAt(7) });
     assert.equal(agendaTick(fed, { now: 0 }), null, '8.4 points held: nothing to do');
     const full = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD)], { food: 20, finished: true, timeOfDay: dayAt(7) });
     assert.equal(agendaTick(full, { now: 0 }), null, 'a full bar (20): the night needs nothing more');

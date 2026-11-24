@@ -236,11 +236,13 @@ export const FOOD_TARGET = { day: 12 };
 
 /**
  * Soak 14 (F1, the lead): a night's food in points (hunger + saturation: the drain takes saturation first).
- * rotn-data: at rest the drain is about 0.5 points a minute; the soak measured a 40-min day cycle with a 26-min
- * sheltered night (rotn-data's 5 a night is a vanilla 10-min night). The bot should end the night at food 7
- * (Hunger Overhaul heals from 7). need = floor + perMin x nightMin - (food + saturation), at least 0, at most cap.
+ * The #611 review measured soak 14's drain: sealed in the shelter 236 s a point (about 0.26/min: Hunger
+ * Overhaul's constant drain; healing costs no food), active 80 to 90 s a point (about 0.7/min: walking,
+ * sprinting, jumps). A sealed night of 26 min (the measured 40-min cycle) costs about 7; perMin 0.3 is the
+ * rest rate with a margin. The bot should end the night at food 7 (Hunger Overhaul heals from 7).
+ * need = floor + perMin x nightMin - (food + saturation), at least 0, at most cap.
  */
-export const NIGHT_FOOD = { floor: 7, perMin: 0.5, nightMin: 26, cap: 16 };
+export const NIGHT_FOOD = { floor: 7, perMin: 0.3, nightMin: 26, cap: 16 };
 export function nightFoodNeed({ food, saturation = 0 }) {
     if (!Number.isFinite(food)) return null;
     const have = food + (Number.isFinite(saturation) ? saturation : 0);

@@ -15,11 +15,12 @@ function runBot({ food = 10, items = [], health = 20 } = {}) {
     return { food, health, interrupt_code: false, entity: { position: new Vec3(0.5, 64, 0.5) }, entities: {}, inventory: { items: () => items } };
 }
 
-test('soak 14 (F1): the night\'s need is 7 + 0.5/min x 26 min - (food + saturation), at least 0, at most 16; held food counts in points (hunger + saturation)', () => {
-    assert.deepEqual(NIGHT_FOOD, { floor: 7, perMin: 0.5, nightMin: 26, cap: 16 });
-    assert.equal(nightFoodNeed({ food: 12, saturation: 2 }), 6);
-    assert.equal(nightFoodNeed({ food: 10, saturation: 0 }), 10, 'soak 14 sunset 1 (food 10)');
-    assert.equal(nightFoodNeed({ food: 2, saturation: 0 }), 16, 'sunset 3 (food 2): capped');
+test('soak 14 (F1, #611 review): the night\'s need is 7 + 0.3/min x 26 min - (food + saturation), at least 0, at most 16; held food counts in points (hunger + saturation)', () => {
+    assert.deepEqual(NIGHT_FOOD, { floor: 7, perMin: 0.3, nightMin: 26, cap: 16 });
+    assert.equal(nightFoodNeed({ food: 12, saturation: 2 }), 0.8);
+    assert.equal(nightFoodNeed({ food: 10, saturation: 0 }), 4.8, 'soak 14 sunset 1 (food 10)');
+    assert.equal(nightFoodNeed({ food: 2, saturation: 0 }), 12.8, 'sunset 3 (food 2)');
+    assert.equal(nightFoodNeed({ food: -2, saturation: 0 }), 16, 'capped');
     assert.equal(nightFoodNeed({ food: 20, saturation: 5 }), 0);
     assert.equal(nightFoodNeed({ food: undefined }), null);
     const bot = runBot({ items: [{ name: 'bread', metadata: 0, count: 2 }, { name: 'rotten_flesh', metadata: 0, count: 3 }, { name: 'cooked_beef', metadata: 0, count: 1 }] });
