@@ -1265,7 +1265,7 @@ test('#478: a finished agenda hands over to the standing goal (the model\'s own 
     let now = 0;
     const tick = () => { clock.now = 1_000_000 + now; return autonomyTick(agent, { now }); };
     assert.equal(tick(), 'goal:open');
-    assert.match(sp.prompt, /^Standing goal \(the agenda is done\): keep food worth at least \d+ hunger \(you hold \d+\) and 14 blocks for the night's shelter and its repairs \(you have 10; cobblestone first\); keep a weapon and a pickaxe/); // soak 10 (S1): the repair spare
+    assert.match(sp.prompt, /^Standing goal \(the agenda is done\): keep food worth at least \d+ points \(you hold [\d.]+\) and 14 blocks for the night's shelter and its repairs \(you have 10; cobblestone first\); keep a weapon and a pickaxe/); // soak 10 (S1): the repair spare
     assert.match(sp.prompt, /explore by day within 64 blocks of your last shelter at -59, 65, -82, away from where you died/);
     assert.notEqual(sp.prompt, agent._autonomy_prompt, 'the model\'s own goal, not the agenda\'s');
     assert.deepEqual(agent.said.filter(l => /^agenda standing goal/.test(l)), ['agenda standing goal started (day 3)']);
