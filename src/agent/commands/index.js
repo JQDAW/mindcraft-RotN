@@ -89,6 +89,12 @@ function checkInInterval(number, lowerBound, upperBound, endpointType) {
 
 
 
+/** Soak 13 (C3b): the registry's block or item names, for the closest-name hint on an unknown name. */
+function registryNames(kind) {
+    try { return (kind === 'blocks' ? getAllBlocks() : getAllItems()).map(b => b?.name).filter(Boolean); }
+    catch { return []; }
+}
+
 // todo: handle arrays?
 /**
  * Returns an object containing the command, the command name, and the comand parameters.
@@ -96,12 +102,6 @@ function checkInInterval(number, lowerBound, upperBound, endpointType) {
  * @param {string} message - A message from a player or language model containing a command.
  * @returns {string | Object}
  */
-/** Soak 13 (C3b): the registry's block or item names, for the closest-name hint on an unknown name. */
-function registryNames(kind) {
-    try { return (kind === 'blocks' ? getAllBlocks() : getAllItems()).map(b => b?.name).filter(Boolean); }
-    catch { return []; }
-}
-
 export function parseCommandMessage(message) {
     const commandMatch = message.match(commandRegex);
     if (!commandMatch) return `Command is incorrectly formatted`;

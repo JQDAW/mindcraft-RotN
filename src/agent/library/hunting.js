@@ -63,6 +63,8 @@ export function matchesKind(e, kind) {
 /** Soak 13 (C1): the animals the bot can see, by name (vanilla's passive animals and every Animania entity). */
 const VANILLA_ANIMALS = new Set(['chicken', 'cow', 'mooshroom', 'pig', 'rabbit', 'sheep', 'horse', 'donkey', 'mule', 'llama', 'wolf', 'ocelot', 'parrot', 'polar_bear']);
 export const isAnimal = (e) => !!e?.name && (VANILLA_ANIMALS.has(e.name) || /^animania:/.test(e.name));
+/** #601 review 1: a kind the model searches for that is an animal (a vanilla animal's name, a generic food kind, or any animania:*); a zombie or a villager is not. */
+export const isAnimalKind = (kind) => typeof kind === 'string' && isAnimal({ name: kind.trim().toLowerCase() });
 
 // The ownership checks (mayBelongToPlayer and its helpers) live in ownership.js (#453 nit 2: no
 // import cycle with threats.js); they are re-exported here for the existing importers.

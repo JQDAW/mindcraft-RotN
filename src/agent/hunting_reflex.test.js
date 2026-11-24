@@ -764,3 +764,42 @@ test('soak 13 C1: !searchForEntity finds Animania adults by generic kind, says w
     for (let i = 0; i < 3; i++) assert.equal(await search(giver, '!searchForEntity("pig", 64)', { sender: 'JQDAW' }), 'Could not find any pig in 64 blocks.\n');
     assert.equal(giver.searchMisses, undefined);
 });
+
+// #601 review 1, 2, 4: the miss count and the animal lines are for animal kinds only (a zombie or a villager
+// search is upstream's: the asked range, the plain line, nothing counted); with other animals in sight the 3rd
+// miss says "None of <kinds> near here", not "No animals"; a record from a miss with no position starts again.
+test('#601 review: a zombie or villager search is not counted and gets no animal lines; other animals in sight: "None of …"; a record with no position does not throw', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { noteSearchMiss, isAnimalKind } = await import('./library/entity_search.js');
+    const search = async (agent, cmd) => {
+        agent.bot.output = '';
+        agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }), () => ({ message: agent.bot.output, interrupted: false }));
+        await executeCommand(agent, cmd);
+        return agent.bot.output;
+    };
+    for (const k of ['cow', 'Pig', 'chicken', 'rabbit', 'animania:bull_holstein', 'horse']) assert.equal(isAnimalKind(k), true, k);
+    for (const k of ['zombie', 'villager', 'skeleton', 'zombie_players:zombie_player']) assert.equal(isAnimalKind(k), false, k);
+    const bull = { id: 3, name: 'animania:bull_holstein', type: 'mob', position: new Vec3(20.5, 64, 0.5), height: 1.6, metadata: { 7: 10 } };
+    const agent = huntAgent({ animals: [bull] });
+    for (const cmd of ['!searchForEntity("zombie", 128)', '!searchForEntity("villager", 64)', '!searchForEntity("zombie", 64)']) {
+        const out = await search(agent, cmd);
+        assert.match(out, /^Could not find any (zombie|villager) in (128|64) blocks\.\n$/, `${cmd}: the plain line, the asked range`);
+    }
+    assert.equal(agent.searchMisses, undefined, 'not counted');
+    // A zombie in range is still found (upstream's search).
+    const z = huntAgent({ animals: [{ id: 4, name: 'zombie', type: 'mob', position: new Vec3(70.5, 64, 0.5), height: 1.9, metadata: {} }] });
+    assert.match(await search(z, '!searchForEntity("zombie", 128)'), /Found zombie/);
+    // A bull in sight, three food kinds searched: "None of …", no "No animals near here".
+    await search(agent, '!searchForEntity("pig", 64)');
+    await search(agent, '!searchForEntity("cow", 64)');
+    const third = await search(agent, '!searchForEntity("sheep", 64)');
+    assert.match(third, /Animals in sight: animania:bull_holstein\. None of pig, cow, sheep near here: you searched for them \(3 times within 64 blocks\), and only the animals above are in sight\. Searching again here for them finds nothing more: move more than 128 blocks away/);
+    assert.doesNotMatch(third, /No animals near here/);
+    // #601 review 4: a first miss with no position, then one with a position: a new record, no throw.
+    const a = { bot: { entity: {} } };
+    noteSearchMiss(a, 'pig', 0);
+    a.bot.entity.position = new Vec3(0.5, 64, 0.5);
+    const r = noteSearchMiss(a, 'cow', 1);
+    assert.equal(r.count, 1);
+    assert.ok(r.at);
+});

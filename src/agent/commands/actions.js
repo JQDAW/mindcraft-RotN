@@ -15,7 +15,7 @@ import { mayBelongToPlayer, retaliationRisk, knownBases, isHuntableAnimal, tooWe
 import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
 import { placeHere } from '../library/escape.js';
-import { sightRange, rangeText, nearestOfKind, noteSearchFind, noteSearchMiss, missText } from '../library/entity_search.js';
+import { sightRange, rangeText, nearestOfKind, noteSearchFind, noteSearchMiss, missText, isAnimalKind } from '../library/entity_search.js';
 
 /** The model's !stay is at most this many seconds; longer (or -1, forever) needs a giver's typed command. */
 export const STAY_LIMITS = { modelMaxS: 120 };
@@ -390,6 +390,8 @@ export const actionsList = [
             // in one area that searching there finds nothing more (entity_search.js). A task giver's typed
             // command gets the plain miss line and is not counted (as hungryCap).
             const capped = hungryCap(agent, 'Searching', range, context);
+            // #601 review 1: not an animal (a zombie, a villager): upstream's search, the asked range, the plain line.
+            if (!isAnimalKind(entity_type)) { await skills.goToNearestEntity(agent.bot, entity_type, 4, capped); return; }
             const r = sightRange(capped);
             const found = nearestOfKind(agent.bot, entity_type, r);
             if (!found) {

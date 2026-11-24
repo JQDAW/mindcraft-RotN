@@ -4,7 +4,13 @@
 // none of any kind is), that a range past what the bot can see finds no more, and after SEARCH_MISSES.count
 // misses in one area that searching there again finds nothing more.
 
-import { matchesKind, isAnimal } from './hunting.js';
+import { matchesKind, isAnimal, isAnimalKind } from './hunting.js';
+
+/**
+ * #601 review 1: the miss count and the animal lines (in sight, the 64-block range, the no-animals line) are for
+ * animal kinds only (isAnimalKind); a search for a zombie or a villager is upstream's, as before.
+ */
+export { isAnimalKind };
 
 /**
  * How far the bot knows animals (rotn-data, /home/rv/soak13-rotn-data-2.md, from the server and Forge jars and
@@ -17,7 +23,10 @@ export const ENTITY_SIGHT = 64;
 /**
  * The miss record: count misses within radius of the first miss and windowMs of it; sightList names at most.
  * moveAway: the walk the no-animals line asks for, two tracking boxes (the lead: a 64-block move still
- * overlaps half the old box), so the new box shares nothing with the searched one.
+ * overlaps half the old box; 128 accepted, #601 review 3). Moved 128 along an axis, the new box shares
+ * nothing with the searched one; moved 128 diagonally, about 37 x 37 blocks of it still overlap.
+ * Deliberately, the count starts again past radius (64), not past moveAway: a search after a shorter move
+ * gets its own 3 misses, while the line asks for the longer walk.
  */
 export const SEARCH_MISSES = { count: 3, radius: 64, windowMs: 10 * 60_000, sightList: 5, moveAway: 2 * ENTITY_SIGHT };
 
@@ -60,7 +69,8 @@ export function noteSearchFind(agent) {
 export function noteSearchMiss(agent, kind, now = Date.now()) {
     const here = agent?.bot?.entity?.position;
     let r = agent.searchMisses;
-    if (!r || !here || now - r.time > SEARCH_MISSES.windowMs || here.distanceTo(r.at) > SEARCH_MISSES.radius) {
+    // #601 review 4: a record from a miss with no position (r.at missing) starts again too.
+    if (!r || !here || !r.at || now - r.time > SEARCH_MISSES.windowMs || here.distanceTo(r.at) > SEARCH_MISSES.radius) {
         r = { at: here?.clone ? here.clone() : here, time: now, count: 0, kinds: [] };
     }
     r.count += 1;
@@ -80,8 +90,12 @@ export function missText(agent, kind, asked, range, record) {
         text += ` You asked for ${asked}: the bot sees animals only within ${ENTITY_SIGHT} blocks, so a larger range finds no more.`;
     text += sight.length ? ` Animals in sight: ${sight.join(', ')}.` : ` No animal of any kind is in sight (${ENTITY_SIGHT} blocks).`;
     if (record && record.count >= SEARCH_MISSES.count) {
-        text += ` No animals near here: you searched for ${record.kinds.join(', ')} (${record.count} times within ${SEARCH_MISSES.radius} blocks)`
-            + `${sight.length ? ', and none of those is in sight' : ' and no animal is in sight'}. Searching again here finds nothing more:`
+        const kinds = record.kinds.join(', ');
+        const where = `(${record.count} times within ${SEARCH_MISSES.radius} blocks)`;
+        // #601 review 2: with other animals in sight, "no animals" would contradict the line before it.
+        text += (sight.length
+            ? ` None of ${kinds} near here: you searched for them ${where}, and only the animals above are in sight. Searching again here for them finds nothing more:`
+            : ` No animals near here: you searched for ${kinds} ${where} and no animal is in sight. Searching again here finds nothing more:`)
             + ` move more than ${SEARCH_MISSES.moveAway} blocks away, or do something else (!forage, or the agenda's other needs).`;
     }
     return text;
