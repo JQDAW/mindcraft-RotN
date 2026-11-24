@@ -22,11 +22,6 @@ export function reasoningLine(usage) {
     return `[openrouter] reasoning_tokens ${n}`;
 }
 
-// The reasoning object as one short log token (field=value pairs, safe characters only).
-export function reasoningSetting(r) {
-    return Object.entries(r ?? {}).map(([k, v]) => `${k}=${v}`).join(',').replace(/[^\w=,.-]/g, '?').slice(0, 60) || 'none';
-}
-
 export class OpenRouter {
     static prefix = 'openrouter';
     constructor(model_name, url) {
@@ -46,12 +41,7 @@ export class OpenRouter {
         this.openai = new OpenAIApi(config);
     }
 
-    // Soak 13 (rotn-v0.1.19, usd_per_hour 0.0552 against 0.05): memory summaries were 42% of the spend, up to
-    // 18,312 reasoning tokens for about 500 characters. `reasoning` (opts) asks OpenRouter for that reasoning
-    // setting on this call only (promptMemSaving: { effort: 'none' }, OpenRouter's documented "disables
-    // reasoning entirely"). A model whose reasoning is mandatory rejects effort none: a 400, 404 or 422 on a call that
-    // carried `reasoning` is retried once without it; if that retry returns a choice, later calls send none.
-    async sendRequest(turns, systemMessage, stop_seq='*', { reasoning = null } = {}) {
+    async sendRequest(turns, systemMessage, stop_seq='*') {
         let messages = [{ role: 'system', content: systemMessage }, ...turns];
         messages = strictFormat(messages);
 
@@ -62,32 +52,11 @@ export class OpenRouter {
         };
         // A null or empty stop_seq sends no stop sequence at all (memory summaries).
         if (stop_seq) pack.stop = stop_seq;
-        if (reasoning && !this.reasoningRefused) {
-            pack.reasoning = reasoning;
-            console.log(`[openrouter] reasoning ${reasoningSetting(reasoning)} for this call`);
-        }
 
         let res = null;
         try {
             console.log('Awaiting openrouter api response...');
-            let completion;
-            try {
-                completion = await this.openai.chat.completions.create(pack);
-            } catch (err) {
-                // Only the statuses a refused parameter gives (400, 404 "no endpoints for these
-                // parameters", 422); the SDK already retries 408/409/429/5xx itself.
-                const status = Number(err?.status);
-                if (!pack.reasoning || ![400, 404, 422].includes(status)) throw err;
-                console.error(`[openrouter] the reasoning setting may have been refused (status ${status}); retrying without it`);
-                delete pack.reasoning;
-                completion = await this.openai.chat.completions.create(pack);
-                // The retry returned a choice without it: the setting was the cause, so later calls send none
-                // (said once). A retry with no choice (an error body) proves nothing; the setting is kept.
-                if (completion?.choices?.[0]) {
-                    this.reasoningRefused = true;
-                    console.error('[openrouter] the retry without the reasoning setting worked; sending none from now on');
-                }
-            }
+            let completion = await this.openai.chat.completions.create(pack);
             // One line per completion for the G3 harness's per-provider counts:
             // provider name, finish reason and content length only, never the body.
             const c0 = completion?.choices?.[0];

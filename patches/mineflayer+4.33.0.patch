@@ -57,6 +57,36 @@ index 496cf63..813a667 100644
        !bot.entity.onGround,
        enchantments,
        bot.entity.effects
+diff --git a/node_modules/mineflayer/lib/plugins/entities.js b/node_modules/mineflayer/lib/plugins/entities.js
+index 666b0b3..2180e0e 100644
+--- a/node_modules/mineflayer/lib/plugins/entities.js
++++ b/node_modules/mineflayer/lib/plugins/entities.js
+@@ -573,6 +573,25 @@
+     bot.emit('entityEffectEnd', entity, effect)
+   })
+ 
++  // mindcraft-rotn (soak 14): a respawn gives the player a new entity, which has no effects, as the
++  // vanilla client's new player entity has none; the server sends no remove_entity_effect for the
++  // effects the old one had. Kept, a starvation death's Mining Fatigue IV (Hunger Overhaul) made
++  // every later dig time minutes long. Effects still active (after a dimension change) are sent
++  // again after the respawn packet. Each dropped effect ends with entityEffectEnd, and the bot
++  // emits respawnEffectsCleared with the list when there was any.
++  bot._client.on('respawn', () => {
++    const entity = bot.entity
++    if (!entity?.effects) return
++    const cleared = []
++    for (const id of Object.keys(entity.effects)) {
++      const effect = entity.effects[id]
++      delete entity.effects[id]
++      cleared.push(effect)
++      bot.emit('entityEffectEnd', entity, effect)
++    }
++    if (cleared.length) bot.emit('respawnEffectsCleared', cleared)
++  })
++
+   const updateAttributes = (packet) => {
+     const entity = fetchEntity(packet.entityId)
+     if (!entity.attributes) entity.attributes = {}
 diff --git a/node_modules/mineflayer/lib/plugins/inventory.js b/node_modules/mineflayer/lib/plugins/inventory.js
 index 70db312..93d2054 100644
 --- a/node_modules/mineflayer/lib/plugins/inventory.js
