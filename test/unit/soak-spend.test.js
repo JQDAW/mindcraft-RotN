@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { parseJournal, calls, windows, soakSpend, render } from '../tools/soak-spend.mjs';
+import { parseJournal, calls, windows, soakSpend, render, gateUsage } from '../tools/soak-spend.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const TOOL = path.join(ROOT, 'test/tools/soak-spend.mjs');
@@ -47,7 +47,7 @@ test('soak 14 rule: a summary is the usage line after a [memory] marker, whateve
     assert.equal(r.effortLines, 1);
     assert.equal(r.other.calls, 2);
     assert.equal(r.total.reasoningLines, 2);
-    assert.match(render(r), /counted by: the `\[memory\] summary turns` marker \(1 markers\)/);
+    assert.match(render(r), /counted by: the `\[memory\] summary turns` marker \(1 markers, 0 with no usage line\)/);
 });
 
 test('before #601 (no marker in the log): the old rule, a prompt under 2,000 tokens, and it says so', () => {
@@ -72,9 +72,11 @@ test('two markers before their calls (overlap): each claims the next usage line 
 test('windows: a night from sunset (or "it is night") to its first [night] morning line; a call at the boundary goes to the next window', () => {
     const text = [
         L('23:50:00', '[release] x'),
+        L('23:50:30', 'BOT spawned.'),
         ...call('23:55:00', 3000, 10, 0.001, 5),
+        ...call('23:58:00', 3000, 10, 0.0005, 5), // the same second as the sunset line, printed before it: day 1
         L('23:58:00', '[night] sunset is near: building a shelter'),
-        ...call('23:58:00', 3000, 10, 0.002, 5), // at the night's start: night 1
+        ...call('23:58:00', 3000, 10, 0.002, 5), // printed after it, the same second: night 1
         L('00:20:00', '[night] morning: dug out of the shelter at 1, 2, 3; back to work', '2026-11-26'),
         L('00:20:01', '[night] morning: a second morning line, same night', '2026-11-26'),
         ...call('00:21:00', 3000, 10, 0.004, 5).map(l => l.replace('2026-11-25', '2026-11-26')),
@@ -82,9 +84,11 @@ test('windows: a night from sunset (or "it is night") to its first [night] morni
         L('00:40:00', 'last line', '2026-11-26'),
     ].join('\n');
     const r = soakSpend(text);
-    assert.deepEqual(r.windows.map(w => [w.name, w.all.calls]), [['Day 1', 1], ['Night 1', 1], ['Day 2', 1], ['Night 2 (open at the end)', 0]]);
+    assert.deepEqual(r.windows.map(w => [w.name, w.all.calls]), [['Day 1', 2], ['Night 1', 1], ['Day 2', 1], ['Night 2 (open at the end)', 0]]);
+    assert.equal(r.windows[0].from, Date.parse('2026-11-25T23:50:30Z')); // day 1 is named from the spawn line
     assert.equal(r.windows[1].to - r.windows[1].from, 22 * 60_000); // across midnight UTC
-    assert.ok(Math.abs(r.total.usd - 0.007) < 1e-12);
+    assert.ok(Math.abs(r.windows[0].all.usd - 0.0015) < 1e-12);
+    assert.ok(Math.abs(r.total.usd - 0.0075) < 1e-12);
     assert.equal(windows([]).length, 0);
 });
 
@@ -118,6 +122,10 @@ test('the soak 13 evidence: the README numbers (268 calls, USD 0.110436, 69 summ
     assert.deepEqual(r.windows.map(w => w.all.calls), [89, 0, 52, 0, 124, 0, 3]);
     assert.equal(r.selfPrompting.calls, 262);
     assert.deepEqual(r.providers, { Wafer: 267, 'Near AI': 1 });
+    assert.equal(r.usdPerHour.source, 'journal span'); // no result.json passed
+    const result = JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'result.json'), 'utf8'));
+    const g = soakSpend(fs.readFileSync(file, 'utf8'), { result }).usdPerHour;
+    assert.deepEqual(g, { source: 'gate', value: 0.055172, minutes: 120, gateUsd: 0.110436, matches: true });
 });
 
 test('the CLI: usage errors exit 2, a file with no usage line exits 1, --json parses', () => {
@@ -137,4 +145,59 @@ test('the CLI: usage errors exit 2, a file with no usage line exits 1, --json pa
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
+});
+
+test('#602 review 2: a summary call that fails (no usage line) drops its marker; the next command call is not a summary', () => {
+    const text = [
+        L('10:00:00', '[memory] summary turns 10 kept 5'),
+        L('10:00:00', '[openrouter] reasoning effort=none for this call'),
+        L('10:00:00', 'Awaiting openrouter api response...'),
+        L('10:00:01', 'Error while awaiting response: 502 bad gateway'),
+        L('10:00:01', '[memory] summary returned a failure stand-in; keeping the previous memory'),
+        ...call('10:00:05', 4000, 100, 0.001, 50),
+        L('10:00:06', '[memory] summary turns 10 kept 5'), // the run stops before its usage line
+    ].join('\n');
+    const r = calls(parseJournal(text));
+    assert.deepEqual(r.list.map(c => [c.memory, c.effort]), [[false, null]]);
+    assert.equal(r.unmatchedMarkers, 2);
+    // An error with no marker waiting (a command call failed) drops nothing.
+    const t2 = [L('10:00:00', 'Error while awaiting response: x'), L('10:00:01', '[memory] summary turns 10 kept 5'), ...call('10:00:02', 900, 1, 0.0001, 0)].join('\n');
+    assert.deepEqual(calls(parseJournal(t2)).list.map(c => c.memory), [true]);
+    assert.match(render(soakSpend(text)), /2 markers, 2 with no usage line/);
+});
+
+test('#602 review 8: an `unknown` usage field is null, adds nothing and is counted', () => {
+    const text = [
+        L('10:00:00', '[openrouter] usage prompt_tokens unknown, completion_tokens unknown, cost_usd unknown'),
+        ...call('10:00:01', 3000, 10, 0.001, 5),
+    ].join('\n');
+    const r = soakSpend(text);
+    assert.equal(r.total.calls, 2);
+    assert.equal(r.total.unknownUsd, 1);
+    assert.equal(r.total.usd, 0.001);
+    assert.equal(r.memory.calls, 0); // an unknown prompt is not a summary under the old rule either
+    assert.match(render(r), /1 usage line\(s\) have cost_usd unknown/);
+});
+
+test('#602 review 4: one USD/h, the gate\'s from result.json; without it, the journal span, labelled not the gate\'s', () => {
+    const text = [L('10:00:00', 'x'), ...call('10:30:00', 3000, 10, 0.01, 5), L('11:00:00', 'y')].join('\n');
+    assert.equal(gateUsage({}), null);
+    const span = soakSpend(text);
+    assert.deepEqual(span.usdPerHour, { source: 'journal span', value: 0.01, minutes: 60 });
+    assert.match(render(span), /\*\*Not the gate's figure\*\*/);
+    const g = soakSpend(text, { result: { notes: { llmUsage: { usdPerHour: 0.012, usd: 0.02, minutes: 50, calls: 2 } } } });
+    assert.deepEqual(g.usdPerHour, { source: 'gate', value: 0.012, minutes: 50, gateUsd: 0.02, matches: false });
+    assert.match(render(g), /\*\*differs from\*\*/);
+});
+
+test('#602 review 7: a summary started inside a loop run whose usage line follows the stop counts outside it', () => {
+    const text = [
+        L('10:00:00', 'starting self-prompt loop'),
+        L('10:00:01', '[memory] summary turns 10 kept 5'),
+        L('10:00:02', 'self prompt loop stopped'),
+        ...call('10:00:03', 2500, 10, 0.001, 0),
+    ].join('\n');
+    const r = soakSpend(text);
+    assert.equal(r.memory.calls, 1);
+    assert.equal(r.selfPrompting.calls, 0);
 });
