@@ -110,16 +110,84 @@ export function toolDigMs(bot, b, tool) {
 }
 /** The best dig time of b with the hand or any tool the bot carries (ms). */
 export function digMs(bot, b) {
-    const tools = (bot.inventory?.items?.() ?? []).filter(i => TOOL_NAME.test(i.name ?? '') || !!getItem(registryName(i.name))?.toolClasses);
-    return Math.min(toolDigMs(bot, b, null), ...tools.map(t => toolDigMs(bot, b, t)));
+    return bestDig(bot, b).ms;
 }
-export function quickDig(bot, p) {
+/** The tools the bot carries (pickaxes, axes, shovels, ... and every item rotn-data gives tool classes). */
+const carriedTools = (bot) => (bot.inventory?.items?.() ?? []).filter(i => TOOL_NAME.test(i.name ?? '') || !!getItem(registryName(i.name))?.toolClasses);
+/** The best dig time of b with the hand or any tool the bot carries, and that tool (null: the hand): {ms, tool}. */
+export function bestDig(bot, b) {
+    let best = { ms: toolDigMs(bot, b, null), tool: null };
+    for (const t of carriedTools(bot)) { const ms = toolDigMs(bot, b, t); if (ms < best.ms) best = { ms, tool: t }; }
+    return best;
+}
+/**
+ * Soak 13 (S2, the lead): what a death keeps (Corpse Complex: the main hand, the off hand and the armour;
+ * the rest drops where the bot died). The items in the main and off hand now.
+ */
+export function keptItems(bot) {
+    return [bot?.heldItem ?? null, bot?.inventory?.slots?.[45] ?? null].filter(i => i?.name);
+}
+/** Soak 13 (S2): the best dig time of b with the hand or an item a death keeps (keptItems), in ms. */
+export function keptDigMs(bot, b) {
+    return Math.min(toolDigMs(bot, b, null), ...keptItems(bot).map(t => toolDigMs(bot, b, t)));
+}
+/**
+ * Why a dig of the block at p is not quick, apart from its time: 'a falling block', 'next to a liquid',
+ * 'a falling block above', or null.
+ */
+function digHazard(bot, p, b) {
+    if (isFalling(b)) return 'a falling block';
+    if (SIX.some(d => isLiquid(bot.blockAt(p.plus(d))))) return 'next to a liquid';
+    if (isFalling(bot.blockAt(p.offset(0, 1, 0)))) return 'a falling block above';
+    return null;
+}
+/**
+ * kept (soak 13, S2): only the hand and the items a death keeps count (keptDigMs), not every tool carried:
+ * the scroll's respawn spot must be left after a death.
+ */
+export function quickDig(bot, p, { kept = false } = {}) {
     if (typeof bot?.blockAt !== 'function') return false;
     const b = bot.blockAt(p);
-    if (!solid(b) || isFalling(b)) return false;
-    if (SIX.some(d => isLiquid(bot.blockAt(p.plus(d))))) return false;
-    if (isFalling(bot.blockAt(p.offset(0, 1, 0)))) return false;
-    return digMs(bot, b) <= DIG_OUT.maxMs;
+    if (!solid(b) || digHazard(bot, p, b)) return false;
+    return (kept ? keptDigMs(bot, b) : digMs(bot, b)) <= DIG_OUT.maxMs;
+}
+
+const SIDES = [['east', new Vec3(1, 0, 0)], ['west', new Vec3(-1, 0, 0)], ['south', new Vec3(0, 0, 1)], ['north', new Vec3(0, 0, -1)]];
+const msText = (ms) => (Number.isFinite(ms) ? `${Math.round(ms)} ms` : 'never');
+const cellAt = (p) => `${p.x},${p.y},${p.z}`;
+/** One blocking cell: its block, its kept-items dig time (S2), and in parentheses the best tool carried. */
+function blockerText(bot, p) {
+    const b = bot.blockAt(p);
+    if (!b) return `${cellAt(p)} not loaded`;
+    const hazard = digHazard(bot, p, b);
+    const best = bestDig(bot, b);
+    const bestText = Number.isFinite(best.ms) ? `${best.tool?.name ?? 'hand'} ${msText(best.ms)}` : 'never with any tool carried';
+    return `${cellAt(p)} ${b.name} ${msText(keptDigMs(bot, b))} (${bestText})${hazard ? `, ${hazard}` : ''}`;
+}
+
+/**
+ * Soak 13 (S1, the lead): why walkableExit found no way out of `from`, side by side, for the journal: the
+ * cells that block each side at feet and head height (block, dig time by hand or with the items a death
+ * keeps, then the best tool carried in parentheses), or a side that was open (level, a step up or down)
+ * but led to no cell `reach` blocks away, or a drop. `free`: the cells counted free, as for walkableExit.
+ */
+export function exitReport(bot, from, { free = new Set(), reach = WALK_EXIT.reach } = {}) {
+    if (typeof bot?.blockAt !== 'function') return 'no world to look at';
+    const f = new Vec3(Math.floor(from.x), Math.floor(from.y), Math.floor(from.z));
+    const stand = (p) => passable(bot, p, free) && passable(bot, p.offset(0, 1, 0), free) && solid(bot.blockAt(p.offset(0, -1, 0))) && !free.has(key(p.offset(0, -1, 0)));
+    const parts = [];
+    for (const [name, d] of SIDES) {
+        const side = f.plus(d);
+        const tail = `but no walk to ${reach} blocks from there`;
+        if (stand(side)) { parts.push(`${name} open, ${tail}`); continue; }
+        if (passable(bot, f.offset(0, 2, 0), free) && stand(side.offset(0, 1, 0))) { parts.push(`${name} a step up to ${cellAt(side.offset(0, 1, 0))}, ${tail}`); continue; }
+        const open = passable(bot, side, free) && passable(bot, side.offset(0, 1, 0), free);
+        if (open && stand(side.offset(0, -1, 0))) { parts.push(`${name} a step down to ${cellAt(side.offset(0, -1, 0))}, ${tail}`); continue; }
+        if (open) { parts.push(`${name} a drop at ${cellAt(side.offset(0, -1, 0))} (${bot.blockAt(side.offset(0, -1, 0))?.name ?? 'not loaded'})`); continue; }
+        const blocked = [side, side.offset(0, 1, 0)].filter(p => !passable(bot, p, free));
+        parts.push(`${name} ${blocked.map(p => blockerText(bot, p)).join(', ')}`);
+    }
+    return parts.join('; ');
 }
 
 /**

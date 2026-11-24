@@ -4028,7 +4028,8 @@ test('soak 12 (B(i)): the night routine tells the scroll check it is in a hole s
         const agent = fakeAgent({ t: NIGHT });
         const o = ops();
         const seen = [], uses = [];
-        o.scrollRefusal = (a, site, opts) => { seen.push(opts); return opts?.pit || opts?.below ? 'no walkable way out' : null; };
+        // Soak 13 (S1): the options also carry explain (the cell line's sink); the flags are what this test checks.
+        o.scrollRefusal = (a, site, opts) => { seen.push({ pit: opts?.pit, below: opts?.below }); return opts?.pit || opts?.below ? 'no walkable way out' : null; };
         o.useSpawnScroll = () => { uses.push(1); return Promise.resolve({ used: true }); };
         nightTick(agent, { now: 0, ops: o });
         await settle(agent);
@@ -4040,4 +4041,184 @@ test('soak 12 (B(i)): the night routine tells the scroll check it is in a hole s
     assert.deepEqual(await run({ pit: true }), { seen: [{ pit: true, below: false }], uses: [] });
     assert.deepEqual(await run({ burrowSteps: 1 }), { seen: [{ pit: false, below: true }], uses: [] });
     assert.deepEqual(await run({}), { seen: [{ pit: false, below: false }], uses: [1] });
+});
+
+// Soak 13 (S2', the lead): the scroll was refused at all 3 sunsets (cobble walls, terrain). Now, out of the
+// shelter in the morning (its side open), the scroll is tried on the shelter's cell before the day's work:
+// scrollRefusal with the cells as they are now; used: back into the cell, then the scroll; refused: its line
+// (and S1's) in the journal, and the next morning tries again. S1 at sunset: the cell line before the refusal.
+const S13_SCROLL = { name: 'lifescroll:spawnscroll', metadata: 0, count: 1 };
+function morningScrollSetup(t, refuse) {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const agent = fakeAgent({ t: NIGHT });
+    agent.bot.inventory = { items: () => [S13_SCROLL] };
+    const o = ops();
+    const checks = [], uses = [], walks = [], labels = [];
+    o.scrollRefusal = (a, site, opts) => { checks.push({ site: `${site.x},${site.y},${site.z}`, pit: !!opts?.pit }); return refuse(checks.length, opts); };
+    o.useSpawnScroll = () => { uses.push(1); return Promise.resolve({ used: true, by: 'the stack shrank', tries: 1 }); };
+    o.walkInto = (bot, site) => { walks.push(`${site.x},${site.y},${site.z}`); return Promise.resolve(true); };
+    const run = agent.actions.runAction.bind(agent.actions);
+    agent.actions.runAction = (label, fn) => { labels.push(label); return run(label, fn); };
+    return { agent, o, logs, checks, uses, walks, labels };
+}
+const nightThenMorning = async ({ agent, o }, start = 0) => {
+    agent.bot.time.timeOfDay = NIGHT;
+    nightTick(agent, { now: start, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: start + 1, ops: o }); // the sunset check
+    await settle(agent);
+    agent.bot.time.timeOfDay = MORNING;
+    nightTick(agent, { now: start + 2, ops: o }); // the dig-out, then the morning scroll
+    await settle(agent);
+};
+
+test('soak 13 (S2\'): refused at sunset (with S1\'s cell line), the scroll is used in the morning from the opened shelter: back into the cell, then the scroll, then the hand-back', async (t) => {
+    const s = morningScrollSetup(t, (n, opts) => {
+        if (n > 1) return null;
+        opts.explain?.("the scroll's way out from 0, 64, 0 (...): east 1,64,0 contenttweaker:chalk_cobble never (stone_pickaxe 1500 ms)");
+        return 'no walkable way out of 0, 64, 0 to 8 blocks (a respawn there could not leave without digging)';
+    });
+    await nightThenMorning(s);
+    assert.ok(s.logs.includes("[night] the scroll's way out from 0, 64, 0 (...): east 1,64,0 contenttweaker:chalk_cobble never (stone_pickaxe 1500 ms)"), s.logs.join('\n'));
+    assert.ok(s.logs.includes('[night] the Scroll of New Life is not used at 0, 64, 0: no walkable way out of 0, 64, 0 to 8 blocks (a respawn there could not leave without digging)'));
+    assert.deepEqual(s.checks, [{ site: '0,64,0', pit: false }, { site: '0,64,0', pit: false }], 'the sunset check, then the morning one');
+    assert.equal(s.o.digs, 1, 'the dig-out first');
+    assert.deepEqual(s.walks, ['0,64,0']);
+    assert.deepEqual(s.uses, [1]);
+    assert.ok(s.labels.includes('action:spawnScroll'), s.labels.join(','));
+    const i = s.agent.chat.indexOf('[night] morning: setting the respawn point at 0, 64, 0 with the Scroll of New Life (once), from the opened shelter: a walkable way out, far from the spawn and every death spot, no hostile near');
+    assert.ok(i >= 0, s.agent.chat.join('\n'));
+    assert.deepEqual(s.agent.chat.slice(i + 1), ['[night] the respawn point is now 0, 64, 0: a death within 32 blocks of it raises no player zombie (seen by the stack shrank)',
+        '[night] morning: dug out of the shelter at 1, 64, 0; back to work']);
+    assert.equal(nightState(s.agent).state, 'day');
+    assert.equal(s.agent.bot.rotnSheltered, false);
+});
+
+test('soak 13 (S2\'): refused in the morning too: its lines in the journal (S1\'s with "morning:"), no use, the hand-back; the next morning tries again', async (t) => {
+    const s = morningScrollSetup(t, (n, opts) => {
+        opts.explain?.(`the scroll's way out from 0, 64, 0 (...): north a step up to 0,65,-1, but no walk to 8 blocks from there (check ${n})`);
+        return 'no walkable way out of 0, 64, 0 to 8 blocks (a respawn there could not leave without digging)';
+    });
+    await nightThenMorning(s);
+    assert.deepEqual(s.uses, []);
+    assert.ok(s.logs.includes("[night] morning: the scroll's way out from 0, 64, 0 (...): north a step up to 0,65,-1, but no walk to 8 blocks from there (check 2)"), s.logs.join('\n'));
+    assert.ok(s.logs.includes('[night] morning: the Scroll of New Life is not used at 0, 64, 0: no walkable way out of 0, 64, 0 to 8 blocks (a respawn there could not leave without digging)'));
+    assert.match(s.agent.chat.at(-1), /\[night\] morning: dug out of the shelter at 1, 64, 0; back to work/);
+    assert.ok(!s.agent.chat.some(l => /Scroll of New Life/.test(l)), 'a refusal is journal-only');
+    // The next night and morning: checked again at sunset and in the morning.
+    await nightThenMorning(s, 10 * CHECK_MS);
+    assert.equal(s.checks.length, 4, JSON.stringify(s.checks));
+    assert.ok(s.logs.some(l => /\(check 4\)$/.test(l) && l.startsWith('[night] morning: ')));
+});
+
+test('soak 13 (S2\'): no morning scroll after a sunset use, from a hole shelter, with no scroll held, or with the bot more than 8 blocks from the cell', async (t) => {
+    // Used at sunset: no second use in the morning.
+    const used = morningScrollSetup(t, () => null);
+    await nightThenMorning(used);
+    assert.deepEqual(used.uses, [1]);
+    assert.equal(used.checks.length, 1);
+    assert.match(used.agent.chat.at(-1), /dug out of the shelter at 1, 64, 0; back to work/);
+    // A hole shelter: the sunset check refuses (pit), and the morning makes none.
+    const pit = morningScrollSetup(t, (n, opts) => (opts?.pit ? 'a hole shelter: no walkable way out of it' : null));
+    pit.agent.bot.time.timeOfDay = NIGHT;
+    nightTick(pit.agent, { now: 0, ops: pit.o });
+    await settle(pit.agent);
+    nightState(pit.agent).pit = true;
+    pit.o.pitOut = () => Promise.resolve(new Vec3(1, 65, 0));
+    nightTick(pit.agent, { now: 1, ops: pit.o });
+    await settle(pit.agent);
+    pit.agent.bot.time.timeOfDay = MORNING;
+    nightTick(pit.agent, { now: 2, ops: pit.o });
+    await settle(pit.agent);
+    assert.deepEqual(pit.checks, [{ site: '0,64,0', pit: true }]);
+    assert.deepEqual(pit.uses, []);
+    // No scroll held: no check.
+    const none = morningScrollSetup(t, () => 'refused');
+    none.agent.bot.inventory = { items: () => [] };
+    await nightThenMorning(none);
+    assert.deepEqual(none.uses, []);
+    assert.equal(none.checks.length, 1, 'the sunset check only (it says "no scroll held" itself)');
+    // The dig-out left the bot 9 blocks off: not used, said why.
+    const far = morningScrollSetup(t, (n) => (n === 1 ? 'refused' : null));
+    far.o.digOut = () => { far.o.digs++; far.agent.bot.entity.position = new Vec3(9.5, 64, 0.5); return Promise.resolve(new Vec3(9, 64, 0)); };
+    await nightThenMorning(far);
+    assert.deepEqual(far.uses, []);
+    assert.ok(far.logs.includes('[night] morning: the Scroll of New Life is not used at 0, 64, 0: the bot is at 9, 64, 0, more than 8 blocks from it'), far.logs.join('\n'));
+    assert.match(far.agent.chat.at(-1), /dug out of the shelter at 9, 64, 0; back to work/);
+});
+
+// Soak 13 (S2', the lead): after a morning scroll use the roof block over the respawn cell comes down (and is
+// picked up), so a zombie that walks in by day stands in daylight; the spawn cell and the one above stay free.
+// Left (and said why) with a hostile near, or with blocks above the roof (no daylight; gravel would fall in).
+test('soak 13 (S2\'): after the morning use the roof over the respawn cell comes down and is picked up; with a hostile near or blocks above it, it stays, said why', async (t) => {
+    const { unroofSpawn } = await import('./night_routine.js');
+    const site = new Vec3(0, 64, 0);
+    // sky: the sky light of the cells above the roof (15: open sky; the client's light, read before the dig).
+    const mkBot = (extra = {}, { sky = 15 } = {}) => {
+        const cells = new Map(Object.entries({ '0,66,0': 'contenttweaker:chalk_cobble', ...extra }));
+        const calls = { digs: [], pickups: [] };
+        const bot = {
+            game: { gameMode: 'creative' }, entity: { position: new Vec3(0.5, 64, 0.5) }, entities: {}, inventory: { items: () => [] },
+            blockAt: (p) => { const k = `${p.x},${p.y},${p.z}`; const v = cells.get(k) ?? 'air'; return { name: v, boundingBox: v === 'air' ? 'empty' : 'block', position: p, skyLight: p.y > 66 ? sky : 0 }; },
+            dig: (b) => { calls.digs.push(`${b.position.x},${b.position.y},${b.position.z}`); cells.set(`${b.position.x},${b.position.y},${b.position.z}`, 'air'); return Promise.resolve(); },
+        };
+        return { bot, cells, calls };
+    };
+    // #604 review 6: only the roof's drop is picked up: an item in the cell yes, one 5 blocks off no.
+    const pickup = (calls) => (bot, { allow }) => { calls.pickups.push([allow({ position: new Vec3(0.5, 64.2, 0.5) }), allow({ position: new Vec3(5.5, 64, 0.5) })]); return Promise.resolve(true); };
+    const open = mkBot();
+    assert.deepEqual(await unroofSpawn(open.bot, site, { pickup: pickup(open.calls) }), { removed: true, name: 'contenttweaker:chalk_cobble' });
+    assert.deepEqual(open.calls.digs, ['0,66,0'], 'only the roof: the spawn cell and the one above stay free');
+    assert.deepEqual(open.calls.pickups, [[true, false]], 'the roof drop is picked up, nothing farther');
+    // #604 review 1: a canopy higher up (sky light 11 above the roof): no daylight would reach the cell; it stays.
+    const shade = mkBot({}, { sky: 11 });
+    assert.deepEqual(await unroofSpawn(shade.bot, site, { pickup: pickup(shade.calls) }), { removed: false, why: 'the sky light above it is 11, not 15 (no open sky: the cell would stay in shade)' });
+    assert.deepEqual(shade.calls.digs, []);
+    const mobNear = mkBot();
+    assert.deepEqual(await unroofSpawn(mobNear.bot, site, { hostile: () => ({ name: 'zombie' }) }), { removed: false, why: 'a zombie is near' });
+    assert.deepEqual(mobNear.calls.digs, []);
+    const gravel = mkBot({ '0,68,0': 'gravel' });
+    const g = await unroofSpawn(gravel.bot, site);
+    assert.equal(g.removed, false);
+    assert.match(g.why, /^gravel at 0, 68, 0 above it \(no daylight would reach the cell; it would fall into it\)$/);
+    assert.deepEqual(gravel.calls.digs, []);
+    // The routine: removed, a chat line; left, a journal line.
+    for (const [roof, want] of [[{ removed: true, name: 'contenttweaker:chalk_cobble' }, null], [{ removed: false, why: 'a zombie is near' }, '[night] morning: the roof over the respawn cell at 0, 64, 0 stays (a zombie is near)']]) {
+        const s = morningScrollSetup(t, (n) => (n === 1 ? 'refused' : null));
+        const seen = [];
+        s.o.unroofSpawn = (bot, at, opts) => { seen.push([`${at.x},${at.y},${at.z}`, typeof opts?.hostile]); return Promise.resolve(roof); };
+        await nightThenMorning(s);
+        assert.deepEqual(seen, [['0,64,0', 'function']], 'after the use, at the spawn cell');
+        const took = '[night] morning: took down the roof block (contenttweaker:chalk_cobble) over the respawn cell at 0, 64, 0: a mob that walks in by day stands in daylight';
+        if (want) { assert.ok(s.logs.includes(want), s.logs.join('\n')); assert.ok(!s.agent.chat.includes(took)); }
+        else assert.ok(s.agent.chat.includes(took), s.agent.chat.join('\n'));
+        assert.match(s.agent.chat.at(-1), /dug out of the shelter at 1, 64, 0; back to work/);
+    }
+});
+
+// #604 review 2 and 5: the hostile check again after the walk back (a zombie that came in the meantime: no use);
+// after the roof dig the weapon goes back in the main hand (soak 11 A3).
+test('#604 review: a hostile near after the walk back: the scroll is not used; after the roof dig the weapon is re-armed', async (t) => {
+    const s = morningScrollSetup(t, (n) => (n === 1 ? 'refused' : null));
+    let back = false;
+    const walk = s.o.walkInto;
+    s.o.walkInto = (bot, site) => { back = true; return walk(bot, site); };
+    s.o.hostileNear = (bot, range) => (back && range === 16 ? { name: 'zombie', position: new Vec3(6.5, 64, 0.5) } : null);
+    const rearms = [];
+    s.o.rearmWeapon = () => { rearms.push(1); return Promise.resolve(); };
+    await nightThenMorning(s);
+    assert.deepEqual(s.uses, [], 'no use: a zombie came on the walk back');
+    assert.ok(s.agent.chat.includes('[night] morning: the Scroll of New Life was not used (a zombie came within 16 blocks on the walk back)'), s.agent.chat.join('\n'));
+    assert.deepEqual(rearms, [], 'no dig, no re-arm');
+    assert.match(s.agent.chat.at(-1), /dug out of the shelter at 1, 64, 0; back to work/);
+    // Used, the roof dug: re-armed after it.
+    const u = morningScrollSetup(t, (n) => (n === 1 ? 'refused' : null));
+    const order = [];
+    u.o.unroofSpawn = () => { order.push('roof'); return Promise.resolve({ removed: true, name: 'contenttweaker:chalk_cobble' }); };
+    u.o.rearmWeapon = () => { order.push('rearm'); return Promise.resolve(); };
+    await nightThenMorning(u);
+    assert.deepEqual(u.uses, [1]);
+    assert.deepEqual(order, ['roof', 'rearm']);
 });
