@@ -19,7 +19,7 @@ import { itemVariants, toolLevels } from './library/rotn_sources.js';
 import { cobbleChoices } from './library/cobble.js';
 import { isSturdy, placeableDirt, minutesToSunset, sunsetEstimateMin } from './library/night.js';
 import { safeError } from './safe_error.js';
-import { heldFoodHunger } from './library/food.js';
+import { heldFoodPoints } from './library/food.js';
 import { nearbyHuntable } from './library/hunting.js';
 import { nearbyForage } from './library/foraging.js';
 import { hasWeapon, WEAPON } from './library/threats.js';
@@ -111,7 +111,8 @@ export function agendaState(bot, clock = null) {
             return Number.isFinite(at) ? Date.now() - at : Infinity;
         },
         day: () => bot.time?.day, // the in-game day (the food reserve's runs per day)
-        foodHeld: () => heldFoodHunger(bot),
+        foodHeld: () => heldFoodPoints(bot), // soak 14 (F1): points (hunger + saturation)
+        saturation: () => bot.foodSaturation ?? 0,
         huntable: () => { try { return [...new Set(nearbyHuntable(bot, { bases: bot.rotnBases?.() ?? [] }))]; } catch { return []; } },
         // the ripe wild food blocks near that the bot may take (foraging.js; full block names)
         forageable: () => { try { return nearbyForage(bot, { bases: bot.rotnBases?.() ?? [] }); } catch { return []; } },

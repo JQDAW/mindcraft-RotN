@@ -303,7 +303,9 @@ test('soak 2: below food 8 the model\'s !moveAway and searches go 32 blocks at m
         await executeCommand(agent, cmd);
         return agent.bot.output;
     };
-    assert.match(await run(7, '!searchForEntity("animania:cow_holstein", 128)'), /Searching 32 blocks at most at food 7, not 128: walking costs hunger, and food 0 kills you at once on this pack\. Eat or !forage first\.[\s\S]*Could not find any animania:cow_holstein in 32 blocks/);
+    // Soak 14 (F1): an animal of the kind asked in sight lifts the cap (that walk is the food); a kind not in sight is capped.
+    assert.match(await run(7, '!searchForEntity("animania:sow_old_spot", 128)'), /Searching 32 blocks at most at food 7, not 128: walking costs hunger, and food 0 kills you at once on this pack\. Eat or !forage first\.[\s\S]*Could not find any animania:sow_old_spot in 32 blocks/);
+    assert.match(await run(7, '!searchForEntity("animania:cow_holstein", 128)'), /Searching past 32 blocks at food 7: animania:cow_holstein is in sight, and it is the food\.[\s\S]*Found animania:cow_holstein/);
     const fed = await run(8, '!searchForEntity("animania:cow_holstein", 128)');
     assert.doesNotMatch(fed, /at most at food/);
     assert.match(fed, /Found animania:cow_holstein/);
@@ -346,7 +348,7 @@ test('#443 review 1: a task giver\'s typed command is never capped while hungry;
         return agent.bot.output;
     };
     for (const cmd of ['!goToCoordinates(100.5, 64, 0.5, 2)', '!goToPlayer("JQDAW", 3)', '!collectBlocks("dirt", 1)', '!moveAway(64)',
-        '!searchForEntity("animania:cow_holstein", 128)', '!searchForBlock("dirt", 128)']) {
+        '!searchForEntity("animania:sow_old_spot", 128)', '!searchForBlock("dirt", 128)']) { // soak 14: a kind not in sight (one in sight is not capped)
         assert.match(await run(cmd), /at most at food 7|at most toward .* at food 7/, `the model's ${cmd} is capped`);
         assert.doesNotMatch(await run(cmd, { sender: 'JQDAW' }), /at most/, `a giver's typed ${cmd} is not`);
     }
@@ -802,4 +804,41 @@ test('#601 review: a zombie or villager search is not counted and gets no animal
     const r = noteSearchMiss(a, 'cow', 1);
     assert.equal(r.count, 1);
     assert.ok(r.at);
+});
+
+// Soak 14 (F1): !consume("wheat") at food 2 ended in "Promise timed out" 3 s later (wheat is no food).
+test('soak 14 (F1): !consume of an item that is no food on this pack says so at once and eats nothing', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const wheat = { name: 'wheat', count: 1, metadata: 0, type: reg.itemsByName.wheat.id };
+    const agent = huntAgent({ food: 2, items: [wheat], armed: false });
+    let consumed = 0;
+    Object.assign(agent.bot, { equip: () => Promise.resolve(), consume: () => { consumed++; return Promise.resolve(); } });
+    agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }));
+    await executeCommand(agent, '!consume("wheat")');
+    assert.match(agent.bot.output, /wheat is not food on this pack: nothing to eat\. 3 wheat make bread at a crafting table\./);
+    assert.equal(consumed, 0);
+});
+
+// Soak 14 (F3, the lead): death 1's low-health flee said "flee zombie" (9 m off) while the grove sprite that
+// hit followed. The flee now names the mob the last hurt line named (recentHitter) and goes away from it.
+test('soak 14 (F3): the low-health flee names the mob the hurt line named (a grove sprite), not the nearest hostile', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const agent = huntAgent({ animals: [] });
+    const bot = agent.bot;
+    const sprite = { id: 7, name: 'primitivemobs:grovesprite', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1 };
+    const zombie = { id: 8, name: 'zombie', type: 'mob', position: new Vec3(9.5, 64, 0.5), height: 1.95, metadata: {} };
+    Object.assign(bot.entities, { 7: sprite, 8: zombie });
+    Object.assign(bot, { health: 1, lastDamageTime: Date.now(), lastDamageTaken: 5.5, rotnLastHitter: { id: 7, at: Date.now() }, blockAt: () => ({ name: 'air' }) });
+    bot.pathfinder.goal = null;
+    const ran = [];
+    agent.actions.runAction = (label) => { ran.push(label); return Promise.resolve({ message: '', interrupted: false }); };
+    await __modeForTest('self_preservation').update(agent);
+    assert.ok(logs.includes('[survival] flee primitivemobs:grovesprite (low health 1)'), logs.join('\n'));
+    assert.deepEqual(ran, ['mode:self_preservation']);
+    // No recent hitter: the nearest hostile, as before.
+    logs.length = 0;
+    bot.rotnLastHitter = null;
+    await __modeForTest('self_preservation').update(agent);
+    assert.ok(logs.includes('[survival] flee zombie (low health 1)'), logs.join('\n'));
 });

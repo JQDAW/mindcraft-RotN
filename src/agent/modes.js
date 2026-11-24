@@ -27,7 +27,7 @@ import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
 import { mayRepeat, handedToChat } from './chat_repeat.js';
-import { fleeLine, mobName, ateLine } from './library/survival_log.js';
+import { fleeLine, mobName, ateLine, recentHitter } from './library/survival_log.js';
 
 /**
  * G4 #7 (the soak): the most of the behavior log kept between two LLM messages. It is flushed only
@@ -110,7 +110,7 @@ function timeOfDayFor(agent, now = Date.now()) {
 export function foodDue(agent) {
     const bot = agent.bot;
     const t = timeOfDayFor(agent);
-    return food.foodShortfall({ food: bot?.food, held: food.heldFoodHunger(bot), minutesToSunset: t === null ? Infinity : minutesToSunset(t),
+    return food.foodShortfall({ food: bot?.food, held: food.heldFoodPoints(bot), saturation: bot?.foodSaturation ?? 0, minutesToSunset: t === null ? Infinity : minutesToSunset(t),
         finished: !!agent.agenda?.finished, reserveLeadMin: RESERVE_LEAD_MIN }) !== null;
 }
 
@@ -407,11 +407,16 @@ const modes_list = [
                 }
                 claimThreat(this.name, Date.now(), { override: true }); // the low-health flee wins at once (#227 review 2)
                 // G4 #5: the journal's flee line names the nearest hostile mob, when one is near.
-                const near = world.getNearestEntityWhere(bot, (e) => threats.shelterEnemy(e), 16);
+                // Soak 14 (F3, the lead): the mob the last hurt line named (recentHitter: a level-'none' grove sprite
+                // that hit, or one the bot provoked) first, and the flee goes away from it (death 1 fled from a
+                // zombie 9 m off while the sprite that hit followed).
+                const hitter = recentHitter(bot);
+                const near = hitter ?? world.getNearestEntityWhere(bot, (e) => threats.shelterEnemy(e), 16);
                 console.log(fleeLine(near ? mobName(near) : 'unknown', `low health ${Math.round(bot.health * 10) / 10}`));
                 say(agent, 'I\'m dying!');
                 execute(this, agent, async () => {
-                    await skills.moveAway(bot, 20);
+                    if (hitter) await skills.moveAwayFromEntity(bot, hitter, 20);
+                    else await skills.moveAway(bot, 20);
                 });
             }
             else if (agent.isIdle()) {
@@ -479,7 +484,8 @@ const modes_list = [
             if (!food.wantsToEat(bot.food, { idle: between, threatened })) return;
             // Soak 2: food 0 kills at once on this pack; at EMERGENCY_FOOD or lower, avoided food too.
             const emergency = Number.isFinite(bot.food) && bot.food <= food.EMERGENCY_FOOD;
-            const item = food.chooseFood(bot, { skip: this.given_up, emergency });
+            // Soak 14 (F1): the least valuable first; at EAT_NOW_AT or lower the most valuable.
+            const item = food.chooseFood(bot, { skip: this.given_up, emergency, largest: Number.isFinite(bot.food) && bot.food <= food.EAT_NOW_AT });
             if (!item) {
                 this.wait_until = Date.now() + this.miss_ms;
                 console.warn(`[reflex] eating: food ${bot.food}, but no safe food in the inventory${emergency ? ', and no other food either' : ''}`);

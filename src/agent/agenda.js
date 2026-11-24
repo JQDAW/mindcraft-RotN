@@ -26,7 +26,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { SHELTER_LEAD_MIN, dirtPileRecipes, isFullDay } from './library/night.js';
-import { foodShortfall, FOOD_TARGET, EMERGENCY_FOOD, EAT_AT, EAT_NOW_AT, emergencyFoodText, NEVER_EAT_TEXT } from './library/food.js';
+import { foodShortfall, FOOD_TARGET, FOOD_SHORT_AT, EMERGENCY_FOOD, EAT_AT, EAT_NOW_AT, emergencyFoodText, NEVER_EAT_TEXT } from './library/food.js';
 import { HUNT_MIN_FOOD } from './library/hunting.js';
 
 /**
@@ -293,7 +293,7 @@ export const WEAPON_RESERVE_STEP = {
 /**
  * Soak 7 (d), the lead's rule: the bot respawned at food 12 with nothing to eat; the agenda put the
  * shelter blocks and the weapon first, and the bot first ate 5 min 48 s after its "low" food line
- * (ate_when_low allows 5 min). Within windowMs of a death, at food EAT_AT (12) or lower with no
+ * (ate_when_low allows 5 min). Within windowMs of a death, at food FOOD_SHORT_AT (12) or lower with no
  * safe food held, the food reserve comes before the shelter reserve and the weapon (with no weapon
  * its goal forages, never hunts: Fix H). windowMs bounds it, so the shelter blocks still get their
  * time before night.
@@ -303,7 +303,7 @@ export const FOOD_AFTER_DEATH = { windowMs: 4 * 60_000 };
 export function foodFirstAfterDeath(s) {
     let since = Infinity, food = null, held = 0;
     try { since = s.sinceDeathMs?.() ?? Infinity; food = s.food?.(); held = s.foodHeld?.() ?? 0; } catch { return false; }
-    return Number.isFinite(since) && since <= FOOD_AFTER_DEATH.windowMs && Number.isFinite(food) && food <= EAT_AT && held <= 0;
+    return Number.isFinite(since) && since <= FOOD_AFTER_DEATH.windowMs && Number.isFinite(food) && food <= FOOD_SHORT_AT && held <= 0;
 }
 
 /**
@@ -346,15 +346,16 @@ export const FOOD_RETRY_MS = 10 * 60_000;
 export const FOOD_DAY_RUNS = 3;
 const dayKeyOf = (s, now) => { const d = s.day?.(); return Number.isFinite(d) ? `day ${d}` : `t ${Math.floor(now / (20 * 60_000))}`; };
 /** The food reserve's shortfall now (food.foodShortfall with the shelter reserve's window), or null. */
-const foodShort = (s, ctx = {}) => foodShortfall({ food: s.food?.(), held: s.foodHeld?.() ?? 0,
+// Soak 14 (F1): held is in points (hunger + saturation, heldFoodPoints), and the saturation counts for the night's need.
+const foodShort = (s, ctx = {}) => foodShortfall({ food: s.food?.(), held: s.foodHeld?.() ?? 0, saturation: s.saturation?.() ?? 0,
     minutesToSunset: s.minutesToSunset?.() ?? Infinity, finished: !!ctx.finished, reserveLeadMin: RESERVE_LEAD_MIN });
 
 /**
  * G4 #5 (CX23 soak m1: food fell to 1; after the deaths nothing to eat, and once the agenda was
  * done nothing got food). Like the shelter reserve, not a step of the list: judged anew every tick,
  * after the shelter reserve and before the current step, also after "agenda done" (a standing
- * duty), with its own budget. Due by food.foodShortfall: before night FOOD_TARGET.night held; once
- * the agenda is done FOOD_TARGET.day; and at once when food is 12 or lower with none held. Never at
+ * duty), with its own budget. Due by food.foodShortfall: before night the night's need (food.nightFoodNeed, points); once
+ * the agenda is done FOOD_TARGET.day; and at once when food is FOOD_SHORT_AT (12) or lower with none held. Never at
  * night: the bot stays sealed. Hunting only wild animals (the !attack guard and the hunting reflex,
  * library/hunting.js). Ripe wild food first (lead, after rotn-data #423): !forage picks wildberry
  * bushes and breaks ripe herbs and gardens (library/foraging.js), then hunting.
@@ -363,7 +364,7 @@ export const FOOD_RESERVE_STEP = {
     id: 'food', short: 'hold food items for the day and the night (not the hunger bar)', reserve: true, when: 'food',
     due: (s, ctx) => foodShort(s, ctx) !== null,
     done: () => false, // done when no longer due (enough held)
-    goal: `Food: on this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: food 0 kills you at once, at any health. Long walks cost hunger. Keep food worth at least ${FOOD_TARGET.night} hunger before night. Gather ripe wild food first with !forage (wildberry bushes, wild herbs, HarvestCraft gardens); only while you hold a weapon, else hunt a wild pig, cow or sheep near you (2 to 8 meat each; a rabbit drops 0 to 2, a young animal nothing) and pick up the meat (raw meat is safe: 1 hunger each, a rabbit 2, never raw chicken; eat it raw when hungry); with no weapon, do not hunt: make a weapon first. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh unless your food is ${EMERGENCY_FOOD} or lower, and then only these, in this order: ${emergencyFoodText()}; never ${NEVER_EAT_TEXT}. Keep the bread for last.`,
+    goal: `Food: on this pack food falls about 1 point every 2 minutes, even resting (a night costs about 13), and starving kills: food 0 kills you at once, at any health. Long walks cost hunger. Keep enough food held for the night (a night needs about 13 points: hunger plus saturation, the food bar and what you hold together). Gather ripe wild food first with !forage (wildberry bushes, wild herbs, HarvestCraft gardens); only while you hold a weapon, else hunt a wild pig, cow or sheep near you (2 to 8 meat each; a rabbit drops 0 to 2, a young animal nothing) and pick up the meat (raw meat is safe: 1 hunger each, a rabbit 2, never raw chicken; eat it raw when hungry); with no weapon, do not hunt: make a weapon first. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh unless your food is ${EMERGENCY_FOOD} or lower, and then only these, in this order: ${emergencyFoodText()}; never ${NEVER_EAT_TEXT}. Keep the bread for last.`,
     goalNow: (s, ctx) => {
         const target = foodShort(s, ctx) ?? FOOD_TARGET.day;
         const held = s.foodHeld?.() ?? 0;
@@ -391,10 +392,11 @@ export const FOOD_RESERVE_STEP = {
             : crops.length ? 'No wild animal is near. ' : 'No ripe wild food and no wild animal is near: try !forage once you see berry bushes, herbs or HarvestCraft gardens; or look for an animal (pigs, cows and sheep first, a rabbit only if there is nothing else; on this pack mostly Animania ones, which !searchForEntity("cow"), "pig" or "sheep" also finds) with !searchForEntity (one search also lists every animal in sight: a miss with none in sight means no animal of any kind is near, so try elsewhere), away from fences and houses, then !attack it. ';
         // Soak 13 (C3a): "your food is 13 of 20 ... get to at least 12" read as met (the model ended the goal twice
         // at food 13 holding food worth 4): the step wants food held, and the bar does not count.
-        return `Food: you hold food worth ${held} hunger in your inventory; this step wants food worth at least ${target} hunger held${Number.isFinite(food) ? ` (your hunger bar, ${food} of 20, does not count toward it)` : ''}. On this pack hunger falls about 1 every 4 minutes, even resting, and starving kills. Food 0 kills you at once on this pack, at any health, and long walks cost hunger: stay near. `
+        // Soak 14 (F1): in food points (hunger + saturation per item: a cooked meat 2.8, bread 4.2), as the night's need.
+        return `Food: you hold food worth ${held} points in your inventory; this step wants food worth at least ${target} points held${Number.isFinite(food) ? ` (your hunger bar, ${food} of 20, does not count toward it)` : ''}. On this pack food falls about 1 point every 2 minutes, even resting (a night costs about 13), and starving kills. Food 0 kills you at once on this pack, at any health, and long walks cost hunger: stay near. The bot eats by itself at food ${EAT_AT} or lower, the least valuable food first: keep the rest. `
             + wild + near + 'Raw meat is safe (1 hunger each, a rabbit 2; never raw chicken): eat it raw when hungry. A pig, cow or sheep drops 2 to 8 meat, a rabbit 0 to 2 (often none): a kill is food only once its meat is in your inventory. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player (the bot refuses those). '
             + (emergency ? `At food ${EMERGENCY_FOOD} or lower, with no other food, eat only these, in this order: ${emergencyFoodText()}; never ${NEVER_EAT_TEXT}.`
-                : 'Do not eat raw chicken or rotten flesh; keep the bread for last.');
+                : 'Do not eat raw chicken or rotten flesh; keep cooked meat and bread for the night.');
     },
 };
 
@@ -819,7 +821,7 @@ export class Agenda {
         const kind = state && noPickaxe(state) ? 'dirt (no pickaxe yet)' : 'cobblestone first';
         let armed = true;
         try { armed = state?.hasWeapon?.() !== false; } catch { armed = true; }
-        return `${STANDING_GOAL_PREFIX}keep food worth at least ${FOOD_TARGET.day} hunger (you hold ${held}) and ${SHELTER_HOLD} blocks for the night's shelter and its repairs (you have ${blocks}; ${kind}); `
+        return `${STANDING_GOAL_PREFIX}keep food worth at least ${FOOD_TARGET.day} points (you hold ${held}) and ${SHELTER_HOLD} blocks for the night's shelter and its repairs (you have ${blocks}; ${kind}); `
             + (armed ? '' : `${NO_WEAPON_FOOD}; `)
             + 'keep a weapon and a pickaxe, and make better ones when you can (a stone sword or axe, a spare pickaxe); '
             + `explore by day within ${STANDING.exploreRadius} blocks of ${where}, away from where you died (a zombie rises there and stays); `
@@ -849,7 +851,7 @@ export class Agenda {
         try { unarmed = state?.hasWeapon?.() === false; } catch { unarmed = false; }
         return `${OPEN_GOAL_PREFIX}step ${stuck.id} (${stuck.short}) is stuck: ${e.why}; ${when}. Its goal was: ${stuck.goal} `
             + 'Until then: gather the materials it needs, and explore nearby for them (rock piles, dead bushes, trees, a crafting table you placed), '
-            + `away from where you died. Keep food worth at least ${FOOD_TARGET.day} hunger${unarmed ? ` (${NO_WEAPON_FOOD})` : ''}, and keep ${SHELTER_HOLD} blocks of ${blocks} for the night's shelter and its repairs: do not place them.`;
+            + `away from where you died. Keep food worth at least ${FOOD_TARGET.day} points${unarmed ? ` (${NO_WEAPON_FOOD})` : ''}, and keep ${SHELTER_HOLD} blocks of ${blocks} for the night's shelter and its repairs: do not place them.`;
     }
 }
 
