@@ -49,8 +49,8 @@ export class OpenRouter {
     // Soak 13 (rotn-v0.1.19, usd_per_hour 0.0552 against 0.05): memory summaries were 42% of the spend, up to
     // 18,312 reasoning tokens for about 500 characters. `reasoning` (opts) asks OpenRouter for that reasoning
     // setting on this call only (promptMemSaving: { effort: 'none' }, OpenRouter's documented "disables
-    // reasoning entirely"). A model whose reasoning is mandatory rejects effort none: a 4xx on a call that
-    // carried `reasoning` (400, 404 or 422) is retried once without it; if that retry works, later calls send none.
+    // reasoning entirely"). A model whose reasoning is mandatory rejects effort none: a 400, 404 or 422 on a call that
+    // carried `reasoning` is retried once without it; if that retry returns a choice, later calls send none.
     async sendRequest(turns, systemMessage, stop_seq='*', { reasoning = null } = {}) {
         let messages = [{ role: 'system', content: systemMessage }, ...turns];
         messages = strictFormat(messages);
@@ -81,9 +81,12 @@ export class OpenRouter {
                 console.error(`[openrouter] the reasoning setting may have been refused (status ${status}); retrying without it`);
                 delete pack.reasoning;
                 completion = await this.openai.chat.completions.create(pack);
-                // The retry worked without it: the setting was the cause, so later calls send none (said once).
-                this.reasoningRefused = true;
-                console.error('[openrouter] the retry without the reasoning setting worked; sending none from now on');
+                // The retry returned a choice without it: the setting was the cause, so later calls send none
+                // (said once). A retry with no choice (an error body) proves nothing; the setting is kept.
+                if (completion?.choices?.[0]) {
+                    this.reasoningRefused = true;
+                    console.error('[openrouter] the retry without the reasoning setting worked; sending none from now on');
+                }
             }
             // One line per completion for the G3 harness's per-provider counts:
             // provider name, finish reason and content length only, never the body.
