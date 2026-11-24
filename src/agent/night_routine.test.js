@@ -15,6 +15,7 @@ import { maxHitOf } from './library/threats.js';
 import { shelterQuiet, SHELTER_QUIET_MODES, __modeForTest } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
 import { PIT, DIG_STALL } from './library/pit.js';
+import { foodRun } from './library/food_run.js';
 import { nightRelocationPlan, NIGHT_RELOCATE, RELOCATE } from './respawn_relocate.js';
 
 const reg = minecraftData('1.12.2');
@@ -1828,21 +1829,37 @@ test('CX23 soak: a repair that placed some blocks but left cells open says which
     assert.ok(logs.includes(`[night] the repair placed 1 but left some open (${line})`), logs.join('\n'));
 });
 
-test('G4 #5: at dusk the night routine logs the food held for the night (6 wanted); with too little it stays sealed anyway', async (t) => {
+test('G4 #5, soak 14 (F1): at dusk the night routine logs the food for the night in points against the night\'s need; short, a bounded food run first, then the shelter where it ended', async (t) => {
     quiet(t);
     const logs = [];
     t.mock.method(console, 'log', (l) => logs.push(String(l)));
     const agent = fakeAgent({ t: DUSK });
-    Object.assign(agent.bot, { food: 14, inventory: { items: () => [{ name: 'bread', metadata: 0, count: 2 }] } });
-    nightTick(agent, { now: 0, ops: ops() });
+    Object.assign(agent.bot, { food: 14, foodSaturation: 0, inventory: { items: () => [{ name: 'bread', metadata: 0, count: 2 }] } });
+    const o = ops();
+    const runs = [];
+    o.foodRun = (bot, opts) => { runs.push(opts); return Promise.resolve({ points: 2.8, why: 'time' }); };
+    nightTick(agent, { now: 0, ops: o });
     await settle(agent);
-    assert.ok(logs.includes('[night] food for the night: food worth 6 hunger held, food 14; enough'), logs.join('\n'));
+    // need = 7 + 0.3 x 26 - 14 = 0.8 (#611 review); 2 bread are 8.4 points.
+    assert.ok(logs.includes('[night] food for the night: food 14 (+0 saturation), held 8.4 points, the night needs about 0.8: enough'), logs.join('\n'));
+    assert.deepEqual(runs, [], 'enough: no run');
     const poor = fakeAgent({ t: DUSK });
-    Object.assign(poor.bot, { food: 9, inventory: { items: () => [] } });
-    nightTick(poor, { now: 0, ops: ops() });
+    Object.assign(poor.bot, { food: 9, foodSaturation: 1, inventory: { items: () => [] } });
+    const labels = [];
+    const run = poor.actions.runAction.bind(poor.actions);
+    poor.actions.runAction = (label, fn) => { labels.push(label); return run(label, fn); };
+    nightTick(poor, { now: 0, ops: o });
     await settle(poor);
-    assert.ok(logs.includes('[night] food for the night: food worth 0 hunger held, food 9; less than 6: staying sealed anyway (never out for food at night)'), logs.join('\n'));
-    assert.equal(nightState(poor).state, 'inside', 'it shelters as usual');
+    assert.ok(logs.includes('[night] food for the night: food 9 (+1 saturation), held 0 points, the night needs about 4.8: short by 4.8: a food run first (at most 3 min)'), logs.join('\n'));
+    assert.equal(runs.length, 1);
+    assert.deepEqual([runs[0].maxMs, runs[0].forage, runs[0].hunt, runs[0].need], [180_000, 24, 32, 4.8]);
+    assert.equal(typeof runs[0].stop, 'function');
+    assert.ok(logs.includes('[night] the food run ended: +2.8 points (time); building the shelter here'), logs.join('\n'));
+    assert.ok(!logs.some(l => /staying sealed/.test(l)), 'never "sealed" (soak 14 night 3)');
+    nightTick(poor, { now: 1, ops: o });
+    await settle(poor);
+    assert.equal(nightState(poor).state, 'inside', 'then it shelters as usual');
+    assert.deepEqual(labels.slice(0, 2), ['action:foodRun', 'action:buildShelter']);
 });
 
 
@@ -2522,8 +2539,8 @@ test('#477 review 1-3: leaveShelterFor clears the morning state; a failed leave 
 });
 
 // #477 review 4 (#478, ate_when_low): the routine holds the bot in its closed shelter (the morning
-// grace, and at night) with a zombie at the corner; the eating mode eats at food 12.
-test('#477 review 4: held by the morning grace, and at night, with a zombie at the corner, the eating mode eats at food 12', async (t) => {
+// grace, and at night) with a zombie at the corner; the eating mode eats at food EAT_AT (8 since soak 14).
+test('#477 review 4: held by the morning grace, and at night, with a zombie at the corner, the eating mode eats at food 8', async (t) => {
     quiet(t);
     const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5), metadata: [] };
     const eatingAt = async (agent) => {
@@ -2531,7 +2548,7 @@ test('#477 review 4: held by the morning grace, and at night, with a zombie at t
         const items = [{ name: 'harvestcraft:zucchiniitem', metadata: 0, count: 1 }, { name: 'bread', metadata: 0, count: 1 }];
         const eaten = [];
         Object.assign(bot, {
-            food: 12, health: 20, entities: { 1: bot.entity, 2: zombie },
+            food: 8, health: 20, entities: { 1: bot.entity, 2: zombie },
             inventory: { items: () => items.filter(i => i.count > 0), slots: [] },
             equip: (item) => { bot.held = item; return Promise.resolve(); },
             consume: () => { eaten.push(bot.held.name); bot.held.count--; bot.food += 3; return Promise.resolve(); },
@@ -2552,13 +2569,13 @@ test('#477 review 4: held by the morning grace, and at night, with a zombie at t
     assert.equal(nightTick(morning, { now: 10, ops: o }), 'night:inside');
     assert.match(morning.chat.at(-1), /staying in until it leaves/);
     assert.equal(morning.bot.rotnSheltered, true);
-    assert.deepEqual(await eatingAt(morning), ['harvestcraft:zucchiniitem'], 'eats at 12 in the grace');
+    assert.deepEqual(await eatingAt(morning), ['harvestcraft:zucchiniitem'], 'eats at 8 in the grace');
     // At night, sealed in, the zombie at the corner.
     const night = fakeAgent({ t: NIGHT });
     nightTick(night, { now: 0, ops: ops() }); await settle(night);
     assert.equal(nightState(night).state, 'inside');
     assert.equal(night.bot.rotnSheltered, true);
-    assert.deepEqual(await eatingAt(night), ['harvestcraft:zucchiniitem'], 'eats at 12 at night');
+    assert.deepEqual(await eatingAt(night), ['harvestcraft:zucchiniitem'], 'eats at 8 at night');
 });
 
 test('#478: the night does not save the standing goal; the hand-back keeps the last shelter for it', async (t) => {
@@ -4223,4 +4240,268 @@ test('#604 review: a hostile near after the walk back: the scroll is not used; a
     await nightThenMorning(u);
     assert.deepEqual(u.uses, [1]);
     assert.deepEqual(order, ['roof', 'rearm']);
+});
+
+// Soak 14 (F1, the lead): food 4 or lower at night with no safe food held: starving is certain (food 0 kills 4 s
+// later), a night outside is not. Once a night, the bot goes out for food (by the shelter's side), then
+// shelters again where the run ends; held below health 8 and while a mob is in the shelter's cells; exposed,
+// at once. Night 3: sunset at food 2, nothing held, no shelter: the run first, then the emergency, never "sealed".
+// #612 review (the lead's decisions): the tests run the REAL foodRun (library/food_run.js) with a fake world
+// (forage, hunt target, the hunt and its drop): at food 4 it hunts though "too weak"; a run a reflex interrupts
+// resumes within its 4 min; then back into the shelter and its opening repaired, or a shelter where it is.
+const S14_SWORD = { name: 'iron_sword', count: 1, metadata: 0, type: reg.itemsByName.iron_sword.id };
+function emergencySetup(t, { food = 4, health = 20, items = [S14_SWORD], hunts = ['killed'], back = true } = {}) {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const agent = fakeAgent({ t: NIGHT });
+    const inv = [...items];
+    Object.assign(agent.bot, { food: 9, health, inventory: { items: () => inv }, entities: {} });
+    const o = ops();
+    const calls = [];
+    const cow = { id: 5, name: 'animania:cow_holstein', type: 'mob', position: new Vec3(8.5, 64, 0.5) };
+    let huntsLeft = [...hunts];
+    const deps = {
+        forageNearby: () => { calls.push('forage'); return Promise.resolve(false); },
+        huntTarget: (bot, opts) => { calls.push(`target ${opts.radius}`); return huntsLeft.length ? cow : null; },
+        huntAnimal: (bot) => {
+            const end = huntsLeft.shift();
+            calls.push(`hunt ${end}`);
+            if (end === 'interrupted') bot.interrupt_code = true; // a reflex (eating, self_defense) stops the action
+            return Promise.resolve(end);
+        },
+        pickupKillDrops: () => { inv.push({ name: 'beef', metadata: 0, count: 3 }); calls.push('pickup'); return Promise.resolve(); },
+        equip: () => Promise.resolve(), rearm: () => Promise.resolve(),
+    };
+    const runs = [];
+    o.foodRun = (bot, opts) => { runs.push(opts); return foodRun(bot, { ...opts, deps }); };
+    o.rearmWeapon = () => Promise.resolve();
+    o.walks = [];
+    o.walkInto = (bot, site, opts) => { o.walks.push(opts?.maxMs); if (back) bot.entity.position = new Vec3(site.x + 0.5, site.y, site.z + 0.5); return Promise.resolve(back); };
+    const labels = [];
+    const run = agent.actions.runAction.bind(agent.actions);
+    agent.actions.runAction = (label, fn) => { labels.push(label); return run(label, fn); };
+    return { agent, o, logs, calls, runs, labels, inv, setFood: () => { agent.bot.food = food; } };
+}
+
+test('#612 review 1 and 3: at food 4 the night food run (the real one) hunts though weak, then the bot walks back into its shelter and the opening is repaired; once a night', async (t) => {
+    const s = emergencySetup(t);
+    nightTick(s.agent, { now: 0, ops: s.o }); await settle(s.agent);
+    assert.equal(nightState(s.agent).state, 'inside');
+    s.setFood();
+    assert.equal(nightTick(s.agent, { now: 1, ops: s.o }), 'night:food');
+    await settle(s.agent);
+    assert.equal(s.o.digs, 1, 'out by the shelter\'s side');
+    assert.deepEqual(s.calls, ['forage', 'target 16', 'hunt killed', 'pickup', 'target 16']);
+    assert.equal(s.runs[0].weakHunt, true);
+    assert.deepEqual([s.runs[0].maxMs, s.runs[0].forage, s.runs[0].hunt], [240_000, 16, 16]);
+    assert.ok(s.agent.chat.includes('[night] food 4 and no food held: starving is certain in about 16 min at rest, a night outside is not: out for food (at most 4 min)'), s.agent.chat.join('\n'));
+    assert.ok(s.agent.chat.includes('[night] the night food run ended: +4.8 points (no ripe wild food and no animal to hunt within 16 blocks)'), s.agent.chat.join('\n'));
+    assert.deepEqual(s.o.walks, [20_000], 'back in at most 20 s, no digging, no building (walkInto)');
+    assert.ok(s.agent.chat.includes('[night] back in the shelter at 0, 64, 0: closing it again'), s.agent.chat.join('\n'));
+    assert.equal(nightState(s.agent).state, 'inside');
+    assert.equal(s.agent.bot.rotnSheltered, 'open');
+    s.o.open = [SITE.offset(1, 0, 0), SITE.offset(1, 1, 0)];
+    nightTick(s.agent, { now: 2, ops: s.o }); await settle(s.agent);
+    assert.deepEqual(s.o.builds, [null, SITE], 'the opening repaired at the same site');
+    s.inv.length = 1; s.agent.bot.food = 3;
+    nightTick(s.agent, { now: 3, ops: s.o }); await settle(s.agent);
+    assert.equal(s.runs.length, 1, 'once a night');
+});
+
+test('#612 review 3: with no way back into the shelter, a new shelter where the run ended', async (t) => {
+    const s = emergencySetup(t, { back: false });
+    nightTick(s.agent, { now: 0, ops: s.o }); await settle(s.agent);
+    s.setFood();
+    nightTick(s.agent, { now: 1, ops: s.o }); await settle(s.agent);
+    assert.ok(s.logs.includes('[night] no way back into the shelter at 0, 64, 0; sheltering here'), s.logs.join('\n'));
+    assert.equal(nightState(s.agent).state, 'building');
+    nightTick(s.agent, { now: 2, ops: s.o }); await settle(s.agent);
+    assert.deepEqual(s.o.builds, [null, null], 'a fresh build where it is');
+    assert.equal(nightState(s.agent).state, 'inside');
+});
+
+test('#612 review 2: a run a reflex interrupts goes on after it within its 4 min (food gained does not end it); the night\'s one is used only by a run that ended', async (t) => {
+    const s = emergencySetup(t, { hunts: ['interrupted', 'killed'] });
+    nightTick(s.agent, { now: 0, ops: s.o }); await settle(s.agent);
+    s.setFood();
+    nightTick(s.agent, { now: 1, ops: s.o }); await settle(s.agent);
+    assert.ok(s.logs.some(l => /^\[night\] the night food run was interrupted; it goes on after the reflex \(\d+ s left\)$/.test(l)), s.logs.join('\n'));
+    assert.equal(nightState(s.agent).state, 'food');
+    s.agent.bot.interrupt_code = false; // the reflex is over
+    assert.equal(nightTick(s.agent, { now: 2, ops: s.o }), 'night:food');
+    await settle(s.agent);
+    assert.equal(s.runs.length, 2, 'resumed');
+    assert.ok(s.runs[1].maxMs <= 240_000 && s.runs[1].maxMs > 230_000, `the time left: ${s.runs[1].maxMs}`);
+    assert.equal(s.o.digs, 1, 'out of the shelter once');
+    assert.ok(s.logs.some(l => /^\[night\] the night food run goes on \(resume 1 of 5; \d+ s of it left\)$/.test(l)), s.logs.join('\n'));
+    assert.deepEqual(s.calls.filter(c => c.startsWith('hunt')), ['hunt interrupted', 'hunt killed']);
+    assert.equal(nightState(s.agent).state, 'inside', 'then back in');
+    // self_defense stopping the action before it ran: the same.
+    const d = emergencySetup(t);
+    nightTick(d.agent, { now: 0, ops: d.o }); await settle(d.agent);
+    d.setFood();
+    d.agent.actions.interruptNext = true;
+    nightTick(d.agent, { now: 1, ops: d.o }); await settle(d.agent);
+    assert.equal(d.runs.length, 0, 'the run never started');
+    assert.equal(nightState(d.agent).state, 'food');
+    nightTick(d.agent, { now: 2, ops: d.o }); await settle(d.agent);
+    assert.equal(d.runs.length, 1, 'it starts after the fight');
+    assert.equal(d.o.digs, 1);
+});
+
+test('#612 review 5 (the lead): the night food run waits below health 8 at food 3 or 4, goes at any health at food 2 or lower, waits while a mob is in the shelter\'s cells; exposed, at once', async (t) => {
+    const weak = emergencySetup(t, { health: 6 });
+    nightTick(weak.agent, { now: 0, ops: weak.o }); await settle(weak.agent);
+    weak.setFood();
+    nightTick(weak.agent, { now: 1, ops: weak.o }); await settle(weak.agent);
+    nightTick(weak.agent, { now: 2, ops: weak.o }); await settle(weak.agent);
+    assert.deepEqual(weak.runs, []);
+    assert.equal(weak.logs.filter(l => l === '[night] food 4 and no food held, but health 6 is below 8 at food 4: not out for food yet').length, 1, 'said once');
+    weak.agent.bot.food = 2;
+    nightTick(weak.agent, { now: 3, ops: weak.o }); await settle(weak.agent);
+    assert.equal(weak.runs.length, 1, 'food 2: at any health');
+    const cell = emergencySetup(t, { food: 2 });
+    nightTick(cell.agent, { now: 0, ops: cell.o }); await settle(cell.agent);
+    cell.setFood();
+    cell.agent.bot.entities = { 2: { id: 2, name: 'zombie', type: 'mob', position: new Vec3(0.6, 64, 0.4), height: 1.95 } };
+    nightTick(cell.agent, { now: 1, ops: cell.o }); await settle(cell.agent);
+    assert.deepEqual(cell.runs, []);
+    assert.ok(cell.logs.includes('[night] food 2 and no food held, but a mob is in the shelter\'s cells: not out for food yet'), cell.logs.join('\n'));
+    // Exposed (night 3: no shelter): at once, no digging out, and a shelter where it ends.
+    const open = emergencySetup(t, { food: 2 });
+    nightTick(open.agent, { now: 0, ops: open.o }); await settle(open.agent);
+    Object.assign(nightState(open.agent), { state: 'exposed', site: null });
+    open.setFood();
+    assert.equal(nightTick(open.agent, { now: 1, ops: open.o }), 'night:food');
+    await settle(open.agent);
+    assert.equal(open.runs.length, 1);
+    assert.equal(open.o.digs, 0, 'no shelter to leave');
+    assert.deepEqual(open.o.walks, [], 'no shelter to go back to');
+    assert.equal(nightState(open.agent).state, 'building');
+});
+
+test('soak 14 (F1, night 3): sunset at food 2 with nothing held: the food run first, never "staying sealed"; at night (a respawn) the line says the emergency rule watches', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const agent = fakeAgent({ t: DUSK });
+    Object.assign(agent.bot, { food: 2, foodSaturation: 0, health: 20, inventory: { items: () => [] } });
+    const o = ops({ closed: false });
+    const runs = [];
+    o.foodRun = (bot, opts) => { runs.push(opts); return Promise.resolve({ points: 0, why: 'no ripe wild food and no animal to hunt within 32 blocks' }); };
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    assert.ok(logs.includes('[night] food for the night: food 2 (+0 saturation), held 0 points, the night needs about 12.8: short by 12.8: a food run first (at most 3 min)'), logs.join('\n'));
+    assert.equal(runs.length, 1);
+    assert.ok(!logs.some(l => /sealed/.test(l)));
+    const night = fakeAgent({ t: NIGHT });
+    Object.assign(night.bot, { food: 12, foodSaturation: 0, health: 20, inventory: { items: () => [] } });
+    nightTick(night, { now: 0, ops: { ...ops(), foodRun: o.foodRun } });
+    await settle(night);
+    assert.ok(logs.includes('[night] food for the night: food 12 (+0 saturation), held 0 points, the night needs about 2.8: short by 2.8: night already: food 4 or lower with none held sends the bot out for food'), logs.join('\n'));
+    assert.equal(runs.length, 1, 'no run at night (the emergency rule instead)');
+});
+
+// Soak 14 (net-forge (D)): Hunger Overhaul's Mining Fatigue at low food (3: II, x0.09; 2: III; 1: IV): night 2's
+// hole shelter ran 10 min. No hole at food 3 or lower: said, and the night food run's rule is next.
+test('soak 14 (D): no hole shelter at food 3 or lower (Mining Fatigue II or worse); at food 4 the hole is dug', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', (...a) => logs.push(a.join(' ')));
+    const run = async (food) => {
+        const agent = fakeAgent({ t: NIGHT });
+        Object.assign(agent.bot, { food, health: 20, inventory: { items: () => [] } });
+        const o = ops({ closed: false });
+        o.pits = 0;
+        o.digPit = () => { o.pits++; return Promise.resolve(null); };
+        nightTick(agent, { now: 0, ops: o });
+        await settle(agent);
+        Object.assign(nightState(agent), { pitNext: true, nextAt: 0 });
+        nightTick(agent, { now: 1, ops: o });
+        await settle(agent);
+        return o.pits;
+    };
+    assert.equal(await run(3), 0);
+    assert.ok(logs.some(l => /no hole shelter at food 3: Hunger Overhaul's Mining Fatigue \(II\) makes every dig 11 times slower or more; eat first/.test(l)), logs.join('\n'));
+    assert.equal(await run(4), 1);
+});
+
+// #612 re-review (the lead): out of the shelter no hold keeps the bot outside: low health (food 3-4), 5 resumes or
+// 6 min since the emergency began end it (back into the shelter, or a shelter here); a run that throws is final; a
+// hole shelter is not walked back into.
+test('#612 re-review 1: out of the shelter after an interrupted run, health below 8 at food 4 ends the emergency: back into the shelter', async (t) => {
+    const s = emergencySetup(t, { hunts: ['interrupted', 'killed'] });
+    nightTick(s.agent, { now: 0, ops: s.o }); await settle(s.agent);
+    s.setFood();
+    nightTick(s.agent, { now: 1, ops: s.o }); await settle(s.agent);
+    assert.equal(nightState(s.agent).state, 'food');
+    s.agent.bot.interrupt_code = false;
+    s.agent.bot.health = 6;
+    nightTick(s.agent, { now: 2, ops: s.o }); await settle(s.agent);
+    assert.ok(s.agent.chat.includes('[night] the night food run ended: +0 points (health 6 at food 4)'), s.agent.chat.join('\n'));
+    assert.equal(s.runs.length, 1, 'no resume');
+    assert.deepEqual(s.o.walks, [20_000]);
+    assert.equal(nightState(s.agent).state, 'inside', 'back in, never left outside');
+});
+
+test('#612 re-review 2: a run that throws is a final ending (no resume); at most 5 resumes; 6 min after the start it ends', async (t) => {
+    // Thrown.
+    const thrown = emergencySetup(t);
+    thrown.o.foodRun = () => Promise.reject(new Error('boom'));
+    nightTick(thrown.agent, { now: 0, ops: thrown.o }); await settle(thrown.agent);
+    thrown.setFood();
+    nightTick(thrown.agent, { now: 1, ops: thrown.o }); await settle(thrown.agent);
+    assert.ok(thrown.agent.chat.includes('[night] the night food run ended: +0 points (the run failed)'), thrown.agent.chat.join('\n'));
+    assert.equal(nightState(thrown.agent).state, 'inside', 'back in');
+    nightTick(thrown.agent, { now: 2, ops: thrown.o }); await settle(thrown.agent);
+    assert.equal(nightState(thrown.agent).state, 'inside', 'no second run');
+    // Interrupted every time: 1 run and 5 resumes, then the end.
+    const many = emergencySetup(t, { hunts: Array(10).fill('interrupted') });
+    nightTick(many.agent, { now: 0, ops: many.o }); await settle(many.agent);
+    many.setFood();
+    for (let k = 1; k <= 8; k++) { many.agent.bot.interrupt_code = false; nightTick(many.agent, { now: k, ops: many.o }); await settle(many.agent); }
+    assert.equal(many.runs.length, 6, 'the run and 5 resumes');
+    assert.ok(many.agent.chat.includes('[night] the night food run ended: +0 points (5 resumes)'), many.agent.chat.join('\n'));
+    assert.equal(nightState(many.agent).state, 'inside');
+    // 6 min after the start (reflex time counts): the end.
+    const late = emergencySetup(t, { hunts: ['interrupted', 'killed'] });
+    nightTick(late.agent, { now: 0, ops: late.o }); await settle(late.agent);
+    late.setFood();
+    nightTick(late.agent, { now: 1, ops: late.o }); await settle(late.agent);
+    late.agent.bot.interrupt_code = false;
+    nightTick(late.agent, { now: 1 + 6 * 60_000, ops: late.o }); await settle(late.agent);
+    assert.equal(late.runs.length, 1, 'no resume after 6 min');
+    assert.ok(late.agent.chat.includes('[night] the night food run ended: +0 points (6 min since it began)'), late.agent.chat.join('\n'));
+});
+
+test('#612 re-review 3: from a hole shelter (its roof and stairs dug open) the bot does not walk back in: a shelter where it is', async (t) => {
+    const s = emergencySetup(t);
+    s.o.pitOut = () => { s.o.pitOuts = (s.o.pitOuts ?? 0) + 1; return Promise.resolve(new Vec3(1, 65, 0)); };
+    nightTick(s.agent, { now: 0, ops: s.o }); await settle(s.agent);
+    nightState(s.agent).pit = true;
+    s.setFood();
+    nightTick(s.agent, { now: 1, ops: s.o }); await settle(s.agent);
+    assert.equal(s.o.pitOuts, 1, 'out by the hole\'s stairs');
+    assert.deepEqual(s.o.walks, [], 'no walk back into the hole');
+    assert.ok(s.agent.chat.includes('[night] the hole shelter at 0, 64, 0 is open (roof and stairs dug): not going back into it; sheltering again here'), s.agent.chat.join('\n'));
+    assert.equal(nightState(s.agent).state, 'building');
+});
+
+// #612 second re-review (deferred nit): a run that ends before the bot is out (the dig-out failed) returns to the old
+// shelter (state inside, its site, the repair path), not a fresh build.
+test('#612 deferred nit: no way out of the shelter: back to the old shelter and its repair, not a fresh build', async (t) => {
+    const s = emergencySetup(t);
+    s.o.digOut = () => { s.o.digs++; return Promise.resolve(null); };
+    nightTick(s.agent, { now: 0, ops: s.o }); await settle(s.agent);
+    s.setFood();
+    nightTick(s.agent, { now: 1, ops: s.o }); await settle(s.agent);
+    assert.ok(s.agent.chat.includes('[night] the night food run ended: +0 points (no way out of the shelter at 0, 64, 0)'), s.agent.chat.join('\n'));
+    assert.ok(s.agent.chat.includes('[night] still in the shelter at 0, 64, 0: closing it again'), s.agent.chat.join('\n'));
+    assert.equal(nightState(s.agent).state, 'inside');
+    assert.deepEqual(nightState(s.agent).site, SITE);
+    assert.deepEqual(s.runs, [], 'no run');
+    s.o.open = [SITE.offset(1, 0, 0)];
+    nightTick(s.agent, { now: 2, ops: s.o }); await settle(s.agent);
+    assert.deepEqual(s.o.builds, [null, SITE], 'the repair at the old site, no fresh build');
 });

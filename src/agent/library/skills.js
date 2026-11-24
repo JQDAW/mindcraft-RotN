@@ -18,8 +18,14 @@ import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, 
 import { logAte, fightJournal, swingLine, logWeapon, mobName } from "./survival_log.js";
 import { waitText } from './wait_text.js';
 import { digBudget, digLine, effectsText, DIG_STALL } from './pit.js';
-import { foodKey } from "./food.js";
+import { foodKey, foodValue } from "./food.js";
 import { getItem as rotnItem, registryName as rotnRegistryName } from "../../../packages/rotn-data/index.js";
+/**
+ * Soak 14, #612 review 8: the item classes (rotn-data's) !consume may eat or drink although rotn-data has no food
+ * value: foods, potions, milk, soups. A water bucket (ItemBucket) or wheat (Item) is no food.
+ */
+const EDIBLE_CLASS = /Food|Potion|BucketMilk|Soup|Stew|Drink/i;
+export const CONSUME_TRY_MS = 3000;
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
@@ -3285,9 +3291,24 @@ export async function consume(bot, itemName="") {
         return false;
     }
     if (spawnScrollRefused(bot, item)) return false;
+    // Soak 14 (F1): !consume("wheat") at food 2 ended in "Promise timed out" 3 s later. An item that is no food
+    // on this pack (rotn-data's food values) and no drink is said at once.
+    // #612 review 8 (the lead): an item rotn-data knows as no food (its class no food, drink or potion: wheat, a
+    // water bucket) is refused; one rotn-data does not list, or a food it has no value for, gets a short try.
+    const known = (() => { try { return rotnItem(rotnRegistryName(item.name)); } catch { return null; } })();
+    const value = foodValue(item);
+    if (!value && known && !EDIBLE_CLASS.test(known.class ?? '')) {
+        log(bot, `${item.name} is not food on this pack: nothing to eat.${/(^|:)wheat$/.test(item.name ?? '') ? ' 3 wheat make bread at a crafting table.' : ''}`);
+        return false;
+    }
     await bot.equip(item, 'hand');
     const before = bot.food;
-    await bot.consume();
+    if (!value) {
+        let timer;
+        const r = await Promise.race([Promise.resolve(bot.consume()).then(() => 'ok', () => 'failed'),
+            new Promise(resolve => { timer = setTimeout(() => resolve('time'), CONSUME_TRY_MS); })]).finally(() => clearTimeout(timer));
+        if (r !== 'ok') { log(bot, `${item.name} was not eaten within ${CONSUME_TRY_MS / 1000} s: it may be no food on this pack.`); return false; }
+    } else await bot.consume();
     await logAte(bot, foodKey(item), before); // G4 #5: the journal's eat line (the same item form as the eating reflex)
     log(bot, `Consumed ${item.name}.`);
     return true;
@@ -4289,7 +4310,7 @@ export async function forageOne(bot, target, run = currentRun(bot), limits = {})
     return 'ok';
 }
 
-export async function forageNearby(bot, { max = FORAGE_RUN.max, keepGoing = () => true, limits = {} } = {}) {
+export async function forageNearby(bot, { max = FORAGE_RUN.max, keepGoing = () => true, limits = {}, radius = FORAGE.radius } = {}) {
     /**
      * Gather ripe wild food near the bot (G4 #5, rotn-data forageFood): right-click Rustic wildberry
      * bushes that have berries, break ripe wild herbs and HarvestCraft gardens. Never a bare bush or
@@ -4310,7 +4331,7 @@ export async function forageNearby(bot, { max = FORAGE_RUN.max, keepGoing = () =
     while (done + failed < max) {
         if (run.aborted || bot.interrupt_code || !keepGoing()) break;
         if (Date.now() - start >= L.totalMs) { timedOut = true; break; }
-        const target = forageTarget(bot, { bases, skipped });
+        const target = forageTarget(bot, { bases, skipped, radius }); // soak 14 (F1): the night food run looks 16 blocks out
         if (!target) break;
         const r = await forageOne(bot, target, run, L);
         if (r === 'interrupted') break;
@@ -4325,7 +4346,7 @@ export async function forageNearby(bot, { max = FORAGE_RUN.max, keepGoing = () =
     for (const item of bot.inventory.items()) { const k = inventoryKey(item) ?? item.name; gained[k] = (gained[k] ?? 0) + item.count; }
     const got = Object.entries(gained).map(([k, n]) => [k, n - (before[k] ?? 0)]).filter(([, n]) => n > 0);
     if (skipped.length) log(bot, `Left alone (may be a player's): ${[...new Set(skipped)].slice(0, 2).join('; ')}.`);
-    if (done === 0 && failed === 0) log(bot, `No ripe wild food within ${FORAGE.radius} blocks (wildberry bushes with berries, ripe herbs, HarvestCraft gardens).`);
+    if (done === 0 && failed === 0) log(bot, `No ripe wild food within ${radius} blocks (wildberry bushes with berries, ripe herbs, HarvestCraft gardens).`);
     else log(bot, `Foraged ${done} block${done === 1 ? '' : 's'}${got.length ? `: got ${got.map(([k, n]) => `${n} ${k}`).join(', ')}` : ', got nothing'}${timedOut ? ` (time limit of ${secsText(L.totalMs)} reached)` : ''}.`);
     return got.length > 0;
 }

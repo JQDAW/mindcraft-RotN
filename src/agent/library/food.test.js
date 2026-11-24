@@ -42,30 +42,32 @@ test('#206 review: auto-eat (it sees names only) bans every food harmful at any 
     for (const n of ['bread', 'cooked_beef', 'rustic:wildberries']) assert.ok(!banned.includes(n), n);
 });
 
-test('D1: with the pack values, cooked beef (2) before berries (1), bread (3) only as the last resort', () => {
+test('D1, soak 14 (F1): with the pack values, the least valuable first: berries (1.1) before cooked beef (2.8) before bread (4.2); the most valuable at EAT_NOW_AT', () => {
     const bread = stack('bread', 0, 3), berries = stack('rustic:wildberries', 0, 4), beef = stack('cooked_beef', 0, 1);
-    assert.equal(chooseFood(invBot([bread, berries, beef])), beef);
-    assert.equal(chooseFood(invBot([bread, berries])), berries);
+    assert.equal(chooseFood(invBot([bread, berries, beef])), berries);
+    assert.equal(chooseFood(invBot([bread, beef])), beef);
+    assert.equal(chooseFood(invBot([bread, berries, beef]), { largest: true }), bread, 'at EAT_NOW_AT: the most valuable');
     assert.equal(chooseFood(invBot([bread, stack('fish', 3, 2)])), bread, 'a pufferfish is never the alternative');
     assert.equal(chooseFood(invBot([stack('fish', 0, 1), stack('fish', 3, 1)])).metadata, 0, 'cod, by meta');
 });
 
-test('D1: the most hunger first, the bread only as the last resort, given-up foods skipped', () => {
+test('D1, soak 14 (F1): the least valuable first (largest: the most), bread no last resort, given-up foods skipped', () => {
     const values = { 'minecraft:bread:0': 3, 'rustic:wildberries:0': 1, 'minecraft:cooked_beef:0': 2 };
     const valueFn = (item) => (values[foodKey(item)] ? { hunger: values[foodKey(item)], saturation: 0 } : null);
     const bread = stack('bread', 0, 3), berries = stack('rustic:wildberries', 0, 4), beef = stack('cooked_beef', 0, 1);
-    assert.equal(chooseFood(invBot([bread, berries]), { valueFn }), berries, 'bread kept although it gives more');
-    assert.equal(chooseFood(invBot([bread, berries, beef]), { valueFn }), beef, 'the most hunger of the others');
+    assert.equal(chooseFood(invBot([bread, berries]), { valueFn }), berries, 'the least valuable first');
+    assert.equal(chooseFood(invBot([bread, beef]), { valueFn }), beef);
+    assert.equal(chooseFood(invBot([bread, berries, beef]), { valueFn, largest: true }), bread, 'largest: the most hunger');
     assert.equal(chooseFood(invBot([bread, beef]), { valueFn, skip: new Set(['minecraft:cooked_beef:0']) }), bread, 'beef given up: bread is all that is left');
     assert.equal(chooseFood(invBot([]), { valueFn }), null);
 });
 
-test('D1: eat at 12 or lower when idle and safe, at 6 or lower always', () => {
-    assert.equal(EAT_AT, 12);
-    assert.equal(wantsToEat(13, { idle: true }), false);
-    assert.equal(wantsToEat(12, { idle: true }), true);
-    assert.equal(wantsToEat(12, { idle: false }), false, 'an action is not cut for a food level of 12');
-    assert.equal(wantsToEat(10, { idle: true, threatened: true }), false, 'not with a mob near');
+test('D1, soak 14 (F1): eat at 8 or lower when idle and safe, at 6 or lower always', () => {
+    assert.equal(EAT_AT, 8);
+    assert.equal(wantsToEat(9, { idle: true }), false, 'soak 14: not at 9 (12 ate every find at once)');
+    assert.equal(wantsToEat(8, { idle: true }), true);
+    assert.equal(wantsToEat(8, { idle: false }), false, 'an action is not cut for a food level of 8');
+    assert.equal(wantsToEat(7, { idle: true, threatened: true }), false, 'not with a mob near');
     assert.equal(wantsToEat(EAT_NOW_AT, { idle: false, threatened: true }), true, 'at 6 in a fight too');
     assert.equal(wantsToEat(undefined, { idle: true }), false);
 });
@@ -120,23 +122,23 @@ test('D1: the eating mode eats the chosen food, and only when it should', async 
     const mode = freshMode();
     assert.deepEqual(mode.interrupts, ['all']);
 
-    const full = eatBot([stack('rustic:wildberries', 0, 3)], 13);
+    const full = eatBot([stack('rustic:wildberries', 0, 3)], 9);
     await mode.update(modeAgent(full.bot));
     await settled();
     assert.deepEqual(full.eaten, []);
 
-    const idle = eatBot([stack('bread', 0, 1), stack('rustic:wildberries', 0, 3)], 12);
+    const idle = eatBot([stack('bread', 0, 1), stack('rustic:wildberries', 0, 3)], 8);
     await mode.update(modeAgent(idle.bot));
     await settled();
     assert.deepEqual(idle.eaten, ['rustic:wildberries']);
-    assert.ok(logs.includes('[reflex] ate rustic:wildberries:0 at food 12'), logs.join('\n'));
+    assert.ok(logs.includes('[reflex] ate rustic:wildberries:0 at food 8'), logs.join('\n'));
     // G4 #5: the journal's eat line, with the food level after it.
-    assert.ok(logs.includes('[survival] ate rustic:wildberries:0 food 12->15'), logs.join('\n'));
+    assert.ok(logs.includes('[survival] ate rustic:wildberries:0 food 8->11'), logs.join('\n'));
 
-    const busy = eatBot([stack('rustic:wildberries', 0, 3)], 10);
+    const busy = eatBot([stack('rustic:wildberries', 0, 3)], 7);
     await mode.update(modeAgent(busy.bot, { idle: false, label: 'action:collectBlocks' }));
     await settled();
-    assert.deepEqual(busy.eaten, [], 'not during an action at 10');
+    assert.deepEqual(busy.eaten, [], 'not during an action at 7');
 });
 
 test('#206 review 4: in a fight it eats at food 6 or lower, not above; eating comes before the fight modes', async (t) => {
@@ -190,14 +192,18 @@ test('#206 review 2: an eat that did not happen backs off, and a food that alway
 });
 
 // G4 #5 (CX23 soak m1: food fell to 1): the food reserve's rule, shared by the agenda and the hunting reflex.
-test('G4 #5: foodShortfall: never at night; before night 8 held; once the agenda is done 12; at food 12 or lower with none held, always', async () => {
+test('G4 #5, soak 14 (F1): foodShortfall: never at night; before night the night\'s need in points; once the agenda is done 12; at food 12 or lower with none held, always', async () => {
     const { foodShortfall, FOOD_TARGET } = await import('./food.js');
-    assert.deepEqual(FOOD_TARGET, { day: 12, night: 8, dusk: 6 });
+    assert.deepEqual(FOOD_TARGET, { day: 12 });
     const f = (o) => foodShortfall({ food: 15, held: 0, minutesToSunset: 30, finished: false, reserveLeadMin: 10, ...o });
     assert.equal(f({ minutesToSunset: 0 }), null, 'night: never (stays sealed)');
     assert.equal(f({ minutesToSunset: 0, food: 2 }), null, 'not even starving');
-    assert.equal(f({ minutesToSunset: 8, held: 7 }), 8, 'before night: 8');
-    assert.equal(f({ minutesToSunset: 8, held: 8 }), null);
+    // need = 7 + 0.3 x 26 - (food + saturation) (#611 review): food 8, saturation 0: 6.8; food 12, saturation 2: 0.8.
+    assert.equal(f({ minutesToSunset: 8, food: 8, held: 6.7 }), 6.8, 'before night: the need');
+    assert.equal(f({ minutesToSunset: 8, food: 8, held: 6.8 }), null);
+    assert.equal(f({ minutesToSunset: 8, food: 12, saturation: 2, held: 0.5 }), 0.8);
+    assert.equal(f({ minutesToSunset: 8, held: 0 }), null, 'food 15: the bar covers the night');
+    assert.equal(f({ minutesToSunset: 8, food: 20, saturation: 5, held: 0 }), null, 'a full bar: no need');
     assert.equal(f({ finished: true, held: 11 }), 12, 'agenda done, by day: 12');
     assert.equal(f({ finished: true, held: 12 }), null);
     assert.equal(f({ held: 3 }), null, 'during the agenda by day: only when urgent');
@@ -206,11 +212,11 @@ test('G4 #5: foodShortfall: never at night; before night 8 held; once the agenda
     assert.equal(f({ food: undefined }), null, 'food unknown: never');
 });
 
-test('G4 #5: heldFoodHunger counts the safe food held by pack values; avoided food (raw chicken, rotten flesh) does not count', async () => {
-    const { heldFoodHunger } = await import('./food.js');
+test('G4 #5, soak 14: heldFoodPoints counts the safe food held by pack values (hunger + saturation); avoided food (raw chicken, rotten flesh) does not count', async () => {
+    const { heldFoodPoints } = await import('./food.js');
     const bot = invBot([stack('bread', 0, 2), stack('beef', 0, 3), stack('chicken', 0, 5), stack('rotten_flesh', 0, 4), stack('stick', 0, 9)], 10);
-    assert.equal(heldFoodHunger(bot), 2 * 3 + 3 * 1, 'bread 3 each, raw beef 1 each');
-    assert.equal(heldFoodHunger(invBot([], 10)), 0);
+    assert.equal(heldFoodPoints(bot), 13.2, 'bread 4.2 each, raw beef 1.6 each');
+    assert.equal(heldFoodPoints(invBot([], 10)), 0);
 });
 
 
@@ -250,17 +256,17 @@ test('soak 2: the eating reflex eats rotten flesh at food 5 with nothing else, a
 
 // Soak 4 (rotn-v0.1.7): a zombie stood at the corner of the closed shelter all morning; the eating
 // reflex took it for a threat and waited for food 6 (food 20 -> 11 with food held, no eat line).
-test('soak 4: in a closed night shelter a mob outside is no threat to eating (food 12 eats); with a wall open it is', async (t) => {
+test('soak 4: in a closed night shelter a mob outside is no threat to eating (food 8 eats); with a wall open it is', async (t) => {
     quiet(t);
     const mode = freshMode();
     const zombie = { name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 1.5), metadata: [] };
-    const shut = eatBot([stack('rustic:wildberries', 0, 3)], 12);
+    const shut = eatBot([stack('rustic:wildberries', 0, 3)], 8);
     shut.bot.entities = { 1: shut.bot.entity, 2: zombie };
     shut.bot.rotnSheltered = true;
     await mode.update(modeAgent(shut.bot));
     await settled();
-    assert.deepEqual(shut.eaten, ['rustic:wildberries'], 'sealed in: it eats at 12');
-    const open = eatBot([stack('rustic:wildberries', 0, 3)], 12);
+    assert.deepEqual(shut.eaten, ['rustic:wildberries'], 'sealed in: it eats at 8');
+    const open = eatBot([stack('rustic:wildberries', 0, 3)], 8);
     open.bot.entities = { 1: open.bot.entity, 2: zombie };
     open.bot.rotnSheltered = 'open';
     Object.assign(mode, { wait_until: -Infinity });
@@ -272,14 +278,14 @@ test('soak 4: in a closed night shelter a mob outside is no threat to eating (fo
 // Soak 4 evidence (#478), ate_when_low failed: "low" at food 12 (11:56:59) while the night routine
 // held the bot in its closed shelter in the morning, a zombie at the corner (-58,65,-81 by
 // -59,65,-82); the reflex ate only at food 6, 24 min later. The same sequence now eats at 12.
-test('#478 ate_when_low: held in the closed shelter with a zombie at the corner, food 13 -> 12 ("low") eats at 12, not at 6', async (t) => {
+test('#478 ate_when_low: held in the closed shelter with a zombie at the corner, food 9 -> 8 ("low", soak 14: EAT_AT 8) eats at 8, not at 6', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
     t.mock.method(console, 'warn', () => {});
     const { foodCheck } = await import('./survival_log.js');
     const mode = freshMode();
     // The soak's held food: bread, a zucchini, a sweet potato, garlic (bread last).
-    const held = eatBot([stack('bread', 0, 1), stack('harvestcraft:zucchiniitem', 0, 1), stack('harvestcraft:sweetpotatoitem', 0, 1), stack('harvestcraft:garlicitem', 0, 1)], 13);
+    const held = eatBot([stack('bread', 0, 1), stack('harvestcraft:zucchiniitem', 0, 1), stack('harvestcraft:sweetpotatoitem', 0, 1), stack('harvestcraft:garlicitem', 0, 1)], 9);
     const bot = held.bot;
     Object.assign(bot, { health: 20, entity: { position: new Vec3(-58.5, 65, -81.5) }, rotnSheltered: true });
     bot.entities = { 1: bot.entity, 2: { id: 2, name: 'zombie', type: 'mob', position: new Vec3(-57.5, 65, -80.5), metadata: [] } };
@@ -288,24 +294,24 @@ test('#478 ate_when_low: held in the closed shelter with a zombie at the corner,
     foodCheck(state, bot, 0);
     await mode.update(agent);
     await settled();
-    assert.deepEqual(held.eaten, [], 'at 13 it does not eat yet');
-    bot.food = 12;
-    assert.equal(foodCheck(state, bot, 1000), '[survival] food 12 health 20 (low)');
+    assert.deepEqual(held.eaten, [], 'at 9 it does not eat yet');
+    bot.food = 8;
+    assert.equal(foodCheck(state, bot, 1000), '[survival] food 8 health 20 (low)');
     await mode.update(agent);
     await settled();
-    assert.equal(held.eaten.length, 1, 'it eats at 12');
-    assert.notEqual(held.eaten[0], 'bread', 'bread last');
-    assert.ok(logs.some(l => /^\[reflex\] ate \S+ at food 12$/.test(l)), logs.join('\n'));
+    assert.equal(held.eaten.length, 1, 'it eats at 8');
+    assert.notEqual(held.eaten[0], 'bread', 'the least valuable first: not the bread');
+    assert.ok(logs.some(l => /^\[reflex\] ate \S+ at food 8$/.test(l)), logs.join('\n'));
 });
 
 // Soak 6 (b): during the eel loop food fell from 12 to 10 over 8 min (18:41:12 to 18:49:30): the
 // eating reflex at food 12 waited for an idle bot with no threat, and self_defense and unstuck took
 // turns all along. Now a reflex's own action is no work to wait for, and a melee mob that is not
 // within 4 blocks and has not hurt the bot in 10 s does not put off the eat.
-test('soak 6 (b): between fights (a reflex\'s action) at food 12 or lower it eats unless the melee mob is close or hurt it lately; never cuts the model\'s action at 11', async (t) => {
+test('soak 6 (b): between fights (a reflex\'s action) at food 8 or lower it eats unless the melee mob is close or hurt it lately; never cuts the model\'s action at 7', async (t) => {
     quiet(t);
     const zombieAt = (x) => ({ 1: null, 2: { id: 2, name: 'zombie', type: 'mob', position: new Vec3(x, 64, 0), metadata: [] } });
-    const run = async ({ x = 6, label = 'mode:unstuck', hurtAgo = Infinity, sword = false, food = 11 } = {}) => {
+    const run = async ({ x = 6, label = 'mode:unstuck', hurtAgo = Infinity, sword = false, food = 7 } = {}) => {
         const mode = freshMode();
         const items = [stack('rustic:wildberries', 0, 3), ...(sword ? [stack('iron_sword', 0, 1)] : [])];
         const b = eatBot(items, food);
@@ -324,8 +330,8 @@ test('soak 6 (b): between fights (a reflex\'s action) at food 12 or lower it eat
     assert.deepEqual(await run({ label: 'mode:self_defense', sword: true }), ['rustic:wildberries'], 'a fight action: its turn too');
     assert.deepEqual(await run({ x: 3, sword: true }), [], 'the zombie within 4: not now');
     assert.deepEqual(await run({ hurtAgo: 5_000, sword: true }), [], 'hurt 5 s ago: not now');
-    assert.deepEqual(await run({ label: 'action:collectBlocks' }), [], 'the model\'s action is not cut at 11');
-    assert.deepEqual(await run({ food: 13 }), [], 'not hungry');
+    assert.deepEqual(await run({ label: 'action:collectBlocks' }), [], 'the model\'s action is not cut at 7');
+    assert.deepEqual(await run({ food: 9 }), [], 'not hungry');
 });
 
 // ---- Soak 12 (rotn-v0.1.18), death 1 at 15:11 ----
@@ -348,11 +354,11 @@ test('soak 12 (A3): only a food level or item count change is an eat; a consume 
     assert.equal(ok.cut, undefined);
 });
 
-test('soak 12 (A2, death 1): in a closed shelter a zombie in the bot\'s cell (or the roof cell over it) puts off the eat at food 12; one outside the walls does not (soak 4); hurt just now, not now', async (t) => {
+test('soak 12 (A2, death 1): in a closed shelter a zombie in the bot\'s cell (or the roof cell over it) puts off the eat at food 8; one outside the walls does not (soak 4); hurt just now, not now', async (t) => {
     quiet(t);
     const run = async (pos, { hurtAgo = Infinity, site = null } = {}) => {
         const mode = freshMode();
-        const b = eatBot([stack('animania:raw_prime_mutton', 0, 2)], 12);
+        const b = eatBot([stack('animania:raw_prime_mutton', 0, 2)], 8);
         b.bot.entities = { 1: b.bot.entity, 2: { id: 2, name: 'zombie', type: 'mob', position: pos, height: 1.95, metadata: [] } };
         b.bot.rotnSheltered = true;
         b.bot.lastDamageTime = Date.now() - hurtAgo;
@@ -374,7 +380,7 @@ test('soak 12 (A3, the lead): a cut eat is no failure of that food (never given 
     t.mock.method(console, 'log', () => {});
     t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
     const mode = freshMode();
-    const b = eatBot([stack('animania:raw_prime_mutton', 0, 3)], 12);
+    const b = eatBot([stack('animania:raw_prime_mutton', 0, 3)], 8);
     let cuts = 0;
     b.bot.consume = () => { cuts++; return Promise.resolve(); };
     const agent = modeAgent(b.bot);
@@ -382,13 +388,13 @@ test('soak 12 (A3, the lead): a cut eat is no failure of that food (never given 
     assert.equal(cuts, 4);
     assert.equal(mode.given_up.size, 0, 'four cuts: still not given up (3 failures would give it up)');
     assert.deepEqual(mode.fails, {});
-    assert.ok(warns.some(l => /^\[reflex\] eating: the eat of animania:raw_prime_mutton:0 was cut after \d+ ms \(no food or count change, food 12\); trying again in 3 s$/.test(l)), warns.join('\n'));
-    // Within the cut wait: at 12 it waits; at EAT_NOW_AT with nothing near it eats now; with a zombie
+    assert.ok(warns.some(l => /^\[reflex\] eating: the eat of animania:raw_prime_mutton:0 was cut after \d+ ms \(no food or count change, food 8\); trying again in 3 s$/.test(l)), warns.join('\n'));
+    // Within the cut wait: at 8 it waits; at EAT_NOW_AT with nothing near it eats now; with a zombie
     // within 4 blocks it waits.
     assert.ok(mode.wait_until > Date.now() && mode.cut_wait);
     await mode.update(agent);
     await settled(200);
-    assert.equal(cuts, 4, 'food 12: the wait holds');
+    assert.equal(cuts, 4, 'food 8: the wait holds');
     b.bot.food = EAT_NOW_AT;
     b.bot.entities = { 1: b.bot.entity, 2: { id: 2, name: 'zombie', type: 'mob', position: new Vec3(3, 64, 0), metadata: [] } };
     await mode.update(agent);
@@ -409,10 +415,10 @@ test('#592 review nit 3: the settle is 300 ms (a lagging server); a change that 
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
     t.mock.method(console, 'warn', () => {});
     const mode = freshMode();
-    const b = eatBot([stack('animania:raw_prime_mutton', 0, 2)], 12);
+    const b = eatBot([stack('animania:raw_prime_mutton', 0, 2)], 8);
     let consumes = 0;
     // The server's update arrives 400 ms after the resolve: past the settle.
-    b.bot.consume = () => { consumes++; setTimeout(() => { b.bot.food = 13; b.bot.held.count--; }, 400); return Promise.resolve(); };
+    b.bot.consume = () => { consumes++; setTimeout(() => { b.bot.food = 9; b.bot.held.count--; }, 400); return Promise.resolve(); };
     const agent = modeAgent(b.bot);
     await mode.update(agent);
     await settled(350);
@@ -420,9 +426,25 @@ test('#592 review nit 3: the settle is 300 ms (a lagging server); a change that 
     await settled(150);
     await mode.update(agent);
     await settled(50);
-    assert.ok(logs.includes('[reflex] ate animania:raw_prime_mutton:0 at food 12 (it showed after the eat was judged cut)'), logs.join('\n'));
+    assert.ok(logs.includes('[reflex] ate animania:raw_prime_mutton:0 at food 8 (it showed after the eat was judged cut)'), logs.join('\n'));
     // #592 re-review nit 1: and the journal's line, which the harness's ate_when_low counts.
-    assert.ok(logs.includes('[survival] ate animania:raw_prime_mutton:0 food 12->13'), logs.join('\n'));
-    assert.equal(consumes, 1, 'food 13: no second eat');
+    assert.ok(logs.includes('[survival] ate animania:raw_prime_mutton:0 food 8->9'), logs.join('\n'));
+    assert.equal(consumes, 1, 'food 9: no second eat');
     assert.equal(mode.cut_wait, false);
+});
+
+// Soak 14 (F1, the lead): the reflex ate each find at once (food 9 to 12) and held nothing at any sunset.
+// Now it eats at EAT_AT (8), the least valuable first (the best is kept for the night); at EAT_NOW_AT (6) the most.
+test('soak 14 (F1): the eating mode eats berries before bread at 8; at 6 the bread first; at 9 nothing', async (t) => {
+    quiet(t);
+    const run = async (food) => {
+        const mode = freshMode();
+        const b = eatBot([stack('bread', 0, 1), stack('rustic:wildberries', 0, 2)], food);
+        await mode.update(modeAgent(b.bot));
+        await settled();
+        return b.eaten;
+    };
+    assert.deepEqual(await run(9), []);
+    assert.deepEqual(await run(8), ['rustic:wildberries']);
+    assert.deepEqual(await run(6), ['bread']);
 });
