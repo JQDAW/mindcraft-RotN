@@ -69,8 +69,23 @@ test('soak 14: a summary and a command call overlap and the command reply comes 
 });
 
 test('a failed summary (`[memory] summary returned …`) is a summary; a call not clearly paired falls back to the prompt size and is counted', () => {
-    const failed = [...call('10:00:00', 900, 5, 0.0001, 0), L('10:00:00', 'Received.'), L('10:00:00', '[memory] summary returned an empty reply; keeping the previous memory')];
+    // The real order (#607 review 1): openrouter.js ends an empty reply with `Empty content returned` (no
+    // `Received.`), and history.js then logs `[memory] summary returned an empty reply`.
+    const failed = [
+        ...call('10:00:00', 900, 5, 0.0001, 0),
+        L('10:00:00', 'Empty content returned (model x/y, finish_reason length)'),
+        L('10:00:00', '[memory] summary returned an empty reply; keeping the previous memory'),
+    ];
     assert.deepEqual(calls(parseJournal(failed.join('\n'))).list.map(c => c.kind), ['summary']);
+    // A command whose reply had no choices: `No completion or choices returned` ends it; agent.js goes on.
+    const nochoice = [
+        ...call('10:00:01', 4000, 0, 0.0001, null),
+        L('10:00:01', 'No completion or choices returned (model x/y): no choices in the response'),
+        L('10:00:01', 'Generated response: No response received.'),
+    ];
+    const nc = calls(parseJournal(nochoice.join('\n')));
+    assert.deepEqual(nc.list.map(c => c.kind), ['command']);
+    assert.equal(nc.unclear, 0);
     // Two replies before either caller line: neither is clear; the prompt-size rule decides each.
     const mixed = [
         ...call('10:00:01', 1999, 10, 0.0001, 5), L('10:00:01', 'Received.'),
@@ -86,8 +101,19 @@ test('a failed summary (`[memory] summary returned …`) is a summary; a call no
     assert.equal(o.unclear, 2);
     assert.equal(o.memory.calls, 1);
     assert.match(render(o), /2 calls not clearly paired \(the prompt-size rule for them\)/);
-    // A summary end line with no call waiting is counted.
-    assert.equal(calls(parseJournal(L('10:00:07', 'Memory updated to:  x'))).orphanEnds, 1);
+    // A summary whose request threw has no usage line: its end line has no reply waiting, counted and
+    // worded as normal (#607 review 2).
+    const threw = [
+        L('10:00:07', '[memory] summary turns 10 kept 5'),
+        L('10:00:07', 'Error while awaiting response: 502'),
+        L('10:00:07', '[memory] summary failed (502); keeping the previous memory'),
+        ...command('10:00:08', 4000, 10, 0.0001, 5),
+    ].join('\n');
+    const t = soakSpend(threw);
+    assert.equal(t.orphanEnds, 1);
+    assert.equal(t.memory.calls, 0);
+    assert.match(render(t), /; 1 summary end lines with no reply \(summaries whose request failed\)\./);
+    assert.doesNotMatch(render(t), /\*\*1 summary end/);
 });
 
 test('windows: a night from sunset (or "it is night") to its first [night] morning line; a call at the boundary goes to the next window', () => {
@@ -135,7 +161,7 @@ test('the soak 13 evidence: the README numbers (268 calls, USD 0.110436, 69 summ
     const file = path.join(ROOT, 'test/evidence/g4/g4soak-13-20261124/driver.log');
     const r = soakSpend(fs.readFileSync(file, 'utf8'));
     assert.equal(r.summaryEnds, 69);
-    assert.equal(r.unclear, 4); // all four have prompts over 2,000 tokens: commands by the fallback
+    assert.equal(r.unclear, 0); // its 4 empty-content replies now end at `Empty content returned` (#607 review 1)
     assert.equal(r.total.calls, 268);
     assert.equal(r.total.usd.toFixed(6), '0.110436');
     assert.equal(r.memory.calls, 69);
@@ -148,6 +174,16 @@ test('the soak 13 evidence: the README numbers (268 calls, USD 0.110436, 69 summ
     const result = JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'result.json'), 'utf8'));
     const g = soakSpend(fs.readFileSync(file, 'utf8'), { result }).usdPerHour;
     assert.deepEqual(g, { source: 'gate', value: 0.055172, minutes: 120, gateUsd: 0.110436, matches: true });
+});
+
+test('the soak 12 and 14 evidence: the README numbers stay (only the unclear counts changed, #607 review 1)', () => {
+    const read = (d) => soakSpend(fs.readFileSync(path.join(ROOT, `test/evidence/g4/${d}/driver.log`), 'utf8'));
+    const s12 = read('g4soak-12-20261123');
+    assert.deepEqual([s12.total.calls, s12.total.usd.toFixed(6), s12.memory.calls, s12.memory.usd.toFixed(6), s12.unclear], [203, '0.068589', 54, '0.021965', 0]);
+    const s14 = read('g4soak-14-20261124');
+    assert.deepEqual([s14.total.calls, s14.total.usd.toFixed(6), s14.memory.calls, s14.memory.usd.toFixed(6), s14.memory.reasoning, s14.unclear], [133, '0.074706', 22, '0.034425', 116060, 0]);
+    assert.deepEqual([s14.markers, s14.summaryEnds, s14.effortLines, s14.effortRefused], [22, 22, 1, 1]);
+    assert.deepEqual(s14.windows.map(w => w.all.calls), [75, 0, 23, 0, 34, 0, 1]);
 });
 
 test('the CLI: usage errors exit 2, a file with no usage line exits 1, --json parses', () => {
