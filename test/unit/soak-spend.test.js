@@ -21,52 +21,73 @@ const call = (time, prompt, completion, usd, reasoning, provider = 'Wafer') => [
     L(time, `[openrouter] usage prompt_tokens ${prompt}, completion_tokens ${completion}, cost_usd ${usd}`),
     ...(reasoning === null ? [] : [L(time, `[openrouter] reasoning_tokens ${reasoning}`)]),
 ];
+// The caller's lines after a reply: a command call's (agent.js) and a memory summary's (history.js).
+const reply = (time, kind) => [L(time, 'Received.'), L(time, kind === 'summary' ? 'Memory updated to:  some memory' : 'Generated response: !stats')];
+const command = (time, prompt, completion, usd, reasoning) => [...call(time, prompt, completion, usd, reasoning), ...reply(time, 'command')];
 const summary = (time, prompt, completion, usd, reasoning) => [
     L(time, '[memory] summary turns 10 kept 5'),
     L(time, '[openrouter] reasoning effort=none for this call'),
     ...call(time, prompt, completion, usd, reasoning),
+    ...reply(time, 'summary'),
 ];
 
-test('soak 14 rule: a summary is the usage line after a [memory] marker, whatever its prompt size', () => {
+test('a summary is the call whose reply goes to history.js (Memory updated to:), whatever its prompt size', () => {
     const text = [
         L('10:00:00', 'starting self-prompt loop'),
-        ...call('10:00:05', 1500, 100, 0.0001, 90), // a small command prompt: not a summary under the marker rule
+        ...command('10:00:05', 1500, 100, 0.0001, 90), // a small command prompt: still a command
         ...summary('10:00:10', 2600, 40, 0.0002, 0), // a 10-turn summary over 2,000 tokens: a summary
-        ...call('10:00:20', 4000, 200, 0.0003, null), // no reasoning_tokens line
+        ...command('10:00:20', 4000, 200, 0.0003, null), // no reasoning_tokens line
+        L('10:00:21', '[openrouter] the reasoning setting may have been refused (status 400); retrying without it'),
     ].join('\n');
-    const { memoryRule, list } = calls(parseJournal(text));
-    assert.equal(memoryRule, 'marker');
-    assert.deepEqual(list.map(c => c.memory), [false, true, false]);
-    assert.equal(list[1].effort, 'effort=none');
-    assert.equal(list[0].effort, null);
+    const { list, unclear } = calls(parseJournal(text));
+    assert.deepEqual(list.map(c => [c.kind, c.memory]), [['command', false], ['summary', true], ['command', false]]);
+    assert.equal(unclear, 0);
     assert.deepEqual(list.map(c => c.reasoning), [90, 0, null]);
     const r = soakSpend(text);
     assert.equal(r.memory.calls, 1);
     assert.equal(r.memory.reasoning, 0);
-    assert.equal(r.memoryWithEffort, 1);
+    assert.equal(r.summaryPromptsOver, 1);
+    assert.equal(r.markers, 1);
+    assert.equal(r.summaryEnds, 1);
     assert.equal(r.effortLines, 1);
+    assert.equal(r.effortRefused, 1);
     assert.equal(r.other.calls, 2);
-    assert.equal(r.total.reasoningLines, 2);
-    assert.match(render(r), /counted by: the `\[memory\] summary turns` marker \(1 markers, 0 with no usage line\)/);
+    assert.match(render(r), /: 1 summaries \(1 with a prompt of 2,000 tokens or more\), 1 summary end lines, 1 `\[memory\] summary turns` markers; 0 calls not clearly paired/);
 });
 
-test('before #601 (no marker in the log): the old rule, a prompt under 2,000 tokens, and it says so', () => {
-    const text = [...call('10:00:05', 1999, 10, 0.0001, 5), ...call('10:00:06', 2000, 10, 0.0001, 5)].join('\n');
-    const r = soakSpend(text);
-    assert.equal(r.memoryRule, 'prompt-size');
-    assert.equal(r.memory.calls, 1);
-    assert.match(render(r), /a prompt under 2,000 tokens \(no `\[memory\] summary turns` marker in this log\)/);
-});
-
-test('two markers before their calls (overlap): each claims the next usage line in order', () => {
+test('soak 14: a summary and a command call overlap and the command reply comes first; each is paired with its own reply', () => {
+    // history.js prints the marker and starts the summary; the next command's prompt goes out at once.
     const text = [
-        L('10:00:00', '[memory] summary turns 10 kept 5'),
-        L('10:00:00', '[memory] summary turns 10 kept 5'),
-        ...call('10:00:01', 900, 10, 0.0001, 0),
-        ...call('10:00:02', 900, 10, 0.0001, 0),
-        ...call('10:00:03', 900, 10, 0.0001, 0),
+        L('14:45:28', '[memory] summary turns 11 kept 4'),
+        L('14:45:30', 'Awaiting openrouter api response...'),
+        L('14:45:30', 'Awaiting openrouter api response...'),
+        ...call('14:45:31', 3442, 123, 0.000167, 92), ...reply('14:45:31', 'command'), // the command's reply first
+        ...call('14:45:36', 901, 300, 0.0002, 159), ...reply('14:45:36', 'summary'),
     ].join('\n');
-    assert.deepEqual(calls(parseJournal(text)).list.map(c => c.memory), [true, true, false]);
+    const { list } = calls(parseJournal(text));
+    assert.deepEqual(list.map(c => [c.prompt, c.kind]), [[3442, 'command'], [901, 'summary']]);
+});
+
+test('a failed summary (`[memory] summary returned …`) is a summary; a call not clearly paired falls back to the prompt size and is counted', () => {
+    const failed = [...call('10:00:00', 900, 5, 0.0001, 0), L('10:00:00', 'Received.'), L('10:00:00', '[memory] summary returned an empty reply; keeping the previous memory')];
+    assert.deepEqual(calls(parseJournal(failed.join('\n'))).list.map(c => c.kind), ['summary']);
+    // Two replies before either caller line: neither is clear; the prompt-size rule decides each.
+    const mixed = [
+        ...call('10:00:01', 1999, 10, 0.0001, 5), L('10:00:01', 'Received.'),
+        ...call('10:00:02', 2000, 10, 0.0001, 5), L('10:00:02', 'Received.'),
+        L('10:00:02', 'Generated response: !stats'),
+    ].join('\n');
+    const r = calls(parseJournal(mixed));
+    assert.deepEqual(r.list.map(c => [c.kind, c.memory]), [['unclear', true], ['command', false]]);
+    assert.equal(r.unclear, 1);
+    // No caller lines at all (a log from before these lines): every call by the prompt size.
+    const old = [...call('10:00:05', 1999, 10, 0.0001, 5), ...call('10:00:06', 2000, 10, 0.0001, 5)].join('\n');
+    const o = soakSpend(old);
+    assert.equal(o.unclear, 2);
+    assert.equal(o.memory.calls, 1);
+    assert.match(render(o), /2 calls not clearly paired \(the prompt-size rule for them\)/);
+    // A summary end line with no call waiting is counted.
+    assert.equal(calls(parseJournal(L('10:00:07', 'Memory updated to:  x'))).orphanEnds, 1);
 });
 
 test('windows: a night from sunset (or "it is night") to its first [night] morning line; a call at the boundary goes to the next window', () => {
@@ -110,10 +131,11 @@ test('self-prompting by line order: a call after the stop line in the same secon
     assert.equal(sp.ms, 60_000 + 60_000);
 });
 
-test('the soak 13 evidence: the README numbers (268 calls, USD 0.110436, 69 summaries by prompt size, 262 self-prompting calls)', () => {
+test('the soak 13 evidence: the README numbers (268 calls, USD 0.110436, 69 summaries paired with their replies, 262 self-prompting calls)', () => {
     const file = path.join(ROOT, 'test/evidence/g4/g4soak-13-20261124/driver.log');
     const r = soakSpend(fs.readFileSync(file, 'utf8'));
-    assert.equal(r.memoryRule, 'prompt-size');
+    assert.equal(r.summaryEnds, 69);
+    assert.equal(r.unclear, 4); // all four have prompts over 2,000 tokens: commands by the fallback
     assert.equal(r.total.calls, 268);
     assert.equal(r.total.usd.toFixed(6), '0.110436');
     assert.equal(r.memory.calls, 69);
@@ -147,25 +169,6 @@ test('the CLI: usage errors exit 2, a file with no usage line exits 1, --json pa
     }
 });
 
-test('#602 review 2: a summary call that fails (no usage line) drops its marker; the next command call is not a summary', () => {
-    const text = [
-        L('10:00:00', '[memory] summary turns 10 kept 5'),
-        L('10:00:00', '[openrouter] reasoning effort=none for this call'),
-        L('10:00:00', 'Awaiting openrouter api response...'),
-        L('10:00:01', 'Error while awaiting response: 502 bad gateway'),
-        L('10:00:01', '[memory] summary returned a failure stand-in; keeping the previous memory'),
-        ...call('10:00:05', 4000, 100, 0.001, 50),
-        L('10:00:06', '[memory] summary turns 10 kept 5'), // the run stops before its usage line
-    ].join('\n');
-    const r = calls(parseJournal(text));
-    assert.deepEqual(r.list.map(c => [c.memory, c.effort]), [[false, null]]);
-    assert.equal(r.unmatchedMarkers, 2);
-    // An error with no marker waiting (a command call failed) drops nothing.
-    const t2 = [L('10:00:00', 'Error while awaiting response: x'), L('10:00:01', '[memory] summary turns 10 kept 5'), ...call('10:00:02', 900, 1, 0.0001, 0)].join('\n');
-    assert.deepEqual(calls(parseJournal(t2)).list.map(c => c.memory), [true]);
-    assert.match(render(soakSpend(text)), /2 markers, 2 with no usage line/);
-});
-
 test('#602 review 8: an `unknown` usage field is null, adds nothing and is counted', () => {
     const text = [
         L('10:00:00', '[openrouter] usage prompt_tokens unknown, completion_tokens unknown, cost_usd unknown'),
@@ -195,7 +198,7 @@ test('#602 review 7: a summary started inside a loop run whose usage line follow
         L('10:00:00', 'starting self-prompt loop'),
         L('10:00:01', '[memory] summary turns 10 kept 5'),
         L('10:00:02', 'self prompt loop stopped'),
-        ...call('10:00:03', 2500, 10, 0.001, 0),
+        ...call('10:00:03', 2500, 10, 0.001, 0), ...reply('10:00:03', 'summary'),
     ].join('\n');
     const r = soakSpend(text);
     assert.equal(r.memory.calls, 1);
