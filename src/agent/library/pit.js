@@ -21,7 +21,7 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { isWall, handDiggable, dumpState } from './night.js';
 import { isLiquid, isEmpty, isFalling, tallyText, standsIn } from './shelter.js';
-import { log, breakBlockAt, goToGoal } from './skills.js';
+import { log, breakBlockAt, goToGoal, offHandToolBack } from './skills.js';
 import { worldSources } from './rotn_sources.js';
 import { blockMatcher } from './rotn_names.js';
 
@@ -228,18 +228,46 @@ export async function digPit(bot, { radius = PIT.radius, progress = {} } = {}) {
     return P.offset(0, -PIT.depth, 0);
 }
 
-/** A dig's estimate (null when unknown) and its limit: twice the estimate, at least PIT.digSlackMs (#431). */
+/**
+ * Soak 14 (F2, the lead): a dig's stall limit is DIG_STALL.factor x its expected time + slackMs (3 x + 2 s; it
+ * was twice, at least 4 s); unknownMs when there is no estimate. A dig expected to take more than maxEstMs
+ * (or than its caller allows) is not started: its [dig] line says why (soak 14: a stale Mining Fatigue IV made
+ * dirt by hand 926 s, and the collect waited 90 s a block; net-forge (C)).
+ */
+export const DIG_STALL = { factor: 3, slackMs: 2000, unknownMs: PIT.digSlackMs, maxEstMs: 60_000 };
+/** A dig's estimate with what is in hand now (null when unknown) and its limit (DIG_STALL). */
 export function digBudget(bot, block) {
     let estMs = null;
     try { estMs = bot.digTime?.(block) ?? null; } catch { estMs = null; }
-    return { estMs, limitMs: Math.max(PIT.digSlackMs, 2 * (Number.isFinite(estMs) ? estMs : 0)) };
+    if (!Number.isFinite(estMs) && estMs !== Infinity) estMs = null;
+    return { estMs, limitMs: Number.isFinite(estMs) ? DIG_STALL.factor * estMs + DIG_STALL.slackMs : DIG_STALL.unknownMs };
+}
+
+const secs = (ms) => (ms === Infinity ? 'never' : `${(ms / 1000).toFixed(1)} s`);
+/** The bot's effects as "name:amplifier" tokens (MiningFatigue:3), or "none". */
+export function effectsText(bot) {
+    const effects = Object.entries(bot?.entity?.effects ?? {}).map(([id, ef]) => `${bot.registry?.effects?.[id]?.name ?? ef?.id ?? id}:${ef?.amplifier ?? '?'}`);
+    return effects.length ? effects.join(' ') : 'none';
+}
+/**
+ * Soak 14 (F2, the lead): the [dig] diagnosis line, for a dig that was not started (too slow) or not done within
+ * its limit: the block, what happened, the expected time with the item in hand and its hotbar slot, the bot's
+ * effects (bot.entity.effects: Hunger Overhaul's Mining Fatigue), the time since the last spawn, and whether
+ * the block is still there (the server broke it, or not).
+ */
+export function digLine(bot, block, { what, estMs = null, now = Date.now() } = {}) {
+    const p = block?.position;
+    const where = p ? `${p.x}, ${p.y}, ${p.z}` : 'unknown';
+    const after = p ? bot.blockAt?.(p) : null;
+    const state = !after ? 'not loaded' : after.name === block.name ? 'still there' : `now ${after.name}`;
+    const since = Number.isFinite(bot?.rotnSpawnedAt) ? `${Math.round((now - bot.rotnSpawnedAt) / 1000)} s since the spawn` : 'no spawn time';
+    return `[dig] ${block?.name ?? 'block'}:${block?.metadata ?? '?'} at ${where}: ${what}; expected ${estMs === null ? 'unknown' : secs(estMs)} with ${bot?.heldItem?.name ?? 'the hand'} (slot ${bot?.quickBarSlot ?? '?'}); effects ${effectsText(bot)}; ${since}; the block is ${state}`;
 }
 
 /** What the bot's state was at a hung dig (#431 review 3): onGround, isInWater, effects, the held item. */
 function digState(bot) {
     const e = bot.entity ?? {};
-    const effects = Object.entries(e.effects ?? {}).map(([id, ef]) => `${bot.registry?.effects?.[id]?.name ?? id}:${ef?.amplifier ?? '?'}`);
-    return `onGround ${e.onGround}, isInWater ${e.isInWater}, effects ${effects.length ? effects.join(' ') : 'none'}, held ${bot.heldItem?.name ?? 'nothing'}`;
+    return `onGround ${e.onGround}, isInWater ${e.isInWater}, effects ${effectsText(bot)}, held ${bot.heldItem?.name ?? 'nothing'}`;
 }
 
 /**
@@ -252,29 +280,49 @@ function digState(bot) {
  * digs it alike, so equipForBlock keeps what is held).
  */
 export async function digWithin(bot, block, ms, { equip = null } = {}) {
-    let timer, cancelled = false;
+    // Soak 14 (F2, net-forge (C)): the budget is taken after the equip, from the tool that will dig (before it,
+    // the hand: Infinity since #595 for stone, so the 4 s floor; morning 1's cobble with Mining Fatigue II needed
+    // 16.7 s). `ms`: the caller's own cap (Infinity: the budget alone); the limit is the smaller.
+    const start = Date.now();
+    const left = () => (Number.isFinite(ms) ? ms - (Date.now() - start) : Infinity);
+    let timer;
+    const race = (p, t) => (Number.isFinite(t)
+        ? Promise.race([p, new Promise(resolve => { timer = setTimeout(() => resolve('timeout'), Math.max(0, t)); })]).finally(() => clearTimeout(timer))
+        : p);
+    if (bot.game?.gameMode !== 'creative') {
+        const ok = await race((async () => {
+            await offHandToolBack(bot); // soak 14 (F2): a pickaxe kept in the off hand, where the tool lookups see it
+            if (equip) return !!(await equip());
+            try { await bot.tool?.equipForBlock?.(block); } catch { /* digs with what is in hand */ }
+            return !(block.canHarvest && !block.canHarvest(bot.heldItem ? bot.heldItem.type : null));
+        })(), left());
+        if (ok === 'timeout') return 'timeout';
+        if (!ok) return false;
+    }
+    if (left() <= 0) return 'timeout';
+    const { estMs, limitMs } = digBudget(bot, block);
+    const cap = Math.min(DIG_STALL.maxEstMs, left());
+    if (estMs === Infinity || (Number.isFinite(estMs) && estMs > cap)) {
+        console.log(digLine(bot, block, { what: `not started: it would take ${secs(estMs)}, over ${secs(cap)}`, estMs }));
+        bot.rotnLastDig = { estMs, limitMs: 0, refused: true };
+        return false;
+    }
+    const limit = Math.min(limitMs, left());
+    bot.rotnLastDig = { estMs, limitMs: limit };
+    let cancelled = false;
     const dig = (async () => {
-        if (bot.game?.gameMode !== 'creative') {
-            if (equip) {
-                if (!await equip()) return false;
-            } else {
-                try { await bot.tool?.equipForBlock?.(block); } catch { /* digs with what is in hand */ }
-                if (block.canHarvest && !block.canHarvest(bot.heldItem ? bot.heldItem.type : null)) return false;
-            }
-        }
         if (cancelled) return false;
         await bot.dig(block, true);
         return true;
     })();
-    try {
-        const r = await Promise.race([dig, new Promise(resolve => { timer = setTimeout(() => resolve('timeout'), ms); })]);
-        if (r === 'timeout') {
-            cancelled = true;
-            try { if (bot.targetDigBlock) bot.stopDigging?.(); } catch { /* best effort */ }
-            dig.catch(() => {}); // it ends as an aborted dig
-        }
-        return r;
-    } finally { clearTimeout(timer); }
+    const r = await race(dig, limit);
+    if (r === 'timeout') {
+        cancelled = true;
+        try { if (bot.targetDigBlock) bot.stopDigging?.(); } catch { /* best effort */ }
+        dig.catch(() => {}); // it ends as an aborted dig
+        console.log(digLine(bot, block, { what: `not dug within ${secs(limit)}`, estMs }));
+    }
+    return r;
 }
 
 /**

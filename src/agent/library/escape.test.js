@@ -335,16 +335,27 @@ test('#562 review 3: the 90 s is hard: each dig gets at most the time left, and 
     // Warm (rotn-data's dump loaded), so the time goes to the dig, not to the first checks.
     nextStep(bot, null, { placed: 0 });
     escapeTarget(bot);
-    // Digs that never end on their own (a dig is stopped by digWithin at its limit: 2 min here).
+    // Digs that never end on their own (a dig is stopped by digWithin at its limit: 3 x 0.5 + 2 = 3.5 s here).
     let digs = 0;
     bot.dig = () => { digs++; return new Promise(() => {}); };
-    bot.digTime = () => 60_000;
+    bot.digTime = () => 500;
     const t0 = Date.now();
     const r = await escape(bot, { moveTo: teleport, say: () => {} });
     assert.ok(digs >= 1, 'a dig was started');
     assert.equal(r.out, false);
     assert.match(r.why, /the 1.5 s ran out/);
-    assert.ok(Date.now() - t0 < 3000, `ended in ${Date.now() - t0} ms, not at the dig's 2 min`);
+    assert.ok(Date.now() - t0 < 3000, `ended in ${Date.now() - t0} ms, not at the dig's 3.5 s`);
+    // Soak 14 (F2): a dig expected to take longer than the time left is not started; its [dig] line says why.
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const slow = fakeBot({ pathfinder: noPath(), items: [['stone_pickaxe', 1]] }).bot;
+    let slowDigs = 0;
+    slow.dig = () => { slowDigs++; return new Promise(() => {}); };
+    slow.digTime = () => 60_000;
+    const r2 = await escape(slow, { moveTo: teleport, say: () => {} });
+    assert.equal(slowDigs, 0, 'never started');
+    assert.equal(r2.out, false);
+    assert.ok(logs.some(l => /^\[dig\] \S+ at .*: not started: it would take 60\.0 s, over 1\.\d s; /.test(l)), logs.join('\n'));
 });
 
 test('#562 review 4: the movements the pathfinder had before the escape come back after it', async (t) => {

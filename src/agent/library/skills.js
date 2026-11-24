@@ -17,7 +17,9 @@ import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
 import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath, isWeaponItem } from "./threats.js";
 import { logAte, fightJournal, swingLine, logWeapon, mobName } from "./survival_log.js";
 import { waitText } from './wait_text.js';
+import { digBudget, digLine, effectsText, DIG_STALL } from './pit.js';
 import { foodKey } from "./food.js";
+import { getItem as rotnItem, registryName as rotnRegistryName } from "../../../packages/rotn-data/index.js";
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
@@ -60,6 +62,20 @@ export { weaponRank };
  * repair). With offHand false, the main hand. Returns whether a weapon is where it should be.
  */
 export const WEAPON_HAND = { offHand: true };
+/** A pickaxe (rotn-data's tool class, or the name), never a weapon. */
+export const isPickaxeItem = (item) => !!item?.name && !isWeaponItem(item)
+    && (/_pickaxe$/.test(item.name) || (() => { try { return Number.isInteger(rotnItem(rotnRegistryName(item.name))?.toolClasses?.pickaxe); } catch { return false; } })());
+const pickLevel = (item) => { try { return rotnItem(rotnRegistryName(item.name))?.toolClasses?.pickaxe ?? 0; } catch { return 0; } };
+/**
+ * Soak 14 (F2, the lead): a pickaxe kept in the off hand (rearmWeapon) is out of the tool lookups' sight (mineflayer's
+ * inventory.items() leaves the off hand out): before a dig it goes back into the inventory; rearmWeapon puts it
+ * back after. True when one was moved.
+ */
+export async function offHandToolBack(bot) {
+    const off = bot?.inventory?.slots?.[45] ?? null;
+    if (!off || !isPickaxeItem(off)) return false;
+    try { return (await stowCarried(bot, isPickaxeItem, { resyncMs: 0 })).length > 0; } catch { return false; }
+}
 export async function rearmWeapon(bot) {
     const items = bot?.inventory?.items?.() ?? [];
     const best = items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0] ?? null;
@@ -68,6 +84,21 @@ export async function rearmWeapon(bot) {
     // (dirt, say) into the off hand; equipping the weapon to the off hand swaps them back. Only a
     // shield there is kept (then the weapon goes to the main hand).
     const shield = !!off && !isWeaponItem(off) && /shield/.test(off.name ?? '');
+    // Soak 14 (F2, the lead): from the stone pickaxe on, the best pickaxe goes in the off hand and the weapon in the
+    // main hand: a death keeps both (Corpse Complex keeps the two hands), and a respawn can dig a hole shelter in
+    // rock (death 2 lost the pickaxe: every later hole site was "not quick to dig by hand"). With no pickaxe, the
+    // weapon in the off hand, as before.
+    const pick = items.filter(isPickaxeItem).sort((a, b) => pickLevel(b) - pickLevel(a))[0] ?? null;
+    const offPick = !!off && isPickaxeItem(off);
+    if (WEAPON_HAND.offHand && !shield && (pick || offPick) && typeof bot.equip === 'function') {
+        if (!offPick || (pick && pickLevel(pick) > pickLevel(off))) await bot.equip(pick, 'off-hand');
+        const weapons = (bot.inventory.items?.() ?? []).filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)));
+        const held = bot.heldItem && isWeaponItem(bot.heldItem) ? bot.heldItem : null;
+        if (held && !(weapons[0] && weaponOrder(attackPath(bot))(weapons[0], held) < 0)) return true;
+        if (!weapons[0]) return !!held;
+        await bot.equip(weapons[0], 'hand');
+        return true;
+    }
     if (WEAPON_HAND.offHand && !shield) {
         const offWeapon = !!off && isWeaponItem(off);
         // #584 nit 5: a better weapon in the inventory takes the off hand's place.
@@ -1583,6 +1614,22 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         if (!block.canHarvest(itemId)) {
             log(bot, `Don't have right tools to harvest ${blockType}.`);
             return false;
+        }
+        // Soak 14 (F2, net-forge (C)): a block whose dig would take longer than its limit, with the tool now in
+        // hand and the bot's effects (Hunger Overhaul's Mining Fatigue at low food; a stale one after a respawn
+        // made dirt by hand 926 s, and the collect waited 90 s a block for 0 piles) is not started: said (and a
+        // [dig] line), given up, the next one tried.
+        if (!isLiquid && !fellsTree(block) && !isLeafBlock(block)) {
+            const { estMs } = digBudget(bot, block);
+            const cap = Math.min(DIG_STALL.maxEstMs, CL.blockMs);
+            if (Number.isFinite(estMs) && estMs > cap) {
+                const secs = (ms) => `${(ms / 1000).toFixed(1)} s`;
+                const fx = effectsText(bot);
+                console.log(digLine(bot, block, { what: `not started: it would take ${secs(estMs)}, over ${secs(cap)}`, estMs }));
+                log(bot, `Not digging ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: it would take ${secs(estMs)}${fx !== 'none' ? ` (effects ${fx}: low food gives Mining Fatigue on this pack; eat first)` : ''}.`);
+                givenUp.push(block.position.clone ? block.position.clone() : block.position);
+                continue;
+            }
         }
         // The drowning reflex counts against this target while it is being collected (wet_ore.noteDrowning).
         bot.rotnCollectTarget = block.position;

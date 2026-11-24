@@ -14,7 +14,7 @@ import { autonomyTick } from './priority.js';
 import { maxHitOf } from './library/threats.js';
 import { shelterQuiet, SHELTER_QUIET_MODES, __modeForTest } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
-import { PIT } from './library/pit.js';
+import { PIT, DIG_STALL } from './library/pit.js';
 import { nightRelocationPlan, NIGHT_RELOCATE, RELOCATE } from './respawn_relocate.js';
 
 const reg = minecraftData('1.12.2');
@@ -1535,9 +1535,10 @@ test('#435 review 4: a stairs plan that fails part-way up walks the bot back to 
 test('#435 review 2: an exit dig has the per-block limit: a hung dig ends that plan and the next side is tried; a quick side beats a slow hand-diggable one', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (l) => logs.push(String(l)));
-    const saved = PIT.digSlackMs;
-    PIT.digSlackMs = 30;
-    t.after(() => { PIT.digSlackMs = saved; });
+    // Soak 14 (F2): the limit is DIG_STALL.factor x the estimate + slackMs (taken after the equip).
+    const saved = DIG_STALL.slackMs;
+    DIG_STALL.slackMs = 30;
+    t.after(() => { DIG_STALL.slackMs = saved; });
     const walls = { ...ring(64, 'dirt', 1), ...ring(65, 'dirt', 1) };
     const { bot, world, dug } = exitWorld(walls);
     let stopped = 0;
@@ -1553,7 +1554,8 @@ test('#435 review 2: an exit dig has the per-block limit: a hung dig ends that p
     assert.equal(stopped, 1, 'the hung dig was stopped');
     assert.equal(world.get('1,65,0'), 'dirt');
     assert.deepEqual(dug.sort(), ['-1,64,0', '-1,65,0']);
-    assert.ok(logs.some(l => /dig out: dirt at 1, 6[45], 0 was not dug within 0\.0 s/.test(l)), logs.join('\n'));
+    assert.ok(logs.some(l => /dig out: dirt at 1, 6[45], 0 was not dug within 0\.1 s/.test(l)), logs.join('\n'));
+    assert.ok(logs.some(l => /^\[dig\] dirt:0 at 1, 6[45], 0: not dug within 0\.1 s; expected 0\.0 s with the hand \(slot \S+\); effects none; .*; the block is still there$/.test(l)), 'the [dig] line');
     // Rooty dirt is hand-diggable but slow (hardness 20): the dirt side goes first, though east comes first otherwise.
     const slow = exitWorld({ ...walls, '1,64,0': 'dynamictrees:rootydirt', '1,65,0': 'dynamictrees:rootydirt' });
     assert.ok((await digOut(slow.bot, SITE))?.equals(new Vec3(-1, 64, 0)));

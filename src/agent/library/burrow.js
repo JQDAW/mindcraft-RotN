@@ -25,7 +25,7 @@ import { isEmpty, isLiquid, hazardOf, hurtsOnContact, isFalling, mobIn, centerIn
 import { threatFor } from './threats.js';
 import { isTreePart } from './fall_safety.js';
 import { toolAllows, allowedTool } from './rotn_sources.js';
-import { digWithin, digBudget } from './pit.js';
+import { digWithin } from './pit.js';
 import { log, craftRecipe } from './skills.js';
 
 /**
@@ -238,7 +238,7 @@ export async function takeBurrowStep(bot, step, { craft = craftRecipe } = {}) {
         const block = bot.blockAt(c);
         if (isEmpty(block)) continue;
         const equip = digEquip(bot, block);
-        const dug = await digWithin(bot, block, digBudget(bot, block).limitMs, equip ? { equip } : {});
+        const dug = await digWithin(bot, block, Infinity, equip ? { equip } : {}); // soak 14 (F2): the budget after the equip
         if (dug !== true) return { why: `could not dig ${block.name} at ${at(c)}${dug === 'timeout' ? ' in time' : ''}` };
         if (bot.interrupt_code) return { why: 'interrupted' };
     }

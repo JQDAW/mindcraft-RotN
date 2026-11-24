@@ -68,3 +68,44 @@ test('#593 review 6: outside a fight (an attack, the hunt\'s equip: no fight obj
     assert.equal(await equipHighestAttack(fakeBot({ equipFails: true })), false);
     assert.equal(logs.filter(l => l.startsWith('[survival] no weapon in hand')).length, 1);
 });
+
+// Soak 14 (F2, the lead): death 2 lost the stone pickaxe (Corpse Complex keeps only the two hands), and every later
+// hole site was "not quick to dig by hand". From the stone pickaxe on: the pickaxe in the off hand, the weapon in the
+// main hand; before a dig the off-hand pickaxe goes back into the inventory (inventory.items() leaves slot 45 out).
+function handsBot({ off = null, items = [] } = {}) {
+    const slots = new Array(46).fill(null);
+    slots[45] = off;
+    items.forEach((it, i) => { slots[36 + i] = { ...it, slot: 36 + i }; });
+    const bot = {
+        heldItem: null, output: '',
+        inventory: { slots, items: () => slots.slice(9, 45).filter(Boolean), firstEmptyInventorySlot: () => slots.findIndex((s, i) => i >= 9 && i < 45 && !s) },
+        moveSlotItem: (from, to) => { const s = slots[from]; slots[from] = null; slots[to] = s ? { ...s, slot: to } : null; return Promise.resolve(); },
+        equip: (item, dest) => {
+            const from = slots.findIndex(s => s && s.name === item.name);
+            if (dest === 'off-hand') { const prev = slots[45]; slots[45] = { ...item, slot: 45 }; slots[from] = prev ? { ...prev, slot: from } : null; }
+            else { slots[from] = bot.heldItem ? { ...bot.heldItem, slot: from } : null; bot.heldItem = { ...item }; }
+            return Promise.resolve();
+        },
+    };
+    return { bot, slots };
+}
+
+test('soak 14 (F2): rearmWeapon puts the stone pickaxe in the off hand and the weapon in the main hand; with no pickaxe the weapon goes to the off hand as before', async () => {
+    const { rearmWeapon, offHandToolBack, isPickaxeItem } = await import('./skills.js');
+    const pick = { name: 'stone_pickaxe', metadata: 0, count: 1, type: 3 };
+    assert.equal(isPickaxeItem(pick), true);
+    assert.equal(isPickaxeItem(club()), false);
+    const { bot, slots } = handsBot({ off: club(), items: [pick] });
+    assert.equal(await rearmWeapon(bot), true);
+    assert.equal(slots[45].name, 'stone_pickaxe', 'the pickaxe in the off hand (kept at a death)');
+    assert.equal(bot.heldItem.name, 'spartanweaponry:club_wood', 'the club in the main hand');
+    // Before a dig: the pickaxe back into the inventory, where the tool lookups see it.
+    assert.equal(await offHandToolBack(bot), true);
+    assert.equal(slots[45], null);
+    assert.ok(bot.inventory.items().some(i => i.name === 'stone_pickaxe'));
+    assert.equal(await offHandToolBack(bot), false, 'nothing there: no move');
+    // No pickaxe: the club in the off hand, as before (soak 11 A3).
+    const plain = handsBot({ items: [club()] });
+    assert.equal(await rearmWeapon(plain.bot), true);
+    assert.equal(plain.slots[45].name, 'spartanweaponry:club_wood');
+});

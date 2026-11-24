@@ -477,3 +477,20 @@ test('#595 review 2: breakBlockAt says a block needs a better tool (Tool Progres
     assert.doesNotMatch(rock.output, /better tool/);
     await assert.rejects(skills.breakBlockAt(mk(new Error('the server closed')), 1, 64, 0), /the server closed/);
 });
+
+// Soak 14 (F2, net-forge (C)): after death 2 a stale Mining Fatigue IV made dirt by hand 926 s, and the collect
+// waited 90 s a block for 0 piles. A block whose dig would take longer than its limit is not started: said, with
+// a [dig] line (the effects), and the next target tried.
+test('soak 14 (F2): a collect does not start a dig expected to take longer than its limit (Mining Fatigue IV): said, a [dig] line, nothing dug', T, async (t) => {
+    fast(t);
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const bot = fakeBot({ bushes: [{ x: 8, sticks: 1 }] });
+    bot.digTime = () => 926_000;
+    bot.entity.effects = { 4: { id: 4, amplifier: 3 } };
+    bot.registry = { ...(bot.registry ?? {}), effects: { 4: { id: 4, name: 'MiningFatigue' } } };
+    assert.equal(await skills.collectBlock(bot, 'stick', 1), false);
+    assert.deepEqual(bot.log.digs, []);
+    assert.match(bot.output, /Not digging \S+ at 8, 64, 0: it would take 926\.0 s \(effects MiningFatigue:3: low food gives Mining Fatigue on this pack; eat first\)\./);
+    assert.ok(logs.some(l => /^\[dig\] \S+ at 8, 64, 0: not started: it would take 926\.0 s, over 60\.0 s; .*effects MiningFatigue:3;/.test(l)), logs.join('\n'));
+});

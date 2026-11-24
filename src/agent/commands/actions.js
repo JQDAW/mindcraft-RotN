@@ -7,7 +7,20 @@ import { addTask, cancelTask } from '../task_queue.js';
 import { finishTask, endOpenGoal } from '../priority.js';
 import { forgetNightGoal } from '../night_routine.js';
 import { hasAutonomyPrefix } from '../agenda_driver.js';
-import { nightPhase, nightRoutineActive } from '../library/night.js';
+import { nightPhase, nightRoutineActive, minutesToSunset, SHELTER_LEAD_MIN } from '../library/night.js';
+/** Soak 14 (F2): the least a model's collect gets before dusk (it ends by the night routine otherwise). */
+export const COLLECT_DUSK_MIN_MS = 30_000;
+/**
+ * Soak 14 (F2, the lead): the model's collect limits: its total time ends when the night routine takes over (dusk:
+ * SHELTER_LEAD_MIN before sunset), at least COLLECT_DUSK_MIN_MS; a task giver's typed command, or no dusk near:
+ * COLLECT_LIMITS as before.
+ */
+export function collectLimitsBeforeDusk(timeOfDay, context = null) {
+    const m = Number.isFinite(timeOfDay) ? minutesToSunset(timeOfDay) : Infinity;
+    const toDusk = (m - SHELTER_LEAD_MIN) * 60_000;
+    return !context?.sender && m > 0 && Number.isFinite(toDusk) && toDusk < skills.COLLECT_LIMITS.totalMs
+        ? { ...skills.COLLECT_LIMITS, totalMs: Math.max(COLLECT_DUSK_MIN_MS, toDusk) } : skills.COLLECT_LIMITS;
+}
 import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
 import { threatFor, hurtBy, hasWeapon } from '../library/threats.js';
@@ -516,7 +529,14 @@ export const actionsList = [
             'num': { type: 'int', description: 'The number of blocks to collect.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
         perform: runAsAction(async (agent, type, num, context) => {
-            await skills.collectBlock(agent.bot, type, num, null, hungryCap(agent, 'Collecting within', 64, context));
+            // Soak 14 (F2, the lead): the model's collect ends before the night routine needs the bot (dusk:
+            // SHELTER_LEAD_MIN before sunset), not after its 8 min: after death 2 the dirt collect took the
+            // last 8 min before sunset.
+            const limits = collectLimitsBeforeDusk(agent.bot?.time?.timeOfDay, context);
+            // Soak 14 (F2): the off-hand pickaxe into the inventory for the collect's tool choice; back in the off hand after.
+            await skills.offHandToolBack(agent.bot);
+            try { await skills.collectBlock(agent.bot, type, num, null, hungryCap(agent, 'Collecting within', 64, context), limits); }
+            finally { try { await skills.rearmWeapon(agent.bot); } catch { /* best effort */ } }
         })
     },
     {
