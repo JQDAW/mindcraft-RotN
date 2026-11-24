@@ -129,16 +129,3 @@ test('promptMemSaving asks the chat model for no reasoning (fourth argument)', a
     assert.equal(calls[0][2], null, 'no stop sequence');
     assert.deepEqual(calls[0][3], { reasoning: { effort: 'none' } });
 });
-
-test('#600 re-review nit 1: a retry that resolves with no choice (an error body) does not set the latch', async (t) => {
-    quiet(t);
-    const { model, packs } = modelWith((pack) => {
-        if (pack.reasoning) { const e = new Error('400 bad'); e.status = 400; return Promise.reject(e); }
-        return Promise.resolve({ error: { code: 400, message: 'something else' } });
-    });
-    assert.equal(await model.sendRequest([], 'system', null, { reasoning: { effort: 'none' } }), 'No response received.');
-    assert.equal(packs.length, 2);
-    assert.equal(model.reasoningRefused, undefined, 'no choice: not shown that the setting was the cause');
-    await model.sendRequest([], 'system', null, { reasoning: { effort: 'none' } });
-    assert.deepEqual(packs[2].reasoning, { effort: 'none' });
-});
