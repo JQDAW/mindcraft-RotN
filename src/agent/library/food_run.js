@@ -24,6 +24,9 @@ export const FOOD_RUN = {
     sunset: { maxMs: 3 * 60_000, forage: 24, hunt: 32 },
     night: { maxMs: 4 * 60_000, forage: 16, hunt: 16 },
     hostileRange: 16, emergencyAt: 4, minHealth: 8, anyHealthAt: 2, backMs: 20_000, rounds: 12,
+    // #612 re-review (the lead): at most this many resumes after reflexes, and this long from the emergency's start in
+    // all (4 min of running and 2 for the reflexes); then back into the shelter, or a shelter where the bot is.
+    maxResumes: 5, wallMs: 6 * 60_000,
 };
 
 const DEPS = {
