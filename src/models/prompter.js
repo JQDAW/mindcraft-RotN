@@ -284,9 +284,7 @@ export class Prompter {
         // request) and no stop sequence: the default '*' cut a markdown summary
         // at its first asterisk, often to nothing (G3 smoke round 5, skills-rotn
         // Request 16).
-        // Soak 13: no reasoning for a memory summary (openrouter.js sendRequest; other providers ignore the
-        // fourth argument).
-        let resp = await this.chat_model.sendRequest([{ role: 'user', content: 'Write the updated memory now, as plain text.' }], prompt, null, { reasoning: { effort: 'none' } });
+        let resp = await this.chat_model.sendRequest([{ role: 'user', content: 'Write the updated memory now, as plain text.' }], prompt, null);
         await this._saveLog(prompt, to_summarize, resp, 'memSaving');
         if (resp?.includes('</think>')) {
             const [_, afterThink] = resp.split('</think>')
