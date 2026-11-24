@@ -10,7 +10,7 @@
 - **The Scroll of New Life was never used.** It was refused at each of the 3 sunsets with `no walkable way out of … to 8 blocks`. The lead's extra item, why `walkableExit` found no exit, has its own section below. In short: the bot always held a stone pickaxe, but its shelter walls are the pack's cobble (`chalk_cobble`, `siltstone_cobble`, `limestone_cobble`, hardness 4). These take 1.5 s each with a stone pickaxe, over `quickDig`'s 1 s, so `scrollRefusal` does not count them as walls it can take down. On nights 1 and 3 the morning dig-out also found solid ground 3 or more blocks deep on 2 to 3 sides.
 - **Most of the v0.1.19 paths the lead listed did not run.** No death or respawn means no respawn escape, dig-out after a respawn, loop breaker, night dirt gather or respawn pre-arm. No mob ever got into a shelter, so there was no shelter fight and no scaffolding line. No block was refused for its tool (`needs a better tool`: 0). No hurt line means no arrow attribution. The counts are below; a 0 is a real 0 in `driver.log`.
 - **Cost:**
-  - **Overall:** USD 0.0552/h, over the 0.05 target; soak 12 was 0.0343/h. 267 of 268 calls went to the provider `Wafer`, 1 to `Near`.
+  - **Overall:** USD 0.0552/h, over the 0.05 target; soak 12 was 0.0343/h. 267 of 268 calls went to the provider `Wafer`, 1 to `Near AI` (corrected in the soak 14 evidence PR: the provider name has a space).
   - **Day 3 (03:12–03:27) cost USD 0.0672,** more than days 1 and 2 together (0.0426). Its 33 memory summaries used 177,035 completion tokens (up to 18,312 for one summary of about 500 characters) and cost 0.0344.
   - **Memory summaries:** 69 of 268 calls (26%), 42% of the spend. **Reasoning:** 95.7% of the completion tokens.
   - **While self-prompting (32.1 min):** USD 0.201/h.
