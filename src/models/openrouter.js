@@ -50,7 +50,7 @@ export class OpenRouter {
     // 18,312 reasoning tokens for about 500 characters. `reasoning` (opts) asks OpenRouter for that reasoning
     // setting on this call only (promptMemSaving: { effort: 'none' }, OpenRouter's documented "disables
     // reasoning entirely"). A model whose reasoning is mandatory rejects effort none: a 4xx on a call that
-    // carried `reasoning` is retried once without it, and later calls send none (said once).
+    // carried `reasoning` (400, 404 or 422) is retried once without it; if that retry works, later calls send none.
     async sendRequest(turns, systemMessage, stop_seq='*', { reasoning = null } = {}) {
         let messages = [{ role: 'system', content: systemMessage }, ...turns];
         messages = strictFormat(messages);
@@ -74,12 +74,16 @@ export class OpenRouter {
             try {
                 completion = await this.openai.chat.completions.create(pack);
             } catch (err) {
+                // Only the statuses a refused parameter gives (400, 404 "no endpoints for these
+                // parameters", 422); the SDK already retries 408/409/429/5xx itself.
                 const status = Number(err?.status);
-                if (!pack.reasoning || !(status >= 400 && status < 500) || status === 401 || status === 402 || status === 429) throw err;
-                this.reasoningRefused = true;
-                console.error(`[openrouter] the reasoning setting was refused (status ${status}); retrying without it, and sending none from now on`);
+                if (!pack.reasoning || ![400, 404, 422].includes(status)) throw err;
+                console.error(`[openrouter] the reasoning setting may have been refused (status ${status}); retrying without it`);
                 delete pack.reasoning;
                 completion = await this.openai.chat.completions.create(pack);
+                // The retry worked without it: the setting was the cause, so later calls send none (said once).
+                this.reasoningRefused = true;
+                console.error('[openrouter] the retry without the reasoning setting worked; sending none from now on');
             }
             // One line per completion for the G3 harness's per-provider counts:
             // provider name, finish reason and content length only, never the body.

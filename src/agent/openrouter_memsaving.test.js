@@ -8,7 +8,8 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import process from 'node:process';
 
-const FAKE_KEY = 'sk-or-v1-0123456789abcdefABCDEF0123456789abcdef';
+// Not key-shaped (secret-scan); this file does not test key redaction.
+const FAKE_KEY = 'test-placeholder-key';
 const KEY_BEFORE = process.env.OPENROUTER_API_KEY;
 let OpenRouter, reasoningSetting, Prompter;
 
@@ -65,16 +66,23 @@ test('a 400 on a call that carried reasoning is retried once without it; later c
     assert.equal(packs.length, 2);
     assert.deepEqual(packs[0].reasoning, { effort: 'none' });
     assert.ok(!('reasoning' in packs[1]));
-    assert.equal(errors.filter(l => /the reasoning setting was refused \(status 400\)/.test(l)).length, 1, errors.join('\n'));
+    assert.equal(errors.filter(l => /the reasoning setting may have been refused \(status 400\)/.test(l)).length, 1, errors.join('\n'));
+    assert.equal(errors.filter(l => /the retry without the reasoning setting worked; sending none from now on/.test(l)).length, 1, errors.join('\n'));
+    assert.equal(model.reasoningRefused, true);
     // From now on, no reasoning field and no retry.
     assert.equal(await model.sendRequest([], 'system', null, { reasoning: { effort: 'none' } }), 'summary');
     assert.equal(packs.length, 3);
     assert.ok(!('reasoning' in packs[2]));
 });
 
-test('auth, payment, rate-limit and 5xx errors are not retried (one request, the usual failure reply)', async (t) => {
+test('404 and 422 are retried like 400; auth, payment, moderation, timeout, rate-limit and 5xx errors are not (one request, the usual failure reply)', async (t) => {
     quiet(t);
-    for (const status of [401, 402, 429, 500, 503]) {
+    for (const status of [404, 422]) {
+        const { model, packs } = modelWith((pack) => { if (pack.reasoning) { const e = new Error(`${status}`); e.status = status; return Promise.reject(e); } return Promise.resolve(reply('ok')); });
+        assert.equal(await model.sendRequest([], 'system', null, { reasoning: { effort: 'none' } }), 'ok', `status ${status}`);
+        assert.equal(packs.length, 2, `status ${status}: one retry`);
+    }
+    for (const status of [401, 402, 403, 408, 409, 429, 500, 503]) {
         const { model, packs } = modelWith(() => { const e = new Error(`${status} failed`); e.status = status; return Promise.reject(e); });
         assert.equal(await model.sendRequest([], 'system', null, { reasoning: { effort: 'none' } }), 'My brain disconnected, try again.', `status ${status}`);
         assert.equal(packs.length, 1, `status ${status}: no retry`);
@@ -89,11 +97,14 @@ test('a 400 on a call without reasoning is not retried', async (t) => {
     assert.equal(packs.length, 1);
 });
 
-test('a retry that fails too gives the usual failure reply', async (t) => {
+test('a retry that fails too gives the usual failure reply, and the setting is kept for later calls (a 400 not about reasoning, e.g. context too long)', async (t) => {
     quiet(t);
     const { model, packs } = modelWith(() => { const e = new Error('400 bad'); e.status = 400; return Promise.reject(e); });
     assert.equal(await model.sendRequest([], 'system', null, { reasoning: { effort: 'none' } }), 'My brain disconnected, try again.');
     assert.equal(packs.length, 2);
+    assert.equal(model.reasoningRefused, undefined, 'no latch: the retry did not show the setting was the cause');
+    await model.sendRequest([], 'system', null, { reasoning: { effort: 'none' } });
+    assert.deepEqual(packs[2].reasoning, { effort: 'none' }, 'the next call still asks for no reasoning');
 });
 
 test('reasoningSetting: field=value pairs, unsafe characters replaced', () => {
@@ -109,9 +120,9 @@ test('promptMemSaving asks the chat model for no reasoning (fourth argument)', a
     const fake = {
         profile: { saving_memory: 'Summarize: $TO_SUMMARIZE' },
         checkCooldown: async () => {},
-        replaceStrings: async (p) => p,
+        replaceStrings: (p) => Promise.resolve(p),
         _saveLog: async () => {},
-        chat_model: { sendRequest: async (...args) => { calls.push(args); return 'memory'; } },
+        chat_model: { sendRequest: (...args) => { calls.push(args); return Promise.resolve('memory'); } },
     };
     assert.equal(await Prompter.prototype.promptMemSaving.call(fake, []), 'memory');
     assert.equal(calls.length, 1);
