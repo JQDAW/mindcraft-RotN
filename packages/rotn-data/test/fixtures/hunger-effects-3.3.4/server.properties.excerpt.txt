@@ -1,0 +1,5 @@
+# server.properties of the pinned RotN 3.3.4 server pack zip (SHA-256 90642fd5...f5205), lines 12 and 18 only.
+# deploy/test-server/build.sh (configure_server) sets online-mode, white-list, level-seed and compression, never difficulty.
+# config/Universal Tweaks - Tweaks.cfg line 555 and config/defaultoptions.cfg line 10 also default new worlds to NORMAL (Lock Difficulty=false).
+difficulty=2
+hardcore=false
