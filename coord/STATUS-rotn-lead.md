@@ -1,6 +1,6 @@
 # Status: rotn-lead
 
-Updated: 2026-11-24 07:05 UTC (from `date -u`)
+Updated: 2026-11-24 22:05 UTC (from `date -u`)
 
 
 ## CX23 deploy record (ADR 0011)
@@ -17,6 +17,7 @@ Updated: 2026-11-24 07:05 UTC (from `date -u`)
 | 2026-11-23 02:06 | rotn-v0.1.18 | 5101e5c84e30 (5101e5c84e30dd18ed2da98c04a8ffaaf0f7697d) | the lead, through the gate (GO G-DEPLOY-v0.1.18-20261123) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.18-5101e5c84e30, previous=rotn-v0.1.17-d92bcdeecb73; pruned rotn-v0.1.11; no bot restarted; deploy/cx23, package-lock and patches unchanged |
 | 2026-11-23 22:03 | rotn-v0.1.19 | 2e662a1b96f5 (2e662a1b96f5bba4535c678a60139b1c80cc045c) | the lead, through the gate (GO G-DEPLOY-v0.1.19-20261123) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.19-2e662a1b96f5, previous=rotn-v0.1.18-5101e5c84e30; pruned rotn-v0.1.12; no bot restarted; deploy/cx23, package-lock and patches unchanged |
 | 2026-11-24 06:58 | rotn-v0.1.20 | 8cdfae874c78 (8cdfae874c78e2ae388a0ebd5483657e2f9a94d9) | the lead, through the gate (GO G-DEPLOY-v0.1.20-20261124) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.20-8cdfae874c78, previous=rotn-v0.1.19-2e662a1b96f5; pruned rotn-v0.1.13; no bot restarted; deploy/cx23, package-lock and patches unchanged |
+| 2026-11-24 21:58 | rotn-v0.1.21 | 83011f506c72 (83011f506c72becf7ff1ed733b91191208e0beb3) | the lead, through the gate (GO G-DEPLOY-v0.1.21-20261124) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.21-83011f506c72, previous=rotn-v0.1.20-8cdfae874c78; pruned rotn-v0.1.14; no bot restarted; deploy/cx23 and package-lock unchanged; patches/mineflayer changed (#610: effects dropped on respawn), patch-package applied it |
 
 ## Snapshot (2026-11-18 17:40 UTC): development resumed; the pause list is done; rotn-v0.1.5 next
 
