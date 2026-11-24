@@ -326,15 +326,16 @@ test('defendSelf with the only sword in the off hand fights with it in the main 
     bot.inventory.firstEmptyInventorySlot = () => { const i = slots.findIndex((x, k) => k >= 9 && k < 45 && !x); return i < 0 ? null : i; };
     bot.moveSlotItem = (from, to) => { slots[to] = slots[from]; slots[from] = null; return Promise.resolve(); };
     const held = [];
-    bot.equip = (item, where) => { held.push(`${item.name}@${where}`); bot.heldItem = item; return Promise.resolve(); };
+    bot.equip = (item, where) => { held.push(`${item.name}@${where}`); if (where === 'hand') bot.heldItem = item; return Promise.resolve(); };
     const zombie = { id: 7, name: 'zombie', type: 'mob', position: at(2), height: 1.8, isValid: true };
     bot.entities[7] = zombie;
     bot.nearestEntity = (pred) => Object.values(bot.entities).find(pred) ?? null;
     let heldWhenHitting = null;
     bot.pvp = { attack: () => { heldWhenHitting = bot.heldItem?.name; delete bot.entities[7]; }, stop() {} };
     assert.equal(await skills.defendSelf(bot, 9, () => true), true);
-    // Soak 11 (A3): into the main hand for the fight, and back into the off hand after it.
-    assert.deepEqual(held, ['stone_sword@hand', 'stone_sword@off-hand']);
+    // Soak 11 (A3): into the main hand for the fight. Soak 14 (F2, the lead): with a pickaxe held, after it the pickaxe
+    // goes in the off hand (kept at a death) and the sword stays in the main hand.
+    assert.deepEqual(held, ['stone_sword@hand', 'stone_pickaxe@off-hand']);
     assert.equal(heldWhenHitting, 'stone_sword');
 });
 
