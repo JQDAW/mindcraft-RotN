@@ -5,7 +5,7 @@
 //   [survival] fight start <mob> (<where>)              where: open | shelter
 //   [survival] fight end <mob> <outcome> after <secs> s  outcome: killed | gone | stopped | capped | interrupted | died
 //   [survival] flee <mob> (<why>)
-//   [survival] food <food> health <health> (<reason>)    reason: check (at most once a minute) | low (fell to food.EAT_AT, 12, or below; at most once a minute)
+//   [survival] food <food> health <health> (<reason>)    reason: check (at most once a minute) | low (each new lower level at or below food.EAT_AT, 8; at most once a minute)
 //   [survival] hurt <amount> health <before>-><after> (by <source>)   soak 2: health fell by HURT.minDrop or more within HURT.windowMs
 //   [survival] hurt-detail drops <amount>@+<s>s,... at <x>,<y>,<z> vy <v> ground|air cause <fall|starving|none> near <mob>@<d>m[/swung-<s>s],...
 //                                                                     soak 5: right after each hurt line
@@ -30,7 +30,7 @@
 // custom name, username or server text reaches the journal. The console only: chat is unchanged.
 
 // No import of food.js (it imports this file): the eat threshold is passed in (bindSurvivalLog).
-import { threatFor } from './threats.js';
+import { threatFor, attackSent } from './threats.js';
 
 export const SURVIVAL_TAG = '[survival]';
 /** The food line's period, and the least time between two "low" lines (G4: no periodic line more than once a minute). */
@@ -87,8 +87,53 @@ const SWINGS_KEPT = 64;
 export function mayHurt(e) {
     if (!e || e.type === 'object' || e.name === 'item') return false;
     if (e.type === 'player') return true;
+    if (Number.isFinite(e.rotnProvokedAt)) return true; // soak 14 (F3): the bot hit it
     const t = threatFor(e);
-    return !!t && (t.level !== 'none' || !!t.provoked);
+    // Soak 14 (F3, death 1): a grove sprite is level 'none' with no provoked flag, but it fights back once
+    // provoked (reaction ignore-unless-provoked, as the endermen): it hit for 5.5 three times as "unknown".
+    return !!t && (t.level !== 'none' || !!t.provoked || t.reaction === 'ignore-unless-provoked');
+}
+
+/**
+ * Soak 14 (F3, the lead): a mob the bot's own attack (or sweep, or projectile) hit is provoked for the rest
+ * of its chase: marked on the entity, and forgotten once it is more than PROVOKED.chase blocks away (rotn-data:
+ * a provoked grove sprite chases within 40 blocks while in sight). The hurt source and the low-health flee
+ * point at it.
+ */
+export const PROVOKED = { chase: 40 };
+/**
+ * #612 review 4 (the lead): only a mob that fights back is marked (reaction ignore-unless-provoked, an animal that
+ * fights back when provoked, or a level above 'none'): a hunted cow is not, so a hit with no swing is not put on it.
+ */
+export function fightsBack(e) {
+    if (!e || e.type === 'player' || e.type === 'object' || e.name === 'item') return false;
+    const t = threatFor(e);
+    return !!t && (t.reaction === 'ignore-unless-provoked' || !!t.provoked || t.level !== 'none');
+}
+/** A mob that attacks once provoked (and chases): ignore-unless-provoked (the grove sprite) or a level above 'none'. */
+export function attacksOnceProvoked(e) {
+    const t = e && e.type !== 'player' ? threatFor(e) : null;
+    return !!t && (t.reaction === 'ignore-unless-provoked' || t.level !== 'none');
+}
+export function markProvoked(e, now = Date.now()) {
+    if (e && typeof e === 'object' && fightsBack(e)) e.rotnProvokedAt = now;
+}
+export function isProvoked(bot, e) {
+    if (!Number.isFinite(e?.rotnProvokedAt)) return false;
+    const here = bot?.entity?.position;
+    if (here && e.position && e.position.distanceTo(here) > PROVOKED.chase) { delete e.rotnProvokedAt; return false; }
+    return bot?.entities?.[e.id] === e || !bot?.entities;
+}
+/** A living entity that may have swung at the bot (any mob, a player): not an item, an object or a marker. */
+const living = (e) => !!e && e.type !== 'object' && e.name !== 'item' && !/entityscent|playersoul/.test(e.name ?? '');
+
+/** Soak 14 (F3): the mob a hurt line named last ({id, at} on the bot), for the low-health flee (modes.js). */
+function noteHitter(bot, e, now) { if (bot && e?.id !== undefined) bot.rotnLastHitter = { id: e.id, at: now }; }
+/** The entity a hurt line named within ms, still in the world, or null. */
+export function recentHitter(bot, ms = 3000, now = Date.now()) {
+    const h = bot?.rotnLastHitter;
+    if (!h || now - h.at > ms) return null;
+    return bot.entities?.[h.id] ?? null;
 }
 
 const isHostileThreat = (e) => e.type !== 'player' && ['hostile', 'dangerous'].includes(threatFor(e)?.level);
@@ -110,12 +155,18 @@ export function hurtSource(bot, { swings = null, now = Date.now() } = {}) {
         && e.position.y >= here.y && Math.hypot(e.position.x - here.x, e.position.z - here.z) <= 2) : null;
     if (falling) return token(falling.name);
     if (here) {
-        const near = Object.values(bot.entities ?? {})
-            .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(here) <= HURT.mobRange && mayHurt(e))
+        const inRange = Object.values(bot.entities ?? {})
+            .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(here) <= HURT.mobRange)
             .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here));
-        const swung = near.find(e => now - (swings?.get(e.id) ?? -Infinity) <= HURT.swingMs);
-        const pick = swung ?? near.find(isHostileThreat) ?? near[0];
-        if (pick) return mobName(pick);
+        // Soak 14 (F3, the lead): a mob that swung within HURT.swingMs and is within HURT.mobRange is named
+        // whatever its threat level (a mob that hits the bot must be attributable); then one the bot provoked.
+        const swung = inRange.find(e => living(e) && now - (swings?.get(e.id) ?? -Infinity) <= HURT.swingMs);
+        const near = inRange.filter(mayHurt);
+        // #612 review 4: a provoked attacker (ignore-unless-provoked, as the grove sprite, or above 'none') before a
+        // hostile one; a provoked animal that only fights back (a hunted cow: provoked.fightBack) after them.
+        const pick = swung ?? near.find(e => isProvoked(bot, e) && attacksOnceProvoked(e)) ?? near.find(isHostileThreat)
+            ?? near.find(e => isProvoked(bot, e)) ?? near[0];
+        if (pick) { noteHitter(bot, pick, now); return mobName(pick); }
     }
     if ((bot?.entity?.velocity?.y ?? 0) < -0.5) return 'fall';
     return 'unknown';
@@ -207,12 +258,18 @@ export function hurtCheck(state, bot, now = Date.now()) {
     // Soak 12 (G): each drop gets its own source (deaths 10-11: an arrow's 1.9 and a zombie's 5 in one
     // window, the line said "by zombie", the server "shot by Skeleton").
     const drop = h < last ? { at: now, amount: last - h, source: dropSource(bot, state, now) } : null;
+    // Soak 14 (F3, the lead): the health the bot last had before an unlogged loss (drops under HURT.minDrop):
+    // the highest since the last hurt line, and when. Death 1 went 20 -> 15.7 with no line before its first hit.
+    if (!state.seen || h >= state.seen.health) state.seen = { health: h, at: now };
     let w = state.hurt;
     if (!w || h > w.from) { state.hurt = { from: h, at: now }; state.drops = []; return null; }
     if (now - w.at > HURT.windowMs) { w = state.hurt = { from: last, at: now }; state.drops = []; }
     if (drop) (state.drops ??= []).push(drop);
-    if (w.from - h < HURT.minDrop) return null;
-    const text = hurtLine(w.from - h, w.from, h, sourcesOf(state.drops ?? []) ?? hurtSource(bot, { swings: state.swings, now }));
+    // Soak 14 (F3): a drop to 0 is always a line (death 1's 1 -> 0 was under minDrop, and no line named the killer).
+    if (w.from - h < HURT.minDrop && !(drop && h <= 0)) return null;
+    const since = state.seen && state.seen.health - w.from >= 0.5 ? ` since ${num(state.seen.health)} at ${new Date(state.seen.at).toISOString().slice(11, 19)}` : '';
+    state.seen = { health: h, at: now };
+    const text = hurtLine(w.from - h, w.from, h, sourcesOf(state.drops ?? []) ?? hurtSource(bot, { swings: state.swings, now })) + since;
     const detail = hurtDetail(bot, state.drops ?? [], { swings: state.swings, now, start: w.at });
     state.hurt = { from: h, at: now };
     state.drops = [];
@@ -234,7 +291,8 @@ export function hurtDetail(bot, drops, { swings = null, now = Date.now(), start 
     const ground = bot?.entity?.onGround === true ? 'ground' : bot?.entity?.onGround === false ? 'air' : 'unknown';
     const ds = drops.length ? drops.map(d => `${num(d.amount)}@+${num((d.at - start) / 1000)}s${d.source ? `=${token(d.source)}` : ''}`).join(',') : 'none';
     const near = p ? Object.values(bot.entities ?? {})
-        .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(p) <= HURT.detailRange && (mayHurt(e) || FALLING.test(e.name ?? '')))
+        .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(p) <= HURT.detailRange
+            && (mayHurt(e) || FALLING.test(e.name ?? '') || (living(e) && now - (swings?.get(e.id) ?? -Infinity) <= HURT.swingMs)))
         .sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))
         .slice(0, HURT.detailMobs)
         .map(e => {
@@ -286,15 +344,20 @@ export function fightJournal(bot, where) {
 }
 
 /**
- * The food line: once every FOOD_LOG_MS while alive ("check"), and when the food level falls to
- * eatAt (food.EAT_AT) or below from above it ("low", at most once per FOOD_LOG_MS). Call it as often as wanted.
+ * The food line: once every FOOD_LOG_MS while alive ("check"), and at each new lower food level at or below
+ * eatAt (food.EAT_AT, 8) ("low", at most once per FOOD_LOG_MS; soak 14). Call it as often as wanted.
  */
-export function foodCheck(state, bot, now = Date.now(), eatAt = 12) {
+export function foodCheck(state, bot, now = Date.now(), eatAt = 8) {
     if (!Number.isFinite(bot?.food) || botDead(bot)) return null;
-    const fell = Number.isFinite(state.lastFood) && state.lastFood > eatAt && bot.food <= eatAt;
+    // Soak 14 (F1, the lead): "low" at each new lower level at or below eatAt (8, 7, 6, ...), not only when food
+    // crosses it (soak 14 saw 3 low lines while food went to 1 twice). Above eatAt the level count starts again.
+    // #612 review 9 (the lead): an eat (food up) starts the level count again, so the next drop at or below eatAt logs.
+    if (bot.food > eatAt || (Number.isFinite(state.lastFood) && bot.food > state.lastFood)) state.lowLevel = null;
+    const fell = Number.isFinite(state.lastFood) && bot.food < state.lastFood && bot.food <= eatAt
+        && (state.lowLevel == null || bot.food < state.lowLevel);
     state.lastFood = bot.food;
     let reason = null;
-    if (fell && now - (state.lowAt ?? -Infinity) >= FOOD_LOG_MS) { reason = 'low'; state.lowAt = now; }
+    if (fell && now - (state.lowAt ?? -Infinity) >= FOOD_LOG_MS) { reason = 'low'; state.lowAt = now; state.lowLevel = bot.food; }
     else if (now - (state.checkAt ?? -Infinity) >= FOOD_LOG_MS) reason = 'check';
     if (!reason) return null;
     state.checkAt = now; // a low line counts as this minute's check
@@ -317,6 +380,20 @@ export function bindSurvivalLog(bot, { eatAt }) {
     bot.on('entitySpawn', (e) => { try { noteArrowSpawn(state, e); } catch { /* never breaks the bot */ } }); // soak 12 (G)
     bot.on('entityGone', (e) => { try { noteArrowGone(state, bot, e); } catch { /* never breaks the bot */ } });
     bot.on('health', () => { try { hurtCheck(state, bot, Date.now()); } catch { /* never breaks the bot */ } });
+    // Soak 14 (F3, the lead): every target of the bot's own attack is provoked for its chase (markProvoked).
+    // defendSelf wraps bot.attack for a fight and restores what it found, so this wrapper stays underneath.
+    if (typeof bot.attack === 'function' && !bot.attack.rotnMarks) {
+        const attack = bot.attack;
+        // #612 review 4: marked only when the attack was sent (vanilla: at once; Better Combat: its result says).
+        const marking = function (target, ...rest) {
+            const r = attack.call(this ?? bot, target, ...rest);
+            const mark = (v) => { try { if (attackSent(v)) markProvoked(target); } catch { /* never breaks the bot */ } };
+            if (r && typeof r.then === 'function') r.then(mark, () => {}); else mark(r);
+            return r;
+        };
+        marking.rotnMarks = true;
+        bot.attack = marking;
+    }
     bot.on('health', check);
     bot.on('physicsTick', check);
     return state;

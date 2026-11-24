@@ -303,7 +303,9 @@ test('soak 2: below food 8 the model\'s !moveAway and searches go 32 blocks at m
         await executeCommand(agent, cmd);
         return agent.bot.output;
     };
-    assert.match(await run(7, '!searchForEntity("animania:cow_holstein", 128)'), /Searching 32 blocks at most at food 7, not 128: walking costs hunger, and food 0 kills you at once on this pack\. Eat or !forage first\.[\s\S]*Could not find any animania:cow_holstein in 32 blocks/);
+    // Soak 14 (F1): an animal of the kind asked in sight lifts the cap (that walk is the food); a kind not in sight is capped.
+    assert.match(await run(7, '!searchForEntity("animania:sow_old_spot", 128)'), /Searching 32 blocks at most at food 7, not 128: walking costs hunger, and food 0 kills you at once on this pack\. Eat or !forage first\.[\s\S]*Could not find any animania:sow_old_spot in 32 blocks/);
+    assert.match(await run(7, '!searchForEntity("animania:cow_holstein", 128)'), /Searching past 32 blocks at food 7: animania:cow_holstein is in sight, and it is the food\.[\s\S]*Found animania:cow_holstein/);
     const fed = await run(8, '!searchForEntity("animania:cow_holstein", 128)');
     assert.doesNotMatch(fed, /at most at food/);
     assert.match(fed, /Found animania:cow_holstein/);
@@ -346,7 +348,7 @@ test('#443 review 1: a task giver\'s typed command is never capped while hungry;
         return agent.bot.output;
     };
     for (const cmd of ['!goToCoordinates(100.5, 64, 0.5, 2)', '!goToPlayer("JQDAW", 3)', '!collectBlocks("dirt", 1)', '!moveAway(64)',
-        '!searchForEntity("animania:cow_holstein", 128)', '!searchForBlock("dirt", 128)']) {
+        '!searchForEntity("animania:sow_old_spot", 128)', '!searchForBlock("dirt", 128)']) { // soak 14: a kind not in sight (one in sight is not capped)
         assert.match(await run(cmd), /at most at food 7|at most toward .* at food 7/, `the model's ${cmd} is capped`);
         assert.doesNotMatch(await run(cmd, { sender: 'JQDAW' }), /at most/, `a giver's typed ${cmd} is not`);
     }
@@ -585,7 +587,7 @@ test('soak 11 (H1): pickupKillDrops picks up only drops near the kill spot, thro
 // meat is safe (only raw chicken gives Hunger); the prime meats are 1 hunger, the rabbit 2.
 test('soak 11 (H2): a pig, cow or sheep in range is hunted before a nearer rabbit, and named first; the meats every breed drops count as safe food', async () => {
     const { huntTarget, nearbyHuntable, meatRank } = await import('./library/hunting.js');
-    const { foodValue, avoidReason, heldFoodHunger } = await import('./library/food.js');
+    const { foodValue, avoidReason, heldFoodPoints } = await import('./library/food.js');
     const doe = { id: 3, name: 'animania:doe_cottontail', type: 'mob', position: new Vec3(3.5, 64, 0.5), height: 0.5, metadata: { 7: 3 } };
     const sow = { id: 4, name: 'animania:sow_large_white', type: 'mob', position: new Vec3(12.5, 64, 0.5), height: 0.9, metadata: { 7: 10 } };
     assert.deepEqual([meatRank(doe), meatRank(sow), meatRank({ name: 'rabbit' }), meatRank(cow(1, 1))], [1, 0, 1, 0]);
@@ -613,9 +615,9 @@ test('soak 11 (H2): a pig, cow or sheep in range is hunted before a nearer rabbi
     assert.equal(chooseFood(inv('minecraft:chicken'), { emergency: true })?.name, 'minecraft:chicken', 'starving: eaten');
     assert.equal(chooseFood(inv('minecraft:chicken', 'minecraft:porkchop'), { emergency: true })?.name, 'minecraft:porkchop', 'safe raw meat first');
     assert.equal(chooseFood(inv('minecraft:beef'))?.name, 'minecraft:beef', 'raw beef eaten as it is');
-    // The night's "food worth N hunger held" counts them.
+    // The night's "held N points" counts them (soak 14: hunger + saturation; heldFoodHunger is gone).
     const held = { inventory: { items: () => [{ name: 'minecraft:porkchop', metadata: 0, count: 5 }, { name: 'animania:raw_prime_beef', metadata: 0, count: 2 }] } };
-    assert.equal(heldFoodHunger(held), 7);
+    assert.equal(heldFoodPoints(held), 10.3);
     // The food step's texts say so.
     const { FOOD_RESERVE_STEP } = await import('./agenda.js');
     assert.match(FOOD_RESERVE_STEP.goal, /hunt a wild pig, cow or sheep near you \(2 to 8 meat each; a rabbit drops 0 to 2, a young animal nothing\)/);
@@ -802,4 +804,79 @@ test('#601 review: a zombie or villager search is not counted and gets no animal
     const r = noteSearchMiss(a, 'cow', 1);
     assert.equal(r.count, 1);
     assert.ok(r.at);
+});
+
+// Soak 14 (F1): !consume("wheat") at food 2 ended in "Promise timed out" 3 s later (wheat is no food).
+test('soak 14 (F1): !consume of an item that is no food on this pack says so at once and eats nothing', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const wheat = { name: 'wheat', count: 1, metadata: 0, type: reg.itemsByName.wheat.id };
+    const agent = huntAgent({ food: 2, items: [wheat], armed: false });
+    let consumed = 0;
+    Object.assign(agent.bot, { equip: () => Promise.resolve(), consume: () => { consumed++; return Promise.resolve(); } });
+    agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }));
+    await executeCommand(agent, '!consume("wheat")');
+    assert.match(agent.bot.output, /wheat is not food on this pack: nothing to eat\. 3 wheat make bread at a crafting table\./);
+    assert.equal(consumed, 0);
+});
+
+// Soak 14 (F3, the lead): death 1's low-health flee said "flee zombie" (9 m off) while the grove sprite that
+// hit followed. The flee now names the mob the last hurt line named (recentHitter) and goes away from it.
+test('soak 14 (F3): the low-health flee names the mob the hurt line named (a grove sprite), not the nearest hostile', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const agent = huntAgent({ animals: [] });
+    const bot = agent.bot;
+    const sprite = { id: 7, name: 'primitivemobs:grovesprite', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1 };
+    const zombie = { id: 8, name: 'zombie', type: 'mob', position: new Vec3(9.5, 64, 0.5), height: 1.95, metadata: {} };
+    Object.assign(bot.entities, { 7: sprite, 8: zombie });
+    Object.assign(bot, { health: 1, lastDamageTime: Date.now(), lastDamageTaken: 5.5, rotnLastHitter: { id: 7, at: Date.now() }, blockAt: () => ({ name: 'air' }) });
+    bot.pathfinder.goal = null;
+    const ran = [];
+    agent.actions.runAction = (label) => { ran.push(label); return Promise.resolve({ message: '', interrupted: false }); };
+    await __modeForTest('self_preservation').update(agent);
+    assert.ok(logs.includes('[survival] flee primitivemobs:grovesprite (low health 1)'), logs.join('\n'));
+    assert.deepEqual(ran, ['mode:self_preservation']);
+    // No recent hitter: the nearest hostile, as before.
+    logs.length = 0;
+    bot.rotnLastHitter = null;
+    await __modeForTest('self_preservation').update(agent);
+    assert.ok(logs.includes('[survival] flee zombie (low health 1)'), logs.join('\n'));
+});
+
+// #612 review 8 (the lead): a water bucket is no food; an item rotn-data does not list gets a short try.
+test('#612 review 8: !consume refuses a water bucket at once; an item rotn-data does not list is tried (it ate, or 3 s and said so)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const run = async (item, consume) => {
+        const agent = huntAgent({ food: 6, items: [item], armed: false });
+        Object.assign(agent.bot, { equip: () => Promise.resolve(), consume });
+        agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }));
+        await executeCommand(agent, `!consume("${item.name}")`);
+        return agent.bot.output;
+    };
+    let tried = 0;
+    const water = { name: 'water_bucket', count: 1, metadata: 0, type: reg.itemsByName.water_bucket.id };
+    assert.match(await run(water, () => { tried++; return Promise.resolve(); }), /water_bucket is not food on this pack: nothing to eat\./);
+    assert.equal(tried, 0);
+    // An item rotn-data does not list: tried.
+    const odd = { name: 'apple', count: 1, metadata: 0, type: reg.itemsByName.apple.id };
+    const { CONSUME_TRY_MS } = await import('./library/skills.js');
+    assert.equal(CONSUME_TRY_MS, 3000);
+    assert.match(await run(odd, () => { tried++; return Promise.resolve(); }), /Consumed apple\./, 'a food rotn-data knows: eaten as before');
+});
+
+test('#612 review 8: an item rotn-data does not list gets a 3 s try: eaten, or said so', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { consume } = await import('./library/skills.js');
+    const mk = (consumeFn) => {
+        const item = { name: 'nosuchmod:snack', count: 1, metadata: 0, type: 9999 };
+        return { output: '', food: 6, inventory: { items: () => [item], slots: [] }, heldItem: null, equip: () => Promise.resolve(), consume: consumeFn };
+    };
+    const ate = mk(() => { ate.food = 8; return Promise.resolve(); });
+    assert.equal(await consume(ate, 'nosuchmod:snack'), true);
+    assert.match(ate.output, /Consumed nosuchmod:snack\./);
+    const hang = mk(() => new Promise(() => {}));
+    const t0 = Date.now();
+    assert.equal(await consume(hang, 'nosuchmod:snack'), false);
+    assert.ok(Date.now() - t0 < 4000);
+    assert.match(hang.output, /nosuchmod:snack was not eaten within 3 s: it may be no food on this pack\./);
 });

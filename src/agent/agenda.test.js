@@ -580,7 +580,8 @@ test('G4 #5: the soak\'s case (agenda done, nothing held, food 12, by day): the 
     assert.equal(agent.said.at(-1), 'agenda step food started: hold food items for the day and the night (not the hunger bar)');
     const p = agent.self_prompter.prompt;
     // Soak 13 (C3a): the step wants food held; the bar does not count (the model read "food 13 ... at least 12" as met).
-    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 hunger in your inventory; this step wants food worth at least 12 hunger held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack hunger falls about 1 every 4 minutes, even resting, and starving kills\. /);
+    // Soak 14 (F1): in food points (hunger + saturation), the drain rotn-data measured, and the eat rule.
+    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 points in your inventory; this step wants food worth at least 12 points held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack food falls about 1 point every 4 minutes at rest \(a sealed night costs about 7\) and about 1 every 1\.5 minutes while walking or hunting, and starving kills\. .*You eat by yourself at food 8 or lower, the least valuable food first: keep the rest\. /);
     assert.doesNotMatch(p, /get to at least/);
     assert.match(p, /Near you: animania:cow_holstein: kill one with !attack\("animania:cow_holstein"\)/);
     assert.doesNotMatch(p, /sow_old_spot/, 'a named animal is never offered');
@@ -592,21 +593,23 @@ test('G4 #5: the soak\'s case (agenda done, nothing held, food 12, by day): the 
     assert.equal(foodDue(agent), false);
 });
 
-test('G4 #5: during the agenda only an urgent need; before night 8 held, after the shelter blocks; at night never', (t) => {
+test('G4 #5: during the agenda only an urgent need; before night the night\'s need (soak 14: points), after the shelter blocks; at night never', (t) => {
     // Running agenda, by day, bread held, food 15: the steps go on.
     const busy = foodAgent(t, [stack('bread', 0, 1)], { food: 15, finished: false });
     assert.equal(agendaTick(busy, { now: 0 }), 'rocks');
     // Food 12 and nothing held: food first.
     const hungry = foodAgent(t, [], { food: 12, finished: false });
     assert.equal(agendaTick(hungry, { now: 0 }), 'food');
-    // Before night: the shelter blocks first, then food (8 held wanted).
+    // Before night: the shelter blocks first, then food (soak 14: the night's need, 7 + 0.3 x 26 - food = 6.8 points at food 8).
     const pick = stack('stone_pickaxe', 0, 1);
     const dusk = foodAgent(t, [pick, stack('bread', 0, 1)], { food: 18, finished: true, timeOfDay: dayAt(7) });
     assert.equal(agendaTick(dusk, { now: 0 }), 'shelter_blocks');
-    const ready = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 1)], { food: 18, finished: true, timeOfDay: dayAt(7) });
-    assert.equal(agendaTick(ready, { now: 0 }), 'food', 'blocks held, 3 food held: food');
-    const fed = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 3)], { food: 18, finished: true, timeOfDay: dayAt(7) });
-    assert.equal(agendaTick(fed, { now: 0 }), null, '9 held: nothing to do');
+    const ready = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 1)], { food: 8, finished: true, timeOfDay: dayAt(7) });
+    assert.equal(agendaTick(ready, { now: 0 }), 'food', 'blocks held, 4.2 points held of 6.8: food');
+    const fed = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 2)], { food: 8, finished: true, timeOfDay: dayAt(7) });
+    assert.equal(agendaTick(fed, { now: 0 }), null, '8.4 points held: nothing to do');
+    const full = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD)], { food: 20, finished: true, timeOfDay: dayAt(7) });
+    assert.equal(agendaTick(full, { now: 0 }), null, 'a full bar (20): the night needs nothing more');
     // Night: never out for food, starving or not.
     const night = foodAgent(t, [], { food: 2, finished: true, timeOfDay: NIGHT_START + 500 });
     assert.equal(agendaTick(night, { now: 0 }), null);
@@ -674,7 +677,7 @@ test('soak 2: the food reserve says food 0 kills at once; at food 4 or lower it 
     const fed = foodAgent(t, [], { food: 10, entities: { 1: cow } });
     agendaTick(fed, { now: 0 });
     assert.match(fed.self_prompter.prompt, /!attack\("animania:cow_holstein"\)/, 'at food 10 the hunt is offered');
-    assert.match(fed.self_prompter.prompt, /Do not eat raw chicken or rotten flesh; keep the bread for last\./);
+    assert.match(fed.self_prompter.prompt, /Do not eat raw chicken or rotten flesh; cooked meat and bread are good night food\./);
 });
 
 test('#422 nit: the day\'s last food run is not stopped as it starts: it runs until it ends, and only then is no new one started', (t) => {
@@ -797,7 +800,7 @@ test('#468 review 1: every step left waits on the stuck one: food first (a stand
     agent.bot.inventory = { items: () => [stack('bread', 0, 4), stack('iron_sword', 0, 1)], slots: [] };
     assert.equal(tick(), null, 'nothing runnable');
     assert.match(agent._agenda_open_goal, /^Open goal while the agenda waits: step rocks \(collect 6 rocks\) is stuck: 5 min of self-prompting; it is retried with a fresh budget in about 20 min or at the next full day\. Its goal was: Collect at least 6 rocks/);
-    assert.match(agent._agenda_open_goal, /Until then: gather the materials it needs, and explore nearby for them .*Keep food worth at least \d+ hunger, and keep 14 blocks of dirt \(no pickaxe yet\) for the night's shelter and its repairs: do not place them\.$/);
+    assert.match(agent._agenda_open_goal, /Until then: gather the materials it needs, and explore nearby for them .*Keep food worth at least \d+ points, and keep 14 blocks of dirt \(no pickaxe yet\) for the night's shelter and its repairs: do not place them\.$/);
     assert.equal(agent.said.filter(l => l === 'agenda open goal: step rocks waits; self-prompting on gathering for it').length, 1);
     clock.now += 5 * 60_000;
     assert.equal(tick(), null);
@@ -1005,7 +1008,7 @@ test('#500 follow-ups 4 and 5: unarmed, the standing and open goals say forage, 
     assert.doesNotMatch(a.standingGoal(armed), /with no weapon/);
     a.start();
     a.markStuck('rocks', '5 min of self-prompting');
-    assert.match(a.openGoal(unarmed), /Keep food worth at least \d+ hunger \(with no weapon: forage for food \(!forage\), do not hunt; make a weapon first\), and keep/);
+    assert.match(a.openGoal(unarmed), /Keep food worth at least \d+ points \(with no weapon: forage for food \(!forage\), do not hunt; make a weapon first\), and keep/);
     assert.doesNotMatch(a.openGoal(armed), /with no weapon/);
     assert.doesNotMatch(FOOD_RESERVE_STEP.goal, /!attack/);
     assert.match(FOOD_RESERVE_STEP.goal, /with no weapon, do not hunt: make a weapon first/);
@@ -1468,4 +1471,15 @@ test('#588 nit 1, #590 review 3: with 5 attempts the backoff before the last foo
     clock = 8 * BACKOFF_MS + 1_000;
     assert.equal(agendaTick(agent, { now: clock }), 'food', 'the backoff is over: its run');
     assert.equal(agent.self_prompter.isActive(), true);
+});
+
+// #612 review 6 (the lead): in the before-night window the need counts the bar: "N more points held beyond your
+// hunger bar"; by day the bar does not count; second person throughout.
+test('#612 review 6: the food goal before night asks for points beyond the hunger bar; the static goal speaks to the model', (t) => {
+    const pick = stack('stone_pickaxe', 0, 1);
+    const agent = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 1)], { food: 8, finished: true, timeOfDay: dayAt(7) });
+    assert.equal(agendaTick(agent, { now: 0 }), 'food');
+    assert.match(agent.self_prompter.prompt, /Food: you hold food worth 4\.2 points in your inventory; for the night you need food worth at least 6\.8 points held beyond your hunger bar \(8 of 20\)\./);
+    assert.doesNotMatch(FOOD_RESERVE_STEP.goal, /the bot should|Keep the bread for last/);
+    assert.match(FOOD_RESERVE_STEP.goal, /you should end the night at food 7 or more/);
 });

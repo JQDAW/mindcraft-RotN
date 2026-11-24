@@ -389,7 +389,15 @@ export const actionsList = [
             // range is what the bot can see at most; the model's miss says what is in sight, and after 3 misses
             // in one area that searching there finds nothing more (entity_search.js). A task giver's typed
             // command gets the plain miss line and is not counted (as hungryCap).
-            const capped = hungryCap(agent, 'Searching', range, context);
+            // Soak 14 (F1, the lead): at food 2 an ewe was in sight beyond 32 blocks and the capped search could not
+            // reach it. The animal asked for, in sight, armed and strong enough to hunt (food > HUNT_MIN_FOOD): no
+            // hungry cap (that walk is the food); else as before.
+            const bot = agent.bot;
+            const huntable = isAnimalKind(entity_type) && !context?.sender && Number.isFinite(bot?.food) && bot.food > HUNT_MIN_FOOD
+                && hasWeapon(bot) && !!nearestOfKind(bot, entity_type, Infinity);
+            const capped = huntable ? range : hungryCap(agent, 'Searching', range, context);
+            if (huntable && Number.isFinite(bot.food) && bot.food < HUNGRY_WALK.belowFood && range > HUNGRY_WALK.maxBlocks)
+                skills.log(bot, `Searching past ${HUNGRY_WALK.maxBlocks} blocks at food ${bot.food}: ${entity_type} is in sight, and it is the food.`);
             // #601 review 1: not an animal (a zombie, a villager): upstream's search, the asked range, the plain line.
             if (!isAnimalKind(entity_type)) { await skills.goToNearestEntity(agent.bot, entity_type, 4, capped); return; }
             const r = sightRange(capped);
