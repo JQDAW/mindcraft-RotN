@@ -322,11 +322,13 @@ test('#229 review: a pickaxe on the cursor or in the off hand is moved back into
     assert.ok(ci.items().some(i => i.name === 'stone_pickaxe'), 'in the inventory, where allowedTool and equipForBlock look');
     assert.match(cursor.bot.output, /Moved stone_pickaxe from the cursor back into the inventory\./);
 
+    // #614 review 1: a pickaxe in the off hand is a held pickaxe (rotn_names.carriedItems; rearmWeapon keeps it there
+    // for a death): the build sees it there, and allowedTool equips it straight from the off hand; it is not moved.
     const off = fakeBot({ pickaxe: false });
     const oi = slotInventory(off.bot, { offHand: pick() });
     assert.equal((await buildShelter(off.bot)).closed, true, off.bot.output);
-    assert.equal(oi.slots[45], null);
-    assert.ok(oi.items().some(i => i.name === 'stone_pickaxe'));
+    assert.equal(oi.slots[45]?.name, 'stone_pickaxe');
+    assert.doesNotMatch(off.bot.output, /Moved stone_pickaxe from the off hand/);
 });
 
 test('#229 review: with no pickaxe anywhere the refusal (after the resync wait) logs every place it looked', async (t) => {
