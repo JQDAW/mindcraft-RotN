@@ -401,6 +401,19 @@ mineflayer's `bot.dig` waits `block.digTime(heldItemType, …)` and then sends S
 - **Tool Progression levels are as dumped.** rotn-data confirmed the dumped levels after #595, `redstone_ore` included. A wrong dumped level would make the rule say `Infinity` for a tool that can break the block.
 - **Later option, not done:** a mineflayer patch so `dig()` resolves when the server sends air (with a time limit) instead of on its local air prediction. It would cover lag and unmodelled hooks, but it changes when `dig()` resolves or fails, for collectblock and skills alike.
 
+## Soak 14: effects after a respawn, and attack counts
+
+**Effects are dropped on every respawn packet** (`patches/mineflayer`, `lib/plugins/entities.js`).
+- mineflayer kept `bot.entity.effects` across a respawn. The vanilla client starts a new player entity there, which has no effects, and the server sends no `remove_entity_effect` for those of the entity that died.
+- In soak 14 both starvation deaths (food 0) left Hunger Overhaul's Mining Fatigue IV behind (`addLowHungerMiningSlowdown`, difficulty normal: IV at food 1 or less, III at 2, II at 3, I at 4). Every later `bot.digTime` read it: dirt by hand took 926 s instead of 750 ms, so digs hung until a caller's limit (the 90 s per-block limit, 0 dirt piles in 480 s; a hole shelter's 10-minute action timeout).
+- The patch empties the map on the `respawn` packet and emits `entityEffectEnd` for each effect. Effects still active after a dimension change are sent again after the respawn packet, so they are kept. Fatigue the bot really has (low food while alive) still counts.
+- `initBot` logs what a respawn dropped, once per respawn with any: `[forge-bridge] respawn: dropped stale effects MiningFatigue:3 Slowness:1 (effect:amplifier; ...)` (`src/respawn-effects.js`, from the patch's `respawnEffectsCleared` event).
+
+**Attack counts in the journal** (`src/attack-counts.js`, wired in `initBot`). The Better Combat wrapper's counts were in memory only, and the per-packet record needs `FORGE_CAPTURE`, so soak 14 could not show whether an attack went out before death 1. Now one numbers-only line:
+- `[forge-bridge] attacks (<why>): packets bettercombat N, use_entity N; calls bettercombat N, vanilla N, waits N, replaced N, gone N, cancelled N, reach N, sight N, misses N`
+- **packets** are those that left the client: every `bettercombat` payload (only the main-hand attack is sent on it) and `use_entity` with mouse 1 (an attack; interactions are not counted), counted on `bot._client.write`. **calls** are `bot.forge.bcAttack.stats`.
+- **When:** once a minute if the numbers changed since the last line, at every death, and at the end of the connection (a stop or a kick), zeros included.
+
 ## Other protocol changes
 
 - **Triumph advancements (G1 Batch B+C).** Triumph 3.19.2 (mod id `triumph`) writes `ExtendedDisplayInfo` into `play.advancements`. Flag bit 8 is set, and colours, line options, extra connections and a position are appended (`javap`, details in `reid.js` `triumphTypes`). minecraft-data's vanilla layout fails on it, and the parse error ended the packet stream.
@@ -641,6 +654,12 @@ What different setups do:
   - **mineflayer's real digging plugin:** `bot.dig` by hand on stone rejects at once, with no packet and no hang.
   - **mineflayer-pathfinder:** `bestHarvestTool` picks the flint pickaxe, and a hand-only dig through stone costs `Infinity`.
   - `e2e-initbot.test.js` checks the install through `initBot`.
+- `respawn-effects.test.js`: mineflayer's real entities and digging plugins on a fake client, with the Forge rule.
+  - Mining Fatigue IV makes dirt by hand 925,950 ms; the respawn packet drops it (and Slowness), with `entityEffectEnd` for each, and dirt is 750 ms again; Mining Fatigue I sent after the respawn is kept (2500 ms), and `remove_entity_effect` still ends it.
+  - `bot.dig` with the stale effect sends START and no STOP within 1 s; after the respawn it digs in about 750 ms with START and STOP.
+  - The log line, once per respawn with any effect, none without. All three fail on develop.
+- `attack-counts.test.js`: only `bettercombat` payloads and `use_entity` attacks are counted, and every packet still goes out; the minute line only on a change; death and end always, zeros included; the end stops the timer; with the real wrapper (`bc_attack` off) one `bot.attack` is one `use_entity` packet and one vanilla call.
+  - `e2e-initbot.test.js` sends `entity_effect` (Mining Fatigue IV) and `respawn` over the wire through `initBot`: the effects are empty and the line names them; one `bot.attack` counts one `use_entity`, and the quit prints the end line.
 - `prismarine-auth-patch.test.js`: the real patched methods, with stubbed fetch, caches and MSAL, and fake tokens. Each reduced output is checked exactly and has nothing token-like. All 7 tests fail against stock 3.1.1.
 - `auth-diagnostics.test.js`: the real `fetchProfile` with a stubbed fetch (429, a network error, a 2xx with `error`). The line has the status and class, and nothing token-like, no body text and no address; the error is rethrown unchanged.
 - `driver-exit.test.js`: the exit decision and the logging before join.
