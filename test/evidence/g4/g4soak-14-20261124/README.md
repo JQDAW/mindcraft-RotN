@@ -14,7 +14,7 @@
   | 2 | 15:29:24 | 72, 64, 84 (the night-1 shelter's cell) | `starved to death` |
   | 3 | 16:26:39 | -2, 71, -46 (in the open, night 3) | `starved to death` |
 
-  Death 1 took the bot's only food (1 bread). After it, the bot ate what it found as soon as it found it, held no food at any sunset, and reached food 1 twice.
+  Death 1 took the bot's only food (1 bread). After it, the bot ate what it found as soon as it found it and held no food at any sunset. Its food lines read 1 twice, and it starved at food 0 both times.
 - **No shelter on nights 2 and 3.** Each death took the dirt piles (60, then 72). The bot then had 0 to 6 dirt, and the dirt shelter needs 8 to 10. Every hole shelter was either interrupted by fights or found no place.
 - **The Scroll of New Life was never used.** It was checked only at sunset 1 and morning 1, the only closed shelter, and refused both times. The new way-out line names the blocking cells: `limestone_cobble` on the east (`never` with the items a death keeps, 1500 ms with the stone pickaxe), and west, south and north `open, but no walk to 8 blocks from there`. No respawn was at a scroll spot.
 - **Cost:**
@@ -91,24 +91,30 @@ The reply lengths in characters, in order:
 > 352, 425, 413, 428, 538, 495, 519, 499, 498, 498, 504, 471, 507, 477, 500, 496, 495, 493, 491, 488, 484, 494
 
 - From summary 5 on, every reply is 470 to 540 characters.
-- Their reasoning tokens grow from 159 (summary 1) to 9,710 (summary 9, 14:55:04), then 15,934 (summary 16), 16,003 (18) and 16,783 (20, 16:17:16).
+- Their reasoning tokens go from 159 (summary 1) to 9,710 (summary 9, 14:55:04), drop back (summaries 10 to 12: 5,480, 3,687, 2,043), and rise to about 16,000 (summary 16: 15,934; 18: 16,003; 20: 16,783 at 16:17:16).
 - Four replies were over 500 characters (summaries 5, 7, 11 and 13: 538, 519, 504 and 507). history.js cut each memory to 500 characters and added `...(Memory truncated to 500 chars. Compress it more next time)`, so those memory lines are 562 characters.
 
 ## What happened
 ### Day 1 (14:43–14:58)
 - **The agenda:** rocks, sticks and the crude axe; logs; the weapon (the club); the first plank. The `shelter_blocks` and `food` steps started at 14:45:40 and 14:46:32.
 - **Death 1 (14:47:10):**
-  - While foraging a `harvestcraft:shadedgarden`, the bot took three hits of 5.5 with source `unknown` (`driver.log:556`–`572`).
-    - **14:46:58:** health 15.7 → 10.2, at -52.8, 66, -78.2, `near zombie@10.9m`.
-    - **14:46:59:** 11.3 → 5.8, `near zombie@11.7m`.
+  - Two seconds into a `!forage` on a `harvestcraft:shadedgarden`, the bot logged three hits of 5.5, each with the source `unknown` (`driver.log:556`–`572`):
+    - **14:46:58:** health 15.7 → 10.2, at -52.8, 66, -78.2, `near zombie@10.9m`;
+    - **14:46:59:** 11.3 → 5.8, `near zombie@11.7m`;
     - **14:47:02:** 6.5 → 1, `near zombie@8.9m`. It then logged `flee zombie (low health 1)`.
-  - The flee took it 19 blocks to -70, 62, -71, where it died (`[death] died at -70, 62, -71`).
-  - The server says `slain by Grove Sprite` (`server.log:1084`). The hurt lines never name it.
+  - The flee took it 19 blocks to -70, 62, -71, where it died (`[death] died at -70, 62, -71`). The server says `slain by Grove Sprite` (`server.log:1084`): a mob's melee hit.
+  - **What the hurt lines can show, and what they can't:**
+    - **They can never name a grove sprite.** rotn-data gives `primitivemobs:grovesprite` threat level `none` (it fights back only when provoked), so `mayHurt()` is false for it (`survival_log.js:87`–`92`). That leaves it out of the 5 m source check, which yields `unknown` when nothing else fits, and out of the hurt-detail's 16 m list. So `near zombie@10.9/11.7/8.9m` says nothing about the sprite, which may have been next to the bot.
+    - `unknown` is our attribution. `cause none` is `bot.lastDamageCause`, not the server's damage type.
+    - **The hits fit the sprite.** Each drop is exactly 5.5, the sprite's damage (3, plus Rough Mobs' 2.5).
+    - **The last hit is not logged.** 1 → 0 is under the hurt line's 4-point minimum. The sprite most likely followed the 19-block flee and struck at -70, 62, -71.
+    - **Health was 15.7 before the first logged hit,** but 20 at the 14:46:11 food line (`driver.log:471`). What took the 4.3 is not logged: each drop was under the 4-point minimum, or there was no line at all.
+  - **Open question (for rotn-data):** nothing in the journal hurt the sprite first. The commands from 14:45:51 to 14:46:56 were `!agenda`, `!collectBlocks("betterwithmods:dirt_pile", 56)`, `!agenda`, `!forage`, `!searchForBlock("harvestcraft:shadedgarden", 64)` and `!forage`; there was no `!attack`, no hunting reflex (the first is at 14:49:53), no swing and no fight. Either "fights back only when hurt" is incomplete for this mob in this pack, or something unlogged provoked it.
   - **Lost:** 69 logs, 60 dirt piles, 11 spruce seeds, 6 sticks, 7 rocks, **1 bread (its only food)**, the bundle and the bark. `club_wood` is also on the list; the club is kept in the off hand.
 - **Respawn 1:** `escape (try 1 of 3): sprinting at least 64 blocks from the spawn and 1 recent death spot, 1 player zombie near …` (14:47:13). Then `escape done: 64 blocks … at 26, 73, -52 in 18 s` (14:47:31). The first listing after it (14:54:07, `driver.log:1074`) shows the scroll, the club, 1 plank, 2 sticks, 60 dirt piles, 2 sheep intestines, wool, 1 wheat and seeds, and **no food**.
 - **Food after respawn 1:**
   - Two hunts killed `ewe_dorset` (14:49:53, 14:52:20), each `no drop seen within 4 blocks in 3 s`. Item collecting then picked up the mutton (14:49:56, `Picked up 1 items.`).
-  - The eat reflex ate it at once: 3 mutton at 14:49:58–14:50:01 (food 10 → 13). Then 2 mutton, a broccoli and a quinoa at 14:52:22–14:52:27 (food 9 → 13).
+  - The eat reflex ate it at once: 3 `animania:raw_prime_mutton` (about 1.1 hunger each) at 14:49:58–14:50:01 (food 10 → 13). Then 2 mutton, a broccoli and a quinoa at 14:52:22–14:52:27 (food 9 → 13).
   - A ram was out of reach (14:51:17). Foraging got food twice (14:51:48, 14:52:33).
 - **Later steps:** Crafting Tools, the table, planks and sticks, and the stone pickaxe (14:56:43). The bot then made 4 `limestone_cobble`.
 - 1 `needs a better tool` line (14:57:01, below).
@@ -132,7 +138,7 @@ The reply lengths in characters, in order:
   - 2 `!attack` calls found nothing to attack (15:26:00, 15:26:09).
   - At 15:26:50 the model walked back to `73, 64, 84` ("my known foraging spot", in fact the night-1 shelter).
   - `!consume("wheat")` at 15:27:38 ended in `Promise timed out` (15:27:41); wheat is not food.
-- **Death 2 (15:29:24):** `hurt 20 health 20->0 (by starving)` at food 1 (RotN's food-1 kill, as in soak 2), at 72, 64, 84, next to a player zombie (`near zombie_players:zombie_player@0m`).
+- **Death 2 (15:29:24):** `hurt 20 health 20->0 (by starving)` at 72, 64, 84. `(by starving)` means `bot.food` was 0 at that moment (`survival_log.js:101`); Hunger Overhaul kills 4 s after food 0. The last food line, at 15:28:52, read 1; the food lines come once a minute. The `zombie_players:zombie_player@0m` in the hurt-detail (`driver.log:1945`) is most likely the one this death raised.
 - **Lost:** 72 dirt piles, 9 logs, 4 rocks, 3 dirt, 6 planks, 2 sticks, the club (`club_wood:16`, kept in the off hand) and the stone pickaxe.
 - **Respawn 2:** `no place 64 blocks from the spawn and 1 recent death spot within 160; the agenda resumes here` (15:29:27). No escape ran.
 - Food was 12 after the respawn. The agenda started `stone_axe` at 15:34:30.
@@ -140,7 +146,9 @@ The reply lengths in characters, in order:
 ### Night 2 (15:38–16:13)
 - `sunset is near` came at 15:38:15 (`food worth 0 hunger held, food 12`).
 - **No shelter all night.** The shelter was refused for lack of dirt: `you have 0 dirt and 0 dirt piles, and a dirt shelter needs 8 dirt` at -40, 66, -64; later `6 dirt … needs 10` at -54, 70, -102.
-- **The hole shelter** was interrupted by self-defense 6 times, then by eating, then `failed (interrupted again (more than 6 times by a threat reflex))` (16:00:22).
+- **The hole shelter** failed twice:
+  - at 15:48:17, `failed (interrupted again (more than 2 times))` (`driver.log:2084`);
+  - at 16:00:22, after 6 self-defense interrupts and 1 by eating: `failed (interrupted again (more than 6 times by a threat reflex))` (`driver.log:2324`).
 - **7 open fights against zombies** from 15:52:27 to 16:00:29: 5 kills, 2 `stopped` with `flee zombie (outnumbered)`. One hit taken: `hurt 5.9 (by zombie)` at 15:54:49.
 - The bot ate rotten flesh twice at food 5 (`eating minecraft:rotten_flesh:0 although it is avoided (hunger)`, 15:55:47 and 16:00:50).
 - Food reached 3 by the morning (16:12:35).
@@ -153,7 +161,7 @@ The reply lengths in characters, in order:
 ### Night 3 (16:18–16:43)
 - `sunset is near` came at 16:17:47 (`food worth 0 hunger held, food 2`).
 - **No shelter.** The shelter was refused for lack of dirt (`you have 4 dirt … needs 9`). The hole shelter found no place (`not quick to dig by hand 82, space not free 64, no wall 1; at -2, 71, -46, on dirt`) 5 times.
-- **Death 3 (16:26:39):** `hurt 4.1 health 14.1->10 (by starving)` (16:26:37), then `hurt 10 health 10->0 (by starving)`. Food had been 1 since 16:22:53. It died at -2, 71, -46, with `[night] death: not in a shelter any more`.
+- **Death 3 (16:26:39):** `hurt 4.1 health 14.1->10 (by starving)` (16:26:37), then `hurt 10 health 10->0 (by starving)`. The food lines had read 1 since 16:22:53. It died at -2, 71, -46, with `[night] death: not in a shelter any more`.
 - **Lost:** 17 rocks, 4 dirt, the leather chestplate, the food book, the club (`club_wood:57`) and 1 wheat; XP level 3 → 0.
 - **Respawn 3:** `escape (try 1 of 3): sprinting …` (16:26:43), then `escape done: … at -66, 73, -138 in 20 s` (16:27:03). Then:
   - `it is night: building a shelter`;
@@ -182,7 +190,7 @@ The reply lengths in characters, in order:
   - In the morning it is `1500 ms`, the time with the stone pickaxe.
 - The other three sides are open next to the bot, but no walk reaches 8 blocks from them.
 - The dig-out found no free cell within 3 blocks on any side.
-- So the site is a hollow in terrain. Even with the east wall counted free, the scroll would be refused.
+- So the site looks like a hollow in terrain. The lines do not say whether the scroll would pass with the east wall counted free.
 
 **The rest:**
 - **Morning use:** 0.
@@ -192,13 +200,13 @@ The reply lengths in characters, in order:
 ### Deaths
 | # | Time | Place | Cause (server) | The lines before it |
 | --- | --- | --- | --- | --- |
-| 1 | 14:47:10 | -70, 62, -71 | `slain by Grove Sprite` | 3 × `hurt 5.5 (by unknown)`, zombie 9–12 m away; `flee zombie (low health 1)` |
-| 2 | 15:29:24 | 72, 64, 84 | `starved to death` | food 1 from 15:26:52; `hurt 20 health 20->0 (by starving)`; 74 `no safe food` lines since death 1 |
-| 3 | 16:26:39 | -2, 71, -46 | `starved to death` | food 1 from 16:22:53; `hurt 4.1 (by starving)`, `hurt 10 (by starving)` |
+| 1 | 14:47:10 | -70, 62, -71 | `slain by Grove Sprite` | 3 × `hurt 5.5 (by unknown)`, the sprite's damage; the source check leaves out level-`none` mobs, so the lines cannot name it; health 15.7 before the first logged hit (20 at 14:46:11); the last hit is unlogged; `flee zombie (low health 1)` |
+| 2 | 15:29:24 | 72, 64, 84 | `starved to death` | food lines at 1 from 15:26:52 (then 0 between two once-a-minute lines); `hurt 20 health 20->0 (by starving)`; 74 `no safe food` lines since death 1 |
+| 3 | 16:26:39 | -2, 71, -46 | `starved to death` | food lines at 1 from 16:22:53 (then 0); `hurt 4.1 (by starving)`, `hurt 10 (by starving)`; the `zombie_player` in the hurt-detail (`driver.log:3036`) is most likely the one this death raised |
 
 ### The food goal lines
 - The self-prompt goal for the `food` step came 11 times (14:47:08 to 16:43:09). Its text: `Food: you hold food worth N hunger in your inventory; this step wants food worth at least 8 hunger held (your hunger bar, 20 of 20, does not count toward it). On this pack hunger falls about 1 every 4 minutes … Food 0 kills you at once on this pack …`
-- `[night] food for the night: food worth 0 hunger held` at all three sunsets: food 10 (14:58:04), 12 (15:38:15) and 2 (16:17:47).
+- `[night] food for the night: food worth 0 hunger held` came 4 times: at the three sunsets, food 10 (14:58:04), 12 (15:38:15) and 2 (16:17:47); and after respawn 3, food 12 (16:27:03, `driver.log:3056`).
 - **The eat reflex ate food as soon as the bot found it.** On day 1 it ate at food 9 to 12, which emptied the inventory; later it ate each find at food 1 to 8. It never kept food back for the step's 8 hunger held.
   - 13 eats in all (`[survival] ate`, each with a food change): 5 mutton, a broccoli, a quinoa, 2 rotten flesh, a tea leaf, a zucchini, a tomatillo and a spice leaf.
   - 74 `no safe food` lines between death 1 and death 2.
@@ -231,7 +239,7 @@ The reply lengths in characters, in order:
   `Failed to collect pyrotech:rock: undergroundbiomes:sedimentary_stone needs a better tool (Tool Progression): the tool you have cannot break it; get a higher-tier one firs…`
   The stone pickaxe had been crafted at 14:56:43.
 - **Swings:** 42 `[survival] swing` lines over 9 fights. 7 fights ended `killed` (5 to 9 s); 2 ended `stopped` with `flee zombie (outnumbered)`. There were no stall-guard lines.
-- **Hurt sources:** 8 hurt lines: 3 `(by unknown)` (death 1, the Grove Sprite), 2 `(by zombie)`, 3 `(by starving)`. No `shot` or arrow line.
+- **Hurt sources:** 8 hurt lines: 3 `(by unknown)` (death 1; the server names a Grove Sprite, which the lines cannot name, see death 1), 2 `(by zombie)`, 3 `(by starving)`. No `shot` or arrow line.
 - **Kill pickups:** the two hunts logged `no drop seen within 4 blocks in 3 s`. Item collecting then picked up the mutton within 3 s (`Picked up 1 items.`, 14:49:56). There were no `!attack` kills; all zombie kills were self-defense.
 
 ### The rest
@@ -242,7 +250,7 @@ The reply lengths in characters, in order:
 - **Self-prompter:** no `standing goal budget spent` line, because the agenda was never done.
 
 ## Server-side notes (not about the bot)
-- `Grove Sprite` is a pack mob. Its hits reached the bot as `unknown` damage (`hurt-detail … cause none`).
+- `slain by Grove Sprite` (`server.log:1084`) is the server's mob-melee death message. The bot's `unknown` and `cause none` are the bot's own attribution and `bot.lastDamageCause`, not the server's damage type.
 
 ## Step 7 (harness-ops)
 - **Fresh:** `fresh: no earlier run, join or scenario; started once; world 6679 of at most 10215 ticks` (14:42:50).
@@ -252,12 +260,15 @@ The reply lengths in characters, in order:
 
 ## For the owners (not judged here)
 - **skills-rotn, food:** the bot never held food for the night.
-  - The eat reflex ate every find at once (on day 1 at food 9 to 12), and the step's goal (8 hunger held) was never met. At all three sunsets it held 0, and two deaths were starvation at food 1.
+  - The eat reflex ate every find at once (on day 1 at food 9 to 12), and the step's goal (8 hunger held) was never met. At all three sunsets, and after respawn 3, it held 0. Two deaths were starvation, at food 0 between two once-a-minute food lines that read 1.
   - Between deaths, the `low` tag fired only when food fell to 12, so `ate_when_low` saw 3 low lines.
 - **skills-rotn, shelters:** after a death the bot has no dirt piles (they are lost), and every later night failed the dirt shelter.
   - The hole shelter was refused for `not quick to dig by hand` or `space not free`, or was interrupted by fights.
   - The night dirt gather ran once, for 97 s, and ended `(stopped)` with 0 piles, 3 s before a zombie fight.
-- **skills-rotn, the hurt source:** death 1's three hits are `by unknown`. The server names a Grove Sprite.
+  - On night 3 the bot logged `less than 6: staying sealed anyway (never out for food at night)` at food 2 (16:17:47), with no shelter to stay in. It starved at 16:26:39.
+- **skills-rotn, the hurt source:** death 1's three hits are `by unknown`, and the server names a Grove Sprite. The source check and the hurt-detail list leave out level-`none` mobs (`mayHurt()`), so a provoked one can never be named. Health also went from 20 (14:46:11) to 15.7 with no line.
+- **skills-rotn, attribution in memory:** memory summaries 6 to 12 (`driver.log:807`–`1493`) say `Zombie player killed me -70,62,-71`. The model took the player zombie the death raised for the killer.
+- **rotn-data, open question:** what provoked the grove sprite? Nothing in the journal hurt it first (see death 1).
 - **rotn-lead (#600), memory summaries:** the first `effort=none` call got a 400, and openrouter.js then sent no setting. Summaries still cost 46% of the spend, up to 16,783 reasoning tokens for about 490 characters.
 - **harness-ops (PR #607):** counting summaries by the `[memory]` marker does not work when a summary and a command call overlap. The tool now pairs each call with its reply.
 
