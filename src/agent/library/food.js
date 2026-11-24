@@ -261,17 +261,6 @@ export function heldFoodPoints(bot) {
     return Math.round(total * 10) / 10;
 }
 
-/** The hunger value of the safe food held (never avoided food; bread counts). */
-export function heldFoodHunger(bot) {
-    let total = 0;
-    for (const item of bot?.inventory?.items?.() ?? []) {
-        if (isAvoided(item)) continue;
-        const f = foodValue(item);
-        if (f) total += f.hunger * (item.count ?? 1);
-    }
-    return total;
-}
-
 /**
  * The food target the bot is short of now, or null: never at night (minutesToSunset 0: the night routine's
  * own rules then); in the before-night window (0 < minutes <= reserveLeadMin) the night's need (soak 14 F1:

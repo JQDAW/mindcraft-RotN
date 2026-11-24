@@ -61,3 +61,22 @@ test('soak 14 (F1): a food run forages first, then hunts the nearest animal and 
     assert.deepEqual([FOOD_RUN.sunset.maxMs, FOOD_RUN.sunset.forage, FOOD_RUN.sunset.hunt, FOOD_RUN.night.maxMs, FOOD_RUN.night.forage, FOOD_RUN.night.hunt, FOOD_RUN.emergencyAt, FOOD_RUN.minHealth],
         [180_000, 24, 32, 240_000, 16, 16, 4, 8]);
 });
+
+// #612 review 1 (the lead): at food 4 or lower (Hunger Overhaul's weakness) the emergency hunts anyway, armed.
+test('#612 review 1: weakHunt: at food 4, armed, the run hunts; without it, it does not', async () => {
+    const cow = { id: 5, name: 'animania:cow_holstein', position: new Vec3(8.5, 64, 0.5) };
+    const calls = [];
+    const deps = {
+        forageNearby: () => Promise.resolve(false),
+        huntTarget: () => (calls.length ? null : cow),
+        huntAnimal: (b, e, opts) => { calls.push(`hunt ${opts.keepGoing()}`); return Promise.resolve('killed'); },
+        pickupKillDrops: () => Promise.resolve(), equip: () => Promise.resolve(), rearm: () => Promise.resolve(),
+    };
+    const weak = await foodRun(runBot({ items: [SWORD], food: 4 }), { ...FOOD_RUN.night, weakHunt: true, deps });
+    assert.deepEqual(calls, ['hunt true'], 'hunted, and the hunt goes on though weak');
+    assert.equal(weak.why, 'no ripe wild food and no animal to hunt within 16 blocks');
+    calls.length = 0;
+    const plain = await foodRun(runBot({ items: [SWORD], food: 4 }), { ...FOOD_RUN.night, deps });
+    assert.deepEqual(calls, []);
+    assert.equal(plain.why, 'no ripe wild food, and too weak to hunt');
+});

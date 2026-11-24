@@ -12,15 +12,18 @@ import * as skills from './skills.js';
 
 /**
  * sunset: at `sunset is near`, before the shelter: at most 3 min, ripe food within 24, animals within 32;
- * ends at a hostile within hostileRange, or night. night: the night emergency: at most 4 min, within 16;
- * hostiles do not end it (it is night: self_defense fights them, the weapon in hand), health below
- * minHealth does. emergencyAt: the food level of the night emergency (food 0 is about 16 min away at rest,
+ * ends at a hostile within hostileRange, or night. night: the night emergency: at most 4 min in all, within
+ * 16; a reflex (self_defense, eating) interrupts it like any action, and the night routine resumes it after
+ * the reflex within what is left of its 4 min (#612 review 2); health below minHealth ends it at food 3 or 4 (at
+ * anyHealthAt, 2, or lower it goes on at any health: #612 review 5). backMs: the walk back into the shelter after
+ * it (#612 review 3). emergencyAt: the food level
+ * of the night emergency (food 0 is about 16 min away at rest,
  * 236 s a point by the #611 review, and kills 4 s later; walking for food costs about 0.7 points a minute). rounds: at most this many forage or hunt tries in one run.
  */
 export const FOOD_RUN = {
     sunset: { maxMs: 3 * 60_000, forage: 24, hunt: 32 },
     night: { maxMs: 4 * 60_000, forage: 16, hunt: 16 },
-    hostileRange: 16, emergencyAt: 4, minHealth: 8, rounds: 12,
+    hostileRange: 16, emergencyAt: 4, minHealth: 8, anyHealthAt: 2, backMs: 20_000, rounds: 12,
 };
 
 const DEPS = {
@@ -36,7 +39,10 @@ const DEPS = {
  * early; stop(): a reason to end it now (a hostile at sunset, low health at night), or null.
  * Returns {points, ms, why}: the points of safe food gained, and why it ended.
  */
-export async function foodRun(bot, { maxMs, forage, hunt, need = Infinity, stop = () => null, deps = {} } = {}) {
+// weakHunt (#612 review 1, the lead): at food HUNT_MIN_FOOD (4) or lower Hunger Overhaul's weakness makes a hunt
+// slow, but at the night emergency (or a sunset run at that food) starvation is certain and a weak hunt is not:
+// armed, it hunts anyway. Everywhere else tooWeakToHunt holds.
+export async function foodRun(bot, { maxMs, forage, hunt, need = Infinity, stop = () => null, weakHunt = false, deps = {} } = {}) {
     const d = { ...DEPS, ...deps };
     const start = Date.now();
     const before = heldFoodPoints(bot);
@@ -56,11 +62,12 @@ export async function foodRun(bot, { maxMs, forage, hunt, need = Infinity, stop 
             if (!got) noForage = true; // nothing (more) ripe in reach: the hunt next
             continue;
         }
-        if (tooWeakToHunt(bot)) { why = 'no ripe wild food, and too weak to hunt'; break; }
+        const weak = tooWeakToHunt(bot) && !weakHunt;
+        if (weak) { why = 'no ripe wild food, and too weak to hunt'; break; }
         if (!hasWeapon(bot)) { why = 'no ripe wild food, and no weapon to hunt with'; break; }
         const target = d.huntTarget(bot, { bases, radius: hunt });
         if (!target) { why = `no ripe wild food and no animal to hunt within ${hunt} blocks`; break; }
-        const end = await d.huntAnimal(bot, target, { keepGoing: () => keepGoing() && !tooWeakToHunt(bot), maxMs: Math.max(1000, Math.min(HUNT.maxMs, left())), equip: d.equip });
+        const end = await d.huntAnimal(bot, target, { keepGoing: () => keepGoing() && (weakHunt || !tooWeakToHunt(bot)), maxMs: Math.max(1000, Math.min(HUNT.maxMs, left())), equip: d.equip });
         if (end === 'killed' && !bot.interrupt_code) {
             const at = target.position?.clone?.() ?? target.position ?? null;
             try { await d.pickupKillDrops(bot, at); } catch { /* the meat may still come in */ }

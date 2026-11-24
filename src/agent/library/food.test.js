@@ -212,11 +212,11 @@ test('G4 #5, soak 14 (F1): foodShortfall: never at night; before night the night
     assert.equal(f({ food: undefined }), null, 'food unknown: never');
 });
 
-test('G4 #5: heldFoodHunger counts the safe food held by pack values; avoided food (raw chicken, rotten flesh) does not count', async () => {
-    const { heldFoodHunger } = await import('./food.js');
+test('G4 #5, soak 14: heldFoodPoints counts the safe food held by pack values (hunger + saturation); avoided food (raw chicken, rotten flesh) does not count', async () => {
+    const { heldFoodPoints } = await import('./food.js');
     const bot = invBot([stack('bread', 0, 2), stack('beef', 0, 3), stack('chicken', 0, 5), stack('rotten_flesh', 0, 4), stack('stick', 0, 9)], 10);
-    assert.equal(heldFoodHunger(bot), 2 * 3 + 3 * 1, 'bread 3 each, raw beef 1 each');
-    assert.equal(heldFoodHunger(invBot([], 10)), 0);
+    assert.equal(heldFoodPoints(bot), 13.2, 'bread 4.2 each, raw beef 1.6 each');
+    assert.equal(heldFoodPoints(invBot([], 10)), 0);
 });
 
 

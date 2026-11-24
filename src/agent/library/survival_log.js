@@ -30,7 +30,7 @@
 // custom name, username or server text reaches the journal. The console only: chat is unchanged.
 
 // No import of food.js (it imports this file): the eat threshold is passed in (bindSurvivalLog).
-import { threatFor } from './threats.js';
+import { threatFor, attackSent } from './threats.js';
 
 export const SURVIVAL_TAG = '[survival]';
 /** The food line's period, and the least time between two "low" lines (G4: no periodic line more than once a minute). */
@@ -101,8 +101,22 @@ export function mayHurt(e) {
  * point at it.
  */
 export const PROVOKED = { chase: 40 };
+/**
+ * #612 review 4 (the lead): only a mob that fights back is marked (reaction ignore-unless-provoked, an animal that
+ * fights back when provoked, or a level above 'none'): a hunted cow is not, so a hit with no swing is not put on it.
+ */
+export function fightsBack(e) {
+    if (!e || e.type === 'player' || e.type === 'object' || e.name === 'item') return false;
+    const t = threatFor(e);
+    return !!t && (t.reaction === 'ignore-unless-provoked' || !!t.provoked || t.level !== 'none');
+}
+/** A mob that attacks once provoked (and chases): ignore-unless-provoked (the grove sprite) or a level above 'none'. */
+export function attacksOnceProvoked(e) {
+    const t = e && e.type !== 'player' ? threatFor(e) : null;
+    return !!t && (t.reaction === 'ignore-unless-provoked' || t.level !== 'none');
+}
 export function markProvoked(e, now = Date.now()) {
-    if (e && typeof e === 'object' && e.type !== 'player') e.rotnProvokedAt = now;
+    if (e && typeof e === 'object' && fightsBack(e)) e.rotnProvokedAt = now;
 }
 export function isProvoked(bot, e) {
     if (!Number.isFinite(e?.rotnProvokedAt)) return false;
@@ -148,7 +162,10 @@ export function hurtSource(bot, { swings = null, now = Date.now() } = {}) {
         // whatever its threat level (a mob that hits the bot must be attributable); then one the bot provoked.
         const swung = inRange.find(e => living(e) && now - (swings?.get(e.id) ?? -Infinity) <= HURT.swingMs);
         const near = inRange.filter(mayHurt);
-        const pick = swung ?? near.find(e => isProvoked(bot, e)) ?? near.find(isHostileThreat) ?? near[0];
+        // #612 review 4: a provoked attacker (ignore-unless-provoked, as the grove sprite, or above 'none') before a
+        // hostile one; a provoked animal that only fights back (a hunted cow: provoked.fightBack) after them.
+        const pick = swung ?? near.find(e => isProvoked(bot, e) && attacksOnceProvoked(e)) ?? near.find(isHostileThreat)
+            ?? near.find(e => isProvoked(bot, e)) ?? near[0];
         if (pick) { noteHitter(bot, pick, now); return mobName(pick); }
     }
     if ((bot?.entity?.velocity?.y ?? 0) < -0.5) return 'fall';
@@ -334,7 +351,8 @@ export function foodCheck(state, bot, now = Date.now(), eatAt = 8) {
     if (!Number.isFinite(bot?.food) || botDead(bot)) return null;
     // Soak 14 (F1, the lead): "low" at each new lower level at or below eatAt (8, 7, 6, ...), not only when food
     // crosses it (soak 14 saw 3 low lines while food went to 1 twice). Above eatAt the level count starts again.
-    if (bot.food > eatAt) state.lowLevel = null;
+    // #612 review 9 (the lead): an eat (food up) starts the level count again, so the next drop at or below eatAt logs.
+    if (bot.food > eatAt || (Number.isFinite(state.lastFood) && bot.food > state.lastFood)) state.lowLevel = null;
     const fell = Number.isFinite(state.lastFood) && bot.food < state.lastFood && bot.food <= eatAt
         && (state.lowLevel == null || bot.food < state.lowLevel);
     state.lastFood = bot.food;
@@ -366,7 +384,13 @@ export function bindSurvivalLog(bot, { eatAt }) {
     // defendSelf wraps bot.attack for a fight and restores what it found, so this wrapper stays underneath.
     if (typeof bot.attack === 'function' && !bot.attack.rotnMarks) {
         const attack = bot.attack;
-        const marking = function (target, ...rest) { try { markProvoked(target); } catch { /* never breaks the bot */ } return attack.call(this ?? bot, target, ...rest); };
+        // #612 review 4: marked only when the attack was sent (vanilla: at once; Better Combat: its result says).
+        const marking = function (target, ...rest) {
+            const r = attack.call(this ?? bot, target, ...rest);
+            const mark = (v) => { try { if (attackSent(v)) markProvoked(target); } catch { /* never breaks the bot */ } };
+            if (r && typeof r.then === 'function') r.then(mark, () => {}); else mark(r);
+            return r;
+        };
         marking.rotnMarks = true;
         bot.attack = marking;
     }

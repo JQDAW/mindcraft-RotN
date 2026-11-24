@@ -581,7 +581,7 @@ test('G4 #5: the soak\'s case (agenda done, nothing held, food 12, by day): the 
     const p = agent.self_prompter.prompt;
     // Soak 13 (C3a): the step wants food held; the bar does not count (the model read "food 13 ... at least 12" as met).
     // Soak 14 (F1): in food points (hunger + saturation), the drain rotn-data measured, and the eat rule.
-    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 points in your inventory; this step wants food worth at least 12 points held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack food falls about 1 point every 4 minutes at rest \(a sealed night costs about 7\) and about 1 every 1\.5 minutes while walking or hunting, and starving kills\. .*The bot eats by itself at food 8 or lower, the least valuable food first: keep the rest\. /);
+    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 points in your inventory; this step wants food worth at least 12 points held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack food falls about 1 point every 4 minutes at rest \(a sealed night costs about 7\) and about 1 every 1\.5 minutes while walking or hunting, and starving kills\. .*You eat by yourself at food 8 or lower, the least valuable food first: keep the rest\. /);
     assert.doesNotMatch(p, /get to at least/);
     assert.match(p, /Near you: animania:cow_holstein: kill one with !attack\("animania:cow_holstein"\)/);
     assert.doesNotMatch(p, /sow_old_spot/, 'a named animal is never offered');
@@ -677,7 +677,7 @@ test('soak 2: the food reserve says food 0 kills at once; at food 4 or lower it 
     const fed = foodAgent(t, [], { food: 10, entities: { 1: cow } });
     agendaTick(fed, { now: 0 });
     assert.match(fed.self_prompter.prompt, /!attack\("animania:cow_holstein"\)/, 'at food 10 the hunt is offered');
-    assert.match(fed.self_prompter.prompt, /Do not eat raw chicken or rotten flesh; keep cooked meat and bread for the night\./);
+    assert.match(fed.self_prompter.prompt, /Do not eat raw chicken or rotten flesh; cooked meat and bread are good night food\./);
 });
 
 test('#422 nit: the day\'s last food run is not stopped as it starts: it runs until it ends, and only then is no new one started', (t) => {
@@ -1471,4 +1471,15 @@ test('#588 nit 1, #590 review 3: with 5 attempts the backoff before the last foo
     clock = 8 * BACKOFF_MS + 1_000;
     assert.equal(agendaTick(agent, { now: clock }), 'food', 'the backoff is over: its run');
     assert.equal(agent.self_prompter.isActive(), true);
+});
+
+// #612 review 6 (the lead): in the before-night window the need counts the bar: "N more points held beyond your
+// hunger bar"; by day the bar does not count; second person throughout.
+test('#612 review 6: the food goal before night asks for points beyond the hunger bar; the static goal speaks to the model', (t) => {
+    const pick = stack('stone_pickaxe', 0, 1);
+    const agent = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_HOLD), stack('bread', 0, 1)], { food: 8, finished: true, timeOfDay: dayAt(7) });
+    assert.equal(agendaTick(agent, { now: 0 }), 'food');
+    assert.match(agent.self_prompter.prompt, /Food: you hold food worth 4\.2 points in your inventory; for the night you need food worth at least 6\.8 points held beyond your hunger bar \(8 of 20\)\./);
+    assert.doesNotMatch(FOOD_RESERVE_STEP.goal, /the bot should|Keep the bread for last/);
+    assert.match(FOOD_RESERVE_STEP.goal, /you should end the night at food 7 or more/);
 });

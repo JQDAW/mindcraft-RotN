@@ -314,14 +314,14 @@ function startJob(agent, n, label, fn, then) {
  */
 export const MORNING_SCROLL = { reach: WALK_EXIT.reach, walkMs: 10_000 };
 /** Walk back into `site` (no digging, at most MORNING_SCROLL.walkMs); true when the bot stands in it. */
-export async function walkInto(bot, site) {
+export async function walkInto(bot, site, { maxMs = MORNING_SCROLL.walkMs } = {}) {
     const inIt = () => bot.entity.position.floored().equals(site);
     if (inIt()) return true;
     let timer;
     try {
         // #604 review 3: noBuild, as the night's other walks: never a block placed on the way back.
         await Promise.race([goToGoal(bot, new pf.goals.GoalBlock(site.x, site.y, site.z), { canDig: false, noBuild: true }).catch(() => null),
-            new Promise(resolve => { timer = setTimeout(resolve, MORNING_SCROLL.walkMs); })]);
+            new Promise(resolve => { timer = setTimeout(resolve, maxMs); })]);
     } finally { clearTimeout(timer); try { bot.pathfinder?.setGoal?.(null); } catch { /* best effort */ } }
     return inIt();
 }
@@ -1185,38 +1185,74 @@ function line(agent, text) {
 /**
  * Soak 14 (F1, the lead): food FOOD_RUN.emergencyAt (4) or lower at night with no safe food held (any emergency
  * food is eaten by the reflex at 5): starving is certain (food 0 kills 4 s later; about 16 min away at rest, 236 s a
- * point by the #611 review, and walking for food costs about 0.7 a minute), a
- * night outside is not. Once a night, in the shelter (out by its side, or the hole's stairs) or exposed (at
- * once): one food run (FOOD_RUN.night, the weapon in hand), then a shelter again where it ends. Held below
- * FOOD_RUN.minHealth, and while a mob is in the shelter's cells (said once).
+ * point by the #611 review, and walking for food costs about 0.7 a minute), a night outside is not. From the
+ * shelter (out by its side, or the hole's stairs) or exposed (at once): food runs (FOOD_RUN.night, armed it hunts
+ * even weak: #612 review 1), 4 min in all. #612 review 2: a run a reflex interrupts (eating, self_defense) goes on
+ * after it within what is left; only a run that ended by time, enough food, nothing found or low health uses the
+ * night's one. #612 review 3: then back into the shelter (no digging, no building, FOOD_RUN.backMs) and its
+ * opening repaired; with no way back, a shelter where the bot is. #612 review 5 (the lead): held below
+ * FOOD_RUN.minHealth only at food 3 or 4; at food 2 or lower it goes at any health. Held while a mob is in the
+ * shelter's cells (said once).
  */
 function nightFoodEmergency(agent, n, ops, now) {
     const bot = agent.bot;
-    if (n.foodEmergencyTried || (n.state !== 'inside' && n.state !== 'exposed') || typeof ops.foodRun !== 'function') return null;
-    if (!Number.isFinite(bot.food) || bot.food > FOOD_RUN.emergencyAt || heldFoodPoints(bot) > 0) return null;
-    const held = !(bot.health >= FOOD_RUN.minHealth) ? `health ${Math.round(bot.health * 10) / 10} is below ${FOOD_RUN.minHealth}`
-        : n.state === 'inside' && n.site && mobInShelterCells(bot, n.site) ? 'a mob is in the shelter\'s cells' : null;
+    if (typeof ops.foodRun !== 'function') return null;
+    const e = n.foodEmergency;
+    if (e?.done) return null;
+    if (!e) {
+        if (n.state !== 'inside' && n.state !== 'exposed') return null;
+        if (!Number.isFinite(bot.food) || bot.food > FOOD_RUN.emergencyAt || heldFoodPoints(bot) > 0) return null;
+    }
+    const weakHold = Number.isFinite(bot.health) && bot.health < FOOD_RUN.minHealth && bot.food > FOOD_RUN.anyHealthAt;
+    const held = weakHold ? `health ${Math.round(bot.health * 10) / 10} is below ${FOOD_RUN.minHealth} at food ${bot.food}`
+        : !e && n.state === 'inside' && n.site && mobInShelterCells(bot, n.site) ? 'a mob is in the shelter\'s cells' : null;
     if (held) {
         if (n.foodEmergencySaid !== held) { n.foodEmergencySaid = held; console.log(`[night] food ${bot.food} and no food held, but ${held}: not out for food yet`); }
-        return null;
+        return e ? 'night:food' : null;
     }
-    n.foodEmergencyTried = true;
-    const inside = n.state === 'inside' && n.site;
-    line(agent, `[night] food ${bot.food} and no food held: starving is certain in about ${bot.food * 4} min at rest, a night outside is not: out for food (at most ${FOOD_RUN.night.maxMs / 60_000} min)`);
+    const em = e ?? (n.foodEmergency = {
+        spentMs: 0, out: false, done: false, wasInside: n.state === 'inside' && !!n.site,
+        site: n.site?.clone?.() ?? n.site, pit: !!n.pit, need: nightFoodNeed({ food: bot.food, saturation: bot.foodSaturation ?? 0 }) ?? Infinity,
+    });
+    n.state = 'food';
+    const left = FOOD_RUN.night.maxMs - em.spentMs;
+    if (!e) line(agent, `[night] food ${bot.food} and no food held: starving is certain in about ${bot.food * 4} min at rest, a night outside is not: out for food (at most ${FOOD_RUN.night.maxMs / 60_000} min)`);
+    else console.log(`[night] the night food run goes on (${Math.round(left / 1000)} s of it left)`);
+    const startedAt = Date.now();
     startJob(agent, n, 'action:nightFood', async () => {
-        if (inside) {
-            const out = await (n.pit ? ops.pitOut?.(bot, n.site) : ops.digOut?.(bot, n.site));
-            if (!out) return { points: 0, why: `no way out of the shelter at ${at(n.site)}` };
+        if (em.wasInside && !em.out) {
+            const out = await (em.pit ? ops.pitOut?.(bot, em.site) : ops.digOut?.(bot, em.site));
+            if (!out) return { points: 0, why: `no way out of the shelter at ${at(em.site)}`, final: true };
         }
+        em.out = true;
         bot.rotnSheltered = false;
         try { await (ops.rearmWeapon ?? rearmWeapon)(bot); } catch { /* best effort */ }
-        return ops.foodRun(bot, { ...FOOD_RUN.night, stop: () => (bot.health < FOOD_RUN.minHealth ? `health ${Math.round(bot.health * 10) / 10}` : null) });
-    }, (r) => {
-        line(agent, `[night] the night food run ended: +${r?.points ?? 0} points (${r?.why ?? 'no result'}); sheltering again here`);
+        return ops.foodRun(bot, { ...FOOD_RUN.night, maxMs: left, need: em.need, weakHunt: true,
+            stop: () => (Number.isFinite(bot.health) && bot.health < FOOD_RUN.minHealth && bot.food > FOOD_RUN.anyHealthAt ? `health ${Math.round(bot.health * 10) / 10}` : null) });
+    }, (r, ret) => {
+        em.spentMs += Date.now() - startedAt;
+        const interrupted = !r?.final && (ret?.interrupted || r?.why === 'stopped' || !r);
+        if (interrupted && em.spentMs < FOOD_RUN.night.maxMs) {
+            console.log(`[night] the night food run was interrupted${r?.points ? ` (+${r.points} points so far)` : ''}; it goes on after the reflex (${Math.round((FOOD_RUN.night.maxMs - em.spentMs) / 1000)} s left)`);
+            return;
+        }
+        em.done = true;
+        line(agent, `[night] the night food run ended: +${r?.points ?? 0} points (${r?.why ?? (interrupted ? 'its time' : 'no result')})`);
+        if (!em.wasInside || !em.out) { shelterHere(); return; }
+        // #612 review 3: back into the shelter, then its opening is repaired (the inside check, every tick while open).
+        startJob(agent, n, 'action:backToShelter', () => (ops.walkInto ?? walkInto)(bot, em.site, { maxMs: FOOD_RUN.backMs }), (back) => {
+            if (!back) { console.log(`[night] no way back into the shelter at ${at(em.site)}; sheltering here`); shelterHere(); return; }
+            Object.assign(n, { state: 'inside', site: em.site, pit: em.pit, checkedAt: null });
+            bot.rotnSheltered = 'open';
+            line(agent, `[night] back in the shelter at ${at(em.site)}: closing it again`);
+        });
+    });
+    function shelterHere() {
+        line(agent, '[night] sheltering again here');
         bot.rotnSheltered = false;
         Object.assign(n, { site: null, pit: false, burrowSteps: 0 });
         startBuilding(n, now); // the routine's clock (the tick that started the run): the next tick builds
-    });
+    }
     return 'night:food';
 }
 
@@ -1386,7 +1422,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // G4 #5: the night's food, in the journal. Soak 14 (F1, the lead): in points (hunger + saturation)
         // against the night's need (food.nightFoodNeed); short at dusk, one bounded food run first (FOOD_RUN.sunset),
         // the shelter where it ends. The line says what happens; never "sealed" (night 3 said so with no shelter).
-        Object.assign(n, { foodRunTried: false, foodEmergencyTried: false, foodEmergencySaid: null }); // once a night each
+        Object.assign(n, { foodRunTried: false, foodEmergency: null, foodEmergencySaid: null }); // once a night each
         const held = heldFoodPoints(bot);
         const sat = Number.isFinite(bot.foodSaturation) ? Math.round(bot.foodSaturation * 10) / 10 : 0;
         const need = nightFoodNeed({ food: bot.food, saturation: sat });
@@ -1399,7 +1435,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         startBuilding(n, now);
         if (run) {
             n.foodRunTried = true;
-            startJob(agent, n, 'action:foodRun', () => ops.foodRun(bot, { ...FOOD_RUN.sunset, need: short,
+            // #612 review 1: at food 4 or lower, armed, it hunts though weak (starvation is certain, a weak hunt is not).
+            startJob(agent, n, 'action:foodRun', () => ops.foodRun(bot, { ...FOOD_RUN.sunset, need: short, weakHunt: Number.isFinite(bot.food) && bot.food <= FOOD_RUN.emergencyAt,
                 stop: () => { const h = ops.hostileNear?.(bot, FOOD_RUN.hostileRange); if (h) return `${aMob(h.name ?? 'hostile mob')} within ${FOOD_RUN.hostileRange} blocks`;
                     return nightPhase(n.clock.timeOfDay(Date.now()) ?? 0) === 'night' ? 'night' : null; } }),
             (r) => console.log(`[night] the food run ended: +${r?.points ?? 0} points (${r?.why ?? 'no result'}); building the shelter here`));
@@ -1422,6 +1459,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
     holdAutonomy(agent);
     const starving = nightFoodEmergency(agent, n, ops, now);
     if (starving) return starving;
+    if (n.state === 'food') return 'night:food';
 
     // #431 review 2: exposed (no shelter after the tries, often because fights kept stopping the
     // build): once no hostile mob has been within QUIET_RANGE for EXPOSED_RETRY_MS, a fresh try

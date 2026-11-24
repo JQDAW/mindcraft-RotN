@@ -18,8 +18,13 @@ import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, 
 import { logAte, fightJournal, swingLine, logWeapon, mobName } from "./survival_log.js";
 import { waitText } from './wait_text.js';
 import { foodKey, foodValue } from "./food.js";
-/** Soak 14: what !consume may drink although it has no food value. */
-const DRINKS = /potion|milk_bucket|bottle|drink|tea|juice|water/;
+import { getItem as rotnItem, registryName as rotnRegistryName } from "../../../packages/rotn-data/index.js";
+/**
+ * Soak 14, #612 review 8: the item classes (rotn-data's) !consume may eat or drink although rotn-data has no food
+ * value: foods, potions, milk, soups. A water bucket (ItemBucket) or wheat (Item) is no food.
+ */
+const EDIBLE_CLASS = /Food|Potion|BucketMilk|Soup|Stew|Drink/i;
+export const CONSUME_TRY_MS = 3000;
 import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
@@ -3242,13 +3247,22 @@ export async function consume(bot, itemName="") {
     if (spawnScrollRefused(bot, item)) return false;
     // Soak 14 (F1): !consume("wheat") at food 2 ended in "Promise timed out" 3 s later. An item that is no food
     // on this pack (rotn-data's food values) and no drink is said at once.
-    if (!foodValue(item) && !DRINKS.test(item.name ?? '')) {
+    // #612 review 8 (the lead): an item rotn-data knows as no food (its class no food, drink or potion: wheat, a
+    // water bucket) is refused; one rotn-data does not list, or a food it has no value for, gets a short try.
+    const known = (() => { try { return rotnItem(rotnRegistryName(item.name)); } catch { return null; } })();
+    const value = foodValue(item);
+    if (!value && known && !EDIBLE_CLASS.test(known.class ?? '')) {
         log(bot, `${item.name} is not food on this pack: nothing to eat.${/(^|:)wheat$/.test(item.name ?? '') ? ' 3 wheat make bread at a crafting table.' : ''}`);
         return false;
     }
     await bot.equip(item, 'hand');
     const before = bot.food;
-    await bot.consume();
+    if (!value) {
+        let timer;
+        const r = await Promise.race([Promise.resolve(bot.consume()).then(() => 'ok', () => 'failed'),
+            new Promise(resolve => { timer = setTimeout(() => resolve('time'), CONSUME_TRY_MS); })]).finally(() => clearTimeout(timer));
+        if (r !== 'ok') { log(bot, `${item.name} was not eaten within ${CONSUME_TRY_MS / 1000} s: it may be no food on this pack.`); return false; }
+    } else await bot.consume();
     await logAte(bot, foodKey(item), before); // G4 #5: the journal's eat line (the same item form as the eating reflex)
     log(bot, `Consumed ${item.name}.`);
     return true;

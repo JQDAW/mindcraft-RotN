@@ -430,7 +430,7 @@ const modes_list = [
         // can eat at food 6 or lower in a fight: the loop stops at the first active mode (#206 review 4).
         name: 'eating',
         // #432 nit: the emergency foods are named from food.EMERGENCY_FOODS; cloudsbluff is never eaten.
-        description: `Eat at food 12 or lower when idle or between fights and no threat is close, and at 6 or lower always, in a fight too. At food ${food.EMERGENCY_FOOD} or lower with nothing else (food 0 kills on this pack): ${food.emergencyFoodText()}, in that order; never ${food.NEVER_EAT_TEXT.replace(' or any other food', '')}. Bread only when nothing else is left.`,
+        description: `Eat at food ${food.EAT_AT} or lower when idle or between fights and no threat is close, and at ${food.EAT_NOW_AT} or lower always, in a fight too; the least valuable food first (at ${food.EAT_NOW_AT} or lower the most). Bread and cooked meat are good night food. At food ${food.EMERGENCY_FOOD} or lower with nothing else (food 0 kills on this pack): ${food.emergencyFoodText()}, in that order; never ${food.NEVER_EAT_TEXT.replace(' or any other food', '')}.`,
         interrupts: ['all'],
         on: true,
         active: false,

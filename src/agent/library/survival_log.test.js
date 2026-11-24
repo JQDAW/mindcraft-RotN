@@ -11,6 +11,7 @@ import {
 } from './survival_log.js';
 import * as skills from './skills.js';
 import { readFileSync } from 'fs';
+import { setImmediate } from 'node:timers';
 
 __setRegistryForTest(minecraftData('1.12.2'));
 
@@ -800,4 +801,55 @@ test('soak 14 (F1, the lead): "low" at each new lower food level at or below EAT
         tags.push(`${f}:${/\(low\)$/.test(l ?? '') ? 'low' : l ? 'check' : '-'}`);
     }
     assert.deepEqual(tags, ['10:check', '9:check', '8:low', '8:check', '7:low', '9:check', '8:low', '6:low', '5:low']);
+});
+
+// #612 review 4 (the lead): only a mob that fights back is marked provoked, only when the attack was sent; a
+// hunted cow is never put before a zombie in range.
+test('#612 review 4: a hunted cow (it only fights back) ranks after a zombie in range; a sow is never marked; a bull is; an attack Better Combat did not send marks nothing', async (t) => {
+    const { bindSurvivalLog, hurtSource, fightsBack } = await import('./survival_log.js');
+    capture(t);
+    const here = new Vec3(0, 64, 0);
+    const cow = { id: 3, type: 'mob', name: 'animania:cow_holstein', position: here.offset(2, 0, 0) };
+    const bull = { id: 6, type: 'mob', name: 'animania:bull_holstein', position: here.offset(30, 0, 0) };
+    const zombie = { id: 4, type: 'mob', name: 'zombie', position: here.offset(4, 0, 0) };
+    const sow = { id: 7, type: 'mob', name: 'animania:sow_old_spot', position: here.offset(1, 0, 0) };
+    assert.equal(fightsBack(sow), false, 'a sow never fights back');
+    assert.equal(fightsBack(cow), true, 'an Animania cow fights back when hit (rotn-data: provoked.fightBack)');
+    assert.equal(fightsBack(bull), true);
+    const bot = { on() {}, health: 20, food: 18, entity: { position: here, velocity: { y: 0 } }, entities: { 3: cow, 4: zombie, 6: bull, 7: sow }, attack: () => undefined };
+    bindSurvivalLog(bot, { eatAt: 8 });
+    bot.attack(sow);
+    assert.equal(sow.rotnProvokedAt, undefined, 'a hunted sow: no mark');
+    bot.attack(cow);
+    assert.ok(Number.isFinite(cow.rotnProvokedAt), 'a hit cow: marked (it may hit back)');
+    assert.equal(hurtSource(bot, { swings: new Map(), now: Date.now() }), 'zombie', 'no swing: the zombie in range before the hunted cow');
+    bot.entities = { 3: cow, 7: sow };
+    assert.equal(hurtSource(bot, { swings: new Map(), now: Date.now() }), 'animania:cow_holstein', 'no zombie: the cow that was hit');
+    // Better Combat's attack resolves {sent: false} past its reach: no mark.
+    const bc = { on() {}, entity: { position: here }, entities: { 6: bull }, attack: () => Promise.resolve({ sent: false, reason: 'reach' }) };
+    bindSurvivalLog(bc, { eatAt: 8 });
+    await bc.attack(bull);
+    await new Promise(r => setImmediate(r));
+    assert.equal(bull.rotnProvokedAt, undefined, 'not sent: no mark');
+    bc.attack = () => Promise.resolve({ sent: true });
+    delete bc.attack.rotnMarks;
+    bindSurvivalLog(bc, { eatAt: 8 });
+    await bc.attack(bull);
+    await new Promise(r => setImmediate(r));
+    assert.ok(Number.isFinite(bull.rotnProvokedAt), 'sent: marked');
+});
+
+// #612 review 9 (the lead): an eat starts the level count again: 6, (eat) 7, 6 logs "low" again.
+test('#612 review 9: after an eat inside 8 the next drop logs "low" again', (t) => {
+    capture(t);
+    const bot = { food: 8, health: 20 };
+    const state = {};
+    const tags = [];
+    let now = 0;
+    for (const f of [9, 6, 7, 6, 5]) {
+        bot.food = f; now += FOOD_LOG_MS;
+        const l = foodCheck(state, bot, now, 8);
+        tags.push(`${f}:${/\(low\)$/.test(l ?? '') ? 'low' : 'check'}`);
+    }
+    assert.deepEqual(tags, ['9:check', '6:low', '7:check', '6:low', '5:low']);
 });
