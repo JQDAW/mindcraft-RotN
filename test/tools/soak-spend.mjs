@@ -8,19 +8,27 @@
 // - A call is one `[openrouter] usage ...` line. Its reasoning tokens are the `[openrouter] reasoning_tokens N`
 //   line after it, before the next usage line (none: null, openrouter.js prints no line then). A field
 //   openrouter.js prints as `unknown` is null: it adds nothing to a sum and is counted (`unknownUsd`).
-// - A memory summary (soak 14): the call whose reply goes to history.js. openrouter.js prints `Received.`
-//   after a call's usage and reasoning lines; the next line from the caller is `Memory updated to:` (or
+// - A memory summary (soak 14): the call whose reply goes to history.js. openrouter.js ends a reply after
+//   its usage and reasoning lines with `Received.`, or with `Empty content returned` or `No completion or
+//   choices returned` when it hands on a stand-in (#607 review 1: all three are reply ends); the next line
+//   from the caller is `Memory updated to:` (or
 //   `[memory] summary returned|failed`) for a summary and `Generated response:` for a command. That pairs
 //   each summary with its own usage line even when a summary and a command call overlap, which they do:
 //   history.js starts the summary and the next command's prompt goes out at once, and the command's
 //   reply usually comes back first. The `[memory] summary turns <n> kept <k>` marker (skills-rotn #601)
 //   was to be the rule (lead, 2026-11-24), but in soak 14 the next usage line after a marker was a
 //   command call 18 times of 22; markers are counted and compared with the summaries found. A call with
-//   no clear pairing (another `Received.` or usage line comes first) falls back to the old rule, a prompt
-//   under 2,000 tokens, and is counted (`unclear`); so does a log with no `Received.` line at all.
-// - `[openrouter] reasoning effort=none for this call` lines (#600) are counted, with the
-//   `the reasoning setting may have been refused` lines (after one, openrouter.js sends no setting).
-//   The summaries' reasoning tokens are reported apart from the other calls'.
+//   no clear pairing falls back to the old rule, a prompt under 2,000 tokens, and is counted (`unclear`):
+//   another reply end or usage line comes before its caller's line (so far only replies with no usable
+//   content, before the empty-content ends counted as reply ends; #607 review 3), or the log has no reply
+//   ends at all. A summary end line with no reply waiting (`orphanEnds`) is a summary whose request threw
+//   (`[memory] summary failed` after `Error while awaiting response`, no usage line): normal, not an error.
+//   Latent (#607 review 4): a `Received.` from promptShouldRespondToBot or promptGoalSetting could sit
+//   between a summary's reply and its end line only with `log_all_prompts` true; the CX23 runs with it off.
+// - `[openrouter] reasoning effort=none for this call` lines (#600) and `the reasoning setting may have
+//   been refused` lines are counted. #609 reverted #600 (the human's decision): releases after rotn-v0.1.20
+//   print neither, so both counts are 0 from soak 15 on; they are still parsed for soaks 13 and 14
+//   (#609 review). The summaries' reasoning tokens are reported apart from the other calls'.
 // - Windows: a night runs from `[night] sunset is near` (or `[night] it is night`) to the night's first
 //   `[night] morning` line; the days are the gaps. Day 1 is named from the bot's `<bot> spawned.` line
 //   (the first line if there is none) and also holds anything before it. Every window after the last
@@ -41,18 +49,19 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 export const MEMORY_MARKER = /^\[memory\] summary turns (\d+) kept (\d+)\b/;
+/** #600 (rotn-v0.1.20 only; reverted in #609): still parsed for soaks 13 and 14. */
 export const EFFORT_LINE = /^\[openrouter\] reasoning (\S+) for this call$/;
 export const USAGE_LINE = /^\[openrouter\] usage prompt_tokens (\S+), completion_tokens (\S+), cost_usd (\S+)$/;
 export const REASONING_LINE = /^\[openrouter\] reasoning_tokens (\S+)$/;
 export const PROVIDER_LINE = /^\[openrouter\] provider ([\w .?-]{0,40}), finish_reason /;
-/** openrouter.js after a call's provider, usage and reasoning lines. */
-export const RECEIVED = /^Received\.$/;
+/** openrouter.js's reply ends after a call's provider, usage and reasoning lines: `Received.`, or a stand-in's error line. */
+export const RECEIVED = /^(Received\.$|Empty content returned\b|No completion or choices returned\b)/;
 /** The caller's first line after a memory summary's reply (history.js). */
 export const SUMMARY_END = /^(Memory updated to:|\[memory\] summary (returned|failed)\b)/;
 /** The caller's first line after a command call's reply (agent.js; or a null reply). */
 export const COMMAND_END = /^(Generated response:|Error: Generated response is not a string)/;
 /** openrouter.js when the reasoning setting was refused (it then sends none). */
-export const EFFORT_REFUSED = /^\[openrouter\] the reasoning setting may have been refused\b/;
+export const EFFORT_REFUSED = /^\[openrouter\] the reasoning setting may have been refused\b/; // #600, reverted in #609
 export const NIGHT_START = /^\[night\] (sunset is near|it is night): building a shelter/;
 export const NIGHT_END = /^\[night\] morning\b/;
 export const LOOP_START = /^starting self-prompt loop$/;
@@ -86,9 +95,9 @@ export function calls(lines) {
     const list = [];
     let provider = null;
     let last = null; // the call whose reasoning line may still come
-    let unreceived = null; // the last call whose `Received.` has not come
-    let awaiting = null; // the call whose `Received.` came, waiting for its caller's first line
-    let orphanEnds = 0; // summary end lines with no call waiting
+    let unreceived = null; // the last call whose reply end (`Received.` or a stand-in's line) has not come
+    let awaiting = null; // the call whose reply end came, waiting for its caller's first line
+    let orphanEnds = 0; // summary end lines with no reply waiting (a summary whose request threw)
     let looping = false; // inside a self-prompt loop run, by line order (a stop and a call can share a second)
     const unclear = () => { if (awaiting) { awaiting.kind = 'unclear'; awaiting = null; } };
     lines.forEach(({ t, msg }, i) => {
@@ -220,8 +229,8 @@ const pct = (a, b) => (b ? `${(100 * a / b).toFixed(1)}%` : '–');
 /** The README tables (Markdown). */
 export function render(r) {
     const o = [];
-    o.push(`Memory summaries: each call paired with its caller's first line after \`Received.\` (\`Memory updated to:\` = a summary): ${r.memory.calls} summaries (${r.summaryPromptsOver} with a prompt of ${int(OLD_SUMMARY_PROMPT_MAX)} tokens or more), ${r.summaryEnds} summary end lines, ${r.markers} \`[memory] summary turns\` markers; ${r.unclear} calls not clearly paired (the prompt-size rule for them)${r.orphanEnds ? `; **${r.orphanEnds} summary end lines with no call**` : ''}.`);
-    o.push(`\`[openrouter] reasoning … for this call\` lines: ${r.effortLines}; \`the reasoning setting may have been refused\` lines: ${r.effortRefused}.`);
+    o.push(`Memory summaries: each call paired with its caller's first line after its reply end (\`Received.\`, \`Empty content returned\` or \`No completion or choices returned\`; \`Memory updated to:\` = a summary): ${r.memory.calls} summaries (${r.summaryPromptsOver} with a prompt of ${int(OLD_SUMMARY_PROMPT_MAX)} tokens or more), ${r.summaryEnds} summary end lines, ${r.markers} \`[memory] summary turns\` markers; ${r.unclear} calls not clearly paired (the prompt-size rule for them)${r.orphanEnds ? `; ${r.orphanEnds} summary end lines with no reply (summaries whose request failed)` : ''}.`);
+    o.push(`\`[openrouter] reasoning … for this call\` lines: ${r.effortLines}; \`the reasoning setting may have been refused\` lines: ${r.effortRefused} (#600, only in rotn-v0.1.20; reverted in #609).`);
     o.push('A night runs from `sunset is near` to its first `[night] morning` line; calls go to windows by line order. Day 1 starts at the spawn line; every window after the last night is a Day.');
     o.push('');
     o.push('| Window | Calls | Memory summaries (calls, USD, reasoning tokens) | Completion tokens | Reasoning tokens | USD |');
