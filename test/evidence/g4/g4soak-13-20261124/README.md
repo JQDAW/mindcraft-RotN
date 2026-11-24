@@ -44,7 +44,7 @@ Every address is redacted (`<ip>`): the CX23's, the dev server's and the test se
 | `deaths_reported` | PASS | no death |
 
 ## The LLM spend and the reasoning tokens (per window)
-Each `[openrouter] usage` line is one call. Its `reasoning_tokens` is the line right after it. A memory summary is a call whose prompt is under 2,000 tokens. A night runs from `sunset is near` to the first `[night] morning` line.
+Each `[openrouter] usage` line is one call. Its `reasoning_tokens` is the line right after it. A memory summary is a call whose prompt is under 2,000 tokens. In this table a night runs from `sunset is near` to the night's first `[night] morning` line (02:32:17, 03:12:18, 03:52:21). The sections under "What happened" use a different end: the dig-out, when the bot left the shelter (02:33:22, 03:13:21, 03:52:21).
 
 | Window | Calls | Memory summaries (calls, USD) | Completion tokens | USD |
 | --- | --- | --- | --- | --- |
@@ -53,8 +53,8 @@ Each `[openrouter] usage` line is one call. Its `reasoning_tokens` is the line r
 | Day 2 (02:32:17–02:46:45) | 52 | 14, 0.004665 | 56,305 | 0.017702 |
 | Night 2 (02:46:45–03:12:18) | 0 | – | – | – |
 | Day 3 (03:12:18–03:26:45) | 124 | 33, 0.034355 | 237,754 | 0.067208 |
-| Night 3 (03:26:45–03:52:18) | 0 | – | – | – |
-| Morning 4 (03:52:18–03:52:30) | 3 | 0 | 174 | 0.000589 |
+| Night 3 (03:26:45–03:52:21) | 0 | – | – | – |
+| Morning 4 (03:52:21–03:52:30) | 3 | 0 | 174 | 0.000589 |
 | **Total** | **268** | **69, 0.046646 (42.2%)** | **365,163** | **0.110436** |
 
 - **Reasoning:** 349,462 of 365,163 completion tokens (95.7%).
@@ -71,12 +71,14 @@ Each `[openrouter] usage` line is one call. Its `reasoning_tokens` is the line r
 - **Self-prompting:**
   - **Total:** 32.1 min in 13 runs of the loop (the last one open at the stop), 262 calls, USD 0.1077 (0.201/h).
   - **Day 1 (01:52:19–02:06:50):** the loop ran from the join until sunset 1, for the agenda.
-  - **Day 2:** the agenda's last steps, then the standing goal from 02:35:5x. Its daily budget was spent at 02:41:22 (`driver.log:2378`, `server.log:819`; the bot calls this "day 1").
-  - **Day 3:** from 03:13:21 until its budget was spent at 03:25:12 (`driver.log:4231`, `server.log:1011`; the bot's "day 2").
+  - **Day 2:** the agenda's last steps, then the standing goal from 02:35:5x. Its daily budget was spent at 02:41:17 (`[agenda] standing goal budget spent`, `driver.log:2378`). The loop stopped after the turn in flight at 02:41:22 (`driver.log:2390`–`2391`, chat `server.log:819`). The bot calls this "day 1".
+  - **Day 3:** from 03:13:21. Its budget was spent at 03:25:04 (`driver.log:4231`), and the loop stopped at 03:25:12 (`driver.log:4242`–`4243`, chat `server.log:1011`). The bot calls this "day 2".
 - **Calls while not self-prompting:** 6 in total (USD 0.0027).
 - **Why it failed:** the night windows had no calls, as in soak 12. The difference from soak 12 (0.0343/h) is day 3's memory summaries: 0.0344 on their own.
 
 ## What happened
+Each night here runs from `sunset is near` to the morning dig-out, the moment the bot left the shelter. The spend table above ends each night at the first `[night] morning` line instead.
+
 ### Day 1 (01:52–02:07)
 - The agenda ran from the join:
   - rocks, sticks and the crude axe;
@@ -98,18 +100,18 @@ Each `[openrouter] usage` line is one call. Its `reasoning_tokens` is the line r
 
 ### Day 2 (02:33–02:47)
 - The agenda finished: the stone axe at 02:33:47, then cobblestone; `agenda done` came at 02:34:43.
-- The standing goal ran until its budget was spent at 02:41:22.
+- The standing goal ran until its budget was spent at 02:41:17; the loop stopped at 02:41:22.
 - The bot tried `!collectBlocks("undergroundbiomes:sedimentary_stone", 4)` (02:37:25). It got `Collected 0`: the stone it dug gave `pyrotech:rock:8` and dirt piles (`driver.log:2035`).
 - It made a second stone pickaxe at 02:39:36 (`driver.log:2254`) and 4 `limestone_cobble`.
 
 ### Night 2 (02:47–03:13)
 - `sunset is near` came at 02:46:45 (food 13).
 - At 02:46:48 it was `in the shelter at 296, 82, -77` and refused the scroll (`driver.log:2405`).
-- 4 low lines and 4 eats.
+- 4 low lines and 4 eats up to the dig-out. 3 came before the first morning line (03:12:18); the 4th came at 03:13:10, while the bot waited for the zombie to leave.
 - At 03:12:18 it logged `a zombie at 297, 82, -78 is within 8 blocks`. At 03:13:21 it dug out at 297, 82, -77. That was a level exit to the east: no `dig out:` side lines, which the code logs only for a step, stairs or a tunnel.
 
 ### Day 3 (03:13–03:27)
-- The standing goal (food, then `shelter_blocks`) ran until its budget was spent at 03:25:12.
+- The standing goal (food, then `shelter_blocks`) ran until its budget was spent at 03:25:04; the loop stopped at 03:25:12.
 - The model ran `!searchForEntity` 35 times (pigs, cows, sheep, rabbits, chickens, Animania kinds) with no find, and made 11 `chalk_cobble` (3 to 14).
 - One open fight at 03:23:25: `fight start zombie (open)`, `weapon spartanweaponry:club_wood (open)`, then `fight end zombie gone after 1 s` (`driver.log:3973`–`3975`). There was no swing.
 - 1 `search_range` error from the model (`!searchForEntity` with a range under 32, 03:17:37).
@@ -118,7 +120,7 @@ Each `[openrouter] usage` line is one call. Its `reasoning_tokens` is the line r
 - `sunset is near` came at 03:26:45 (food 14, `food worth 13 hunger held`).
 - At 03:26:45 it was `in the shelter at 288, 66, -74` and refused the scroll (`driver.log:4260`).
 - 2 low lines and 2 eats.
-- Morning came at 03:52:18. It dug out to the north (`a step up, 2 blocks`) at 03:52:21.
+- The dig-out's side lines came at 03:52:18 (`driver.log:4297`–`4299`). The night's first `[night] morning` line, `dug out of the shelter at 288, 66, -75`, came at 03:52:21 (`driver.log:4301`), after it went north (`a step up, 2 blocks`). There was no zombie wait this morning.
 - The runner stopped the unit at 03:52:30.
 
 ## The lines the lead asked for
@@ -172,15 +174,15 @@ The bot also held 92 to 144 `betterwithmods:dirt_pile` every night. These are no
   - north: `no firm floor under 280, 65, -84 (air)`, a drop;
   - west: `a tunnel, 4 blocks`.
 
-  The site was cut into solid ground on two sides, with a drop on the third. The terrain alone would have refused it.
-- **Night 2, 296, 82, -77** (`driver.log:2452`): a level exit on the east (297, 82, -77). There was no `dig out:` line, so no side was refused and none needed a step or a tunnel. The east side opened level onto free ground, so this refusal points at the walls more than at the terrain. The bot held 18 cobble after 02:37:53 and 9 just before its 03:14:51 craft, so about 9 net went into this shelter; most of it was placed cobble. The east wall's two cells were most likely `chalk_cobble`, `siltstone_cobble` or `limestone_cobble` (1.5 s). The logs cannot show which.
+  The dig-out found solid ground on two sides (it looks 3 blocks out). The third side was a drop of unrecorded depth; `walkableExit` may step down only one block. The fourth needed a tunnel. Inferred, not recorded: the terrain probably left no walkable way to 8 blocks, but `walkableExit` needs 8 blocks and the dig-out looked only 3, so it is not known whether the drop or the far ground was walkable.
+- **Night 2, 296, 82, -77** (`driver.log:2452`): a level exit on the east (297, 82, -77). There was no `dig out:` line, so no side was refused and none needed a step or a tunnel. The east side opened level onto free ground, so this refusal points at the walls more than at the terrain. The bot held 18 cobble after 02:37:53 and 9 just before its 03:14:51 craft, so about 9 net went into this shelter, and most of it was placed cobble. The count is only a bound: cobble picked up in the morning dig-out, or placed or used outside the shelter, would also move it. The east wall's two cells were most likely `chalk_cobble`, `siltstone_cobble` or `limestone_cobble` (1.5 s). The logs cannot show which.
 - **Night 3, 288, 66, -74** (`driver.log:4297`–`4301`):
   - east, west and south: `no free cell within 3 blocks`;
   - north: `a step up, 2 blocks`.
 
-  The site was in a cut with ground on three sides. The terrain alone would have refused it.
+  The dig-out found solid ground on three sides (3 blocks out), and the fourth needed a step up of 2 blocks. Inferred, not recorded: the terrain probably left no walkable way out, but whether the ground past the step was walkable to 8 blocks is not known.
 
-**Summary.** On nights 1 and 3 the site was enclosed by terrain. On night 2 the likely cause is the shelter's own cobble walls, at 1.5 s against `quickDig`'s 1 s. On every night, a wall of placed cobble could never count as free with a stone pickaxe. This is read from the dig-out lines and the inventory, not from a cell list; a `[night]` line naming the blocking cells would settle it.
+**Summary.** On nights 1 and 3 the dig-out lines show solid ground on 2 to 3 sides, and on the remaining side a drop or a step that is not known to be walkable to 8 blocks; this points to the terrain, inferred and not recorded. On night 2 the likely cause is the shelter's own cobble walls, at 1.5 s against `quickDig`'s 1 s. On every night, a wall of placed cobble could never count as free with a stone pickaxe. This is read from the dig-out lines and the inventory, not from a cell list; a `[night]` line naming the blocking cells would settle it.
 
 ### Shelter fights and scaffolding
 - **A mob in the bot's cells or the roof cell (the soak 12 death-1 type): 0.** No `from the shelter`, `cornered`, `in the opening` or `mob inside` line, and no `[survival] hurt` line.
@@ -240,7 +242,10 @@ The bot also held 92 to 144 `betterwithmods:dirt_pile` every night. These are no
 - **Pathfinder:** 2 `Took to long to decide path to goal!` timeouts: 02:00:03 (two lines, `driver.log:814`, `826`) and 02:38:49 (`driver.log:2218`). There was also 1 `unstuck` interrupt (01:56:53).
 - **Model command errors:** 1 `!searchForEntity` call with a `search_range` under 32 (03:17:37, `driver.log:3369`).
 - **The club:** crafted once, at the weapon step. It was held through the run.
-- **Self-prompter stops:** 2 standing-goal budget stops (02:41:22, 03:25:12). Each is in `driver.log` (`[agenda] standing goal budget spent`) and in the server chat (`its 5 min of self-prompting for day N are spent`).
+- **Self-prompter stops:** 2 standing-goal budget stops.
+  - **Budget spent:** 02:41:17 and 03:25:04 (`[agenda] standing goal budget spent`, `driver.log:2378`, `4231`).
+  - **Loop stopped:** 02:41:22 and 03:25:12 (`[self-prompt] stopping after the turn` and `self prompt loop stopped`, `driver.log:2390`–`2391`, `4242`–`4243`).
+  - **Server chat:** at the stop times (`its 5 min of self-prompting for day N are spent`, `server.log:819`, `1011`).
 
 ## Server-side notes (not about the bot)
 - **`[Skeleton: Object successfully summoned]`:** 7 lines, 2 at 02:32:14–17 and 5 at 03:12:16–19 (`server.log:756`–`757`, `869`–`874`). Each burst came within 4 s of a `morning: a zombie … within 8 blocks` line. These are pack entities running a summon, not the bot.
@@ -258,7 +263,7 @@ The bot also held 92 to 144 `betterwithmods:dirt_pile` every night. These are no
   - With a stone pickaxe, any shelter wall of the pack's hardness-4 cobble fails `quickDig` (1.5 s against 1 s). The `free` set in `scrollRefusal` then holds no placed wall cell.
   - A shelter of placed cobble on open ground can only pass if a gap in its walls is already walkable.
   - A `[night]` line that names the cells which stopped `walkableExit`, with each cell's block and dig time, would let the next soak say which it was.
-- **skills-rotn and rotn-lead, cost:** the fail is day 3's memory summaries. They had about 500 characters of content each but up to 18,312 reasoning tokens. The other windows' spend is close to soak 12's.
+- **skills-rotn and rotn-lead, cost:** the fail is day 3's memory summaries. They had about 500 characters of content each but up to 18,312 completion tokens, of which up to 18,156 were reasoning (`driver.log:2941`). The other windows' spend is close to soak 12's.
 - **skills-rotn:** the two morning zombie lines were followed by a dig-out 61 s and 63 s later, with no fight or hurt.
   - Night 1 dug out to the west (279, 65, -83), next to the zombie's reported cell (279, 65, -84).
   - Night 2 dug out to the east (297, 82, -77), next to 297, 82, -78.
