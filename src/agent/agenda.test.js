@@ -581,7 +581,7 @@ test('G4 #5: the soak\'s case (agenda done, nothing held, food 12, by day): the 
     const p = agent.self_prompter.prompt;
     // Soak 13 (C3a): the step wants food held; the bar does not count (the model read "food 13 ... at least 12" as met).
     // Soak 14 (F1): in food points (hunger + saturation), the drain rotn-data measured, and the eat rule.
-    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 points in your inventory; this step wants food worth at least 12 points held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack food falls about 1 point every 4 minutes at rest \(a sealed night costs about 7\) and about 1 every 1\.5 minutes while walking, and starving kills\. .*The bot eats by itself at food 8 or lower, the least valuable food first: keep the rest\. /);
+    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 points in your inventory; this step wants food worth at least 12 points held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack food falls about 1 point every 4 minutes at rest \(a sealed night costs about 7\) and about 1 every 1\.5 minutes while walking or hunting, and starving kills\. .*The bot eats by itself at food 8 or lower, the least valuable food first: keep the rest\. /);
     assert.doesNotMatch(p, /get to at least/);
     assert.match(p, /Near you: animania:cow_holstein: kill one with !attack\("animania:cow_holstein"\)/);
     assert.doesNotMatch(p, /sow_old_spot/, 'a named animal is never offered');
