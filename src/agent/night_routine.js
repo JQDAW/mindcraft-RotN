@@ -1017,7 +1017,7 @@ export const NIGHT_OPS = { foodRun, buildShelter, digOut, siteNeeds, siteProblem
     burrowThreat, burrowAway,
     // #580 review 3: the blocks a repair may place now (with a pickaxe sturdy and dirt; without, dirt, its piles, logs and planks).
     repairBlocks: (bot) => {
-        const items = bot.inventory?.items?.() ?? [];
+        const items = bot.inventory?.items?.() ?? []; // (toolLevels below reads the off hand too: #614 review 1)
         const dirt = countOf(softItems(bot)) + placeableDirt(items);
         return toolLevels(bot, 'pickaxe').length > 0 ? countOf(shelterItems(bot)) + dirt : dirt + countOf(woodItems(bot));
     } };

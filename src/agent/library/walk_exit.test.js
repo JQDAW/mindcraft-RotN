@@ -169,3 +169,14 @@ test('soak 14 (F2): digSpeedFactor: Mining Fatigue I-IV x0.3/0.09/0.0027/0.00081
     assert.ok(Math.abs(digMs(w.bot, w.bot.blockAt(new Vec3(1, 63, 0))) - 750 / 0.09) < 1);
     assert.equal(quickDig(w.bot, new Vec3(1, 63, 0)), false, 'Mining Fatigue II: 8.3 s');
 });
+
+// #614 review 5: a block with no dump entry: prismarine's digTime got the effects and bestDig divided by digSpeedFactor
+// again (Mining Fatigue twice). Now digTime gets none; the factor applies once.
+test('#614 review 5: Mining Fatigue counts once for a block with no dump entry', async () => {
+    const { digMs, digSpeedFactor } = await import('./walk_exit.js');
+    const bot = { inventory: { items: () => [] }, registry: { effects: { 4: { name: 'MiningFatigue' } } }, entity: { effects: { 4: { amplifier: 1 } } } };
+    let seen = null;
+    const b = { name: 'nosuchmod:soft_block', metadata: 0, boundingBox: 'block', digTime: (type, c, w, g, ench, effects) => { seen = effects; return 1000 * (Object.keys(effects).length ? 1 / 0.09 : 1); } };
+    assert.ok(Math.abs(digMs(bot, b) - 1000 / digSpeedFactor(bot)) < 1, `${digMs(bot, b)}`);
+    assert.deepEqual(seen, {}, 'no effects passed to prismarine');
+});

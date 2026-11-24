@@ -485,12 +485,15 @@ test('soak 14 (F2): a collect does not start a dig expected to take longer than 
     fast(t);
     const logs = [];
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
-    const bot = fakeBot({ bushes: [{ x: 8, sticks: 1 }] });
+    const bot = fakeBot({ bushes: [{ x: 8, sticks: 1 }, { x: 12, sticks: 1 }] });
     bot.digTime = () => 926_000;
     bot.entity.effects = { 4: { id: 4, amplifier: 3 } };
     bot.registry = { ...(bot.registry ?? {}), effects: { 4: { id: 4, name: 'MiningFatigue' } } };
     assert.equal(await skills.collectBlock(bot, 'stick', 1), false);
     assert.deepEqual(bot.log.digs, []);
-    assert.match(bot.output, /Not digging \S+ at 8, 64, 0: it would take 926\.0 s \(effects MiningFatigue:3: low food gives Mining Fatigue on this pack; eat first\)\./);
+    // #614 review 4 (the lead): the first refusal stops the collect, one line (the next bush would be as slow).
+    assert.match(bot.output, /Stopped collecting stick: digging \S+ would take 926\.0 s \(effects MiningFatigue:3: low food gives Mining Fatigue on this pack; eat first\)\./);
+    assert.equal((bot.output.match(/Stopped collecting/g) ?? []).length, 1);
+    assert.equal(logs.filter(l => l.startsWith('[dig] ')).length, 1, 'one [dig] line');
     assert.ok(logs.some(l => /^\[dig\] \S+ at 8, 64, 0: not started: it would take 926\.0 s, over 60\.0 s; .*effects MiningFatigue:3;/.test(l)), logs.join('\n'));
 });

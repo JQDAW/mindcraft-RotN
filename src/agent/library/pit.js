@@ -234,7 +234,8 @@ export async function digPit(bot, { radius = PIT.radius, progress = {} } = {}) {
  * (or than its caller allows) is not started: its [dig] line says why (soak 14: a stale Mining Fatigue IV made
  * dirt by hand 926 s, and the collect waited 90 s a block; net-forge (C)).
  */
-export const DIG_STALL = { factor: 3, slackMs: 2000, unknownMs: PIT.digSlackMs, maxEstMs: 60_000 };
+// equipMs (#614 review 7): the equip before a dig (and the off-hand pickaxe's move) gets at most this long.
+export const DIG_STALL = { factor: 3, slackMs: 2000, unknownMs: PIT.digSlackMs, maxEstMs: 60_000, equipMs: 10_000 };
 /** A dig's estimate with what is in hand now (null when unknown) and its limit (DIG_STALL). */
 export function digBudget(bot, block) {
     let estMs = null;
@@ -284,6 +285,7 @@ export async function digWithin(bot, block, ms, { equip = null } = {}) {
     // the hand: Infinity since #595 for stone, so the 4 s floor; morning 1's cobble with Mining Fatigue II needed
     // 16.7 s). `ms`: the caller's own cap (Infinity: the budget alone); the limit is the smaller.
     const start = Date.now();
+    bot.rotnLastDig = null; // #614 review 6: no earlier dig's refusal is read for this one
     const left = () => (Number.isFinite(ms) ? ms - (Date.now() - start) : Infinity);
     let timer;
     const race = (p, t) => (Number.isFinite(t)
@@ -295,7 +297,7 @@ export async function digWithin(bot, block, ms, { equip = null } = {}) {
             if (equip) return !!(await equip());
             try { await bot.tool?.equipForBlock?.(block); } catch { /* digs with what is in hand */ }
             return !(block.canHarvest && !block.canHarvest(bot.heldItem ? bot.heldItem.type : null));
-        })(), left());
+        })(), Math.min(left(), DIG_STALL.equipMs)); // #614 review 7: the equip (and the off-hand move) has its own cap
         if (ok === 'timeout') return 'timeout';
         if (!ok) return false;
     }

@@ -13,6 +13,7 @@ import pf from 'mineflayer-pathfinder';
 import { handDiggable, dumpState } from './night.js';
 import { digEquip } from './burrow.js';
 import { getItem, registryName } from '../../../packages/rotn-data/index.js';
+import { carriedItems } from './rotn_names.js';
 import { isLiquid, isFalling } from './shelter.js';
 import { goToGoal } from './skills.js';
 import { digWithin, PIT } from './pit.js';
@@ -105,7 +106,8 @@ export function toolDigMs(bot, b, tool) {
         // A tool rotn-data does not know: as the hand.
         return st.toolRequired ? Infinity : st.hardness * 1.5 * 1000;
     }
-    if (typeof b?.digTime === 'function') { try { return b.digTime(tool?.type ?? null, false, false, false, [], bot.entity?.effects ?? {}); } catch { return Infinity; } }
+    // #614 review 5: no effects here: bestDig and keptDigMs apply them once (digSpeedFactor).
+    if (typeof b?.digTime === 'function') { try { return b.digTime(tool?.type ?? null, false, false, false, [], {}); } catch { return Infinity; } }
     return !tool && handDiggable(b) && (st?.hardness ?? Infinity) <= PIT.maxHardness ? 0 : Infinity;
 }
 /** The best dig time of b with the hand or any tool the bot carries (ms). */
@@ -113,7 +115,8 @@ export function digMs(bot, b) {
     return bestDig(bot, b).ms;
 }
 /** The tools the bot carries (pickaxes, axes, shovels, ... and every item rotn-data gives tool classes). */
-const carriedTools = (bot) => (bot.inventory?.items?.() ?? []).filter(i => TOOL_NAME.test(i.name ?? '') || !!getItem(registryName(i.name))?.toolClasses);
+const carriedTools = (bot) => carriedItems(bot).filter( // #614 review 1: the off hand too
+    i => TOOL_NAME.test(i.name ?? '') || !!getItem(registryName(i.name))?.toolClasses);
 /**
  * Soak 14 (F2, net-forge): the bot's effects on dig speed, as vanilla: Mining Fatigue I to IV x0.3, 0.09, 0.0027,
  * 0.00081 (Hunger Overhaul gives them at food 4 to 1 or less), Haste +20% a level. 1 with none.

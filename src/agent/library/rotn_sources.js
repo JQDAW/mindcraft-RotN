@@ -4,7 +4,7 @@
 // Sturdy gives 4 rocks of the stone's type instead of cobblestone; and so on.
 // No RotN block names are hard-coded here.
 import { howToGet, getItem, registryName, botName } from '../../../packages/rotn-data/index.js';
-import { formatName, parseName } from './rotn_names.js';
+import { formatName, parseName, carriedItems } from './rotn_names.js';
 
 // rotn-data's howToGet for a canonical name, or null for an unknown item.
 function lookup(name) {
@@ -81,9 +81,9 @@ export function worldSources(name) {
 /** The levels of every tool of this type the bot holds ("pickaxe" -> [0] for a stone pickaxe). */
 export function toolLevels(bot, type) {
     const levels = [];
-    // inventory.items() only: the same stacks allowedTool and mineflayer-tool's equipForBlock can
-    // equip (#229 review). A stack on the cursor or in the off hand is moved back first (stowCarried).
-    for (const item of bot.inventory.items()) {
+    // The inventory and the off hand (#614 review 1: rearmWeapon keeps the stone pickaxe there); allowedTool equips
+    // from either (bot.equip takes the off-hand stack straight into the hand). The cursor is moved back first (stowCarried).
+    for (const item of carriedItems(bot)) {
         const level = getItem(registryName(item.name))?.toolClasses?.[type];
         if (typeof level === 'number' && level >= 0) levels.push(level);
     }
@@ -190,7 +190,7 @@ export function allowedTool(bot, tool) {
     if (!tool) return null;
     let best = null;
     let bestLevel = -1;
-    for (const item of bot.inventory.items()) {
+    for (const item of carriedItems(bot)) { // #614 review 1: the off hand too
         const level = getItem(registryName(item.name))?.toolClasses?.[tool.type];
         if (typeof level === 'number' && level >= 0 && levelOk(tool, level) && level > bestLevel) {
             best = item;
@@ -235,7 +235,7 @@ export function handRoute(bot, name) {
 /** Every held item that is the rule's tool (allowedTool gives only the best one). */
 export function allowedTools(bot, tool) {
     if (!tool) return [];
-    return bot.inventory.items().filter(item => {
+    return carriedItems(bot).filter(item => { // #614 review 1: the off hand too
         const level = getItem(registryName(item.name))?.toolClasses?.[tool.type];
         return typeof level === 'number' && level >= 0 && levelOk(tool, level);
     });

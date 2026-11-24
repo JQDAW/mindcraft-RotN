@@ -8,6 +8,15 @@ import { finishTask, endOpenGoal } from '../priority.js';
 import { forgetNightGoal } from '../night_routine.js';
 import { hasAutonomyPrefix } from '../agenda_driver.js';
 import { nightPhase, nightRoutineActive, minutesToSunset, SHELTER_LEAD_MIN } from '../library/night.js';
+import { deathSpotBlocked } from '../library/death_report.js';
+import * as world from '../library/world.js';
+import { threatFor, hurtBy, hasWeapon } from '../library/threats.js';
+import { mayBelongToPlayer, retaliationRisk, knownBases, isHuntableAnimal, tooWeakToHunt, HUNT_MIN_FOOD } from '../library/hunting.js';
+import { threatOf } from '../../../packages/rotn-data/index.js';
+import { parseStandOn } from '../library/stand_on.js';
+import { placeHere } from '../library/escape.js';
+import { sightRange, rangeText, nearestOfKind, noteSearchFind, noteSearchMiss, missText, isAnimalKind } from '../library/entity_search.js';
+
 /** Soak 14 (F2): the least a model's collect gets before dusk (it ends by the night routine otherwise). */
 export const COLLECT_DUSK_MIN_MS = 30_000;
 /**
@@ -21,14 +30,6 @@ export function collectLimitsBeforeDusk(timeOfDay, context = null) {
     return !context?.sender && m > 0 && Number.isFinite(toDusk) && toDusk < skills.COLLECT_LIMITS.totalMs
         ? { ...skills.COLLECT_LIMITS, totalMs: Math.max(COLLECT_DUSK_MIN_MS, toDusk) } : skills.COLLECT_LIMITS;
 }
-import { deathSpotBlocked } from '../library/death_report.js';
-import * as world from '../library/world.js';
-import { threatFor, hurtBy, hasWeapon } from '../library/threats.js';
-import { mayBelongToPlayer, retaliationRisk, knownBases, isHuntableAnimal, tooWeakToHunt, HUNT_MIN_FOOD } from '../library/hunting.js';
-import { threatOf } from '../../../packages/rotn-data/index.js';
-import { parseStandOn } from '../library/stand_on.js';
-import { placeHere } from '../library/escape.js';
-import { sightRange, rangeText, nearestOfKind, noteSearchFind, noteSearchMiss, missText, isAnimalKind } from '../library/entity_search.js';
 
 /** The model's !stay is at most this many seconds; longer (or -1, forever) needs a giver's typed command. */
 export const STAY_LIMITS = { modelMaxS: 120 };

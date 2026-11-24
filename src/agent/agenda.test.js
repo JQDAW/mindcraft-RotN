@@ -1071,8 +1071,10 @@ test('soak 7 (d): within FOOD_AFTER_DEATH.windowMs of a death (its time, with or
     // Bounded: past the window, the night near, the shelter blocks come first again.
     assert.equal(agendaTick(died(soak7(), FOOD_AFTER_DEATH.windowMs + 1000), { now: 0 }), 'shelter_blocks');
     // Food held, or food above 12: no food first.
-    assert.notEqual(agendaTick(died(far([stack('bread', 0, 1)]), 20_000), { now: 0 }), 'food');
-    assert.notEqual(agendaTick(died(far([], { food: 13 }), 20_000), { now: 0 }), 'food');
+    // #614 review 10: exactly as with no death (unarmed in the morning: Fix H's weapon first).
+    assert.equal(agendaTick(far([stack('bread', 0, 1)]), { now: 0 }), 'weapon', 'no death: the weapon');
+    assert.equal(agendaTick(died(far([stack('bread', 0, 1)]), 20_000), { now: 0 }), 'weapon');
+    assert.equal(agendaTick(died(far([], { food: 13 }), 20_000), { now: 0 }), 'weapon');
     // !agenda (readOnly) shows the same step.
     const shown = died(far(), 20_000);
     assert.equal(shown.agenda.judge(agendaState(shown.bot), { readOnly: true }).step.id, 'food');
@@ -1480,7 +1482,7 @@ test('#588 nit 1, #590 review 3: with 5 attempts the backoff before the last foo
 // Soak 14 (F2, the lead): after a respawn by day, the night 15 min away or less and too few shelter blocks: the blocks first.
 test('soak 14 (F2): shelterFirstAfterDeath: within 15 min of a death, the night 15 min away or less, fewer than SHELTER_HOLD blocks', async () => {
     const { shelterFirstAfterDeath, SHELTER_AFTER_DEATH } = await import('./agenda.js');
-    assert.deepEqual(SHELTER_AFTER_DEATH, { windowMs: 15 * 60_000, nightMin: 15 });
+    assert.deepEqual(SHELTER_AFTER_DEATH, { windowMs: 15 * 60_000, nightMin: 15, foodAtMost: 4 });
     const s = (o = {}) => ({ sinceDeathMs: () => 60_000, minutesToSunset: () => 7, hasPickaxe: () => true, shelterBlocks: () => 3, ...o });
     assert.equal(shelterFirstAfterDeath(s()), true);
     assert.equal(shelterFirstAfterDeath(s({ sinceDeathMs: () => Infinity })), false, 'no death');
@@ -1489,6 +1491,10 @@ test('soak 14 (F2): shelterFirstAfterDeath: within 15 min of a death, the night 
     assert.equal(shelterFirstAfterDeath(s({ minutesToSunset: () => 0 })), false, 'night: the night routine');
     assert.equal(shelterFirstAfterDeath(s({ shelterBlocks: () => SHELTER_HOLD })), false, 'enough blocks');
     assert.equal(shelterFirstAfterDeath(s({ hasPickaxe: () => false, dirtBlocks: () => 2 })), true, 'no pickaxe: dirt counts');
+    assert.deepEqual(SHELTER_AFTER_DEATH.foodAtMost, 4);
+    assert.equal(shelterFirstAfterDeath(s({ food: () => 4, foodHeld: () => 0 })), false, '#614 review 8: food 4, none held: food first (Mining Fatigue refuses the digs)');
+    assert.equal(shelterFirstAfterDeath(s({ food: () => 4, foodHeld: () => 2.8 })), true, 'food held: the reflex eats it');
+    assert.equal(shelterFirstAfterDeath(s({ food: () => 5, foodHeld: () => 0 })), true);
 });
 
 // #612 review 6 (the lead): in the before-night window the need counts the bar: "N more points held beyond your

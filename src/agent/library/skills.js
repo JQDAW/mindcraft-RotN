@@ -2,7 +2,7 @@ import { setImmediate } from "node:timers";
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
-import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey } from "./rotn_names.js";
+import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey, carriedItems } from "./rotn_names.js";
 import { worldSources, itemVariants, toolAllows, allowedTool, allowedTools, toolUsesLeft, describeTool, stowCarried, isToolFor, handRoute } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
@@ -80,7 +80,21 @@ const pickLevel = (item) => { try { return rotnItem(rotnRegistryName(item.name))
 export async function offHandToolBack(bot) {
     const off = bot?.inventory?.slots?.[45] ?? null;
     if (!off || !isPickaxeItem(off)) return false;
-    try { return (await stowCarried(bot, isPickaxeItem, { resyncMs: 0 })).length > 0; } catch { return false; }
+    const slot = bot.inventory?.firstEmptyInventorySlot?.();
+    const empty = Number.isInteger(slot) && slot >= 0 ? slot : null; // null (mineflayer) or -1: no free slot
+    if (empty != null) {
+        try { if ((await stowCarried(bot, isPickaxeItem, { resyncMs: 0 })).length > 0) return true; } catch { /* the swap below */ }
+    }
+    // #614 review 2: a full inventory (no slot to move it to): the off-hand pickaxe swapped straight into the main hand
+    // (the main hand's stack goes to the off hand; #584 review 3's swap); rearmWeapon swaps them back after.
+    try {
+        await bot.equip(off, 'hand');
+        console.log(`[inventory] ${empty == null ? 'no free slot' : 'the move failed'}: the ${off.name} swapped from the off hand into the main hand for the dig`);
+        return true;
+    } catch (err) {
+        console.warn(`[inventory] the ${off.name} in the off hand could not be taken for the dig (${err?.message ?? err})`);
+        return false;
+    }
 }
 export async function rearmWeapon(bot) {
     const items = bot?.inventory?.items?.() ?? [];
@@ -165,8 +179,9 @@ export async function equipHighestAttack(bot, fight = null) {
         if (!moved.length && !best(bot.inventory.items())) return noWeapon(`the ${off.name} in the off hand did not move into the inventory`);
     }
     let weapon = best(bot.inventory.items());
+    // #614 review 3: the no-weapon fallback sees the off hand too (rearmWeapon keeps the stone pickaxe there).
     if (!weapon)
-        weapon = bot.inventory.items().find(item => item.name.includes('pickaxe') || item.name.includes('shovel')) ?? null;
+        weapon = carriedItems(bot).find(item => item.name.includes('pickaxe') || item.name.includes('shovel')) ?? null;
     if (!weapon) return isWeapon(off) ? noWeapon(`the ${off.name} moved out of the off hand, but no weapon is in the inventory`) : noWeapon('none held', { none: true });
     if (fight.equipFailed) return noWeapon(`an earlier equip failed this fight`); // fighting with what is in hand (#296 review 2)
     if (bot.heldItem === weapon || (weapon.slot != null && bot.heldItem?.slot === weapon.slot)) return true;
@@ -1632,9 +1647,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 const secs = (ms) => `${(ms / 1000).toFixed(1)} s`;
                 const fx = effectsText(bot);
                 console.log(digLine(bot, block, { what: `not started: it would take ${secs(estMs)}, over ${secs(cap)}`, estMs }));
-                log(bot, `Not digging ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: it would take ${secs(estMs)}${fx !== 'none' ? ` (effects ${fx}: low food gives Mining Fatigue on this pack; eat first)` : ''}.`);
-                givenUp.push(block.position.clone ? block.position.clone() : block.position);
-                continue;
+                // #614 review 4 (the lead): the next block of this type would be as slow: the collect stops here, one line.
+                log(bot, `Stopped collecting ${blockType}: digging ${block.name} would take ${secs(estMs)}${fx !== 'none' ? ` (effects ${fx}: low food gives Mining Fatigue on this pack; eat first)` : ' with what you hold'}.`);
+                break;
             }
         }
         // The drowning reflex counts against this target while it is being collected (wet_ore.noteDrowning).

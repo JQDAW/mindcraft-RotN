@@ -346,3 +346,23 @@ test('soak 14 (F2): digBudget 3 x + 2 s; digWithin takes it after the equip; a d
     assert.equal(await digWithin(stale, dirt, Infinity), false);
     assert.match(digLine(stale, dirt, { what: 'x', estMs: 926_000 }), /^\[dig\] dirt:0 at 0, 63, 0: x; expected 926\.0 s with the hand \(slot \?\); effects MiningFatigue:3; no spawn time; the block is still there$/);
 });
+
+// #614 review 6 and 7: digWithin clears the last dig's record at entry (a later equip failure is not blamed on an
+// earlier refusal); its equip (and the off-hand pickaxe's move) has its own cap, DIG_STALL.equipMs, even with no caller cap.
+test('#614 review 6 and 7: rotnLastDig is cleared at entry; the equip is capped by DIG_STALL.equipMs', async (t) => {
+    const { digWithin, DIG_STALL } = await import('./pit.js');
+    t.mock.method(console, 'log', () => {});
+    const block = { name: 'stone', metadata: 0, position: new Vec3(1, 64, 0) };
+    const bot = { game: { gameMode: 'survival' }, heldItem: null, blockAt: () => block, digTime: () => 120_000, dig: () => Promise.resolve() };
+    assert.equal(await digWithin(bot, block, Infinity, { equip: () => Promise.resolve(true) }), false);
+    assert.equal(bot.rotnLastDig.refused, true);
+    assert.equal(await digWithin(bot, block, Infinity, { equip: () => Promise.resolve(false) }), false);
+    assert.equal(bot.rotnLastDig, null, 'the equip failed: no stale refusal');
+    const saved = DIG_STALL.equipMs;
+    DIG_STALL.equipMs = 50;
+    t.after(() => { DIG_STALL.equipMs = saved; });
+    assert.equal(DIG_STALL.equipMs, 50);
+    const t0 = Date.now();
+    assert.equal(await digWithin(bot, block, Infinity, { equip: () => new Promise(() => {}) }), 'timeout');
+    assert.ok(Date.now() - t0 < 1000, 'the hung equip is cut');
+});

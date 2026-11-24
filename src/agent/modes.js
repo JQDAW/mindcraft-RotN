@@ -497,6 +497,9 @@ const modes_list = [
             this.cut_eat = null; // a new eat: an older cut is not judged any more
             execute(this, agent, async () => {
                 const r = await food.eatFood(bot, item, { checkMs: this.check_ms });
+                // #614 review 3 (the lead): the eat took the food into the main hand: at dusk or night (or in the shelter)
+                // the weapon goes back in hand (and the pickaxe in the off hand), so a death keeps both.
+                if (bot.rotnSheltered || !isDaylight(agent)) { try { await skills.rearmWeapon(bot); } catch { /* best effort */ } }
                 if (r.ate) {
                     delete this.fails[key];
                     console.log(`[reflex] ate ${key} at food ${r.before}${r.threw ? ' (the eat timed out, but it went through)' : ''}`);

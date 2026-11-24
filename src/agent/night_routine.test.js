@@ -4505,3 +4505,17 @@ test('#612 deferred nit: no way out of the shelter: back to the old shelter and 
     nightTick(s.agent, { now: 2, ops: s.o }); await settle(s.agent);
     assert.deepEqual(s.o.builds, [null, SITE], 'the repair at the old site, no fresh build');
 });
+
+// #614 review 10: the #612 nit's hole-shelter case: no way out of the hole (pitOut fails): back to the old hole shelter.
+test('#614 review 10: a hole shelter that cannot be left (pitOut fails): back to the old hole shelter, not a fresh build', async (t) => {
+    const s = emergencySetup(t);
+    s.o.pitOut = () => Promise.resolve(null);
+    nightTick(s.agent, { now: 0, ops: s.o }); await settle(s.agent);
+    nightState(s.agent).pit = true;
+    s.setFood();
+    nightTick(s.agent, { now: 1, ops: s.o }); await settle(s.agent);
+    assert.ok(s.agent.chat.includes('[night] still in the shelter at 0, 64, 0: closing it again'), s.agent.chat.join('\n'));
+    assert.equal(nightState(s.agent).state, 'inside');
+    assert.equal(nightState(s.agent).pit, true);
+    assert.deepEqual(s.runs, []);
+});
