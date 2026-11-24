@@ -18,6 +18,7 @@ import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LA
 import { buildShelter, dirtShelterNeed, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
 import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon, SHELTER_FIGHT, collectBlock, pickupNearbyItems } from './library/skills.js';
 import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
+import { carriedItems } from './library/rotn_names.js';
 import { digPit, pitOut, quickByHand, digWithin } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
@@ -496,7 +497,8 @@ function exitPlan(bot, feet, d) {
  */
 function unharvestable(bot, plan) {
     if (bot.game?.gameMode === 'creative') return null;
-    const picks = [null, ...(bot.inventory?.items?.() ?? []).filter(i => /pickaxe/.test(i.name)).map(i => i.type)];
+    // #614 re-review nit 1: the off hand too (rearmWeapon keeps the stone pickaxe there).
+    const picks = [null, ...carriedItems(bot).filter(i => /pickaxe/.test(i.name)).map(i => i.type)];
     const breakable = (b) => {
         const rule = digRule(b);
         if (rule === null) return true;

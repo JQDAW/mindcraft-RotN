@@ -335,7 +335,8 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
     //Check that the agent has sufficient items to use the recipe `num` times.
     const requiredIngredients = recipeIngredients(recipe); //Items required to use the recipe once, by variant.
     // Count each ingredient with countItem: "planks:0" only oak, "planks" every variant (#131 review).
-    const inventory = Object.fromEntries(Object.keys(requiredIngredients).map(name => [name, countItem(bot, name)]));
+    // #614 re-review nit 2: the inventory only: bot.craft takes no stack from the off hand.
+    const inventory = Object.fromEntries(Object.keys(requiredIngredients).map(name => [name, countItem(bot, name, { offHand: false })]));
     const craftLimit = mc.calculateLimitingResource(inventory, requiredIngredients);
     
     const crafted = await craftPausingAutoEat(bot, recipe, Math.min(craftLimit.num, num), craftingTable);
@@ -1620,7 +1621,10 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             const preferred = preferredTools.find(([matches]) => matches(block))?.[1];
             const prefItem = preferred ? allowedTool(bot, preferred) : null;
             if (prefItem) await bot.equip(prefItem, 'hand');
-            else await bot.tool.equipForBlock(block);
+            else {
+                await offHandToolBack(bot); // #614 re-review nit 3: equipForBlock reads inventory.items() only
+                await bot.tool.equipForBlock(block);
+            }
         }
         if (run.aborted) break;
         if (isLiquid) {
