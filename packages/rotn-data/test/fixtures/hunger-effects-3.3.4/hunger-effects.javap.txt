@@ -1,0 +1,1152 @@
+# javap -c -p excerpts (no mod code was run), RotN 3.3.4 pinned server pack zip (SHA-256 90642fd5...f5205), 2026-11-24.
+# mods/HungerOverhaul-1.12.2-1.3.3.jenkins148.jar SHA-256 994c18ef5544b02bf5e998b5b3b1db3d952ccb1024a3adc6d029347d6f8d3a1c
+# mods/AppleCore-mc1.12.2-3.4.0.jar SHA-256 9e4980728afb5941bdd67c435d2fddf260d88685563343f32d009bae01b64962
+# minecraft_server.1.12.2.jar (pack root, obfuscated; names from forge-1.12.2-14.23.5.2860.jar deobfuscation_data-1.12.2.lzma):
+#   aed = EntityPlayer, aed.b(awt) = getDigSpeed (func_184813_a).
+# MobEffects fields (MCP stable-39): field_76421_d SLOWNESS, field_76419_f MINING_FATIGUE, field_76437_t WEAKNESS, field_76431_k NAUSEA.
+# EnumDifficulty.func_151525_a = getDifficultyId (PEACEFUL 0, EASY 1, NORMAL 2, HARD 3). PotionEffect(Potion, duration, amplifier, ambient, showParticles).
+
+## HungerOverhaul HungerOverhaulEventHook
+  public void onLivingUpdate(net.minecraftforge.event.entity.living.LivingEvent$LivingUpdateEvent);
+    Code:
+       0: new           #59                 // class java/util/Random
+       3: dup
+       4: invokespecial #60                 // Method java/util/Random."<init>":()V
+       7: astore_2
+       8: aload_1
+       9: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+      12: instanceof    #66                 // class net/minecraft/entity/passive/EntityAnimal
+      15: ifeq          249
+      18: aload_2
+      19: getstatic     #72                 // Field iguanaman/hungeroverhaul/common/config/Config.breedingTimeoutMultiplier:F
+      22: invokestatic  #78                 // Method iguanaman/hungeroverhaul/common/RandomHelper.nextFloat:(Ljava/util/Random;F)F
+      25: fstore_3
+      26: aload_2
+      27: getstatic     #81                 // Field iguanaman/hungeroverhaul/common/config/Config.childDurationMultiplier:F
+      30: invokestatic  #78                 // Method iguanaman/hungeroverhaul/common/RandomHelper.nextFloat:(Ljava/util/Random;F)F
+      33: fstore        4
+      35: aload_1
+      36: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+      39: checkcast     #83                 // class net/minecraft/entity/EntityAgeable
+      42: astore        5
+      44: aload         5
+      46: invokevirtual #87                 // Method net/minecraft/entity/EntityAgeable.func_70874_b:()I
+      49: istore        6
+      51: iload         6
+      53: ifle          75
+      56: fload_3
+      57: fconst_1
+      58: fcmpl
+      59: iflt          75
+      62: aload         5
+      64: iinc          6, 1
+      67: iload         6
+      69: invokevirtual #91                 // Method net/minecraft/entity/EntityAgeable.func_70873_a:(I)V
+      72: goto          97
+      75: iload         6
+      77: ifge          97
+      80: fload         4
+      82: fconst_1
+      83: fcmpl
+      84: iflt          97
+      87: aload         5
+      89: iinc          6, -1
+      92: iload         6
+      94: invokevirtual #91                 // Method net/minecraft/entity/EntityAgeable.func_70873_a:(I)V
+      97: getstatic     #94                 // Field iguanaman/hungeroverhaul/common/config/Config.eggTimeoutMultiplier:F
+     100: fconst_1
+     101: fcmpl
+     102: ifle          159
+     105: aload_1
+     106: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     109: instanceof    #96                 // class net/minecraft/entity/passive/EntityChicken
+     112: ifeq          159
+     115: aload_2
+     116: getstatic     #94                 // Field iguanaman/hungeroverhaul/common/config/Config.eggTimeoutMultiplier:F
+     119: invokestatic  #78                 // Method iguanaman/hungeroverhaul/common/RandomHelper.nextFloat:(Ljava/util/Random;F)F
+     122: fstore        7
+     124: aload_1
+     125: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     128: checkcast     #96                 // class net/minecraft/entity/passive/EntityChicken
+     131: astore        8
+     133: aload         8
+     135: getfield      #100                // Field net/minecraft/entity/passive/EntityChicken.field_70887_j:I
+     138: ifle          159
+     141: fload         7
+     143: fconst_1
+     144: fcmpl
+     145: iflt          159
+     148: aload         8
+     150: dup
+     151: getfield      #100                // Field net/minecraft/entity/passive/EntityChicken.field_70887_j:I
+     154: iconst_1
+     155: iadd
+     156: putfield      #100                // Field net/minecraft/entity/passive/EntityChicken.field_70887_j:I
+     159: getstatic     #103                // Field iguanaman/hungeroverhaul/common/config/Config.milkedTimeout:I
+     162: ifle          249
+     165: aload_1
+     166: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     169: instanceof    #105                // class net/minecraft/entity/passive/EntityCow
+     172: ifeq          249
+     175: aload_1
+     176: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     179: getfield      #111                // Field net/minecraft/entity/EntityLivingBase.field_70170_p:Lnet/minecraft/world/World;
+     182: invokevirtual #117                // Method net/minecraft/world/World.func_82737_E:()J
+     185: ldc2_w        #118                // long 20l
+     188: lrem
+     189: lconst_0
+     190: lcmp
+     191: ifne          249
+     194: aload_1
+     195: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     198: invokevirtual #123                // Method net/minecraft/entity/EntityLivingBase.getEntityData:()Lnet/minecraft/nbt/NBTTagCompound;
+     201: astore        7
+     203: aload         7
+     205: ldc           #125                // String Milked
+     207: invokevirtual #131                // Method net/minecraft/nbt/NBTTagCompound.func_74764_b:(Ljava/lang/String;)Z
+     210: ifeq          249
+     213: aload         7
+     215: ldc           #125                // String Milked
+     217: invokevirtual #135                // Method net/minecraft/nbt/NBTTagCompound.func_74762_e:(Ljava/lang/String;)I
+     220: istore        8
+     222: iinc          8, -1
+     225: iload         8
+     227: ifgt          240
+     230: aload         7
+     232: ldc           #125                // String Milked
+     234: invokevirtual #139                // Method net/minecraft/nbt/NBTTagCompound.func_82580_o:(Ljava/lang/String;)V
+     237: goto          249
+     240: aload         7
+     242: ldc           #125                // String Milked
+     244: iload         8
+     246: invokevirtual #143                // Method net/minecraft/nbt/NBTTagCompound.func_74768_a:(Ljava/lang/String;I)V
+     249: aload_1
+     250: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     253: getfield      #111                // Field net/minecraft/entity/EntityLivingBase.field_70170_p:Lnet/minecraft/world/World;
+     256: getfield      #147                // Field net/minecraft/world/World.field_72995_K:Z
+     259: ifne          1373
+     262: aload_1
+     263: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     266: invokevirtual #123                // Method net/minecraft/entity/EntityLivingBase.getEntityData:()Lnet/minecraft/nbt/NBTTagCompound;
+     269: astore_3
+     270: aload_3
+     271: ldc           #149                // String HungerOverhaulCheck
+     273: invokevirtual #131                // Method net/minecraft/nbt/NBTTagCompound.func_74764_b:(Ljava/lang/String;)Z
+     276: ifeq          315
+     279: aload_3
+     280: ldc           #149                // String HungerOverhaulCheck
+     282: invokevirtual #135                // Method net/minecraft/nbt/NBTTagCompound.func_74762_e:(Ljava/lang/String;)I
+     285: istore        4
+     287: iinc          4, -1
+     290: iload         4
+     292: ifgt          304
+     295: aload_3
+     296: ldc           #149                // String HungerOverhaulCheck
+     298: invokevirtual #139                // Method net/minecraft/nbt/NBTTagCompound.func_82580_o:(Ljava/lang/String;)V
+     301: goto          312
+     304: aload_3
+     305: ldc           #149                // String HungerOverhaulCheck
+     307: iload         4
+     309: invokevirtual #143                // Method net/minecraft/nbt/NBTTagCompound.func_74768_a:(Ljava/lang/String;I)V
+     312: goto          1373
+     315: aload_1
+     316: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     319: invokevirtual #153                // Method net/minecraft/entity/EntityLivingBase.func_110143_aJ:()F
+     322: aload_1
+     323: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     326: invokevirtual #156                // Method net/minecraft/entity/EntityLivingBase.func_110138_aP:()F
+     329: fdiv
+     330: fstore        4
+     332: bipush        20
+     334: istore        5
+     336: iconst_0
+     337: istore        6
+     339: iconst_0
+     340: istore        7
+     342: aload_1
+     343: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     346: instanceof    #158                // class net/minecraft/entity/player/EntityPlayer
+     349: ifeq          387
+     352: aload_1
+     353: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     356: checkcast     #158                // class net/minecraft/entity/player/EntityPlayer
+     359: astore        8
+     361: aload         8
+     363: getfield      #162                // Field net/minecraft/entity/player/EntityPlayer.field_71075_bZ:Lnet/minecraft/entity/player/PlayerCapabilities;
+     366: getfield      #167                // Field net/minecraft/entity/player/PlayerCapabilities.field_75098_d:Z
+     369: istore        6
+     371: aload         8
+     373: invokevirtual #171                // Method net/minecraft/entity/player/EntityPlayer.func_71024_bL:()Lnet/minecraft/util/FoodStats;
+     376: invokevirtual #176                // Method net/minecraft/util/FoodStats.func_75116_a:()I
+     379: istore        5
+     381: iconst_1
+     382: istore        7
+     384: goto          393
+     387: fload         4
+     389: fconst_2
+     390: fdiv
+     391: fstore        4
+     393: aload_1
+     394: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     397: instanceof    #158                // class net/minecraft/entity/player/EntityPlayer
+     400: ifeq          444
+     403: getstatic     #179                // Field iguanaman/hungeroverhaul/common/config/Config.constantHungerLoss:Z
+     406: ifeq          444
+     409: aload_1
+     410: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     413: checkcast     #158                // class net/minecraft/entity/player/EntityPlayer
+     416: astore        8
+     418: aload         8
+     420: getfield      #162                // Field net/minecraft/entity/player/EntityPlayer.field_71075_bZ:Lnet/minecraft/entity/player/PlayerCapabilities;
+     423: getfield      #167                // Field net/minecraft/entity/player/PlayerCapabilities.field_75098_d:Z
+     426: ifne          444
+     429: aload         8
+     431: getfield      #182                // Field net/minecraft/entity/player/EntityPlayer.field_70128_L:Z
+     434: ifne          444
+     437: aload         8
+     439: ldc           #183                // float 0.01f
+     441: invokevirtual #187                // Method net/minecraft/entity/player/EntityPlayer.func_71020_j:(F)V
+     444: getstatic     #190                // Field iguanaman/hungeroverhaul/common/config/Config.addLowStatEffects:Z
+     447: ifeq          1365
+     450: iconst_2
+     451: istore        8
+     453: getstatic     #193                // Field iguanaman/hungeroverhaul/common/config/Config.difficultyScalingEffects:Z
+     456: ifeq          505
+     459: aload_1
+     460: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     463: getfield      #111                // Field net/minecraft/entity/EntityLivingBase.field_70170_p:Lnet/minecraft/world/World;
+     466: invokevirtual #197                // Method net/minecraft/world/World.func_175659_aa:()Lnet/minecraft/world/EnumDifficulty;
+     469: ifnull        505
+     472: aload_1
+     473: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     476: getfield      #111                // Field net/minecraft/entity/EntityLivingBase.field_70170_p:Lnet/minecraft/world/World;
+     479: invokevirtual #197                // Method net/minecraft/world/World.func_175659_aa:()Lnet/minecraft/world/EnumDifficulty;
+     482: invokevirtual #202                // Method net/minecraft/world/EnumDifficulty.func_151525_a:()I
+     485: istore        8
+     487: aload_1
+     488: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     491: instanceof    #158                // class net/minecraft/entity/player/EntityPlayer
+     494: ifne          505
+     497: iload         8
+     499: iconst_m1
+     500: imul
+     501: iconst_3
+     502: iadd
+     503: istore        8
+     505: iload         6
+     507: ifne          1365
+     510: iload         7
+     512: ifeq          1365
+     515: aload_1
+     516: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     519: getfield      #203                // Field net/minecraft/entity/EntityLivingBase.field_70128_L:Z
+     522: ifne          1365
+     525: fload         4
+     527: fconst_0
+     528: fcmpl
+     529: ifle          1365
+     532: getstatic     #206                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthSlowness:Z
+     535: ifne          544
+     538: getstatic     #209                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerSlowness:Z
+     541: ifeq          829
+     544: getstatic     #209                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerSlowness:Z
+     547: ifeq          556
+     550: iload         5
+     552: iconst_1
+     553: if_icmple     570
+     556: getstatic     #206                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthSlowness:Z
+     559: ifeq          598
+     562: fload         4
+     564: ldc           #210                // float 0.05f
+     566: fcmpg
+     567: ifgt          598
+     570: aload_1
+     571: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     574: new           #212                // class net/minecraft/potion/PotionEffect
+     577: dup
+     578: getstatic     #218                // Field net/minecraft/init/MobEffects.field_76421_d:Lnet/minecraft/potion/Potion;
+     581: bipush        19
+     583: iconst_1
+     584: iload         8
+     586: iadd
+     587: iconst_1
+     588: iconst_1
+     589: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+     592: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+     595: goto          829
+     598: getstatic     #209                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerSlowness:Z
+     601: ifeq          610
+     604: iload         5
+     606: iconst_2
+     607: if_icmple     624
+     610: getstatic     #206                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthSlowness:Z
+     613: ifeq          650
+     616: fload         4
+     618: ldc           #226                // float 0.1f
+     620: fcmpg
+     621: ifgt          650
+     624: aload_1
+     625: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     628: new           #212                // class net/minecraft/potion/PotionEffect
+     631: dup
+     632: getstatic     #218                // Field net/minecraft/init/MobEffects.field_76421_d:Lnet/minecraft/potion/Potion;
+     635: bipush        19
+     637: iload         8
+     639: iconst_1
+     640: iconst_1
+     641: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+     644: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+     647: goto          829
+     650: getstatic     #209                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerSlowness:Z
+     653: ifeq          662
+     656: iload         5
+     658: iconst_3
+     659: if_icmple     676
+     662: getstatic     #206                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthSlowness:Z
+     665: ifeq          710
+     668: fload         4
+     670: ldc           #227                // float 0.15f
+     672: fcmpg
+     673: ifgt          710
+     676: iload         8
+     678: iconst_1
+     679: if_icmplt     710
+     682: aload_1
+     683: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     686: new           #212                // class net/minecraft/potion/PotionEffect
+     689: dup
+     690: getstatic     #218                // Field net/minecraft/init/MobEffects.field_76421_d:Lnet/minecraft/potion/Potion;
+     693: bipush        19
+     695: iconst_m1
+     696: iload         8
+     698: iadd
+     699: iconst_1
+     700: iconst_1
+     701: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+     704: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+     707: goto          829
+     710: getstatic     #209                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerSlowness:Z
+     713: ifeq          722
+     716: iload         5
+     718: iconst_4
+     719: if_icmple     736
+     722: getstatic     #206                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthSlowness:Z
+     725: ifeq          771
+     728: fload         4
+     730: ldc           #228                // float 0.2f
+     732: fcmpg
+     733: ifgt          771
+     736: iload         8
+     738: iconst_2
+     739: if_icmplt     771
+     742: aload_1
+     743: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     746: new           #212                // class net/minecraft/potion/PotionEffect
+     749: dup
+     750: getstatic     #218                // Field net/minecraft/init/MobEffects.field_76421_d:Lnet/minecraft/potion/Potion;
+     753: bipush        19
+     755: bipush        -2
+     757: iload         8
+     759: iadd
+     760: iconst_1
+     761: iconst_1
+     762: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+     765: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+     768: goto          829
+     771: getstatic     #209                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerSlowness:Z
+     774: ifeq          783
+     777: iload         5
+     779: iconst_5
+     780: if_icmple     797
+     783: getstatic     #206                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthSlowness:Z
+     786: ifeq          829
+     789: fload         4
+     791: ldc           #229                // float 0.25f
+     793: fcmpg
+     794: ifgt          829
+     797: iload         8
+     799: iconst_3
+     800: if_icmplt     829
+     803: aload_1
+     804: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     807: new           #212                // class net/minecraft/potion/PotionEffect
+     810: dup
+     811: getstatic     #218                // Field net/minecraft/init/MobEffects.field_76421_d:Lnet/minecraft/potion/Potion;
+     814: bipush        19
+     816: bipush        -3
+     818: iload         8
+     820: iadd
+     821: iconst_1
+     822: iconst_1
+     823: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+     826: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+     829: getstatic     #232                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthMiningSlowdown:Z
+     832: ifne          841
+     835: getstatic     #235                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerMiningSlowdown:Z
+     838: ifeq          1126
+     841: getstatic     #235                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerMiningSlowdown:Z
+     844: ifeq          853
+     847: iload         5
+     849: iconst_1
+     850: if_icmple     867
+     853: getstatic     #232                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthMiningSlowdown:Z
+     856: ifeq          895
+     859: fload         4
+     861: ldc           #210                // float 0.05f
+     863: fcmpg
+     864: ifgt          895
+     867: aload_1
+     868: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     871: new           #212                // class net/minecraft/potion/PotionEffect
+     874: dup
+     875: getstatic     #238                // Field net/minecraft/init/MobEffects.field_76419_f:Lnet/minecraft/potion/Potion;
+     878: bipush        19
+     880: iconst_1
+     881: iload         8
+     883: iadd
+     884: iconst_1
+     885: iconst_1
+     886: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+     889: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+     892: goto          1126
+     895: getstatic     #235                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerMiningSlowdown:Z
+     898: ifeq          907
+     901: iload         5
+     903: iconst_2
+     904: if_icmple     921
+     907: getstatic     #232                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthMiningSlowdown:Z
+     910: ifeq          947
+     913: fload         4
+     915: ldc           #226                // float 0.1f
+     917: fcmpg
+     918: ifgt          947
+     921: aload_1
+     922: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     925: new           #212                // class net/minecraft/potion/PotionEffect
+     928: dup
+     929: getstatic     #238                // Field net/minecraft/init/MobEffects.field_76419_f:Lnet/minecraft/potion/Potion;
+     932: bipush        19
+     934: iload         8
+     936: iconst_1
+     937: iconst_1
+     938: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+     941: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+     944: goto          1126
+     947: getstatic     #235                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerMiningSlowdown:Z
+     950: ifeq          959
+     953: iload         5
+     955: iconst_3
+     956: if_icmple     973
+     959: getstatic     #232                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthMiningSlowdown:Z
+     962: ifeq          1007
+     965: fload         4
+     967: ldc           #227                // float 0.15f
+     969: fcmpg
+     970: ifgt          1007
+     973: iload         8
+     975: iconst_1
+     976: if_icmplt     1007
+     979: aload_1
+     980: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+     983: new           #212                // class net/minecraft/potion/PotionEffect
+     986: dup
+     987: getstatic     #238                // Field net/minecraft/init/MobEffects.field_76419_f:Lnet/minecraft/potion/Potion;
+     990: bipush        19
+     992: iconst_m1
+     993: iload         8
+     995: iadd
+     996: iconst_1
+     997: iconst_1
+     998: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+    1001: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+    1004: goto          1126
+    1007: getstatic     #235                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerMiningSlowdown:Z
+    1010: ifeq          1019
+    1013: iload         5
+    1015: iconst_4
+    1016: if_icmple     1033
+    1019: getstatic     #232                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthMiningSlowdown:Z
+    1022: ifeq          1068
+    1025: fload         4
+    1027: ldc           #228                // float 0.2f
+    1029: fcmpg
+    1030: ifgt          1068
+    1033: iload         8
+    1035: iconst_2
+    1036: if_icmplt     1068
+    1039: aload_1
+    1040: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+    1043: new           #212                // class net/minecraft/potion/PotionEffect
+    1046: dup
+    1047: getstatic     #238                // Field net/minecraft/init/MobEffects.field_76419_f:Lnet/minecraft/potion/Potion;
+    1050: bipush        19
+    1052: bipush        -2
+    1054: iload         8
+    1056: iadd
+    1057: iconst_1
+    1058: iconst_1
+    1059: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+    1062: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+    1065: goto          1126
+    1068: getstatic     #235                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerMiningSlowdown:Z
+    1071: ifeq          1080
+    1074: iload         5
+    1076: iconst_5
+    1077: if_icmple     1094
+    1080: getstatic     #232                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthMiningSlowdown:Z
+    1083: ifeq          1126
+    1086: fload         4
+    1088: ldc           #229                // float 0.25f
+    1090: fcmpg
+    1091: ifgt          1126
+    1094: iload         8
+    1096: iconst_3
+    1097: if_icmplt     1126
+    1100: aload_1
+    1101: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+    1104: new           #212                // class net/minecraft/potion/PotionEffect
+    1107: dup
+    1108: getstatic     #238                // Field net/minecraft/init/MobEffects.field_76419_f:Lnet/minecraft/potion/Potion;
+    1111: bipush        19
+    1113: bipush        -3
+    1115: iload         8
+    1117: iadd
+    1118: iconst_1
+    1119: iconst_1
+    1120: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+    1123: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+    1126: getstatic     #241                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthWeakness:Z
+    1129: ifne          1138
+    1132: getstatic     #244                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerWeakness:Z
+    1135: ifeq          1317
+    1138: getstatic     #244                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerWeakness:Z
+    1141: ifeq          1150
+    1144: iload         5
+    1146: iconst_1
+    1147: if_icmple     1164
+    1150: getstatic     #241                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthWeakness:Z
+    1153: ifeq          1198
+    1156: fload         4
+    1158: ldc           #210                // float 0.05f
+    1160: fcmpg
+    1161: ifgt          1198
+    1164: iload         8
+    1166: iconst_1
+    1167: if_icmplt     1198
+    1170: aload_1
+    1171: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+    1174: new           #212                // class net/minecraft/potion/PotionEffect
+    1177: dup
+    1178: getstatic     #247                // Field net/minecraft/init/MobEffects.field_76437_t:Lnet/minecraft/potion/Potion;
+    1181: bipush        19
+    1183: iconst_m1
+    1184: iload         8
+    1186: iadd
+    1187: iconst_1
+    1188: iconst_1
+    1189: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+    1192: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+    1195: goto          1317
+    1198: getstatic     #244                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerWeakness:Z
+    1201: ifeq          1210
+    1204: iload         5
+    1206: iconst_2
+    1207: if_icmple     1224
+    1210: getstatic     #241                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthWeakness:Z
+    1213: ifeq          1259
+    1216: fload         4
+    1218: ldc           #226                // float 0.1f
+    1220: fcmpg
+    1221: ifgt          1259
+    1224: iload         8
+    1226: iconst_2
+    1227: if_icmplt     1259
+    1230: aload_1
+    1231: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+    1234: new           #212                // class net/minecraft/potion/PotionEffect
+    1237: dup
+    1238: getstatic     #247                // Field net/minecraft/init/MobEffects.field_76437_t:Lnet/minecraft/potion/Potion;
+    1241: bipush        19
+    1243: bipush        -2
+    1245: iload         8
+    1247: iadd
+    1248: iconst_1
+    1249: iconst_1
+    1250: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+    1253: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+    1256: goto          1317
+    1259: getstatic     #244                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerWeakness:Z
+    1262: ifeq          1271
+    1265: iload         5
+    1267: iconst_3
+    1268: if_icmple     1285
+    1271: getstatic     #241                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthWeakness:Z
+    1274: ifeq          1317
+    1277: fload         4
+    1279: ldc           #227                // float 0.15f
+    1281: fcmpg
+    1282: ifgt          1317
+    1285: iload         8
+    1287: iconst_3
+    1288: if_icmplt     1317
+    1291: aload_1
+    1292: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+    1295: new           #212                // class net/minecraft/potion/PotionEffect
+    1298: dup
+    1299: getstatic     #247                // Field net/minecraft/init/MobEffects.field_76437_t:Lnet/minecraft/potion/Potion;
+    1302: bipush        19
+    1304: bipush        -3
+    1306: iload         8
+    1308: iadd
+    1309: iconst_1
+    1310: iconst_1
+    1311: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+    1314: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+    1317: getstatic     #250                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHungerNausea:Z
+    1320: ifeq          1329
+    1323: iload         5
+    1325: iconst_1
+    1326: if_icmple     1343
+    1329: getstatic     #253                // Field iguanaman/hungeroverhaul/common/config/Config.addLowHealthNausea:Z
+    1332: ifeq          1365
+    1335: fload         4
+    1337: ldc           #210                // float 0.05f
+    1339: fcmpg
+    1340: ifgt          1365
+    1343: aload_1
+    1344: invokevirtual #64                 // Method net/minecraftforge/event/entity/living/LivingEvent$LivingUpdateEvent.getEntityLiving:()Lnet/minecraft/entity/EntityLivingBase;
+    1347: new           #212                // class net/minecraft/potion/PotionEffect
+    1350: dup
+    1351: getstatic     #256                // Field net/minecraft/init/MobEffects.field_76431_k:Lnet/minecraft/potion/Potion;
+    1354: bipush        19
+    1356: iconst_0
+    1357: iconst_1
+    1358: iconst_1
+    1359: invokespecial #221                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;IIZZ)V
+    1362: invokevirtual #225                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+    1365: aload_3
+    1366: ldc           #149                // String HungerOverhaulCheck
+    1368: bipush        9
+    1370: invokevirtual #143                // Method net/minecraft/nbt/NBTTagCompound.func_74768_a:(Ljava/lang/String;I)V
+    1373: return
+
+
+## HungerOverhaul FoodEventHandler
+  public void getMaxExhaustion(squeek.applecore.api.hunger.ExhaustionEvent$GetMaxExhaustion);
+    Code:
+       0: aload_1
+       1: getfield      #205                // Field squeek/applecore/api/hunger/ExhaustionEvent$GetMaxExhaustion.player:Lnet/minecraft/entity/player/EntityPlayer;
+       4: getfield      #69                 // Field net/minecraft/entity/player/EntityPlayer.field_70170_p:Lnet/minecraft/world/World;
+       7: invokevirtual #209                // Method net/minecraft/world/World.func_175659_aa:()Lnet/minecraft/world/EnumDifficulty;
+      10: astore_2
+      11: aload_1
+      12: getfield      #212                // Field squeek/applecore/api/hunger/ExhaustionEvent$GetMaxExhaustion.maxExhaustionLevel:F
+      15: getstatic     #173                // Field iguanaman/hungeroverhaul/common/config/Config.hungerLossRatePercentage:F
+      18: ldc           #213                // float 100.0f
+      20: fdiv
+      21: fdiv
+      22: fstore_3
+      23: getstatic     #216                // Field iguanaman/hungeroverhaul/common/config/Config.difficultyScalingHunger:Z
+      26: ifeq          56
+      29: aload_2
+      30: getstatic     #222                // Field net/minecraft/world/EnumDifficulty.PEACEFUL:Lnet/minecraft/world/EnumDifficulty;
+      33: if_acmpne     44
+      36: fload_3
+      37: ldc           #223                // float 1.6666666f
+      39: fmul
+      40: fstore_3
+      41: goto          56
+      44: aload_2
+      45: getstatic     #226                // Field net/minecraft/world/EnumDifficulty.EASY:Lnet/minecraft/world/EnumDifficulty;
+      48: if_acmpne     56
+      51: fload_3
+      52: ldc           #227                // float 1.3333334f
+      54: fmul
+      55: fstore_3
+      56: aload_1
+      57: fload_3
+      58: putfield      #212                // Field squeek/applecore/api/hunger/ExhaustionEvent$GetMaxExhaustion.maxExhaustionLevel:F
+      61: return
+
+  public void onExhausted(squeek.applecore.api.hunger.ExhaustionEvent$Exhausted);
+    Code:
+       0: aload_1
+       1: getfield      #233                // Field squeek/applecore/api/hunger/ExhaustionEvent$Exhausted.player:Lnet/minecraft/entity/player/EntityPlayer;
+       4: invokevirtual #237                // Method net/minecraft/entity/player/EntityPlayer.func_71024_bL:()Lnet/minecraft/util/FoodStats;
+       7: invokevirtual #242                // Method net/minecraft/util/FoodStats.func_75115_e:()F
+      10: fconst_0
+      11: fcmpg
+      12: ifgt          20
+      15: aload_1
+      16: iconst_m1
+      17: putfield      #245                // Field squeek/applecore/api/hunger/ExhaustionEvent$Exhausted.deltaHunger:I
+      20: return
+
+  public void allowHealthRegen(squeek.applecore.api.hunger.HealthRegenEvent$AllowRegen);
+    Code:
+       0: aload_1
+       1: getfield      #249                // Field squeek/applecore/api/hunger/HealthRegenEvent$AllowRegen.player:Lnet/minecraft/entity/player/EntityPlayer;
+       4: invokevirtual #237                // Method net/minecraft/entity/player/EntityPlayer.func_71024_bL:()Lnet/minecraft/util/FoodStats;
+       7: invokevirtual #252                // Method net/minecraft/util/FoodStats.func_75116_a:()I
+      10: getstatic     #255                // Field iguanaman/hungeroverhaul/common/config/Config.minHungerToHeal:I
+      13: if_icmplt     60
+      16: getstatic     #93                 // Field iguanaman/hungeroverhaul/common/config/Config.healthRegenRatePercentage:I
+      19: ifle          60
+      22: aload_1
+      23: getfield      #249                // Field squeek/applecore/api/hunger/HealthRegenEvent$AllowRegen.player:Lnet/minecraft/entity/player/EntityPlayer;
+      26: getfield      #69                 // Field net/minecraft/entity/player/EntityPlayer.field_70170_p:Lnet/minecraft/world/World;
+      29: invokevirtual #79                 // Method net/minecraft/world/World.func_82736_K:()Lnet/minecraft/world/GameRules;
+      32: ldc           #81                 // String naturalRegeneration
+      34: invokevirtual #87                 // Method net/minecraft/world/GameRules.func_82766_b:(Ljava/lang/String;)Z
+      37: ifeq          60
+      40: aload_1
+      41: getfield      #249                // Field squeek/applecore/api/hunger/HealthRegenEvent$AllowRegen.player:Lnet/minecraft/entity/player/EntityPlayer;
+      44: invokevirtual #259                // Method net/minecraft/entity/player/EntityPlayer.func_70996_bM:()Z
+      47: ifeq          60
+      50: aload_1
+      51: getstatic     #262                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.ALLOW:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+      54: invokevirtual #263                // Method squeek/applecore/api/hunger/HealthRegenEvent$AllowRegen.setResult:(Lnet/minecraftforge/fml/common/eventhandler/Event$Result;)V
+      57: goto          67
+      60: aload_1
+      61: getstatic     #197                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.DENY:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+      64: invokevirtual #263                // Method squeek/applecore/api/hunger/HealthRegenEvent$AllowRegen.setResult:(Lnet/minecraftforge/fml/common/eventhandler/Event$Result;)V
+      67: return
+
+  public void onStarve(squeek.applecore.api.hunger.StarvationEvent$Starve);
+    Code:
+       0: aload_1
+       1: getstatic     #315                // Field iguanaman/hungeroverhaul/common/config/Config.damageOnStarve:I
+       4: i2f
+       5: putfield      #318                // Field squeek/applecore/api/hunger/StarvationEvent$Starve.starveDamage:F
+       8: return
+  public void onHealthRegen(squeek.applecore.api.hunger.HealthRegenEvent$Regen);
+    Code:
+       0: getstatic     #306                // Field iguanaman/hungeroverhaul/common/config/Config.disableHealingHungerDrain:Z
+       3: ifeq          11
+       6: aload_1
+       7: fconst_0
+       8: putfield      #309                // Field squeek/applecore/api/hunger/HealthRegenEvent$Regen.deltaExhaustion:F
+      11: return
+
+
+## AppleCore Hooks
+  public static boolean onAppleCoreFoodStatsUpdate(net.minecraft.util.FoodStats, net.minecraft.entity.player.EntityPlayer);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokestatic  #140                // Method verifyFoodStats:(Lnet/minecraft/util/FoodStats;Lnet/minecraft/entity/player/EntityPlayer;)V
+       5: aload_0
+       6: checkcast     #77                 // class squeek/applecore/asm/util/IAppleCoreFoodStats
+       9: astore_2
+      10: aload_2
+      11: aload_0
+      12: invokevirtual #146                // Method net/minecraft/util/FoodStats.func_75116_a:()I
+      15: invokeinterface #150,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setPrevFoodLevel:(I)V
+      20: aload_1
+      21: invokestatic  #154                // Method fireAllowExhaustionEvent:(Lnet/minecraft/entity/player/EntityPlayer;)Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+      24: astore_3
+      25: aload_1
+      26: aload_2
+      27: invokeinterface #158,  1          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.getExhaustion:()F
+      32: invokestatic  #162                // Method fireExhaustionTickEvent:(Lnet/minecraft/entity/player/EntityPlayer;F)F
+      35: fstore        4
+      37: aload_3
+      38: getstatic     #166                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.ALLOW:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+      41: if_acmpeq     63
+      44: aload_3
+      45: getstatic     #169                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.DEFAULT:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+      48: if_acmpne     141
+      51: aload_2
+      52: invokeinterface #158,  1          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.getExhaustion:()F
+      57: fload         4
+      59: fcmpl
+      60: iflt          141
+      63: aload_1
+      64: fload         4
+      66: aload_2
+      67: invokeinterface #158,  1          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.getExhaustion:()F
+      72: invokestatic  #173                // Method fireExhaustionMaxEvent:(Lnet/minecraft/entity/player/EntityPlayer;FF)Lsqueek/applecore/api/hunger/ExhaustionEvent$Exhausted;
+      75: astore        5
+      77: aload_2
+      78: aload_2
+      79: invokeinterface #158,  1          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.getExhaustion:()F
+      84: aload         5
+      86: getfield      #177                // Field squeek/applecore/api/hunger/ExhaustionEvent$Exhausted.deltaExhaustion:F
+      89: fadd
+      90: invokeinterface #181,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setExhaustion:(F)V
+      95: aload         5
+      97: invokevirtual #185                // Method squeek/applecore/api/hunger/ExhaustionEvent$Exhausted.isCanceled:()Z
+     100: ifne          141
+     103: aload_2
+     104: aload_0
+     105: invokevirtual #188                // Method net/minecraft/util/FoodStats.func_75115_e:()F
+     108: aload         5
+     110: getfield      #191                // Field squeek/applecore/api/hunger/ExhaustionEvent$Exhausted.deltaSaturation:F
+     113: fadd
+     114: fconst_0
+     115: invokestatic  #197                // Method java/lang/Math.max:(FF)F
+     118: invokeinterface #200,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setSaturation:(F)V
+     123: aload_0
+     124: aload_0
+     125: invokevirtual #146                // Method net/minecraft/util/FoodStats.func_75116_a:()I
+     128: aload         5
+     130: getfield      #204                // Field squeek/applecore/api/hunger/ExhaustionEvent$Exhausted.deltaHunger:I
+     133: iadd
+     134: iconst_0
+     135: invokestatic  #207                // Method java/lang/Math.max:(II)I
+     138: invokevirtual #210                // Method net/minecraft/util/FoodStats.func_75114_a:(I)V
+     141: aload_1
+     142: getfield      #214                // Field net/minecraft/entity/player/EntityPlayer.field_70170_p:Lnet/minecraft/world/World;
+     145: invokevirtual #220                // Method net/minecraft/world/World.func_82736_K:()Lnet/minecraft/world/GameRules;
+     148: ldc           #222                // String naturalRegeneration
+     150: invokevirtual #228                // Method net/minecraft/world/GameRules.func_82766_b:(Ljava/lang/String;)Z
+     153: istore        5
+     155: aload_1
+     156: invokestatic  #231                // Method fireAllowSaturatedRegenEvent:(Lnet/minecraft/entity/player/EntityPlayer;)Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+     159: astore        6
+     161: aload         6
+     163: getstatic     #166                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.ALLOW:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+     166: if_acmpeq     207
+     169: aload         6
+     171: getstatic     #169                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.DEFAULT:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+     174: if_acmpne     211
+     177: iload         5
+     179: ifeq          211
+     182: aload_0
+     183: invokevirtual #188                // Method net/minecraft/util/FoodStats.func_75115_e:()F
+     186: fconst_0
+     187: fcmpl
+     188: ifle          211
+     191: aload_1
+     192: invokevirtual #234                // Method net/minecraft/entity/player/EntityPlayer.func_70996_bM:()Z
+     195: ifeq          211
+     198: aload_0
+     199: invokevirtual #146                // Method net/minecraft/util/FoodStats.func_75116_a:()I
+     202: bipush        20
+     204: if_icmplt     211
+     207: iconst_1
+     208: goto          212
+     211: iconst_0
+     212: istore        7
+     214: iload         7
+     216: ifeq          225
+     219: getstatic     #237                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.DENY:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+     222: goto          229
+     225: aload_1
+     226: invokestatic  #240                // Method fireAllowRegenEvent:(Lnet/minecraft/entity/player/EntityPlayer;)Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+     229: astore        8
+     231: aload         8
+     233: getstatic     #166                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.ALLOW:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+     236: if_acmpeq     268
+     239: aload         8
+     241: getstatic     #169                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.DEFAULT:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+     244: if_acmpne     272
+     247: iload         5
+     249: ifeq          272
+     252: aload_0
+     253: invokevirtual #146                // Method net/minecraft/util/FoodStats.func_75116_a:()I
+     256: bipush        18
+     258: if_icmplt     272
+     261: aload_1
+     262: invokevirtual #234                // Method net/minecraft/entity/player/EntityPlayer.func_70996_bM:()Z
+     265: ifeq          272
+     268: iconst_1
+     269: goto          273
+     272: iconst_0
+     273: istore        9
+     275: iload         7
+     277: ifeq          349
+     280: aload_2
+     281: aload_2
+     282: invokeinterface #243,  1          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.getFoodTimer:()I
+     287: iconst_1
+     288: iadd
+     289: invokeinterface #246,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setFoodTimer:(I)V
+     294: aload_2
+     295: invokeinterface #243,  1          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.getFoodTimer:()I
+     300: aload_1
+     301: invokestatic  #250                // Method fireSaturatedRegenTickEvent:(Lnet/minecraft/entity/player/EntityPlayer;)I
+     304: if_icmplt     430
+     307: aload_1
+     308: invokestatic  #254                // Method fireSaturatedRegenEvent:(Lnet/minecraft/entity/player/EntityPlayer;)Lsqueek/applecore/api/hunger/HealthRegenEvent$SaturatedRegen;
+     311: astore        10
+     313: aload         10
+     315: invokevirtual #255                // Method squeek/applecore/api/hunger/HealthRegenEvent$SaturatedRegen.isCanceled:()Z
+     318: ifne          339
+     321: aload_1
+     322: aload         10
+     324: getfield      #258                // Field squeek/applecore/api/hunger/HealthRegenEvent$SaturatedRegen.deltaHealth:F
+     327: invokevirtual #261                // Method net/minecraft/entity/player/EntityPlayer.func_70691_i:(F)V
+     330: aload_0
+     331: aload         10
+     333: getfield      #262                // Field squeek/applecore/api/hunger/HealthRegenEvent$SaturatedRegen.deltaExhaustion:F
+     336: invokevirtual #265                // Method net/minecraft/util/FoodStats.func_75113_a:(F)V
+     339: aload_2
+     340: iconst_0
+     341: invokeinterface #246,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setFoodTimer:(I)V
+     346: goto          430
+     349: iload         9
+     351: ifeq          423
+     354: aload_2
+     355: aload_2
+     356: invokeinterface #243,  1          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.getFoodTimer:()I
+     361: iconst_1
+     362: iadd
+     363: invokeinterface #246,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setFoodTimer:(I)V
+     368: aload_2
+     369: invokeinterface #243,  1          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.getFoodTimer:()I
+     374: aload_1
+     375: invokestatic  #268                // Method fireRegenTickEvent:(Lnet/minecraft/entity/player/EntityPlayer;)I
+     378: if_icmplt     430
+     381: aload_1
+     382: invokestatic  #272                // Method fireRegenEvent:(Lnet/minecraft/entity/player/EntityPlayer;)Lsqueek/applecore/api/hunger/HealthRegenEvent$Regen;
+     385: astore        10
+     387: aload         10
+     389: invokevirtual #273                // Method squeek/applecore/api/hunger/HealthRegenEvent$Regen.isCanceled:()Z
+     392: ifne          413
+     395: aload_1
+     396: aload         10
+     398: getfield      #274                // Field squeek/applecore/api/hunger/HealthRegenEvent$Regen.deltaHealth:F
+     401: invokevirtual #261                // Method net/minecraft/entity/player/EntityPlayer.func_70691_i:(F)V
+     404: aload_0
+     405: aload         10
+     407: getfield      #275                // Field squeek/applecore/api/hunger/HealthRegenEvent$Regen.deltaExhaustion:F
+     410: invokevirtual #265                // Method net/minecraft/util/FoodStats.func_75113_a:(F)V
+     413: aload_2
+     414: iconst_0
+     415: invokeinterface #246,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setFoodTimer:(I)V
+     420: goto          430
+     423: aload_2
+     424: iconst_0
+     425: invokeinterface #246,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setFoodTimer:(I)V
+     430: aload_1
+     431: invokestatic  #278                // Method fireAllowStarvation:(Lnet/minecraft/entity/player/EntityPlayer;)Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+     434: astore        10
+     436: aload         10
+     438: getstatic     #166                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.ALLOW:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+     441: if_acmpeq     459
+     444: aload         10
+     446: getstatic     #169                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.DEFAULT:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+     449: if_acmpne     523
+     452: aload_0
+     453: invokevirtual #146                // Method net/minecraft/util/FoodStats.func_75116_a:()I
+     456: ifgt          523
+     459: aload_2
+     460: aload_2
+     461: invokeinterface #281,  1          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.getStarveTimer:()I
+     466: iconst_1
+     467: iadd
+     468: invokeinterface #284,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setStarveTimer:(I)V
+     473: aload_2
+     474: invokeinterface #281,  1          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.getStarveTimer:()I
+     479: aload_1
+     480: invokestatic  #287                // Method fireStarvationTickEvent:(Lnet/minecraft/entity/player/EntityPlayer;)I
+     483: if_icmplt     530
+     486: aload_1
+     487: invokestatic  #291                // Method fireStarveEvent:(Lnet/minecraft/entity/player/EntityPlayer;)Lsqueek/applecore/api/hunger/StarvationEvent$Starve;
+     490: astore        11
+     492: aload         11
+     494: invokevirtual #292                // Method squeek/applecore/api/hunger/StarvationEvent$Starve.isCanceled:()Z
+     497: ifne          513
+     500: aload_1
+     501: getstatic     #298                // Field net/minecraft/util/DamageSource.field_76366_f:Lnet/minecraft/util/DamageSource;
+     504: aload         11
+     506: getfield      #301                // Field squeek/applecore/api/hunger/StarvationEvent$Starve.starveDamage:F
+     509: invokevirtual #305                // Method net/minecraft/entity/player/EntityPlayer.func_70097_a:(Lnet/minecraft/util/DamageSource;F)Z
+     512: pop
+     513: aload_2
+     514: iconst_0
+     515: invokeinterface #284,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setStarveTimer:(I)V
+     520: goto          530
+     523: aload_2
+     524: iconst_0
+     525: invokeinterface #284,  2          // InterfaceMethod squeek/applecore/asm/util/IAppleCoreFoodStats.setStarveTimer:(I)V
+     530: iconst_1
+     531: ireturn
+
+
+## AppleCore StarvationEvent
+public class squeek.applecore.api.hunger.StarvationEvent$Starve extends squeek.applecore.api.hunger.StarvationEvent {
+  public float starveDamage;
+
+  public squeek.applecore.api.hunger.StarvationEvent$Starve(net.minecraft.entity.player.EntityPlayer);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #13                 // Method squeek/applecore/api/hunger/StarvationEvent."<init>":(Lnet/minecraft/entity/player/EntityPlayer;)V
+       5: aload_0
+       6: fconst_1
+       7: putfield      #15                 // Field starveDamage:F
+      10: aload_1
+      11: getfield      #21                 // Field net/minecraft/entity/player/EntityPlayer.field_70170_p:Lnet/minecraft/world/World;
+      14: invokevirtual #27                 // Method net/minecraft/world/World.func_175659_aa:()Lnet/minecraft/world/EnumDifficulty;
+      17: astore_2
+      18: aload_1
+      19: invokevirtual #31                 // Method net/minecraft/entity/player/EntityPlayer.func_110143_aJ:()F
+      22: ldc           #32                 // float 10.0f
+      24: fcmpl
+      25: ifgt          51
+      28: aload_2
+      29: getstatic     #38                 // Field net/minecraft/world/EnumDifficulty.HARD:Lnet/minecraft/world/EnumDifficulty;
+      32: if_acmpeq     51
+      35: aload_1
+      36: invokevirtual #31                 // Method net/minecraft/entity/player/EntityPlayer.func_110143_aJ:()F
+      39: fconst_1
+      40: fcmpl
+      41: ifle          55
+      44: aload_2
+      45: getstatic     #41                 // Field net/minecraft/world/EnumDifficulty.NORMAL:Lnet/minecraft/world/EnumDifficulty;
+      48: if_acmpne     55
+      51: iconst_1
+      52: goto          56
+      55: iconst_0
+      56: istore_3
+      57: iload_3
+      58: ifne          66
+      61: aload_0
+      62: fconst_0
+      63: putfield      #15                 // Field starveDamage:F
+      66: return
+}
+public class squeek.applecore.api.hunger.StarvationEvent$GetStarveTickPeriod extends squeek.applecore.api.hunger.StarvationEvent {
+  public int starveTickPeriod;
+
+  public squeek.applecore.api.hunger.StarvationEvent$GetStarveTickPeriod(net.minecraft.entity.player.EntityPlayer);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #12                 // Method squeek/applecore/api/hunger/StarvationEvent."<init>":(Lnet/minecraft/entity/player/EntityPlayer;)V
+       5: aload_0
+       6: bipush        80
+       8: putfield      #14                 // Field starveTickPeriod:I
+      11: return
+}
+
+## AppleCore HealthRegenEvent
+public class squeek.applecore.api.hunger.HealthRegenEvent$SaturatedRegen extends squeek.applecore.api.hunger.HealthRegenEvent {
+  public float deltaHealth;
+
+  public float deltaExhaustion;
+
+  public squeek.applecore.api.hunger.HealthRegenEvent$SaturatedRegen(net.minecraft.entity.player.EntityPlayer);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #14                 // Method squeek/applecore/api/hunger/HealthRegenEvent."<init>":(Lnet/minecraft/entity/player/EntityPlayer;)V
+       5: aload_0
+       6: aload_1
+       7: invokevirtual #20                 // Method net/minecraft/entity/player/EntityPlayer.func_71024_bL:()Lnet/minecraft/util/FoodStats;
+      10: invokevirtual #26                 // Method net/minecraft/util/FoodStats.func_75115_e:()F
+      13: ldc           #27                 // float 6.0f
+      15: invokestatic  #33                 // Method java/lang/Math.min:(FF)F
+      18: putfield      #35                 // Field deltaExhaustion:F
+      21: aload_0
+      22: aload_0
+      23: getfield      #35                 // Field deltaExhaustion:F
+      26: ldc           #27                 // float 6.0f
+      28: fdiv
+      29: putfield      #37                 // Field deltaHealth:F
+      32: return
+}
+
+## Vanilla EntityPlayer.getDigSpeed
+  public float b(awt);
+    Code:
+       0: aload_0
+       1: getfield      #105                // Field bv:Laec;
+       4: aload_1
+       5: invokevirtual #817                // Method aec.a:(Lawt;)F
+       8: fstore_2
+       9: fload_2
+      10: fconst_1
+      11: fcmpl
+      12: ifle          47
+      15: aload_0
+      16: invokestatic  #820                // Method alm.f:(Lvp;)I
+      19: istore_3
+      20: aload_0
+      21: invokevirtual #351                // Method co:()Laip;
+      24: astore        4
+      26: iload_3
+      27: ifle          47
+      30: aload         4
+      32: invokevirtual #361                // Method aip.b:()Z
+      35: ifne          47
+      38: fload_2
+      39: iload_3
+      40: iload_3
+      41: imul
+      42: iconst_1
+      43: iadd
+      44: i2f
+      45: fadd
+      46: fstore_2
+      47: aload_0
+      48: getstatic     #825                // Field vb.c:Luz;
+      51: invokevirtual #828                // Method a:(Luz;)Z
+      54: ifeq          79
+      57: fload_2
+      58: fconst_1
+      59: aload_0
+      60: getstatic     #825                // Field vb.c:Luz;
+      63: invokevirtual #831                // Method b:(Luz;)Lva;
+      66: invokevirtual #835                // Method va.c:()I
+      69: iconst_1
+      70: iadd
+      71: i2f
+      72: ldc_w         #391                // float 0.2f
+      75: fmul
+      76: fadd
+      77: fmul
+      78: fstore_2
+      79: aload_0
+      80: getstatic     #837                // Field vb.d:Luz;
+      83: invokevirtual #828                // Method a:(Luz;)Z
+      86: ifeq          157
+      89: aload_0
+      90: getstatic     #837                // Field vb.d:Luz;
+      93: invokevirtual #831                // Method b:(Luz;)Lva;
+      96: invokevirtual #835                // Method va.c:()I
+      99: tableswitch   { // 0 to 3
+                     0: 128
+                     1: 135
+                     2: 142
+                     3: 149
+               default: 149
+          }
+     128: ldc_w         #787                // float 0.3f
+     131: fstore_3
+     132: goto          153
+     135: ldc_w         #838                // float 0.09f
+     138: fstore_3
+     139: goto          153
+     142: ldc_w         #839                // float 0.0027f
+     145: fstore_3
+     146: goto          153
+     149: ldc_w         #840                // float 8.1E-4f
+     152: fstore_3
+     153: fload_2
+     154: fload_3
+     155: fmul
+     156: fstore_2
+     157: aload_0
+     158: getstatic     #845                // Field bcz.h:Lbcz;
+     161: invokevirtual #848                // Method a:(Lbcz;)Z
+     164: ifeq          180
+     167: aload_0
+     168: invokestatic  #851                // Method alm.h:(Lvp;)Z
+     171: ifne          180
+     174: fload_2
+     175: ldc_w         #852                // float 5.0f
+     178: fdiv
+     179: fstore_2
+     180: aload_0
+     181: getfield      #268                // Field z:Z
+     184: ifne          193
+     187: fload_2
+     188: ldc_w         #852                // float 5.0f
+     191: fdiv
+     192: fstore_2
+     193: fload_2
+     194: freturn
+

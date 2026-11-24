@@ -118,6 +118,9 @@ export class RotnData {
         this.fallingBlocks = readJson(dir, 'falling-blocks')?.blocks ?? null;
         // Food values on this pack and foods to avoid (food-values.json, tools/build-food-values.mjs).
         this.foodData = readJson(dir, 'food-values') ?? null;
+        // What low food does to a player: Hunger Overhaul's low-food effects by food and difficulty,
+        // starvation, the constant drain (hunger-effects.json, hand-written with evidence).
+        this.hungerEffectsData = readJson(dir, 'hunger-effects') ?? null;
 
         this.dump = {};
         for (const f of DUMP_FILES) this.dump[f] = readJson(dir, f);
