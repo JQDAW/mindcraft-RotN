@@ -1,7 +1,7 @@
 {
   "format": "rotn-hunger-effects/1",
   "pack": "3.3.4",
-  "description": "What low food does to a player on RotN 3.3.4: Hunger Overhaul's low-food potion effects (by food level and difficulty), starvation, the constant hunger drain and the regeneration floor. Hand-written from the bytecode of Hunger Overhaul 1.3.3 (jenkins 148), AppleCore 3.4.0 and the vanilla 1.12.2 server jar of the pinned pack zip, read with javap only, and from the pack's configs; excerpts and copies in packages/rotn-data/test/fixtures/hunger-effects-3.3.4/. confidence 'verified' = read from that bytecode and config; nothing here was watched in a run.",
+  "description": "What low food does to a player on RotN 3.3.4: Hunger Overhaul's low-food potion effects (by food level and difficulty), starvation, the constant hunger drain and the regeneration floor. Hand-written from the bytecode of Hunger Overhaul 1.3.3 (jenkins 148), AppleCore 3.4.0 and the vanilla 1.12.2 server jar of the pinned pack zip, read with javap only, and from the pack's configs; excerpts and copies in packages/rotn-data/test/fixtures/hunger-effects-3.3.4/. confidence 'verified' = read from that bytecode and config; only the drain was also measured in a run (drain.observed).",
   "confidence": "verified",
   "summary": "On the test server (difficulty 2, Normal), from food 4 down Hunger Overhaul keeps Mining Fatigue and Slowness on the player, from I at food 4 to IV at food 1 or 0. Weakness comes at food 2 (I) and 1 (II), Nausea at food 1. Mining Fatigue multiplies dig speed by 0.3, 0.09, 0.0027 and 0.00081 (I to IV), so from food 3 any dig harder than a crop is about 11 times slower and from food 2 it is effectively impossible (dirt by hand: 750 ms, 2.5 s at I, 8.3 s at II, 278 s at III, 926 s at IV). Each effect lasts 19 ticks and is renewed every 10 ticks while food stays low; the server removes it when food rises (or the player dies). Food 0 for 80 ticks kills: 200 starvation damage at any difficulty and health. At rest Hunger Overhaul's constant drain takes 1 point (saturation first, then food) about every 235 s (about 15 per hour); activity adds vanilla's exhaustion on top. No health regeneration below food 7.",
   "sources": {
@@ -48,7 +48,7 @@
   },
   "serverDifficulty": 2,
   "effects": {
-    "rule": "HungerOverhaulEventHook.onLivingUpdate, every 10 ticks (an NBT countdown 'HungerOverhaulCheck' set to 9) for a player that is alive and not in creative: d = the world difficulty id (Peaceful 0 .. Hard 3) when difficultyScalingEffects is true, else 2. For each effect the first tier whose food bound holds is checked; it applies only if d >= minDifficulty, and then no later tier is tried. The effect is PotionEffect(effect, 19 ticks, amplifier, ambient true, particles true). Amplifier 0 = level I.",
+    "rule": "HungerOverhaulEventHook.onLivingUpdate, every 10 ticks (an NBT countdown 'HungerOverhaulCheck' set to 9) for a player that is alive and not in creative: d = the world difficulty id (Peaceful 0 .. Hard 3) when difficultyScalingEffects is true, else 2. For each effect the tiers are tried in order and the first tier whose food bound and difficulty floor both hold applies (a tier whose bound holds but whose floor fails falls through to the next tier; since the floors rise with the bound, no later tier can then hold either). The effect is PotionEffect(effect, 19 ticks, amplifier, ambient true, particles true). Amplifier 0 = level I.",
     "tiers": {
       "minecraft:slowness": [
         { "foodAtMost": 1, "minDifficulty": 0, "amplifier": "d + 1" },
@@ -99,14 +99,21 @@
     "rule": "Hunger Overhaul adds 0.01 exhaustion every 10 ticks, 0.001 per tick (constantHungerLoss), on top of vanilla's sources; one point of saturation, or of food once saturation is 0, costs maxExhaustion = 4.0 / (hungerLossRatePercentage / 100), times 1.6667 on Peaceful and 1.3333 on Easy (difficultyScalingHunger).",
     "constantExhaustionPerTick": 0.001,
     "maxExhaustionAtServerDifficulty": 4.7059,
-    "secondsPerPointAtRest": 235.3
+    "secondsPerPointAtRest": 235.3,
+    "observed": {
+      "run": "G4 soak 14 (G4-SOAK-14-20261124, rotn-v0.1.20), driver.log [survival] food checks (once a minute) on the test server",
+      "sealedSecondsPerPoint": 236,
+      "activeSecondsPerPoint": [80, 90],
+      "sealedShelter": "14:58-15:23, the bot sealed in its shelter at night: food 10 -> 3 in 23.6 min, 236 s per point (the steps 15:02:51, 15:06:51, 15:10:51, 15:14:39, 15:18:39, 15:22:39 are 4 min apart); matches secondsPerPointAtRest",
+      "active": "80-90 s per point while moving and working (13 -> 10 at 14:52-14:56; 3 -> 1 at 15:24-15:27): vanilla exhaustion (sprinting 0.1 per metre, jumps 0.05 or 0.2 sprinting, attacks and hits taken 0.1, block breaks 0.005) on top of the constant drain"
+    }
   },
   "regeneration": {
-    "rule": "FoodEventHandler.allowHealthRegen: natural regeneration only while food >= minHungerToHeal (7), healthRegenRatePercentage > 0, the naturalRegeneration game rule is on and the player is hurt; disableHealingHungerDrain means healing costs no food.",
+    "rule": "FoodEventHandler.allowHealthRegen: natural regeneration only while food >= minHungerToHeal (7), healthRegenRatePercentage > 0, the naturalRegeneration game rule is on and the player is hurt. FoodEventHandler.onHealthRegen sets the Regen event's deltaExhaustion to 0 (disableHealingHungerDrain), so this regeneration costs no food. Hunger Overhaul has no SaturatedRegen handler: AppleCore's saturated regeneration (food 20 with saturation above 0, the game rule on, the player hurt; AppleCore Hooks bytecode 141-212) still heals min(saturation, 6) / 6 and adds min(saturation, 6) exhaustion, vanilla's cost.",
     "minFood": 7
   },
   "unverified": [
     "The test server's difficulty was not read from a running server (no log line prints it); it is the pack's server.properties value, which the harness never changes.",
-    "Nothing was watched in a run; soak 14's dig hangs (net-forge, /home/rv/soak14-net-forge.md) fit the table."
+    "The effect table was not watched in a run; soak 14's dig hangs (net-forge, /home/rv/soak14-net-forge.md) fit it. The drain was (drain.observed)."
   ]
 }

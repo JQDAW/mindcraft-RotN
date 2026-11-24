@@ -719,6 +719,14 @@
        4: i2f
        5: putfield      #318                // Field squeek/applecore/api/hunger/StarvationEvent$Starve.starveDamage:F
        8: return
+  public void onHealthRegen(squeek.applecore.api.hunger.HealthRegenEvent$Regen);
+    Code:
+       0: getstatic     #306                // Field iguanaman/hungeroverhaul/common/config/Config.disableHealingHungerDrain:Z
+       3: ifeq          11
+       6: aload_1
+       7: fconst_0
+       8: putfield      #309                // Field squeek/applecore/api/hunger/HealthRegenEvent$Regen.deltaExhaustion:F
+      11: return
 
 
 ## AppleCore Hooks
@@ -1012,6 +1020,33 @@ public class squeek.applecore.api.hunger.StarvationEvent$GetStarveTickPeriod ext
        6: bipush        80
        8: putfield      #14                 // Field starveTickPeriod:I
       11: return
+}
+
+## AppleCore HealthRegenEvent
+public class squeek.applecore.api.hunger.HealthRegenEvent$SaturatedRegen extends squeek.applecore.api.hunger.HealthRegenEvent {
+  public float deltaHealth;
+
+  public float deltaExhaustion;
+
+  public squeek.applecore.api.hunger.HealthRegenEvent$SaturatedRegen(net.minecraft.entity.player.EntityPlayer);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #14                 // Method squeek/applecore/api/hunger/HealthRegenEvent."<init>":(Lnet/minecraft/entity/player/EntityPlayer;)V
+       5: aload_0
+       6: aload_1
+       7: invokevirtual #20                 // Method net/minecraft/entity/player/EntityPlayer.func_71024_bL:()Lnet/minecraft/util/FoodStats;
+      10: invokevirtual #26                 // Method net/minecraft/util/FoodStats.func_75115_e:()F
+      13: ldc           #27                 // float 6.0f
+      15: invokestatic  #33                 // Method java/lang/Math.min:(FF)F
+      18: putfield      #35                 // Field deltaExhaustion:F
+      21: aload_0
+      22: aload_0
+      23: getfield      #35                 // Field deltaExhaustion:F
+      26: ldc           #27                 // float 6.0f
+      28: fdiv
+      29: putfield      #37                 // Field deltaHealth:F
+      32: return
 }
 
 ## Vanilla EntityPlayer.getDigSpeed
