@@ -577,9 +577,11 @@ test('G4 #5: the soak\'s case (agenda done, nothing held, food 12, by day): the 
     const named = { id: 2, type: 'mob', name: 'animania:sow_old_spot', metadata: { 7: 10, 2: 'Wilbur' }, position: new Vec3(3.5, 64, 0.5) };
     const agent = foodAgent(t, [], { entities: { 1: cow, 2: named } });
     assert.equal(agendaTick(agent, { now: 0 }), 'food');
-    assert.equal(agent.said.at(-1), 'agenda step food started: keep food for the day and the night');
+    assert.equal(agent.said.at(-1), 'agenda step food started: hold food items for the day and the night (not the hunger bar)');
     const p = agent.self_prompter.prompt;
-    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 hunger and your food is 12 of 20\. On this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: get to at least 12\. /);
+    // Soak 13 (C3a): the step wants food held; the bar does not count (the model read "food 13 ... at least 12" as met).
+    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 hunger in your inventory; this step wants food worth at least 12 hunger held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack hunger falls about 1 every 4 minutes, even resting, and starving kills\. /);
+    assert.doesNotMatch(p, /get to at least/);
     assert.match(p, /Near you: animania:cow_holstein: kill one with !attack\("animania:cow_holstein"\)/);
     assert.doesNotMatch(p, /sow_old_spot/, 'a named animal is never offered');
     assert.match(p, /Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses/);

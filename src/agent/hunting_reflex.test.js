@@ -689,3 +689,78 @@ test('soak 12 (E): !attack waits for the kill\'s drop where the animal died, pic
     assert.match(agent.bot.output, /Its drop: picked up 2 animania:raw_prime_mutton\./);
     assert.doesNotMatch(agent.bot.output, /Picked up 0 items/);
 });
+
+// Soak 13 (C1, the lead): day 3 ran !searchForEntity 35 times (8 kinds, 64 to 511 blocks) with no find; each
+// miss named only the kind asked. Now a generic kind also finds its Animania food adults, the range is what the
+// bot can see (64: Animania's tracking box, rotn-data), a miss lists the animals in sight, and the 3rd miss within 64 blocks (10 min) says no animals
+// are near, the kinds searched, and to move away or do something else. A task giver's typed command: plain.
+test('soak 13 C1: !searchForEntity finds Animania adults by generic kind, says what is in sight, and after 3 misses in an area says no animals are near', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { matchesKind } = await import('./library/hunting.js');
+    const { SEARCH_MISSES, ENTITY_SIGHT } = await import('./library/entity_search.js');
+    assert.equal(ENTITY_SIGHT, 64);
+    assert.equal(SEARCH_MISSES.moveAway, 128, 'two tracking boxes: the new box shares nothing with the old');
+    const search = async (agent, cmd, context) => {
+        agent.bot.output = '';
+        agent.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: agent.bot.output, interrupted: false }), () => ({ message: agent.bot.output, interrupted: false }));
+        await executeCommand(agent, cmd, context);
+        return agent.bot.output;
+    };
+    // The generic kinds and the hunt's food adults agree.
+    const named = (name) => ({ name });
+    assert.equal(matchesKind(named('animania:cow_holstein'), 'cow'), true);
+    assert.equal(matchesKind(named('animania:sow_old_spot'), 'pig'), true);
+    assert.equal(matchesKind(named('animania:ewe_dorset'), 'sheep'), true);
+    assert.equal(matchesKind(named('animania:doe_cottontail'), 'rabbit'), true);
+    assert.equal(matchesKind(named('animania:doe_alpine'), 'rabbit'), false, 'a goat doe is no rabbit');
+    assert.equal(matchesKind(named('animania:bull_holstein'), 'cow'), false, 'a bull is left alone, as by the hunt');
+    assert.equal(matchesKind(named('animania:calf_holstein'), 'cow'), false, 'a calf is no food');
+    assert.equal(matchesKind(named('animania:hen_leghorn'), 'chicken'), false, 'no hen: hunting never takes one');
+    assert.equal(matchesKind(named('chicken'), 'chicken'), true);
+    assert.equal(matchesKind(named('animania:cow_holstein'), 'animania:cow_holstein'), true);
+
+    // A generic "cow" finds the Holstein (soak 13: "cow" never matched an Animania cow).
+    const found = await search(huntAgent({ animals: [cow(1, 20)] }), '!searchForEntity("cow", 64)');
+    assert.match(found, /Found animania:cow_holstein/);
+
+    // A miss lists what is in sight; a range past 80 says a larger range finds no more.
+    const ewe = { id: 2, name: 'animania:ewe_dorset', type: 'mob', position: new Vec3(30.5, 64, 0.5), height: 1.2, metadata: { 7: 10 } };
+    const sight = await search(huntAgent({ animals: [ewe] }), '!searchForEntity("pig", 128)');
+    assert.match(sight, /Could not find any pig in 64 blocks\. You asked for 128: the bot sees animals only within 64 blocks, so a larger range finds no more\. Animals in sight: animania:ewe_dorset\./);
+
+    // The server's box is square (|dx|, |dz| <= 64): an ewe toward its corner (85 blocks) is in sight, and a search of 64 finds it.
+    const corner = { ...ewe, position: new Vec3(60.5, 64, 60.5) };
+    assert.match(await search(huntAgent({ animals: [corner] }), '!searchForEntity("sheep", 64)'), /Found animania:ewe_dorset/);
+    // Below 64 the asked range holds.
+    assert.match(await search(huntAgent({ animals: [{ ...ewe, position: new Vec3(40.5, 64, 0.5) }] }), '!searchForEntity("sheep", 32)'), /Could not find any sheep in 32 blocks\. Animals in sight: animania:ewe_dorset\./);
+
+    // Nothing at all: the 1st and 2nd misses say so; the 3rd (any kinds, within 64 blocks) says no animals near here.
+    const agent = huntAgent({ animals: [] });
+    assert.match(await search(agent, '!searchForEntity("pig", 64)'), /Could not find any pig in 64 blocks\. No animal of any kind is in sight \(64 blocks\)\.\n$/);
+    assert.doesNotMatch(await search(agent, '!searchForEntity("cow", 128)'), /No animals near here/);
+    agent.bot.entity.position = new Vec3(30.5, 64, 0.5); // 30 blocks on: the same area
+    const third = await search(agent, '!searchForEntity("sheep", 256)');
+    assert.match(third, /No animals near here: you searched for pig, cow, sheep \(3 times within 64 blocks\) and no animal is in sight\. Searching again here finds nothing more: move more than 128 blocks away, or do something else \(!forage, or the agenda's other needs\)\./);
+    assert.match(await search(agent, '!searchForEntity("animania:cow_holstein", 128)'), /you searched for pig, cow, sheep, animania:cow_holstein \(4 times within 64 blocks\)/, 'a 4th repeats it');
+
+    // More than 64 blocks from the first miss: a new area, a new count.
+    agent.bot.entity.position = new Vec3(65.5, 64, 0.5);
+    const moved = await search(agent, '!searchForEntity("pig", 64)');
+    assert.doesNotMatch(moved, /No animals near here/);
+    assert.equal(agent.searchMisses.count, 1);
+    // 10 min after the first miss: a new count too.
+    await search(agent, '!searchForEntity("cow", 64)');
+    agent.searchMisses.time -= SEARCH_MISSES.windowMs + 1;
+    assert.doesNotMatch(await search(agent, '!searchForEntity("sheep", 64)'), /No animals near here/);
+    assert.equal(agent.searchMisses.count, 1);
+    // A find forgets the misses.
+    await search(agent, '!searchForEntity("cow", 64)');
+    agent.bot.entities[1] = cow(1, 70);
+    assert.match(await search(agent, '!searchForEntity("cow", 64)'), /Found animania:cow_holstein/);
+    assert.equal(agent.searchMisses, null);
+
+    // A task giver's typed command: the plain line, not counted.
+    const giver = huntAgent({ animals: [] });
+    for (let i = 0; i < 3; i++) assert.equal(await search(giver, '!searchForEntity("pig", 64)', { sender: 'JQDAW' }), 'Could not find any pig in 64 blocks.\n');
+    assert.equal(giver.searchMisses, undefined);
+});

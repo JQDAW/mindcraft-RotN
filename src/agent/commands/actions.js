@@ -15,6 +15,7 @@ import { mayBelongToPlayer, retaliationRisk, knownBases, isHuntableAnimal, tooWe
 import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
 import { placeHere } from '../library/escape.js';
+import { sightRange, rangeText, nearestOfKind, noteSearchFind, noteSearchMiss, missText } from '../library/entity_search.js';
 
 /** The model's !stay is at most this many seconds; longer (or -1, forever) needs a giver's typed command. */
 export const STAY_LIMITS = { modelMaxS: 120 };
@@ -378,13 +379,26 @@ export const actionsList = [
     },
     {
         name: '!searchForEntity',
-        description: 'Find and go to the nearest entity of a given type in a given range.',
+        description: 'Find and go to the nearest entity of a given type in a given range. A pig, cow, sheep or rabbit also finds the pack\'s Animania ones; the bot sees animals only within 64 blocks, and a miss lists the animals in sight.',
         params: {
             'type': { type: 'string', description: 'The type of entity to go to.' },
             'search_range': { type: 'float', description: 'The range to search for the entity.', domain: [32, 512] }
         },
         perform: runAsAction(async (agent, entity_type, range, context) => {
-            await skills.goToNearestEntity(agent.bot, entity_type, 4, hungryCap(agent, 'Searching', range, context));
+            // Soak 13 (C1): a generic kind (cow, pig, sheep, rabbit) also finds its Animania food adults; the
+            // range is what the bot can see at most; the model's miss says what is in sight, and after 3 misses
+            // in one area that searching there finds nothing more (entity_search.js). A task giver's typed
+            // command gets the plain miss line and is not counted (as hungryCap).
+            const capped = hungryCap(agent, 'Searching', range, context);
+            const r = sightRange(capped);
+            const found = nearestOfKind(agent.bot, entity_type, r);
+            if (!found) {
+                if (context?.sender) skills.log(agent.bot, `Could not find any ${entity_type} in ${rangeText(r)} blocks.`);
+                else skills.log(agent.bot, missText(agent, entity_type, capped, r, noteSearchMiss(agent, entity_type)));
+                return;
+            }
+            noteSearchFind(agent);
+            await skills.goToNearestEntity(agent.bot, found.name, 4, Number.isFinite(r) ? r : Number.MAX_VALUE);
         })
     },
     {

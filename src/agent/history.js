@@ -23,6 +23,12 @@ export function isMemoryReply(reply) {
     return typeof reply === 'string' && reply.trim() !== '' && !MODEL_FAILURE_REPLIES.has(reply.trim());
 }
 
+/** Soak 13 (C2): the turns one summary takes: max_messages - 5 (5 stay in context), at least 5 (upstream's chunk). */
+export const SUMMARY_KEEP = 5;
+export function summaryChunkSize(maxMessages) {
+    return Number.isFinite(maxMessages) ? Math.max(5, maxMessages - SUMMARY_KEEP) : 5;
+}
+
 export class History {
     constructor(agent) {
         this.agent = agent;
@@ -41,7 +47,10 @@ export class History {
         this.max_messages = settings.max_messages;
 
         // Number of messages to remove from current history and save into memory
-        this.summary_chunk_size = 5; 
+        // Soak 13 (C2, the lead): 5 (upstream) with max_messages 15 summarized every 5 turns (one summary
+        // every 2 to 3 commands, 69 in 2 h, 26% of the calls). Now max_messages - 5 (10 at 15): a summary every
+        // 10 turns, and 5 turns stay in context after it. At least 5.
+        this.summary_chunk_size = summaryChunkSize(this.max_messages);
         // chunking reduces expensive calls to promptMemSaving and appendFullHistory
         // and improves the quality of the memory summary
     }
@@ -118,8 +127,11 @@ export class History {
             // A non-giver's words must not become a "long-term reminder" in $MEMORY, which every
             // later prompt (self-prompts included) trusts (#174 review 1): they are left out.
             const trusted = chunk.filter(t => !isUntrustedTurn(t));
-            if (trusted.length > 0)
+            if (trusted.length > 0) {
+                // Soak 13 (C2, the lead): one marker per summary call, numbers only, for the harness's count.
+                console.log(`[memory] summary turns ${trusted.length} kept ${this.turns.length}`);
                 await this.summarizeMemories(trusted);
+            }
             await this.appendFullHistory(chunk);
         }
     }

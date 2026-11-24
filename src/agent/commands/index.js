@@ -1,4 +1,5 @@
-import { getBlockId, getItemId } from "../../utils/mcdata.js";
+import { getBlockId, getItemId, getAllBlocks, getAllItems } from "../../utils/mcdata.js";
+import { suggestText } from "../library/name_suggest.js";
 import { canonicalName } from "../library/rotn_names.js";
 import { actionsList } from './actions.js';
 import { queryList } from './queries.js';
@@ -95,6 +96,12 @@ function checkInInterval(number, lowerBound, upperBound, endpointType) {
  * @param {string} message - A message from a player or language model containing a command.
  * @returns {string | Object}
  */
+/** Soak 13 (C3b): the registry's block or item names, for the closest-name hint on an unknown name. */
+function registryNames(kind) {
+    try { return (kind === 'blocks' ? getAllBlocks() : getAllItems()).map(b => b?.name).filter(Boolean); }
+    catch { return []; }
+}
+
 export function parseCommandMessage(message) {
     const commandMatch = message.match(commandRegex);
     if (!commandMatch) return `Command is incorrectly formatted`;
@@ -162,13 +169,13 @@ export function parseCommandMessage(message) {
                 suppressNoDomainWarning = true; //Don't spam console. Only give the warning once.
             }
         } else if(param.type === 'BlockName') { //Check that there is a block with this name
-            if(getBlockId(arg) == null) return  `Invalid block type: ${arg}.`
+            if(getBlockId(arg) == null) return  `Invalid block type: ${arg}.${suggestText(arg, registryNames('blocks'))}`
             arg = canonicalName(arg, 'blocks') ?? arg; // the skills' name space (rotn_names.js, B1b)
         } else if(param.type === 'ItemName') { //Check that there is an item with this name
-            if(getItemId(arg) == null) return `Invalid item type: ${arg}.`
+            if(getItemId(arg) == null) return `Invalid item type: ${arg}.${suggestText(arg, registryNames('items'))}`
             arg = canonicalName(arg, 'items') ?? arg;
         } else if(param.type === 'BlockOrItemName') {
-            if(getBlockId(arg) == null && getItemId(arg) == null) return  `Invalid block or item type: ${arg}.`
+            if(getBlockId(arg) == null && getItemId(arg) == null) return  `Invalid block or item type: ${arg}.${suggestText(arg, [...registryNames('blocks'), ...registryNames('items')])}`
             arg = canonicalName(arg, 'items') ?? canonicalName(arg, 'blocks') ?? arg;
         }
         args[i] = arg;
