@@ -307,6 +307,23 @@ export function foodFirstAfterDeath(s) {
 }
 
 /**
+ * Soak 14 (F2, the lead): each death took the dirt piles (60, then 72), and nights 2 and 3 had no shelter
+ * (food first after the deaths, then a dirt collect that hung). After a respawn by day, within windowMs of the
+ * death, while the night is nightMin minutes away or less and the bot holds fewer blocks than the shelter needs
+ * (SHELTER_HOLD), the shelter reserve comes first: before food after a death (FOOD_AFTER_DEATH) and before H3.
+ * (After the morning freeze sunset is at most 7.9 min away, inside RESERVE_LEAD_MIN: the reserve is due then anyway.)
+ */
+export const SHELTER_AFTER_DEATH = { windowMs: 15 * 60_000, nightMin: 15, foodAtMost: 4 };
+export function shelterFirstAfterDeath(s) {
+    let since = Infinity, m = Infinity, have = 0, food = null, held = 0;
+    try { since = s.sinceDeathMs?.() ?? Infinity; m = s.minutesToSunset?.() ?? Infinity; have = reserveHave(s); food = s.food?.(); held = s.foodHeld?.() ?? 0; } catch { return false; }
+    // #614 review 8 (the lead): not at food SHELTER_AFTER_DEATH.foodAtMost or lower with no food held: Mining Fatigue
+    // refuses the digs then, and food comes first.
+    if (Number.isFinite(food) && food <= SHELTER_AFTER_DEATH.foodAtMost && held <= 0) return false;
+    return Number.isFinite(since) && since <= SHELTER_AFTER_DEATH.windowMs && m > 0 && m <= SHELTER_AFTER_DEATH.nightMin && have < SHELTER_HOLD;
+}
+
+/**
  * Soak 11 (H3, the lead): 22:03:42, 9 min before sunset, the before-night shelter blocks came before
  * food at food 7-8 with no food held (the 4 min after the 21:57 death had gone on the club); food came
  * back at 22:06 at food 6, and the night began at food 4 with nothing to eat (food 0 kills at once).
@@ -548,6 +565,8 @@ export class Agenda {
 
     /** A reserve, if one is wanted now: the shelter reserve first, then the weapon, then food (G4 #5). */
     anyReserveWanted(state) {
+        // Soak 14 (F2): after a respawn by day with the night near and too few blocks: the shelter blocks first.
+        if (shelterFirstAfterDeath(state)) { const r = this.reserveWanted(state); if (r) return r; }
         // Soak 7 (d): after a death, hungry with nothing to eat: food first (FOOD_AFTER_DEATH).
         const first = foodFirstAfterDeath(state) ? this.foodWanted(state) : null;
         if (first) return first;
@@ -806,7 +825,9 @@ export class Agenda {
             if (f) { if (!readOnly) this.foodBeforeBlocksRan(); return f; }
             return this.reserveWanted(state, { readOnly });
         };
-        const pick = first ?? (this.foodBeforeBlocks(state, { readOnly })
+        // Soak 14 (F2): after a respawn by day with the night near and too few blocks: the shelter blocks first.
+        const shelterFirst = shelterFirstAfterDeath(state) ? this.reserveWanted(state, { readOnly }) : null;
+        const pick = shelterFirst ?? first ?? (this.foodBeforeBlocks(state, { readOnly })
             ? h3()
             : this.reserveWanted(state, { readOnly }) ?? this.weaponWanted(state, { readOnly, foodDue }) ?? this.foodWanted(state, { standing: blocked, readOnly }))
             ?? step;

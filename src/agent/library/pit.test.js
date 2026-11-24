@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { pitProblem, choosePit, digPit, pitOut, PIT } from './pit.js';
+import { pitProblem, choosePit, digPit, pitOut, PIT, DIG_STALL } from './pit.js';
 import { buildShelter, retreatPlan, backAway } from './shelter.js';
 
 const reg = minecraftData('1.12.2');
@@ -211,9 +211,10 @@ test('soak 2: the bot is still on purpose while it digs (the unstuck reflex leav
     t.mock.method(console, 'log', () => {});
     const warns = [];
     t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
-    const saved = PIT.digSlackMs;
-    PIT.digSlackMs = 200;
-    t.after(() => { PIT.digSlackMs = saved; });
+    // Soak 14 (F2): the limit is DIG_STALL.factor x the estimate + slackMs.
+    const saved = DIG_STALL.slackMs;
+    DIG_STALL.slackMs = 200;
+    t.after(() => { DIG_STALL.slackMs = saved; });
     const { bot, calls } = fakeBot();
     const stationary = [];
     const dig = bot.dig;
@@ -245,9 +246,10 @@ test('soak 2: the bot is still on purpose while it digs (the unstuck reflex leav
 test('#431 review 6: no dig starts once the time is up (an equip still running when digPit gives up)', async (t) => {
     t.mock.method(console, 'log', () => {});
     t.mock.method(console, 'warn', () => {});
-    const saved = PIT.digSlackMs;
-    PIT.digSlackMs = 100;
-    t.after(() => { PIT.digSlackMs = saved; });
+    // Soak 14 (F2): the limit is DIG_STALL.factor x the estimate + slackMs.
+    const saved = DIG_STALL.slackMs;
+    DIG_STALL.slackMs = 100;
+    t.after(() => { DIG_STALL.slackMs = saved; });
     const { bot, calls } = fakeBot();
     bot.digTime = () => 10;
     bot.stopDigging = () => {};
@@ -309,4 +311,58 @@ test('soak 4: pitOut away from a mob takes the stairs whose top is farthest from
     await buildShelter(bot, { site: feet, keepSoft: true, craft: craft(items) });
     const exit = await pitOut(bot, feet, { away: new Vec3(4.5, 64, 0.5) });
     assert.ok(exit && exit.x < 0, `out on the west, away from the zombie in the east: ${exit}`);
+});
+
+// Soak 14 (F2, the lead; net-forge (C)): the stall limit is 3 x the expected time + 2 s, taken after the equip from the
+// tool that digs (morning 1: the hand's Infinity gave the 4 s floor for cobble that took 16.7 s with the pickaxe under
+// Mining Fatigue II); a dig expected past 60 s (or the caller's cap) is not started; the [dig] line says why, with the
+// held item and slot, the effects and the time since the spawn.
+test('soak 14 (F2): digBudget 3 x + 2 s; digWithin takes it after the equip; a dig too slow is not started; [dig] lines', async (t) => {
+    const { digBudget, digWithin, DIG_STALL, digLine } = await import('./pit.js');
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    assert.deepEqual([DIG_STALL.factor, DIG_STALL.slackMs, DIG_STALL.maxEstMs], [3, 2000, 60_000]);
+    const block = { name: 'contenttweaker:limestone_cobble', metadata: 0, position: new Vec3(1, 66, 0) };
+    const pick = { name: 'stone_pickaxe', count: 1 };
+    const bot = { game: { gameMode: 'survival' }, heldItem: null, quickBarSlot: 2, rotnSpawnedAt: Date.now() - 30_000, entity: { effects: { 4: { amplifier: 1 } } },
+        registry: { effects: { 4: { name: 'MiningFatigue' } } }, blockAt: () => block,
+        digTime: () => (bot.heldItem === pick ? 16_700 : Infinity) };
+    assert.deepEqual(digBudget(bot, block), { estMs: Infinity, limitMs: DIG_STALL.unknownMs }, 'the hand: no estimate, the floor');
+    let dug = 0;
+    bot.dig = () => { dug++; return Promise.resolve(); };
+    const equip = () => { bot.heldItem = pick; return Promise.resolve(true); };
+    assert.equal(await digWithin(bot, block, Infinity, { equip }), true, 'the pickaxe\'s 16.7 s: limit 52.1 s, not the 4 s floor');
+    assert.deepEqual(bot.rotnLastDig, { estMs: 16_700, limitMs: 3 * 16_700 + 2000 });
+    assert.equal(dug, 1);
+    // Too slow for the caller's cap: not started, said why.
+    bot.heldItem = null;
+    assert.equal(await digWithin(bot, block, 10_000, { equip }), false);
+    assert.equal(dug, 1, 'not started');
+    assert.ok(logs.includes('[dig] contenttweaker:limestone_cobble:0 at 1, 66, 0: not started: it would take 16.7 s, over 10.0 s; expected 16.7 s with stone_pickaxe (slot 2); effects MiningFatigue:1; 30 s since the spawn; the block is still there'), logs.join('\n'));
+    // A stale Mining Fatigue IV: dirt by hand 926 s, over 60 s: not started.
+    const dirt = { name: 'dirt', metadata: 0, position: new Vec3(0, 63, 0) };
+    const stale = { game: { gameMode: 'survival' }, heldItem: null, entity: { effects: { 4: { amplifier: 3 } } }, registry: { effects: { 4: { name: 'MiningFatigue' } } },
+        blockAt: () => dirt, digTime: () => 926_000, tool: { equipForBlock: () => Promise.resolve() }, dig: () => { throw new Error('never'); } };
+    assert.equal(await digWithin(stale, dirt, Infinity), false);
+    assert.match(digLine(stale, dirt, { what: 'x', estMs: 926_000 }), /^\[dig\] dirt:0 at 0, 63, 0: x; expected 926\.0 s with the hand \(slot \?\); effects MiningFatigue:3; no spawn time; the block is still there$/);
+});
+
+// #614 review 6 and 7: digWithin clears the last dig's record at entry (a later equip failure is not blamed on an
+// earlier refusal); its equip (and the off-hand pickaxe's move) has its own cap, DIG_STALL.equipMs, even with no caller cap.
+test('#614 review 6 and 7: rotnLastDig is cleared at entry; the equip is capped by DIG_STALL.equipMs', async (t) => {
+    const { digWithin, DIG_STALL } = await import('./pit.js');
+    t.mock.method(console, 'log', () => {});
+    const block = { name: 'stone', metadata: 0, position: new Vec3(1, 64, 0) };
+    const bot = { game: { gameMode: 'survival' }, heldItem: null, blockAt: () => block, digTime: () => 120_000, dig: () => Promise.resolve() };
+    assert.equal(await digWithin(bot, block, Infinity, { equip: () => Promise.resolve(true) }), false);
+    assert.equal(bot.rotnLastDig.refused, true);
+    assert.equal(await digWithin(bot, block, Infinity, { equip: () => Promise.resolve(false) }), false);
+    assert.equal(bot.rotnLastDig, null, 'the equip failed: no stale refusal');
+    const saved = DIG_STALL.equipMs;
+    DIG_STALL.equipMs = 50;
+    t.after(() => { DIG_STALL.equipMs = saved; });
+    assert.equal(DIG_STALL.equipMs, 50);
+    const t0 = Date.now();
+    assert.equal(await digWithin(bot, block, Infinity, { equip: () => new Promise(() => {}) }), 'timeout');
+    assert.ok(Date.now() - t0 < 1000, 'the hung equip is cut');
 });

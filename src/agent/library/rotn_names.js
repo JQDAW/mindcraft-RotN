@@ -103,10 +103,21 @@ export function variantMeta(name) {
     return p && p.meta != null && hasSubtypes(p.name) ? p.meta : null;
 }
 
-/** How many of the named item the bot holds; a bare name counts every variant. */
+/**
+ * Soak 14 (F2, #614 review 1): every stack the bot carries: the inventory (mineflayer's inventory.items(), slots
+ * 9-44) and the off hand (slot 45), where rearmWeapon keeps the stone pickaxe (kept at a death). Every tool and
+ * count lookup reads this, so an off-hand pickaxe is a held pickaxe.
+ */
+export function carriedItems(bot) {
+    const items = bot?.inventory?.items?.() ?? [];
+    const off = bot?.inventory?.slots?.[45];
+    return off && typeof off.name === 'string' && !items.includes(off) ? [...items, off] : items;
+}
+
+/** How many of the named item the bot holds (the off hand too); a bare name counts every variant. */
 export function countItem(bot, name) {
     let n = 0;
-    for (const item of bot.inventory.items()) {
+    for (const item of carriedItems(bot)) {
         if (itemMatches(item, name)) n += item.count;
     }
     return n;

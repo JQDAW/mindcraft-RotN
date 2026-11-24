@@ -151,3 +151,32 @@ test('soak 12 (B, D3): stairOut digs the plan and walks out; nothing to dig out 
     assert.match(none.why, /no way out within 6 quick blocks/);
     assert.deepEqual(rock.calls.digs, []);
 });
+
+// Soak 14 (F2, net-forge): Hunger Overhaul's Mining Fatigue at low food slows every dig (food 3: II x0.09): the dig
+// estimates (quickDig, the scroll's kept-items rule, the dig-out plan) count it.
+test('soak 14 (F2): digSpeedFactor: Mining Fatigue I-IV x0.3/0.09/0.0027/0.00081, Haste +20% a level; dirt by hand is no quick dig under Mining Fatigue II', async () => {
+    const { digSpeedFactor, digMs } = await import('./walk_exit.js');
+    const fx = (amp, name = 'MiningFatigue') => ({ registry: { effects: { 4: { name } } }, entity: { effects: { 4: { amplifier: amp } } } });
+    assert.equal(digSpeedFactor({}), 1);
+    assert.equal(digSpeedFactor(fx(0)), 0.3);
+    assert.equal(digSpeedFactor(fx(1)), 0.09);
+    assert.equal(digSpeedFactor(fx(3)), 0.00081);
+    assert.equal(digSpeedFactor(fx(9)), 0.00081);
+    assert.ok(Math.abs(digSpeedFactor(fx(1, 'Haste')) - 1.4) < 1e-9);
+    const w = world();
+    assert.equal(quickDig(w.bot, new Vec3(1, 63, 0)), true, 'dirt by hand, 750 ms');
+    Object.assign(w.bot, fx(1));
+    assert.ok(Math.abs(digMs(w.bot, w.bot.blockAt(new Vec3(1, 63, 0))) - 750 / 0.09) < 1);
+    assert.equal(quickDig(w.bot, new Vec3(1, 63, 0)), false, 'Mining Fatigue II: 8.3 s');
+});
+
+// #614 review 5: a block with no dump entry: prismarine's digTime got the effects and bestDig divided by digSpeedFactor
+// again (Mining Fatigue twice). Now digTime gets none; the factor applies once.
+test('#614 review 5: Mining Fatigue counts once for a block with no dump entry', async () => {
+    const { digMs, digSpeedFactor } = await import('./walk_exit.js');
+    const bot = { inventory: { items: () => [] }, registry: { effects: { 4: { name: 'MiningFatigue' } } }, entity: { effects: { 4: { amplifier: 1 } } } };
+    let seen = null;
+    const b = { name: 'nosuchmod:soft_block', metadata: 0, boundingBox: 'block', digTime: (type, c, w, g, ench, effects) => { seen = effects; return 1000 * (Object.keys(effects).length ? 1 / 0.09 : 1); } };
+    assert.ok(Math.abs(digMs(bot, b) - 1000 / digSpeedFactor(bot)) < 1, `${digMs(bot, b)}`);
+    assert.deepEqual(seen, {}, 'no effects passed to prismarine');
+});

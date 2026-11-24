@@ -18,7 +18,7 @@ import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, BACK_AWAY_LA
 import { buildShelter, dirtShelterNeed, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, woodItems, countOf, exactAt, SETTLE, heldCells, retreatPlan, backAway } from './library/shelter.js';
 import { goToGoal, descendFromTree, avoidEnemies, inShelterReach, rearmWeapon, SHELTER_FIGHT, collectBlock, pickupNearbyItems } from './library/skills.js';
 import { stowCarried, toolAllows, toolLevels } from './library/rotn_sources.js';
-import { digPit, pitOut, quickByHand, digWithin, digBudget } from './library/pit.js';
+import { digPit, pitOut, quickByHand, digWithin } from './library/pit.js';
 import { burrowThreat, burrowAway, burrowsFrom, digRule, digEquip, BURROW } from './library/burrow.js';
 import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_relocate.js';
 import { escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll, isSpawnScroll, SCROLL } from './respawn_escape.js';
@@ -351,7 +351,7 @@ export async function unroofSpawn(bot, site, { hostile = () => null, pickup = pi
     }
     const sky = bot.blockAt?.(roof.offset(0, 1, 0))?.skyLight;
     if (sky !== 15) return { removed: false, why: `the sky light above it is ${Number.isFinite(sky) ? sky : 'unknown'}, not 15 (no open sky: the cell would stay in shade)` };
-    const r = await digWithin(bot, b, digBudget(bot, b).limitMs, { equip: digEquip(bot, b) });
+    const r = await digWithin(bot, b, Infinity, { equip: digEquip(bot, b) }); // soak 14 (F2): the budget after the equip
     if (r !== true) return { removed: false, why: r === 'timeout' ? `the dig of ${b.name} ran out of time` : `${b.name} could not be dug` };
     const cell = site.offset(0.5, 1, 0.5);
     try { await pickup(bot, { allow: (e) => !!e?.position && e.position.distanceTo(cell) <= UNROOF.dropRadius }); } catch { /* the drop falls into the cell the bot stands in */ }
@@ -609,10 +609,12 @@ async function digExitCell(bot, q, walk) {
         if (bot.entity.position.distanceTo(q) > EXIT_REACH) return false;
     }
     const block = bot.blockAt(q);
-    const { limitMs } = digBudget(bot, block);
     const equip = digEquip(bot, block);
-    const dug = await digWithin(bot, block, limitMs, equip ? { equip } : {});
-    if (dug === false) console.log(`[night] dig out: could not break ${block.name} at ${at(q)}${equip ? ' (no tool it needs in hand)' : ''}`);
+    // Soak 14 (F2, net-forge (C)): the budget after the equip, from the tool that digs (morning 1: the hand's
+    // Infinity gave the 4 s floor for cobble that needed 16.7 s with a pickaxe under Mining Fatigue II).
+    const dug = await digWithin(bot, block, Infinity, equip ? { equip } : {});
+    const limitMs = bot.rotnLastDig?.limitMs ?? 0;
+    if (dug === false) console.log(`[night] dig out: could not break ${block.name} at ${at(q)}${bot.rotnLastDig?.refused ? ' (too slow now: see the [dig] line)' : equip ? ' (no tool it needs in hand)' : ''}`);
     if (dug === 'timeout') console.log(`[night] dig out: ${block.name} at ${at(q)} was not dug within ${(limitMs / 1000).toFixed(1)} s`);
     return dug === true;
 }
@@ -818,7 +820,8 @@ export async function gatherDirtPiles(bot, { piles = GATHER.perDirt * 3, stop = 
 }
 
 /** Soak 11 (A3): the jobs that put a block in the hand; the weapon goes back after them. */
-export const REARM_AFTER = [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, 'action:buildShelter', 'action:digPit', GATHER_LABEL];
+// Soak 14 (F2): and the morning's dig-out (its digs took the off-hand pickaxe into the main hand).
+export const REARM_AFTER = [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL, 'action:buildShelter', 'action:digPit', GATHER_LABEL, 'action:leaveShelter'];
 
 /**
  * Soak 11 (A2): fight first from the shelter, armed, only with one melee mob within `range` and no other
@@ -1014,7 +1017,7 @@ export const NIGHT_OPS = { foodRun, buildShelter, digOut, siteNeeds, siteProblem
     burrowThreat, burrowAway,
     // #580 review 3: the blocks a repair may place now (with a pickaxe sturdy and dirt; without, dirt, its piles, logs and planks).
     repairBlocks: (bot) => {
-        const items = bot.inventory?.items?.() ?? [];
+        const items = bot.inventory?.items?.() ?? []; // (toolLevels below reads the off hand too: #614 review 1)
         const dirt = countOf(softItems(bot)) + placeableDirt(items);
         return toolLevels(bot, 'pickaxe').length > 0 ? countOf(shelterItems(bot)) + dirt : dirt + countOf(woodItems(bot));
     } };
@@ -1270,7 +1273,15 @@ function finishFoodEmergency(agent, n, ops, em, r, now) {
         Object.assign(n, { site: null, pit: false, burrowSteps: 0 });
         startBuilding(n, now); // the routine's clock: the next tick builds
     };
-    if (!em.wasInside || !em.out) { shelterHere(); return; }
+    if (!em.wasInside) { shelterHere(); return; }
+    // #612 second re-review (deferred nit): never out of it (the dig-out failed or ended first): the old shelter, its
+    // opening (if the dig-out made one) repaired by the inside check, not a fresh build.
+    if (!em.out) {
+        Object.assign(n, { state: 'inside', site: em.site, pit: em.pit, checkedAt: null });
+        bot.rotnSheltered = 'open';
+        line(agent, `[night] still in the shelter at ${at(em.site)}: closing it again`);
+        return;
+    }
     if (em.pit) { shelterHere(`the hole shelter at ${at(em.site)} is open (roof and stairs dug): not going back into it`); return; }
     startJob(agent, n, 'action:backToShelter', () => (ops.walkInto ?? walkInto)(bot, em.site, { maxMs: FOOD_RUN.backMs }), (back) => {
         if (!back) { console.log(`[night] no way back into the shelter at ${at(em.site)}; sheltering here`); shelterHere(); return; }

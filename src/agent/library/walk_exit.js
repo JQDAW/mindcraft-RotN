@@ -13,9 +13,10 @@ import pf from 'mineflayer-pathfinder';
 import { handDiggable, dumpState } from './night.js';
 import { digEquip } from './burrow.js';
 import { getItem, registryName } from '../../../packages/rotn-data/index.js';
+import { carriedItems } from './rotn_names.js';
 import { isLiquid, isFalling } from './shelter.js';
 import { goToGoal } from './skills.js';
-import { digWithin, digBudget, PIT } from './pit.js';
+import { digWithin, PIT } from './pit.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const SIX = [...HORIZONTAL, new Vec3(0, 1, 0), new Vec3(0, -1, 0)];
@@ -105,7 +106,8 @@ export function toolDigMs(bot, b, tool) {
         // A tool rotn-data does not know: as the hand.
         return st.toolRequired ? Infinity : st.hardness * 1.5 * 1000;
     }
-    if (typeof b?.digTime === 'function') { try { return b.digTime(tool?.type ?? null, false, false, false, [], bot.entity?.effects ?? {}); } catch { return Infinity; } }
+    // #614 review 5: no effects here: bestDig and keptDigMs apply them once (digSpeedFactor).
+    if (typeof b?.digTime === 'function') { try { return b.digTime(tool?.type ?? null, false, false, false, [], {}); } catch { return Infinity; } }
     return !tool && handDiggable(b) && (st?.hardness ?? Infinity) <= PIT.maxHardness ? 0 : Infinity;
 }
 /** The best dig time of b with the hand or any tool the bot carries (ms). */
@@ -113,11 +115,28 @@ export function digMs(bot, b) {
     return bestDig(bot, b).ms;
 }
 /** The tools the bot carries (pickaxes, axes, shovels, ... and every item rotn-data gives tool classes). */
-const carriedTools = (bot) => (bot.inventory?.items?.() ?? []).filter(i => TOOL_NAME.test(i.name ?? '') || !!getItem(registryName(i.name))?.toolClasses);
-/** The best dig time of b with the hand or any tool the bot carries, and that tool (null: the hand): {ms, tool}. */
+const carriedTools = (bot) => carriedItems(bot).filter( // #614 review 1: the off hand too
+    i => TOOL_NAME.test(i.name ?? '') || !!getItem(registryName(i.name))?.toolClasses);
+/**
+ * Soak 14 (F2, net-forge): the bot's effects on dig speed, as vanilla: Mining Fatigue I to IV x0.3, 0.09, 0.0027,
+ * 0.00081 (Hunger Overhaul gives them at food 4 to 1 or less), Haste +20% a level. 1 with none.
+ */
+const FATIGUE = [0.3, 0.09, 0.0027, 0.00081];
+export function digSpeedFactor(bot) {
+    let f = 1;
+    for (const [id, ef] of Object.entries(bot?.entity?.effects ?? {})) {
+        const name = String(bot?.registry?.effects?.[id]?.name ?? ef?.name ?? '').toLowerCase().replace(/[^a-z]/g, '');
+        const a = Number.isInteger(ef?.amplifier) ? Math.max(0, ef.amplifier) : 0;
+        if (name === 'miningfatigue') f *= FATIGUE[Math.min(a, 3)];
+        else if (name === 'haste') f *= 1 + 0.2 * (a + 1);
+    }
+    return f;
+}
+/** The best dig time of b with the hand or any tool the bot carries, and that tool (null: the hand): {ms, tool}. With the bot's effects (digSpeedFactor). */
 export function bestDig(bot, b) {
     let best = { ms: toolDigMs(bot, b, null), tool: null };
     for (const t of carriedTools(bot)) { const ms = toolDigMs(bot, b, t); if (ms < best.ms) best = { ms, tool: t }; }
+    best.ms /= digSpeedFactor(bot);
     return best;
 }
 /**
@@ -129,7 +148,7 @@ export function keptItems(bot) {
 }
 /** Soak 13 (S2): the best dig time of b with the hand or an item a death keeps (keptItems), in ms. */
 export function keptDigMs(bot, b) {
-    return Math.min(toolDigMs(bot, b, null), ...keptItems(bot).map(t => toolDigMs(bot, b, t)));
+    return Math.min(toolDigMs(bot, b, null), ...keptItems(bot).map(t => toolDigMs(bot, b, t))) / digSpeedFactor(bot);
 }
 /**
  * Why a dig of the block at p is not quick, apart from its time: 'a falling block', 'next to a liquid',
@@ -245,7 +264,7 @@ export async function stairOut(bot, feet, { hostiles = [], maxBlocks = DIG_OUT.m
         if (bot.interrupt_code) return { to: null, dug, why: 'stopped' };
         const b = bot.blockAt(p);
         if (!solid(b)) continue;
-        const r = await digWithin(bot, b, digBudget(bot, b).limitMs, { equip: digEquip(bot, b) });
+        const r = await digWithin(bot, b, Infinity, { equip: digEquip(bot, b) }); // soak 14 (F2): the budget after the equip
         if (r !== true) return { to: null, dug, why: `could not dig ${b.name} at ${p.x}, ${p.y}, ${p.z}` };
         dug++;
     }

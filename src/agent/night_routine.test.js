@@ -14,7 +14,7 @@ import { autonomyTick } from './priority.js';
 import { maxHitOf } from './library/threats.js';
 import { shelterQuiet, SHELTER_QUIET_MODES, __modeForTest } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
-import { PIT } from './library/pit.js';
+import { PIT, DIG_STALL } from './library/pit.js';
 import { foodRun } from './library/food_run.js';
 import { nightRelocationPlan, NIGHT_RELOCATE, RELOCATE } from './respawn_relocate.js';
 
@@ -1536,9 +1536,10 @@ test('#435 review 4: a stairs plan that fails part-way up walks the bot back to 
 test('#435 review 2: an exit dig has the per-block limit: a hung dig ends that plan and the next side is tried; a quick side beats a slow hand-diggable one', async (t) => {
     const logs = [];
     t.mock.method(console, 'log', (l) => logs.push(String(l)));
-    const saved = PIT.digSlackMs;
-    PIT.digSlackMs = 30;
-    t.after(() => { PIT.digSlackMs = saved; });
+    // Soak 14 (F2): the limit is DIG_STALL.factor x the estimate + slackMs (taken after the equip).
+    const saved = DIG_STALL.slackMs;
+    DIG_STALL.slackMs = 30;
+    t.after(() => { DIG_STALL.slackMs = saved; });
     const walls = { ...ring(64, 'dirt', 1), ...ring(65, 'dirt', 1) };
     const { bot, world, dug } = exitWorld(walls);
     let stopped = 0;
@@ -1554,7 +1555,8 @@ test('#435 review 2: an exit dig has the per-block limit: a hung dig ends that p
     assert.equal(stopped, 1, 'the hung dig was stopped');
     assert.equal(world.get('1,65,0'), 'dirt');
     assert.deepEqual(dug.sort(), ['-1,64,0', '-1,65,0']);
-    assert.ok(logs.some(l => /dig out: dirt at 1, 6[45], 0 was not dug within 0\.0 s/.test(l)), logs.join('\n'));
+    assert.ok(logs.some(l => /dig out: dirt at 1, 6[45], 0 was not dug within 0\.1 s/.test(l)), logs.join('\n'));
+    assert.ok(logs.some(l => /^\[dig\] dirt:0 at 1, 6[45], 0: not dug within 0\.1 s; expected 0\.0 s with the hand \(slot \S+\); effects none; .*; the block is still there$/.test(l)), 'the [dig] line');
     // Rooty dirt is hand-diggable but slow (hardness 20): the dirt side goes first, though east comes first otherwise.
     const slow = exitWorld({ ...walls, '1,64,0': 'dynamictrees:rootydirt', '1,65,0': 'dynamictrees:rootydirt' });
     assert.ok((await digOut(slow.bot, SITE))?.equals(new Vec3(-1, 64, 0)));
@@ -4484,4 +4486,36 @@ test('#612 re-review 3: from a hole shelter (its roof and stairs dug open) the b
     assert.deepEqual(s.o.walks, [], 'no walk back into the hole');
     assert.ok(s.agent.chat.includes('[night] the hole shelter at 0, 64, 0 is open (roof and stairs dug): not going back into it; sheltering again here'), s.agent.chat.join('\n'));
     assert.equal(nightState(s.agent).state, 'building');
+});
+
+// #612 second re-review (deferred nit): a run that ends before the bot is out (the dig-out failed) returns to the old
+// shelter (state inside, its site, the repair path), not a fresh build.
+test('#612 deferred nit: no way out of the shelter: back to the old shelter and its repair, not a fresh build', async (t) => {
+    const s = emergencySetup(t);
+    s.o.digOut = () => { s.o.digs++; return Promise.resolve(null); };
+    nightTick(s.agent, { now: 0, ops: s.o }); await settle(s.agent);
+    s.setFood();
+    nightTick(s.agent, { now: 1, ops: s.o }); await settle(s.agent);
+    assert.ok(s.agent.chat.includes('[night] the night food run ended: +0 points (no way out of the shelter at 0, 64, 0)'), s.agent.chat.join('\n'));
+    assert.ok(s.agent.chat.includes('[night] still in the shelter at 0, 64, 0: closing it again'), s.agent.chat.join('\n'));
+    assert.equal(nightState(s.agent).state, 'inside');
+    assert.deepEqual(nightState(s.agent).site, SITE);
+    assert.deepEqual(s.runs, [], 'no run');
+    s.o.open = [SITE.offset(1, 0, 0)];
+    nightTick(s.agent, { now: 2, ops: s.o }); await settle(s.agent);
+    assert.deepEqual(s.o.builds, [null, SITE], 'the repair at the old site, no fresh build');
+});
+
+// #614 review 10: the #612 nit's hole-shelter case: no way out of the hole (pitOut fails): back to the old hole shelter.
+test('#614 review 10: a hole shelter that cannot be left (pitOut fails): back to the old hole shelter, not a fresh build', async (t) => {
+    const s = emergencySetup(t);
+    s.o.pitOut = () => Promise.resolve(null);
+    nightTick(s.agent, { now: 0, ops: s.o }); await settle(s.agent);
+    nightState(s.agent).pit = true;
+    s.setFood();
+    nightTick(s.agent, { now: 1, ops: s.o }); await settle(s.agent);
+    assert.ok(s.agent.chat.includes('[night] still in the shelter at 0, 64, 0: closing it again'), s.agent.chat.join('\n'));
+    assert.equal(nightState(s.agent).state, 'inside');
+    assert.equal(nightState(s.agent).pit, true);
+    assert.deepEqual(s.runs, []);
 });

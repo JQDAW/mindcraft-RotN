@@ -18,7 +18,7 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { isEmpty, isLiquid, isFalling, hurtsOnContact, shelterItems, softItems, countOf } from './shelter.js';
 import { burrowDiggable, digEquip } from './burrow.js';
-import { digWithin, digBudget } from './pit.js';
+import { digWithin } from './pit.js';
 import { goodFloor, inWater, boundedWalk } from './shelter_ground.js';
 import { fallSafe } from './fall_safety.js';
 import { planPath, placeBlock, log } from './skills.js';
@@ -171,7 +171,7 @@ async function digCell(bot, c, deadline) {
     const left = deadline - Date.now();
     if (left <= 0) return 'time';
     const equip = digEquip(bot, block);
-    const r = await digWithin(bot, block, Math.min(digBudget(bot, block).limitMs, left), equip ? { equip } : {});
+    const r = await digWithin(bot, block, left, equip ? { equip } : {}); // soak 14 (F2): the budget after the equip, within left
     if (r === 'timeout' && Date.now() >= deadline) return 'time';
     return r === true && isEmpty(bot.blockAt(c));
 }

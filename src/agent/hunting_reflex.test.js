@@ -806,6 +806,21 @@ test('#601 review: a zombie or villager search is not counted and gets no animal
     assert.ok(r.at);
 });
 
+// Soak 14 (F2, the lead): after death 2 the dirt collect took the last 8 min before sunset. The model's collect ends
+// when the night routine takes over (dusk, SHELTER_LEAD_MIN before sunset), at least 30 s; a giver's command and a
+// collect with no dusk near keep COLLECT_LIMITS.
+test('soak 14 (F2): the model\'s collect is bounded by the time left before dusk', async () => {
+    const { collectLimitsBeforeDusk, COLLECT_DUSK_MIN_MS } = await import('./commands/actions.js');
+    const skills = await import('./library/skills.js');
+    const { SHELTER_LEAD_MIN, TICKS_PER_MIN } = await import('./library/night.js');
+    const at = (minBefore) => NIGHT_START - minBefore * TICKS_PER_MIN;
+    assert.ok(Math.abs(collectLimitsBeforeDusk(at(SHELTER_LEAD_MIN + 1.5)).totalMs - 90_000) < 100, '1.5 min to dusk');
+    assert.equal(collectLimitsBeforeDusk(at(SHELTER_LEAD_MIN + 0.2)).totalMs, COLLECT_DUSK_MIN_MS, 'at least 30 s');
+    assert.equal(collectLimitsBeforeDusk(at(SHELTER_LEAD_MIN + 1.5), { sender: 'JQDAW' }), skills.COLLECT_LIMITS, 'a giver\'s command: as before');
+    assert.equal(collectLimitsBeforeDusk(1000), skills.COLLECT_LIMITS, 'the morning: as before');
+    assert.equal(collectLimitsBeforeDusk(undefined), skills.COLLECT_LIMITS);
+});
+
 // Soak 14 (F1): !consume("wheat") at food 2 ended in "Promise timed out" 3 s later (wheat is no food).
 test('soak 14 (F1): !consume of an item that is no food on this pack says so at once and eats nothing', async (t) => {
     t.mock.method(console, 'log', () => {});
