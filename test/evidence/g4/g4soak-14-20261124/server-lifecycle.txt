@@ -1,0 +1,37 @@
+## test-server.sh up (run from the rotn-v0.1.20 checkout, 2026-11-24)
+[test-server 14:34:16] sweeper OK (via cadence): cadence of 4 dispatch runs on develop in the last 50 min, gaps 15.4, 14.5, 15.2 min, newest 45414904105 3.4 min ago
+[test-server 14:34:16] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 4h, sweeper deletes it) ~5 billed hours, EUR 0.69 plus Primary IPv4
+[test-server 14:34:16] creating mcr-test-20261124-143409: delete-after 2026-11-24T18:34:16Z (TTL 4h)
+Server <server-id> created
+[test-server 14:34:26] server mcr-test-20261124-143409 is at <ip>
+[test-server 14:34:27] waiting for SSH and the build (up to 120 min)
+[test-server 14:34:37] phase: unreachable
+[test-server 14:34:53] phase: booting:running
+[test-server 14:35:09] phase: packages
+[test-server 14:35:24] phase: starting
+[test-server 14:37:29] phase: ready
+[test-server 14:37:30] mod-director: pinned mods/esmtweaks-1.12.2-0.4.5.jar sha256 b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 OK
+[test-server 14:37:30] mod-director: OK: 1 pinned download(s) match; 337 jars of the pinned zip match; 0 extra mod(s)
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 14:37:31] READY: mcr-test-20261124-143409 at <ip>:25565 (delete-after 2026-11-24T18:34:16Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261124-143409
+
+## test-server.sh starts (14:37:31, right after up)
+starts=1 files=1
+
+## test-server.sh log 200000 since-start, fetched before down (header line only; the file stays in the raw folder)
+##rotn-test since-start files=latest.log found=1 lines=22059 over=0 nonempty=22038
+
+## test-server.sh starts (16:43, after the run and the since-start log, before down)
+starts=1 files=1
+
+## test-server.sh down (2026-11-24, after the run)
+[test-server 16:43:31] deleting batch mcr-test-20261124-143409 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261124-143409)
+[test-server 16:43:44] batch mcr-test-20261124-143409: ran 129 min, billed ~3h, est. EUR 0.4143 (excl. IPv4)
+[test-server 16:43:44] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261124-143409
+
+## hcloud counts after the delete (servers and Primary IPs with grep -c .; SSH keys named mcr-test with grep -c; ssh_keys_total includes the permanent non-test keys)
+servers=0
+primary_ips=0
+mcr_test_keys=0
+ssh_keys_total=2
+2026-11-24T16:43:45Z
