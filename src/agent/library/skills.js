@@ -1409,6 +1409,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     const esc = mines ? await import('./escape.js') : null;
     const noWayOut = [];
     let noWayOutSaid = 0;
+    let exposeCapped = false;
     let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at CL.freeMisses)
     let leafMisses = 0; // leaves out of reach after the walk (capped at CL.unreachableLeaves, then no leaves)
     let walkMisses = 0; // other targets the walk did not reach (capped at CL.unreachableTargets)
@@ -1591,7 +1592,12 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             const mined = () => {
                 const top = esc.topMemo(bot);
                 let checks = 0;
-                const exposed = (b) => !b.position || (++checks <= CL.exposeChecks && esc.exposedBlock(bot, b));
+                // #630 re-review 1: past the cap the search ends with what it found, and says it was cut short ('capped').
+                const exposed = (b) => {
+                    if (!b.position) return true;
+                    if (++checks > CL.exposeChecks) { exposeCapped = true; return false; }
+                    return esc.exposedBlock(bot, b);
+                };
                 const cands = world.getNearestBlocksWhere(bot, b => !isHand(b) && !!ruleToolFor(b) && wanted(b) && exposed(b), range, CL.mineCandidates);
                 for (const b of cands) {
                     if (esc.keepsWayOut(bot, b, top)) return [b];
@@ -1623,7 +1629,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         }
 
         if (blocks.length === 0) {
-            endReason = 'none';
+            endReason = exposeCapped ? 'capped' : 'none';
             if (collected === 0)
                 log(bot, `No ${blockType} nearby to collect.`);
             else
@@ -4773,7 +4779,7 @@ const STOP_SETTLE_MS = 5000;
 // mineHandRadius, mineCandidates (soak 16 R): for an item with by-hand and mined blocks (rocks), the loose ones are
 // searched this far before any is mined; at most this many mined candidates are checked for a way out per target.
 export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
-    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000, mineHandRadius: 48, mineCandidates: 8, exposeChecks: 16_384 };
+    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000, mineHandRadius: 48, mineCandidates: 8, exposeChecks: 262_144 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit

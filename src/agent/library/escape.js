@@ -635,6 +635,16 @@ const unknownAround = (bot, c) => SIX.some(d => bot.blockAt(c.plus(d)) == null);
 export function exposedBlock(bot, block) {
     const c = block?.position;
     if (!c) return true;
+    // #630 re-review 1: the state-id fast path (no Block objects: the section scan calls this for every stone in
+    // range): a neighbour that is air (state 0) or unloaded (undefined) exposes it. One pass over the six sides.
+    const sid = bot.world?.getBlockStateId;
+    if (typeof sid === 'function') {
+        for (const d of SIX) {
+            const id = sid.call(bot.world, c.plus(d));
+            if (id === undefined || id === 0) return true;
+        }
+        return false;
+    }
     return unknownAround(bot, c) || SIX.some(d => passCell(bot.blockAt(c.plus(d))));
 }
 /** #630 review 5: one column memo for a whole pick (its base the bot's feet), shared by keepsWayOut's searches. */
@@ -654,7 +664,9 @@ export function keepsWayOut(bot, block, top = null) {
         from = from.offset(0, -1, 0);
     }
     if (!solid(bot.blockAt(from.offset(0, -1, 0))) && !from.equals(c)) return false; // a drop of more than 3
-    if (!top) { top = new Map(); top.base = c.y; }
+    // #630 re-review 4: the shared memo scans its columns from its base (the bot's feet) down to base - 12 only: for a
+    // candidate farther below, its own memo.
+    if (!top || c.y < top.base - 8) { top = new Map(); top.base = c.y; }
     const free = new Set([key(c)]);
     return !!walkableExit(bot, from, { maxNodes: WALK_EXIT.maxNodes, radius: ESCAPE.targetRadius, free,
         until: (n) => !n.equals(c) && openGround(bot, n, top) });

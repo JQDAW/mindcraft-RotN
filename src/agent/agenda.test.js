@@ -1706,9 +1706,14 @@ test('soak 16 (R5): the shelter_blocks job crafts from the rocks held, collects 
     s.hasPickaxe = () => true;
     assert.match(SHELTER_RESERVE_STEP.goalNow(s), /The block job found no loose rocks within 48 blocks and no stone open to the air with a way out here\./);
     assert.match(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => false }), /^no pickaxe/);
-    // #630 review 7: at least its maxMs (4 min) and a minute before sunset.
-    assert.match(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => true, minutesToSunset: () => 4.5 }), /^too close to sunset \(4\.5 min\)$/);
-    assert.equal(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => true, minutesToSunset: () => 6 }), null);
+    // #630 review 7, re-review 3 (the lead): a run ends before the night routine starts (6 min before sunset): it needs
+    // 4 min + 1 min more, so 11 min before sunset at the latest; the reserve is due from 16.
+    assert.match(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => true, minutesToSunset: () => 10.5 }), /^too close to dusk \(10\.5 min to sunset; the night routine starts at 6\)$/);
+    assert.equal(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => true, minutesToSunset: () => 11 }), null);
+    const { SHELTER_BLOCKS_LEAD_MIN } = await import('./agenda.js');
+    assert.equal(SHELTER_BLOCKS_LEAD_MIN, 16);
+    assert.equal(SHELTER_RESERVE_STEP.due({ minutesToSunset: () => 15, shelterBlocks: () => 0, hasPickaxe: () => true }), true, 'due at 15 min');
+    assert.equal(SHELTER_RESERVE_STEP.due({ minutesToSunset: () => 17, shelterBlocks: () => 0, hasPickaxe: () => true }), false);
     assert.doesNotMatch(SHELTER_RESERVE_STEP.goal, /mine stone with the pickaxe for more rocks/);
     assert.match(SHELTER_RESERVE_STEP.goal, /takes the loose rock piles on the ground within 48 blocks first, then stone open to the air that leaves you a walkable way out/);
 });
@@ -1759,4 +1764,26 @@ test('#630 review 2: the watchdog stops the hung action; after the gap the job s
     other.agent.actions.executing = true;
     assert.equal(autoJobTick(other.agent, FOOD_RESERVE_STEP, agendaState(other.agent.bot), { jobs, now: t0 }), 'food', 'waits');
     assert.equal(autoJobTick(other.agent, FOOD_RESERVE_STEP, agendaState(other.agent.bot), { jobs, now: t0 + AUTO_JOBS.food.maxMs + JOB_WATCHDOG.marginMs + 1 }), null, 'no longer');
+});
+
+// #630 re-review 2: the wait on another action counts from when it began; it is cleared whenever nothing runs (and on a
+// new day), so a later wait is a fresh one.
+test('#630 re-review 2: waitSince is cleared when nothing runs and on a new day', (t) => {
+    const { agent } = jobAgent(t, []);
+    const jobs = { food: { ...AUTO_JOBS.food, run: () => Promise.resolve({ why: 'x', none: null, text: 'x' }) } };
+    const state = agendaState(agent.bot);
+    const t0 = 1_000_000;
+    agent.actions.executing = true;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: t0 }), 'food', 'waits');
+    assert.equal(agent._agenda_jobs.food.waitSince, t0);
+    agent.actions.executing = false;
+    agent._agenda_jobs.food.lastAt = t0; // in its gap: no run now
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: t0 + 1000 }), null);
+    assert.equal(agent._agenda_jobs.food.waitSince, null, 'cleared: nothing runs');
+    agent.actions.executing = true;
+    const later = t0 + AUTO_JOBS.food.maxMs + 120_000;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: later }), 'food', 'a fresh wait, not an old one past its limit');
+    agent.bot.time.day = 4;
+    autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: later + 1 });
+    assert.equal(agent._agenda_jobs.food.waitSince, later + 1, 'a new day: a fresh wait');
 });

@@ -25,6 +25,7 @@ import { nearbyForage } from './library/foraging.js';
 import { stillTrapped } from './library/escape.js';
 import { hasWeapon, WEAPON } from './library/threats.js';
 import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT, foodTargetNow, SHELTER_HOLD } from './agenda.js';
+import { SHELTER_LEAD_MIN } from './library/night.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
 export const TICK_MS = 2_000;
@@ -246,9 +247,10 @@ AUTO_JOBS.shelter_blocks = {
     label: 'action:shelterBlocks', perDay: 2, gapMs: 60_000, moveOn: 32, shortMs: 30_000, maxMs: 4 * 60_000, collectMs: 3 * 60_000,
     ready: (agent, state) => {
         if (!state.hasPickaxe?.()) return 'no pickaxe (a dirt shelter: the model gathers dirt piles)';
-        // #630 review 7: a run needs its maxMs and a minute before sunset (the night routine takes over at dusk).
+        // #630 review 7, re-review 3 (the lead): a run must end before the night routine starts (SHELTER_LEAD_MIN before
+        // sunset): it needs its maxMs + 1 min more than that (6 + 4 + 1 = 11 min before sunset).
         const m = state.minutesToSunset?.() ?? Infinity;
-        if (m * 60_000 < AUTO_JOBS.shelter_blocks.maxMs + 60_000) return `too close to sunset (${Math.round(m * 10) / 10} min)`;
+        if ((m - SHELTER_LEAD_MIN) * 60_000 < AUTO_JOBS.shelter_blocks.maxMs + 60_000) return `too close to dusk (${Math.round(m * 10) / 10} min to sunset; the night routine starts at ${SHELTER_LEAD_MIN})`;
         return null;
     },
     run: async (agent, state, { craft = null, collect = null } = {}) => {
@@ -280,6 +282,7 @@ AUTO_JOBS.shelter_blocks = {
         const end = (bot.rotnCollectEnd?.at ?? 0) >= t0 ? bot.rotnCollectEnd : null;
         const why = need() <= 0 ? 'enough' : bot.interrupt_code ? 'stopped'
             : collected === false && gained <= 0 && end?.reason === 'none' ? 'no loose rocks within 48 and no stone open to the air with a way out'
+            : end?.reason === 'capped' ? 'the stone search was cut short (too many to check)'
             : end?.reason === 'time' ? 'the collect\'s time limit' : end?.lastWalkFailed ? 'a target out of reach' : 'short';
         return { why, none: why.startsWith('no loose rocks') ? 'none' : null, text: `+${gained} shelter blocks (${have()} of ${SHELTER_HOLD}; ${why})` };
     },
@@ -329,7 +332,9 @@ export function autoJobTick(agent, step, state, { jobs = AUTO_JOBS, now = Date.n
     const j = all[step.id] ??= { day: null, runs: 0, lastAt: -Infinity, lastEnd: null, lastNone: false, noneAt: null, noneKind: null, running: false };
     if (j.running && !staleCheck(agent, step.id, j, now)) return step.id;
     const day = state.day?.() ?? Math.floor(now / (20 * 60_000));
-    if (j.day !== day) Object.assign(j, { day, runs: 0 });
+    if (j.day !== day) Object.assign(j, { day, runs: 0, waitSince: null });
+    // #630 re-review 2: the wait on another action counts from when it began: cleared whenever nothing runs.
+    if (!agent.actions.executing) j.waitSince = null;
     if (j.runs >= spec.perDay) return null; // the model, as before the job
     // Nothing in reach here: the model picks a direction (or, with no weapon, makes one: once armed the job runs again).
     if (j.noneAt && agent.bot?.entity?.position?.distanceTo(j.noneAt) < spec.moveOn && !(j.noneKind === 'noWeapon' && state.hasWeapon?.())) return null;

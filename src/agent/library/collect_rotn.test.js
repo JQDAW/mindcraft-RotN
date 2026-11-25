@@ -74,6 +74,8 @@ function fakeBot({ blocks = [], items = [], dropsOf = drops, world = null, palet
                 .slice(0, count).map(b => b.position);
         },
         blockAt: (pos) => remaining.find(b => b.position.equals(pos)) ?? (world ? world(pos.floored ? pos.floored() : pos) : null),
+        // #630 re-review 1: the state-id view of the same world (air 0, unloaded undefined), as prismarine-world's.
+        world: world ? { getBlockStateId: (pos) => { const b = bot.blockAt(pos); return b == null ? undefined : b.name === 'air' ? 0 : (b.type || 1); } } : undefined,
         equip: (item) => { calls.equip.push(item.name); bot.heldItem = item; return Promise.resolve(); },
         // Like mineflayer-tool: the fastest pickaxe.
         tool: {
@@ -361,4 +363,42 @@ test('#630 review 1: findBlocks\' palette pass (no position) does not hide expos
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), true, bot.output);
     assert.deepEqual([...bot.calls.collected, ...bot.calls.dug], [surface]);
     assert.doesNotMatch(bot.output, /Skipped/);
+});
+
+// #630 re-review 1: the exposure check uses the state-id fast path; bare stone 40 blocks away on dirt over stone is found
+// past 1,500 buried stones nearer (the old 16,384 cap missed stone 2+ sections away); a search that hits the cap says
+// "capped", not "none". The time is measured (the old check took 1.7-3 s of CPU per pick).
+const dirtOverStone = (pos) => {
+    const name = pos.y <= 59 ? 'stone' : pos.y <= 63 ? 'dirt' : 'air';
+    return { name, metadata: 0, type: reg.blocksByName[name].id, position: pos, boundingBox: name === 'air' ? 'empty' : 'block', shapes: name === 'air' ? [] : [[0, 0, 0, 1, 1, 1]], transparent: name === 'air' };
+};
+const buriedField = () => {
+    const out = [];
+    for (let x = -10; x <= 10 && out.length < 1500; x++) for (let z = -10; z <= 10 && out.length < 1500; z++) for (let y = 55; y <= 59 && out.length < 1500; y++) out.push(block('stone', 0, at(x, y, z)));
+    return out;
+};
+test('#630 re-review 1: bare stone 40 blocks away on dirt over stone is found past 1,500 buried stones (state ids), and fast', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    const boulder = block('stone', 0, at(40, 64));
+    const bot = fakeBot({ items, blocks: [...buriedField(), boulder], world: dirtOverStone, palettePass: true });
+    let reads = 0;
+    const sid = bot.world.getBlockStateId;
+    bot.world.getBlockStateId = (p) => { reads++; return sid(p); };
+    const t0 = Date.now();
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), true, bot.output);
+    const ms = Date.now() - t0;
+    assert.deepEqual([...bot.calls.collected, ...bot.calls.dug], [boulder]);
+    assert.ok(reads > 0, 'the state-id path ran');
+    assert.ok(ms < 5000, `${ms} ms`);
+    assert.equal(skills.COLLECT_LIMITS.exposeChecks, 262_144);
+});
+
+test('#630 re-review 1: a stone search that hits the exposure cap ends "capped", not "none"', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    const boulder = block('stone', 0, at(40, 64));
+    const bot = fakeBot({ items, blocks: [...buriedField(), boulder], world: dirtOverStone, palettePass: true });
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1, null, 64, { ...skills.COLLECT_LIMITS, exposeChecks: 100 }), false);
+    assert.equal(bot.rotnCollectEnd.reason, 'capped');
 });

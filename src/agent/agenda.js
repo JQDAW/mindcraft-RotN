@@ -147,6 +147,8 @@ export const SHELTER_HOLD = SHELTER_RESERVE + REPAIR_SPARE;
  * so the reserve is due from the morning freeze on, about 12 min before the night routine.
  */
 export const RESERVE_LEAD_MIN = SHELTER_LEAD_MIN + 4;
+/** #630 re-review 3: the shelter blocks reserve is due from this many minutes before sunset (its job's two runs fit before 11). */
+export const SHELTER_BLOCKS_LEAD_MIN = SHELTER_LEAD_MIN + 10;
 
 /**
  * G3 round 6 B (the lead): before dusk the agenda keeps at least 9 sturdy blocks for the shelter.
@@ -191,7 +193,9 @@ export const SHELTER_RESERVE_STEP = {
     autoJob: 'shelter_blocks',
     // Not at night (minutesToSunset is 0 from sunset to sunrise; #284 review 1): the night routine
     // shelters then, and nothing may send the bot out for blocks in the dark.
-    due: (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN && !s.jobWaiting?.('shelter_blocks'); },
+    // #630 re-review 3 (the lead): due from SHELTER_BLOCKS_LEAD_MIN (16) before sunset, so its scripted job (a run must
+    // start 11 min before sunset at the latest: dusk at 6, 4 min, 1 min margin) gets its runs before dusk.
+    due: (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= SHELTER_BLOCKS_LEAD_MIN && !s.jobWaiting?.('shelter_blocks'); },
     done: (s) => reserveHave(s) >= SHELTER_HOLD,
     // Only when goalNow fails: both cases, as goalNow tells them apart.
     goal: `Night is near. At dusk the night routine builds a shelter of ${SHELTER_RESERVE} blocks on open ground, and keeps ${REPAIR_SPARE} more to repair it when a zombie digs a wall open. If you have a pickaxe, it is built from sturdy blocks (any cobblestone or stone): make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1); for more rocks, !collectBlocks("pyrotech:rock", 8) takes the loose rock piles on the ground within 48 blocks first, then stone open to the air that leaves you a walkable way out (never digging down into a hole). If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks("betterwithmods:dirt_pile", ${4 * SHELTER_HOLD}) (4 piles make one dirt, which the shelter crafts itself). Keep these blocks for the night: do not place them.`,
