@@ -186,7 +186,11 @@ export async function postEscape(agent, label, start, { escapeIfTrapped = null }
     const bot = agent.bot;
     const walkFailed = (bot.rotnWalkFailedAt ?? 0) >= start.t;
     if (kind === 'failed' && !walkFailed) return null;
-    const minDepth = kind === 'deep' ? 3 : kind === 'down-or-failed' && !walkFailed ? 3 : 0;
+    // #624 re-review nit 1 (the lead): the collect only when its last walk failed or it got fewer than asked
+    // (bot.rotnCollectEnd), never for one target out of reach on the way.
+    const end = bot.rotnCollectEnd;
+    const collectShort = kind === 'down-or-failed' && (end?.at ?? 0) >= start.t && (end.lastWalkFailed || end.short);
+    const minDepth = kind === 'deep' ? 3 : kind === 'down-or-failed' && !collectShort ? 3 : 0;
     const run = escapeIfTrapped ?? (await import('../library/escape.js')).escapeIfTrapped;
     const line = await run(bot, { digsBefore: start.digs, from: start.at, minDepth });
     if (line) skills.log(bot, line);

@@ -1441,6 +1441,10 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     };
 
     let collected = 0;
+    // Soak 16 (E, #624 re-review nit 1): whether the collect's last walk failed (no path, out of reach): with the
+    // count short, the end of the collect says so (bot.rotnCollectEnd) for its post-condition; one target out of
+    // reach on the way (a cave collect that skipped one ore) is not.
+    let lastWalkFailed = false;
     // CX23 soak: no target within DEATH_SPOT_RADIUS of a recent death spot for deathSpotMs: a
     // player zombie rose there and never leaves (the agenda dug dirt among them, death after death).
     // #416 review 2: not for a crafting table the bot placed and picks up again (pickUpTable).
@@ -1712,7 +1716,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                         givenUp.push(block.position.clone ? block.position.clone() : block.position);
                         outOfReach.set(leafKey(block.position), Date.now());
                         missed = true;
-                        bot.rotnWalkFailedAt = Date.now(); // soak 16 (E, #624 review 2)
+                        lastWalkFailed = true;
                         return false;
                     }
                     if (!await handOff(avoid)) { log(bot, cannotLetGo(block)); return false; } // still not after the walk
@@ -1752,6 +1756,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                     log(bot, `${leafMisses} leaves were out of reach from the ground; no more leaves in this collect.`);
             }
             if (success) {
+                lastWalkFailed = false;
                 let gained = 1; // a block with no item (water): one per success
                 if (countsItems) {
                     gained = 0;
@@ -1811,7 +1816,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 // up for this collect and CL.unreachableMs, and uses no attempt, at most
                 // CL.unreachableTargets times: the next target is tried, not the same one again.
                 if (['Timeout', 'NoPath'].includes(err?.name) && block?.position) {
-                    bot.rotnWalkFailedAt = Date.now(); // soak 16 (E, #624 review 2): the collect's post-condition reads it
+                    lastWalkFailed = true;
                     givenUp.push(block.position.clone ? block.position.clone() : block.position);
                     outOfReach.set(leafKey(block.position), Date.now());
                     if (walkMisses < CL.unreachableTargets) { walkMisses++; i--; }
@@ -1854,6 +1859,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
     sayDeathSkips(); // #416 nit: also when the collect ended otherwise (a time limit, its attempts)
     log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.`);
+    bot.rotnCollectEnd = { at: Date.now(), short: collected < num, lastWalkFailed };
     return collected > 0;
 }
 

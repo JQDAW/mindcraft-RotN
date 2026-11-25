@@ -288,6 +288,9 @@ test('#624 review 5: on a canopy (on the leaves at y 73): not open ground, the t
     const r = await escape(bot, { budget: 'day', moveTo: teleport, say: () => {} });
     assert.equal(r.out, false);
     assert.match(r.why, /^the ground is below you \(open ground at -?\d+, 64, -?\d+\): climb down to it$/);
+    // #624 re-review nit 2: its own next step (down), not "!goToSurface tries again".
+    assert.match(escapeText(r), /: climb down to it\. Climb down to it: !goToCoordinates to that spot \(a walk down\), or break the leaves under you with !digDown\(1\)/);
+    assert.doesNotMatch(escapeText(r), /tries again/);
 });
 
 // #624 review 6: the cost on a big cave (61 x 61, 5 high): no walkable sky anywhere, the search is bounded.
@@ -315,9 +318,20 @@ test('#624 review 2: the collect\'s post-condition: not after a collect in a cav
     assert.equal(await postEscape(agent(36), 'collectBlocks', start(40), { escapeIfTrapped: fake }), 'escaped', '4 below where it started');
     const failed = agent(40);
     const s = start(40);
-    failed.bot.rotnWalkFailedAt = s.t + 1;
-    assert.equal(await postEscape(failed, 'collectBlocks', s, { escapeIfTrapped: fake }), 'escaped', 'a failed walk');
-    assert.deepEqual(runs, [3, 3, 0]);
+    failed.bot.rotnCollectEnd = { at: s.t + 1, short: false, lastWalkFailed: true };
+    assert.equal(await postEscape(failed, 'collectBlocks', s, { escapeIfTrapped: fake }), 'escaped', 'its last walk failed');
+    // #624 re-review nit 1: one target out of reach on the way (goToGoal marked a failed walk), but the collect got
+    // all it asked and its last walk did not fail: a cave collect at its own level does not escape.
+    const skipped = agent(40);
+    const s2 = start(40);
+    skipped.bot.rotnWalkFailedAt = s2.t + 1;
+    skipped.bot.rotnCollectEnd = { at: s2.t + 2, short: false, lastWalkFailed: false };
+    assert.equal(await postEscape(skipped, 'collectBlocks', s2, { escapeIfTrapped: fake }), null, 'one ore skipped on the way');
+    const short = agent(40);
+    const s3 = start(40);
+    short.bot.rotnCollectEnd = { at: s3.t + 1, short: true, lastWalkFailed: false };
+    assert.equal(await postEscape(short, 'collectBlocks', s3, { escapeIfTrapped: fake }), 'escaped', 'fewer than asked');
+    assert.deepEqual(runs, [3, 3, 0, 3, 0]);
     assert.equal(await postEscape(agent(40), 'goToCoordinates', start(40), { escapeIfTrapped: fake }), null, 'a walk that did not fail');
     assert.equal(await postEscape(agent(40), 'craftRecipe', start(40), { escapeIfTrapped: fake }), null, 'no post-condition');
     // The real check: a cave collect (dug, trapped by the cave, at its own level) runs no escape.

@@ -548,7 +548,10 @@ export function escapeText(r) {
         : `Reached open ground at ${at(r.at)} (${r.how === 'pathfinder' ? 'by the pathfinder' : 'by stairs and pillars dug by hand'}; dug ${r.dug}, placed ${r.placed}${r.crafted ? `, ${r.crafted} dirt crafted from piles` : ''}) in ${secs} s.`;
     if (r.interrupted) return `The way out from ${at(r.at)} was stopped by something else; !goToSurface goes on from here.`;
     const why = String(r.why ?? 'no reason');
-    const next = /no block to pillar|blocks for pillars are spent|used the \d+ blocks/.test(why)
+    const next = /the ground is below you/.test(why)
+        // #624 re-review nit 2: the ground under a canopy (or downhill): down, not up.
+        ? 'Climb down to it: !goToCoordinates to that spot (a walk down), or break the leaves under you with !digDown(1) one at a time while the drop below is short.'
+        : /no block to pillar|blocks for pillars are spent|used the \d+ blocks/.test(why)
         ? 'Make dirt from dirt piles (4 piles each) or planks, then !goToSurface again (the cobblestone kept for the night\'s shelter is not used).'
         : /falling/.test(why)
         ? 'Start sideways, away from the falling block: !breakBlockAt the block beside you on another side, step into it, then !goToSurface.'
