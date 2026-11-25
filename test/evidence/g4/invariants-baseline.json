@@ -496,10 +496,10 @@
   },
   "g4soak-16-20261125": {
     "release": "rotn-v0.1.22",
-    "I1_trapped": 5,
-    "I1_longestMin": 7.8,
+    "I1_trapped": 2,
+    "I1_longestMin": 34.9,
     "I1_escapes": 7,
-    "I1_escapesNotCleared": 4,
+    "I1_escapesNotCleared": 3,
     "I2_couldNotLeave": 1,
     "I2_sameShelterNights": 0,
     "I3_rejectedClicks": 2,

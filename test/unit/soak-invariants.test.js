@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { soakInvariants, table, evidenceDirs, serverDeaths, renderTable, render } from '../tools/soak-invariants.mjs';
+import { soakInvariants, table, evidenceDirs, serverDeaths, renderTable, render, releaseAtLeast, releaseOf, readJournal } from '../tools/soak-invariants.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const TOOL = path.join(ROOT, 'test/tools/soak-invariants.mjs');
@@ -49,10 +49,10 @@ test('the known incidents are found (calibration)', () => {
     assert.equal(rows['g4soak-12-20261123'].I10_loopDeaths, 15); // deaths 2-16 at the scroll's respawn point
     assert.ok(rows['g4soak-10-20261122'].I10_loopDeaths >= 80); // the spawn loop, split where the bot lived over 5 min
     assert.equal(rows['g4soak-13-20261124'].I11_bigSummaries, 6);
-    // Escape episodes (soak 16, the lead): the trap at 9, 68, -63 fires I1 through 4 uncleared escapes; soak 11's one
+    // Escape episodes (soak 16, the lead; #648 review 1): the trap at 9, 68, -63 is one 34.9-min span; soak 11's one
     // escape cleared; before rotn-v0.1.15 (soak 8) there was no escape.js: n/a.
     const s16 = rows['g4soak-16-20261125'];
-    assert.deepEqual([s16.I1_trapped, s16.I1_escapes, s16.I1_escapesNotCleared], [5, 7, 4]);
+    assert.deepEqual([s16.I1_trapped, s16.I1_longestMin, s16.I1_escapes, s16.I1_escapesNotCleared], [2, 34.9, 7, 3]);
     assert.deepEqual([rows['g4soak-11-20261122'].I1_escapes, rows['g4soak-11-20261122'].I1_escapesNotCleared], [1, 0]);
     assert.equal(rows['g4soak-8-20261121'].I1_escapes, null);
     assert.equal(rows['g4soak-9-20261122'].I1_escapes, 0);
@@ -76,7 +76,7 @@ test('I1 trapped: failed path attempts close together; lines within 2 s are one 
     assert.equal(r.I1.count, 0); // 2 + 2 attempts, split by the 11-min gap
 });
 
-test('I1 escape episodes: start to out (cleared, its seconds) or still stuck (not cleared, fires I1); n/a before rotn-v0.1.15', () => {
+test('I1 escape episodes: start to out (cleared, its seconds), still stuck (not cleared) or open; their trap spans fire I1; n/a before rotn-v0.1.15', () => {
     const r = run([
         REL(22),
         // A trap check, joined by the escape's own start line; the pathfinder's step; out by hand.
@@ -127,16 +127,23 @@ test('I1 escape episodes: start to out (cleared, its seconds) or still stuck (no
     assert.equal(e[3].at, '1, 60, 1'); // the night start names no cell; escape.js's start line does
     assert.equal(e[5].why, 'no stair step');
     assert.equal(e[6].why, 'died');
-    // I1 fires on the 4 uncleared escapes (no path-failure episode here); the open one does not count.
-    assert.deepEqual([r.I1.count, r.I1.pathEpisodes, r.I1.escapes, r.I1.escapesNotCleared, r.I1.escapesCleared, r.I1.longestClearedS], [4, 0, 8, 4, 3, 126.6]);
+    // The trap spans: 9, 68, -63 from 10:10 until the escape at 10:30 cleared; the failed night escape (no cell) joined
+    // by the !goToSurface one until the death; the escape still open at the journal's end (it fires: still trapped).
+    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.at, x.until, x.minutes, x.end, x.fails]), [
+        ['10:10:00', '9, 68, -63', '10:30:04', 20.1, 'cleared', 2],
+        ['10:50:00', '10, 68, -63', '11:00:40', 10.7, 'died', 2],
+        ['11:10:00', '5, 50, 5', '11:10:03', 0.1, 'open', 1],
+    ]);
+    assert.deepEqual([r.I1.count, r.I1.pathEpisodes, r.I1.trapSpans, r.I1.longestMin, r.I1.escapes, r.I1.escapesNotCleared, r.I1.escapesCleared, r.I1.longestClearedS], [3, 0, 3, 20.1, 8, 4, 3, 126.6]);
     const text = render(r, 'synthetic');
-    assert.match(text, /- I1 trapped: 4 \(0 path-failure episodes, 0 failed path attempts, longest 0 min; 4 of 8 escape episodes not cleared, 3 cleared, the longest cleared in 126\.6 s\)/);
+    assert.match(text, /- I1 trapped: 3 \(0 path-failure episodes, 0 failed path attempts; 3 trap spans; 8 escape episodes: 4 not cleared, 0 interrupted, 3 cleared, the longest cleared in 126\.6 s; longest 20\.1 min\)/);
+    assert.match(text, /trap span 11:10:00 \(driver\.log:24\) at 5, 50, 5 until 11:10:03 \(driver\.log:25\), 0\.1 min, ended: open \(still trapped at the journal's end\)/);
     assert.match(text, /escape 10:00:00 \(driver\.log:2\) at -42, 65, -12 by trap check: cleared in 126\.6 s to -41, 69, -12 \(by hand; dug 0, placed 3\) \(driver\.log:5\)/);
     assert.match(text, /escape 10:40:00 \(driver\.log:17\) by night: cleared in 0 s to -7, 65, 30/);
     // Before rotn-v0.1.15 (no escape.js): n/a, and the count is the path episodes alone.
     const old = run([REL(14), L('10:10:05', '[escape] still stuck at 9, 68, -63 after 5.1 s (dug 0, placed 0): x')]);
-    assert.deepEqual([old.I1.count, old.I1.escapes, old.I1.escapesNotCleared, old.I1.escapeList], [0, null, null, null]);
-    assert.match(render(old), /escapes n\/a\)/);
+    assert.deepEqual([old.I1.count, old.I1.escapes, old.I1.escapesNotCleared, old.I1.escapeList, old.I1.trapSpans], [0, null, null, null, null]);
+    assert.match(render(old), /; escapes n\/a; longest 0 min\)/);
 });
 
 test('I1 escape episodes: a start within 30 s of an open one joins it; a later start closes it as not cleared', () => {
@@ -150,19 +157,78 @@ test('I1 escape episodes: a start within 30 s of an open one joins it; a later s
     assert.deepEqual(r.I1.escapeList.map(x => [x.t, x.result, x.why ?? null, x.endLine]), [['10:00:00', 'not cleared', 'no end line before the next escape', 3], ['10:05:00', 'cleared', null, 5]]);
 });
 
-test('soak 16 in detail: the trap at 9, 68, -63 fires I1 through its 4 uncleared escapes', () => {
+test('soak 16 in detail: the trap at 9, 68, -63 is one 34.9-min span (21:20:07 to the death), 3 failed escapes and 1 interrupted', () => {
     const r = soakInvariants(fs.readFileSync(path.join(EVIDENCE, 'g4soak-16-20261125/driver.log'), 'utf8'));
-    assert.deepEqual([r.I1.count, r.I1.pathEpisodes, r.I1.escapes, r.I1.escapesNotCleared], [5, 1, 7, 4]);
+    assert.deepEqual([r.I1.count, r.I1.pathEpisodes, r.I1.trapSpans, r.I1.longestMin, r.I1.escapes, r.I1.escapesNotCleared, r.I1.escapesInterrupted], [2, 1, 1, 34.9, 7, 3, 1]);
+    assert.deepEqual(r.I1.spanList, [{ t: '21:20:07', line: 1826, at: '9, 68, -63', until: '21:54:59', untilLine: 2187, minutes: 34.9, end: 'died', fails: 3, interrupted: 1, gaveUp: false }]);
     assert.deepEqual(r.I1.escapeList.map(e => [e.t, e.line, e.by, e.result, e.endLine]), [
         ['20:41:29', 932, 'trap check', 'cleared', 941],
         ['21:20:07', 1826, '!goToSurface', 'not cleared', 1828],
         ['21:52:31', 2001, 'morning', 'not cleared', 2004],
         ['21:53:14', 2050, '!goToSurface', 'not cleared', 2052],
-        ['21:54:09', 2150, '!goToSurface', 'not cleared', 2177],
+        ['21:54:09', 2150, '!goToSurface', 'interrupted', 2177],
         ['22:07:04', 2760, 'night', 'cleared', 2762],
         ['22:07:07', 2770, 'night', 'cleared', 2772],
     ]);
     assert.equal(r.I1.escapeList[4].why, 'interrupted');
+});
+
+test('I1 trap spans (#648 review 1, 3): joined within 3 cells; a move away ends one; interrupted alone is no trap, interrupted then a death is', () => {
+    const stuck = (t, c) => L(t, `[escape] stuck at ${c}: getting out upward (the sky starts at y 99)`);
+    const fail = (t, c, why = 'no stair step') => L(t, `[escape] still stuck at ${c} after 1.0 s (dug 0, placed 0): ${why}`);
+    // Two failed escapes 2 blocks apart, a position line 1 block away between them, then one 6 blocks away.
+    let r = run([REL(22), stuck('10:00:00', '1, 60, 1'), fail('10:00:01', '1, 60, 1'), L('10:05:00', 'You have reached at 2, 60, 1.'),
+        stuck('10:10:00', '1, 60, 3'), fail('10:10:01', '1, 60, 3'), L('10:20:00', 'You have reached at 7, 60, 1.'), L('10:30:00', 'x')]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.until, x.minutes, x.end, x.fails]), [['10:00:00', '10:20:00', 20, 'moved away', 2]]);
+    // A failed escape 5 blocks from the span's first cell starts a new span (the first ends: moved away).
+    r = run([REL(22), stuck('10:00:00', '1, 60, 1'), fail('10:00:01', '1, 60, 1'), stuck('10:10:00', '6, 60, 1'), fail('10:10:01', '6, 60, 1'), L('10:11:00', '[escape] stuck at 6, 60, 1: x'), L('10:11:01', '[escape] out at 6, 64, 1 (by hand; dug 4, placed 0) in 1.0 s')]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.until, x.end]), [['10:00:00', '10:10:01', 'moved away'], ['10:10:00', '10:11:01', 'cleared']]);
+    // Interrupted (a reflex stopped it), then cleared: no trap.
+    r = run([REL(22), stuck('10:00:00', '1, 60, 1'), fail('10:00:30', '1, 63, 1', 'interrupted'), stuck('10:01:00', '1, 63, 1'), L('10:01:02', '[escape] out at 1, 66, 1 (by hand; dug 3, placed 0) in 2.0 s')]);
+    assert.deepEqual([r.I1.count, r.I1.trapSpans, r.I1.escapesInterrupted], [0, 0, 1]);
+    // Interrupted, then a move away: no trap.
+    r = run([REL(22), stuck('10:00:00', '1, 60, 1'), fail('10:00:30', '1, 63, 1', 'interrupted'), L('10:02:00', 'You have reached at 20, 64, 1.'), L('10:30:00', 'x')]);
+    assert.equal(r.I1.trapSpans, 0);
+    // Interrupted, then a death: a trap (soak 16's end).
+    r = run([REL(22), stuck('10:00:00', '1, 60, 1'), fail('10:00:30', '1, 63, 1', 'interrupted'), L('10:00:40', '[death] died at 1, 63, 1; waiting for the respawn')]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.until, x.end, x.fails, x.interrupted]), [['10:00:00', '10:00:40', 'died', 0, 1]]);
+    assert.equal(r.I1.count, 1);
+});
+
+test('I1 and #642: the trapped job names the caller; its re-plan and give-up lines are still-trapped signals; open at the end fires', () => {
+    const r = run([
+        REL(23),
+        L('10:00:00', '[trapped] at 3, 60, 3, idle: the escape runs (day budget)'),
+        L('10:00:00', '[escape] stuck at 3, 60, 3: getting out to 3, 70, 3 (dry ground under open sky)'),
+        L('10:00:05', '[escape] still stuck at 3, 60, 3 after 5.0 s (dug 0, placed 0): no stair step'),
+        L('10:00:05', '[trapped] still trapped: still stuck at 3, 60, 3 after 5.0 s: no stair step'),
+        L('10:10:00', '[trapped] at 3, 60, 3, idle, the escape failed 595 s ago: one re-plan (due; 0 of 2 here today)'),
+        L('10:30:00', '[trapped] at 3, 60, 3: the escape failed 3 times here within 30 min: no more scripted escapes or re-plans here until the bot is more than 3 blocks away or the next day'),
+        L('10:40:00', 'x'),
+    ]);
+    assert.deepEqual(r.I1.escapeList.map(x => [x.by, x.result, x.endLine]), [['trapped job', 'not cleared', 4]]); // the [trapped] result line is not a second end
+    assert.deepEqual(r.I1.spanList, [{ t: '10:00:00', line: 3, at: '3, 60, 3', until: '10:40:00', untilLine: 8, minutes: 40, end: 'open', fails: 3, interrupted: 0, gaveUp: true }]);
+    assert.equal(r.I1.count, 1);
+    // `[trapped] out:` ends an open escape as cleared, and the span with it.
+    const out = run([REL(23), L('10:00:00', '[escape] stuck at 3, 60, 3: x'), L('10:00:05', '[escape] still stuck at 3, 60, 3 after 5.0 s (dug 0, placed 0): no stair step'),
+        L('10:05:00', '[trapped] at 3, 60, 3, idle: the escape runs (day budget)'), L('10:05:00', '[escape] stuck at 3, 60, 3: x'), L('10:05:09', '[trapped] out: out at 3, 70, 3 by hand')]);
+    assert.deepEqual(out.I1.escapeList.map(x => [x.by, x.result]), [['other', 'not cleared'], ['trapped job', 'cleared']]);
+    assert.deepEqual(out.I1.spanList.map(x => [x.until, x.end]), [['10:05:09', 'cleared']]);
+});
+
+test('#648 review 6: the SINCE checks compare major.minor.patch, not the patch alone', () => {
+    const rel = (tag) => releaseOf(readJournal(`2026-11-25T10:00:00+00:00 node[1]: [release] ${tag}-0123456789ab`));
+    assert.equal(releaseAtLeast(rel('rotn-v0.1.15'), '0.1.15'), true);
+    assert.equal(releaseAtLeast(rel('rotn-v0.1.14'), '0.1.15'), false);
+    assert.equal(releaseAtLeast(rel('rotn-v0.2.0'), '0.1.19'), true); // patch 0 < 19, but a later minor
+    assert.equal(releaseAtLeast(rel('rotn-v1.0.3'), '0.1.19'), true);
+    assert.equal(releaseAtLeast(rel('rotn-v0.0.30'), '0.1.5'), false);
+    assert.equal(releaseAtLeast(releaseOf([]), '0.1.5'), false); // no release line (M1, soak 2)
+    const r = soakInvariants([L('10:00:00', '[release] rotn-v0.2.0-0123456789ab'), L('10:00:01', 'x')].join('\n'));
+    assert.notEqual(r.I1.escapes, null);
+    assert.notEqual(r.I4, null);
+    assert.notEqual(r.I7, null);
+    assert.notEqual(r.I9, null);
 });
 
 test('I2 enclosed-morning: "could not leave" lines and a night in the same shelter as the night before', () => {

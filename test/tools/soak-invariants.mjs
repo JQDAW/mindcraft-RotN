@@ -26,11 +26,23 @@
 //                            Escape episodes (soak 16, the lead; rotn-v0.1.15 on, n/a before): an escape run from its
 //                            start (`[escape] trapped at …`, `[escape] stuck at …`, `[night] …: getting out first (escape
 //                            N of M)`; a start within `escapeJoinS` of an open episode's last line joins it) to its end:
-//                            cleared (`[escape] out at … in S s`, `[night] the escape got out at …`), or not cleared
-//                            (`[escape] still stuck at … after S s …: why`, `[night] the escape failed (why)`, a death).
-//                            A cleared one is listed with its duration; an uncleared one fires I1: I1's count is the
-//                            path-failure episodes plus the uncleared escapes. An escape still open at the journal's
-//                            end (a soak still running) is listed as open and does not fire.
+//                            cleared (`[escape] out at … in S s`, `[night] the escape got out at …`, `[trapped] out:`),
+//                            not cleared (`[escape] still stuck at … after S s …: why`, `[night] the escape failed
+//                            (why)`, `[trapped] still trapped:`, a death), interrupted (`still stuck … : interrupted`,
+//                            stopped by a reflex or a command: escape.js #562 review 5, not a failure by itself), or open
+//                            at the journal's end. The caller is named: the trap check, the night routine, !goToSurface,
+//                            the morning, the trapped job (#642 `[trapped] at X, idle: the escape runs`), else other.
+//                            Trap spans (#648 review 1): the escapes that did not clear, joined while they stay within
+//                            `spanCells` (escape.js ESCAPE_HOLD.cells) of the first, from the first one's start until an
+//                            escape clears, the bot dies, a position line puts it more than `spanCells` away, or the
+//                            journal ends (`open`, which fires: the trap was still on). #642's `[trapped] at X …` re-plan
+//                            and give-up lines (`the escape failed N times here …`) count as escapes that did not clear.
+//                            An interrupted escape opens a span only if a failed escape or a death follows before an
+//                            escape clears or the bot moves away. I1's count is the path-failure episodes plus the trap
+//                            spans; `longestMin` is the longest of either. Cleared escapes are listed with their seconds.
+//                            The limit (#648 review 2): before rotn-v0.1.22 (#624) !goToSurface was upstream's
+//                            goToSurface and logged no `[escape]` line, and the `[trapped]` lines start with #642 (after
+//                            rotn-v0.1.22). So soak 15's trap shows only as the path episode above and I2.
 //   I2  enclosed-morning     `could not leave the shelter … after N tries` lines; nights spent in the same shelter as
 //                            the night before (`in the shelter at X until morning`, X repeated).
 //   I3  rejected-click       rejected window clicks: one per `[forge-bridge] click rejected:` line (#618) when the
@@ -77,7 +89,7 @@ import { fileURLToPath } from 'node:url';
 import { parseJournal as spendJournal, calls as spendCalls } from './soak-spend.mjs';
 
 export const INVARIANTS = {
-    trapped: { minAttempts: 3, gapMin: 10, attemptGapS: 2, escapeJoinS: 30 },
+    trapped: { minAttempts: 3, gapMin: 10, attemptGapS: 2, escapeJoinS: 30, spanCells: 3 },
     starving: { lowFood: 4, noSafeFoodMin: 5 },
     gateThenAct: { afterS: 60 },
     falseCollect: { collectS: 30 },
@@ -86,8 +98,16 @@ export const INVARIANTS = {
     unattributed: { hurtS: 15 },
 };
 
-/** The first release (rotn-v0.1.N) whose journal has each invariant's lines. */
-export const SINCE = { I1escape: 15, I4: 19, I7: 19, I9: 19, I12: 5 };
+/** The first release (rotn-vX.Y.Z) whose journal has each invariant's lines (#648 review 6: compared in full). */
+export const SINCE = { I1escape: '0.1.15', I4: '0.1.19', I7: '0.1.19', I9: '0.1.19', I12: '0.1.5' };
+
+/** Whether the release is at least `since` ('X.Y.Z'); a journal with no release line (M1, soak 2) is none. */
+export function releaseAtLeast(rel, since) {
+    if (!rel?.version) return false;
+    const a = rel.version, b = since.split('.').map(Number);
+    for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
+    return true;
+}
 
 const JOURNAL = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:[+-]\d\d:\d\d|Z)) \S+?: ?(.*)$/;
 const RELEASE = /^\[release\] rotn-v(\d+)\.(\d+)\.(\d+)-/;
@@ -95,6 +115,12 @@ const FAIL_PATH = /^(Path not found|Unable to reach|(Error: |Code execution trig
 const ARRIVED = /^(You have reached\b|\[respawn\] escape done|\[night\] (morning: )?(dug out|left the shelter)|\[night\] morning: (dug out|left the shelter))/;
 const ESCAPE_START = /^(\[escape\] (trapped|stuck) at (-?\d+, -?\d+, -?\d+)|\[night\] .*: getting out first \(escape \d+ of \d+\)$)/;
 const ESCAPE_STEP = /^\[escape\] /;
+// #642's trapped job (trapped_job.js): its escape run, its re-plan and give-up lines (the bot is still trapped at X), and
+// its own result lines after the escape's.
+const TRAPPED_RUNS = /^\[trapped\] at -?\d+, -?\d+, -?\d+, idle: the escape runs\b/;
+const TRAPPED_STILL_AT = /^\[trapped\] at (-?\d+, -?\d+, -?\d+)(?:, idle, the escape failed \d+ s ago: one re-plan|: the escape failed (\d+) times here\b)/;
+const TRAPPED_OUT = /^\[trapped\] out: /;
+const TRAPPED_STILL = /^\[trapped\] still trapped: (.*)$/;
 const GO_TO_SURFACE = /^parsed command: \{ commandName: '!goToSurface'/;
 const MORNING_ESCAPE = /^\[night\] morning: .*climbing out with the escape/;
 const ESCAPE_OUT = /^\[escape\] out at (-?\d+, -?\d+, -?\d+) \(([^;]*); dug (\d+), placed (\d+)\) in ([\d.]+) s$/;
@@ -149,10 +175,10 @@ export function readJournal(text) {
     return out;
 }
 
-/** The release's patch number (rotn-v0.1.N -> N), or 0 when the journal has no release line. */
+/** The release: its tag, its [major, minor, patch] (`version`) and patch number; none when the journal has no release line. */
 export function releaseOf(lines) {
-    for (const { msg } of lines) { const m = RELEASE.exec(msg); if (m) return { tag: `rotn-v${m[1]}.${m[2]}.${m[3]}`, patch: Number(m[3]) }; }
-    return { tag: null, patch: 0 };
+    for (const { msg } of lines) { const m = RELEASE.exec(msg); if (m) return { tag: `rotn-v${m[1]}.${m[2]}.${m[3]}`, version: [Number(m[1]), Number(m[2]), Number(m[3])], patch: Number(m[3]) }; }
+    return { tag: null, version: null, patch: 0 };
 }
 
 /** The server's death messages for the bot, in order: [{line (1-based), cause}]. */
@@ -168,46 +194,138 @@ export function serverDeaths(text) {
 const at = (l) => ({ t: hms(l.t), line: l.n });
 const firsts = (list, n = 3) => list.slice(0, n);
 
-/**
- * The escape episodes (I1, soak 16): [{t, line, at, by, result: 'cleared'|'not cleared'|'open', seconds, endLine, how?, why?}].
- * `by`: 'trap check' (`[escape] trapped`), 'night' (the night routine's `getting out first`), '!goToSurface' (its
- * `parsed command` line within `escapeJoinS` before), 'morning' (`[night] morning: … climbing out with the escape`
- * just before), else 'other'; `at` is the start position when a line names it.
- */
-export function escapeEpisodes(lines) {
+// Lines that put the bot at a cell (for a trap span's "moved away"); an escape's own lines are not used.
+const BOT_AT = [
+    /^You have reached at (-?\d+), (-?\d+), (-?\d+)/,
+    /^- Position: x: (-?[\d.]+), y: (-?[\d.]+), z: (-?[\d.]+)/,
+    /^\[night\] in the shelter at (-?\d+), (-?\d+), (-?\d+) until morning$/,
+    /^Moved away from \(.*?\) to \((-?\d+), (-?\d+), (-?\d+)\)/,
+    /^\[respawn\] (?:now .* at|escape done: .* at) (-?\d+), (-?\d+), (-?\d+)/,
+];
+const cellOf = (m) => `${Math.floor(Number(m[1]))}, ${Math.floor(Number(m[2]))}, ${Math.floor(Number(m[3]))}`;
+const dist = (a, b) => {
+    if (!a || !b) return 0; // a cell not known: taken as the same place
+    const [x1, y1, z1] = a.split(', ').map(Number), [x2, y2, z2] = b.split(', ').map(Number);
+    return Math.hypot(x1 - x2, y1 - y2, z1 - z2);
+};
+
+/** The escapes as found (journal lines kept), and #642's trapped-job signals. */
+function rawEscapes(lines) {
     const p = INVARIANTS.trapped;
-    const out = [];
+    const eps = [];
+    const signals = [];
     let cur = null;
-    let callerLine = null; // the last !goToSurface or morning-escape line, for `by`
-    const end = (l, result, extra = {}) => {
-        // The escape's own seconds when its end line gives them, else the journal's (whole seconds).
-        const seconds = extra.seconds ?? Math.round((l.t - cur.from.t) / 100) / 10;
-        out.push({ t: hms(cur.from.t), line: cur.from.n, at: cur.at, by: cur.by, result, endLine: l.n, ...extra, seconds });
-        cur = null;
-    };
+    let callerLine = null; // the last !goToSurface, morning-escape or trapped-job line, for `by`
+    let lastAt = null; // the last cell a line put the bot at, for an escape whose start names none
+    const end = (l, result, extra = {}) => { eps.push({ from: cur.from, end: l, at: cur.at, by: cur.by, result, extra }); cur = null; };
     for (const l of lines) {
+        for (const re of BOT_AT) { const m = re.exec(l.msg); if (m) { lastAt = { at: cellOf(m), t: l.t }; break; } }
         if (GO_TO_SURFACE.test(l.msg)) callerLine = { l, by: '!goToSurface' };
         else if (MORNING_ESCAPE.test(l.msg)) callerLine = { l, by: 'morning' };
+        else if (TRAPPED_RUNS.test(l.msg)) callerLine = { l, by: 'trapped job' };
+        let m;
+        if ((m = TRAPPED_STILL_AT.exec(l.msg))) { signals.push({ l, at: m[1], gaveUp: m[2] != null }); continue; }
         const start = ESCAPE_START.exec(l.msg);
         if (start) {
             if (cur && l.t - cur.lastT <= p.escapeJoinS * 1000) { cur.lastT = l.t; cur.last = l; if (!cur.at && start[3]) cur.at = start[3]; continue; }
             if (cur) end(cur.last, 'not cleared', { why: 'no end line before the next escape' });
             const caller = callerLine && l.t - callerLine.l.t <= p.escapeJoinS * 1000 ? callerLine.by : 'other';
-            cur = { from: l, lastT: l.t, last: l, at: start[3] ?? null, by: start[2] === 'trapped' ? 'trap check' : start[2] ? caller : 'night' };
+            const at0 = start[3] ?? (lastAt && l.t - lastAt.t <= 60_000 ? lastAt.at : null);
+            cur = { from: l, lastT: l.t, last: l, at: at0, by: start[2] === 'trapped' ? 'trap check' : start[2] ? caller : 'night' };
             callerLine = null;
             continue;
         }
-        if (!cur) continue; // a [night] end line after an [escape] end closed the episode, or a stray step
-        let m;
+        if (!cur) continue; // a [night] or [trapped] end line after an [escape] end closed the episode, or a stray step
         if ((m = ESCAPE_OUT.exec(l.msg))) { end(l, 'cleared', { seconds: Number(m[5]), how: m[2], dug: Number(m[3]), placed: Number(m[4]), to: m[1] }); continue; }
-        if ((m = ESCAPE_STUCK.exec(l.msg))) { end(l, 'not cleared', { seconds: Number(m[2]), dug: Number(m[3]), placed: Number(m[4]), why: m[5] }); continue; }
+        if ((m = ESCAPE_STUCK.exec(l.msg))) {
+            // #648 review 3: interrupted (a reflex or a command stopped it: escape.js #562 review 5) is not a failure.
+            end(l, /^interrupted\b/.test(m[5]) ? 'interrupted' : 'not cleared', { seconds: Number(m[2]), dug: Number(m[3]), placed: Number(m[4]), why: m[5] });
+            continue;
+        }
         if ((m = NIGHT_ESCAPE_OUT.exec(l.msg))) { end(l, 'cleared', { to: m[1] }); continue; }
         if ((m = NIGHT_ESCAPE_FAILED.exec(l.msg))) { end(l, 'not cleared', { why: m[1] }); continue; }
+        if (TRAPPED_OUT.test(l.msg)) { end(l, 'cleared', {}); continue; }
+        if ((m = TRAPPED_STILL.exec(l.msg))) { end(l, /\binterrupted\b/.test(m[1]) ? 'interrupted' : 'not cleared', { why: m[1] }); continue; }
         if (DEATH.test(l.msg)) { end(l, 'not cleared', { why: 'died' }); continue; }
         if (ESCAPE_STEP.test(l.msg)) { cur.lastT = l.t; cur.last = l; }
     }
-    if (cur) out.push({ t: hms(cur.from.t), line: cur.from.n, at: cur.at, by: cur.by, result: 'open', seconds: Math.round((cur.last.t - cur.from.t) / 100) / 10, endLine: null });
-    return out;
+    if (cur) eps.push({ from: cur.from, end: null, last: cur.last, at: cur.at, by: cur.by, result: 'open', extra: {} });
+    return { eps, signals };
+}
+
+/**
+ * The escape episodes (I1, soak 16): [{t, line, at, by, result: 'cleared'|'not cleared'|'interrupted'|'open', seconds,
+ * endLine, how?, why?}]. `by`: 'trap check' (`[escape] trapped`), 'night' (the night routine's `getting out first`),
+ * '!goToSurface' (its `parsed command` line within `escapeJoinS` before), 'morning' (`[night] morning: … climbing out
+ * with the escape` just before), 'trapped job' (#642's `[trapped] at X, idle: the escape runs`), else 'other'; `at`
+ * is the start cell when a line names it (else the last cell a line put the bot at, within 60 s).
+ */
+export function escapeEpisodes(lines) {
+    return rawEscapes(lines).eps.map(e => {
+        const lastT = (e.end ?? e.last).t;
+        // The escape's own seconds when its end line gives them, else the journal's (whole seconds).
+        const seconds = e.extra.seconds ?? Math.round((lastT - e.from.t) / 100) / 10;
+        return { t: hms(e.from.t), line: e.from.n, at: e.at, by: e.by, result: e.result, endLine: e.end ? e.end.n : null, ...e.extra, seconds };
+    });
+}
+
+/**
+ * The trap spans (#648 review 1): the escapes that did not clear (and #642's still-trapped lines), joined while they
+ * stay within `spanCells` of the span's first cell, until an escape clears, a death, a line puts the bot more than
+ * `spanCells` away (outside an escape's own lines), or the journal ends ('open'). An interrupted escape starts a span
+ * only if a failed escape, a still-trapped line or a death follows first. [{t, line, at, until, untilLine, minutes,
+ * end: 'cleared'|'died'|'moved away'|'open', fails, interrupted, gaveUp}].
+ */
+export function trapSpans(lines) {
+    const cells = INVARIANTS.trapped.spanCells;
+    const { eps, signals } = rawEscapes(lines);
+    const inEscape = eps.map(e => [e.from.n, (e.end ?? e.last).n]);
+    const events = [
+        ...eps.map(e => ({ n: (e.end ?? e.from).n, t: (e.end ?? e.from).t, kind: 'esc', e })),
+        ...signals.map(s => ({ n: s.l.n, t: s.l.t, kind: 'sig', s })),
+    ];
+    for (const l of lines) {
+        if (DEATH.test(l.msg)) { events.push({ n: l.n, t: l.t, kind: 'death' }); continue; }
+        if (inEscape.some(([a, b]) => l.n >= a && l.n <= b)) continue;
+        for (const re of BOT_AT) { const m = re.exec(l.msg); if (m) { events.push({ n: l.n, t: l.t, kind: 'pos', at: cellOf(m) }); break; } }
+    }
+    events.sort((a, b) => a.n - b.n);
+    const spans = [];
+    let span = null;
+    let pend = null; // interrupted escapes not yet a span
+    const close = (ev, why) => { if (span) spans.push({ ...span, until: ev.t, untilLine: ev.n, end: why }); span = null; };
+    const fail = (ev, at, fromL, extra = {}) => {
+        if (span && dist(at, span.at) <= cells) { span.fails++; if (!span.at) span.at = at; if (extra.gaveUp) span.gaveUp = true; return; }
+        if (span) close(ev, 'moved away');
+        const p = pend && dist(at, pend.at) <= cells ? pend : null;
+        span = { fromT: p ? p.fromT : fromL.t, fromN: p ? p.fromN : fromL.n, at: p ? p.at : at, fails: 1, interrupted: p ? p.interrupted : 0, gaveUp: !!extra.gaveUp };
+        pend = null;
+    };
+    for (const ev of events) {
+        if (ev.kind === 'esc') {
+            const r = ev.e.result;
+            if (r === 'cleared') { close(ev, 'cleared'); pend = null; continue; }
+            if (r === 'interrupted') {
+                if (span && dist(ev.e.at, span.at) <= cells) span.interrupted++;
+                else if (pend && dist(ev.e.at, pend.at) <= cells) pend.interrupted++;
+                else pend = { fromT: ev.e.from.t, fromN: ev.e.from.n, at: ev.e.at, interrupted: 1 };
+                continue;
+            }
+            fail(ev, ev.e.at, ev.e.from); // not cleared, or open at the journal's end
+            continue;
+        }
+        if (ev.kind === 'sig') { fail(ev, ev.s.at, ev.s.l, { gaveUp: ev.s.gaveUp }); continue; }
+        if (ev.kind === 'death') {
+            if (!span && pend) span = { fromT: pend.fromT, fromN: pend.fromN, at: pend.at, fails: 0, interrupted: pend.interrupted, gaveUp: false };
+            pend = null;
+            close(ev, 'died');
+            continue;
+        }
+        if (span && dist(ev.at, span.at) > cells) close(ev, 'moved away');
+        if (pend && dist(ev.at, pend.at) > cells) pend = null;
+    }
+    if (span && lines.length) close({ n: lines.at(-1).n, t: lines.at(-1).t }, 'open');
+    return spans.map(s => ({ t: hms(s.fromT), line: s.fromN, at: s.at, until: hms(s.until), untilLine: s.untilLine, minutes: Math.round((s.until - s.fromT) / 6000) / 10, end: s.end, fails: s.fails, interrupted: s.interrupted, gaveUp: s.gaveUp }));
 }
 
 function trapped(lines, rel) {
@@ -226,13 +344,19 @@ function trapped(lines, rel) {
     }
     close();
     const list = episodes.map(e => ({ ...at(e.from), until: hms(e.last.t), untilLine: e.last.n, attempts: e.attempts, minutes: Math.round((e.last.t - e.from.t) / 6000) / 10 }));
-    const esc = rel.patch < SINCE.I1escape ? null : escapeEpisodes(lines);
-    const failed = esc ? esc.filter(e => e.result === 'not cleared').length : 0;
-    const cleared = esc ? esc.filter(e => e.result === 'cleared') : [];
+    const pathLongest = list.reduce((m, e) => Math.max(m, e.minutes), 0);
+    if (!releaseAtLeast(rel, SINCE.I1escape)) {
+        return { count: list.length, pathEpisodes: list.length, attempts: list.reduce((s, e) => s + e.attempts, 0), longestMin: pathLongest, first: firsts(list), trapSpans: null, spanList: null, escapes: null, escapesNotCleared: null, escapesInterrupted: null, escapesCleared: null, longestClearedS: null, escapeList: null };
+    }
+    const esc = escapeEpisodes(lines);
+    const spans = trapSpans(lines);
+    const cleared = esc.filter(e => e.result === 'cleared');
     return {
-        count: list.length + failed, pathEpisodes: list.length, attempts: list.reduce((s, e) => s + e.attempts, 0), longestMin: list.reduce((m, e) => Math.max(m, e.minutes), 0), first: firsts(list),
-        escapes: esc ? esc.length : null, escapesNotCleared: esc ? failed : null, escapesCleared: esc ? cleared.length : null,
-        longestClearedS: esc ? cleared.reduce((m, e) => Math.max(m, e.seconds), 0) : null, escapeList: esc ? esc.slice(0, 20) : null,
+        count: list.length + spans.length, pathEpisodes: list.length, attempts: list.reduce((s, e) => s + e.attempts, 0),
+        longestMin: Math.max(pathLongest, spans.reduce((m, s) => Math.max(m, s.minutes), 0)), first: firsts(list),
+        trapSpans: spans.length, spanList: spans.slice(0, 5),
+        escapes: esc.length, escapesNotCleared: esc.filter(e => e.result === 'not cleared').length, escapesInterrupted: esc.filter(e => e.result === 'interrupted').length,
+        escapesCleared: cleared.length, longestClearedS: cleared.reduce((m, e) => Math.max(m, e.seconds), 0), escapeList: esc.slice(0, 20),
     };
 }
 
@@ -256,7 +380,7 @@ function rejectedClicks(lines) {
 }
 
 function digRefusedWithTool(lines, rel) {
-    if (rel.patch < SINCE.I4) return null;
+    if (!releaseAtLeast(rel, SINCE.I4)) return null;
     const fb = lines.filter(l => DIG_REFUSED.test(l.msg)); // DIG_REFUSED needs `<block> at x, y, z`: never the cap line
     const capped = lines.some(l => DIG_LIMIT.test(l.msg));
     if (fb.length || capped) {
@@ -340,7 +464,7 @@ function actsOn(lines, i, mob, untilT = Infinity) {
 }
 
 function gateThenAct(lines, rel) {
-    if (rel.patch < SINCE.I7) return null;
+    if (!releaseAtLeast(rel, SINCE.I7)) return null;
     const p = INVARIANTS.gateThenAct;
     const refusals = [];
     for (const l of lines) {
@@ -369,7 +493,7 @@ function refusedCommands(lines) {
 }
 
 function falseCollects(lines, rel) {
-    if (rel.patch < SINCE.I9) return null;
+    if (!releaseAtLeast(rel, SINCE.I9)) return null;
     const p = INVARIANTS.falseCollect;
     const out = [];
     for (let i = 0; i < lines.length; i++) {
@@ -409,7 +533,7 @@ function summaryCost(text) {
 }
 
 function unattributed(lines, serverText, rel) {
-    if (rel.patch < SINCE.I12) return null;
+    if (!releaseAtLeast(rel, SINCE.I12)) return null;
     const p = INVARIANTS.unattributed;
     const unknown = lines.filter(l => HURT.exec(l.msg)?.[3] === 'unknown');
     const deaths = lines.filter(l => DEATH.test(l.msg));
@@ -499,10 +623,14 @@ export function render(r, name = 'soak') {
         o.push(`- ${id} ${title}: ${detail}`);
         for (const f of x.first ?? []) o.push(`    ${f.t}${f.line ? ` (driver.log:${f.line})` : ''}${Object.entries(f).filter(([k]) => !['t', 'line'].includes(k)).map(([k, v]) => ` ${k} ${v}`).join('')}`);
     };
-    row('I1', 'trapped', r.I1, `${r.I1.count} (${r.I1.pathEpisodes} path-failure episodes, ${r.I1.attempts} failed path attempts, longest ${r.I1.longestMin} min; `
-        + (r.I1.escapes == null ? 'escapes n/a)' : `${r.I1.escapesNotCleared} of ${r.I1.escapes} escape episodes not cleared, ${r.I1.escapesCleared} cleared, the longest cleared in ${r.I1.longestClearedS} s)`));
+    row('I1', 'trapped', r.I1, `${r.I1.count} (${r.I1.pathEpisodes} path-failure episodes, ${r.I1.attempts} failed path attempts; `
+        + (r.I1.escapes == null ? 'escapes n/a' : `${r.I1.trapSpans} trap spans; ${r.I1.escapes} escape episodes: ${r.I1.escapesNotCleared} not cleared, ${r.I1.escapesInterrupted} interrupted, ${r.I1.escapesCleared} cleared, the longest cleared in ${r.I1.longestClearedS} s`)
+        + `; longest ${r.I1.longestMin} min)`);
+    for (const s of r.I1.spanList ?? []) {
+        o.push(`    trap span ${s.t} (driver.log:${s.line}) at ${s.at ?? '?'} until ${s.until} (driver.log:${s.untilLine}), ${s.minutes} min, ended: ${s.end}${s.end === 'open' ? ' (still trapped at the journal\'s end)' : ''}; ${s.fails} escapes not cleared, ${s.interrupted} interrupted${s.gaveUp ? ', the trapped job gave up' : ''}`);
+    }
     for (const e of r.I1.escapeList ?? []) {
-        const how = e.result === 'cleared' ? ` to ${e.to}${e.how ? ` (${e.how}; dug ${e.dug}, placed ${e.placed})` : ''}` : e.why ? `: ${e.why}` : '';
+        const how = e.result === 'cleared' ? (e.to ? ` to ${e.to}${e.how ? ` (${e.how}; dug ${e.dug}, placed ${e.placed})` : ''}` : '') : e.why ? `: ${e.why}` : '';
         o.push(`    escape ${e.t} (driver.log:${e.line})${e.at ? ` at ${e.at}` : ''} by ${e.by}: ${e.result} in ${e.seconds} s${how}${e.endLine ? ` (driver.log:${e.endLine})` : ''}`);
     }
     row('I2', 'enclosed-morning', r.I2, `${r.I2.count} "could not leave the shelter", ${r.I2.sameShelterNights} nights in the same shelter as the night before`);
