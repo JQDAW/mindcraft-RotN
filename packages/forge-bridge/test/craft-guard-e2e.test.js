@@ -1,6 +1,5 @@
-// Soak 16's rejected craft (/home/rv/soak16-net-forge-recipe.md) through Mindcraft's real initBot,
-// RotN's recipes from the dump and mineflayer's real bot.craft, against the fake Forge server.
-// Loopback only.
+// Soak 16's rejected craft (/home/rv/soak16-net-forge-recipe.md) through Mindcraft's real initBot and
+// mineflayer's real bot.craft, against the fake Forge server. Loopback only.
 //
 // 9 sticks in the 3x3 grid are two pack recipes: AncientBeasts' stick_wall and DungeonTactics'
 // planks_from_sticks. The server makes the first in its registry, the stick wall. mineflayer 4.33 wrote
@@ -8,6 +7,8 @@
 // used up the 9 sticks and rejected the click. patches/mineflayer (craft.js grabResult) now takes the
 // server's slot 0: another item is never clicked, the same item with another count is taken as the
 // server has it, and an empty slot 0 throws after 500 ms.
+// The client's recipes are built here (prismarine-recipe), not taken from the installed RotN recipes:
+// this tests the guard, whatever rotn-data offers (#639 drops planks_from_sticks from bot.recipesFor).
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -51,17 +52,19 @@ test('soak 16: a grid the server makes into another item is never clicked; the s
     };
     const resultClicks = () => st.clicks.filter(k => k.slot === 0 && k.mode === 0);
 
-    // The recipe skills' craftRecipe takes for "planks" with sticks and no log: RotN's planks_from_sticks.
-    const [planks] = bot.recipesFor(ids[PLANKS], 0, 1, tableBlock);
-    assert.ok(planks, 'bot.recipesFor offers planks from sticks');
-    assert.deepEqual(planks.inShape.flat().map(i => i.id), Array(9).fill(ids[STICK]), '9 sticks, 3x3');
-    assert.equal(planks.result.count, 1);
+    // The client's recipes: DungeonTactics' planks_from_sticks as soak 16's bot had it (9 sticks, 3x3,
+    // planks x1), and AncientBeasts' stick_wall (the same grid).
+    const { Recipe } = require('prismarine-recipe')(bot.registry);
+    const sticks9 = nine.map(row => row.map(() => ids[STICK]));
+    const planks = new Recipe({ inShape: sticks9, result: { id: ids[PLANKS], count: 1, metadata: 0 } });
+    assert.equal(planks.requiresTable, true);
 
-    // Develop: "Server rejected transaction for clicking on slot 0", 9 sticks used up, the stick wall dropped.
+    // Without the craft.js patch: "Server rejected transaction for clicking on slot 0", 9 sticks used up,
+    // the stick wall dropped.
     const err = await craft(planks, tableBlock);
     for (let w = 0; st.tableWindow && w < 3000; w += 20) await sleep(20);
     assert.equal(c.count(ids[STICK]), 21, `the 9 sticks are back in the inventory (the table's close); ${err?.message}`);
-    assert.deepEqual(st.dropped, [], 'nothing dropped (develop: the stick wall on the cursor, dropped by the close)');
+    assert.deepEqual(st.dropped, [], 'nothing dropped (without the patch: the stick wall on the cursor, dropped by the close)');
     assert.deepEqual(resultClicks(), [], 'no click on slot 0');
     assert.deepEqual(st.rejected, []);
     assert.match(String(err?.message), /crafting: the server makes ancientbeasts:stick_wall x1 from this grid, not planks x1/);
@@ -72,16 +75,14 @@ test('soak 16: a grid the server makes into another item is never clicked; the s
     assert.match(lines[0], /^\[forge-bridge\] craft refused: window \d+ \(minecraft:crafting[^)]*\): the server makes ancientbeasts:stick_wall x1 from this grid, not planks x1; nothing taken$/);
 
     // The recipe the server does make: accepted and taken as before.
-    const [wall] = bot.recipesFor(ids[WALL], null, 1, tableBlock);
-    assert.ok(wall, 'RotN\'s stick_wall recipe');
+    const wall = new Recipe({ inShape: sticks9, result: { id: ids[WALL], count: 1, metadata: 0 } });
     assert.equal(await craft(wall, tableBlock), null);
     await inStep();
     assert.deepEqual([c.count(ids[STICK]), c.count(ids[WALL])], [12, 1]);
 
     // The same item with another count (a recipe that says 2, the server makes 1): the server's stack
     // is clicked, so the click is accepted (develop sent x2 and was rejected).
-    const { Recipe } = require('prismarine-recipe')(bot.registry);
-    const wallTwo = new Recipe({ inShape: nine.map(row => row.map(() => ids[STICK])), result: { id: ids[WALL], count: 2, metadata: 0 } });
+    const wallTwo = new Recipe({ inShape: sticks9, result: { id: ids[WALL], count: 2, metadata: 0 } });
     assert.equal(await craft(wallTwo, tableBlock), null);
     await inStep();
     assert.deepEqual([c.count(ids[STICK]), c.count(ids[WALL])], [3, 2], 'one wall made, as the server says');
