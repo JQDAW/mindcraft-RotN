@@ -11,9 +11,9 @@ import process from 'node:process';
 import * as acorn from 'acorn';
 import settings from './settings.js';
 import { Vec3 } from 'vec3';
+import committed from '../../settings.js';
 
 const profile = JSON.parse(readFileSync(new URL('../../profiles/rotn-bot.json', import.meta.url), 'utf8'));
-const committed = (await import('../../settings.js')).default;
 
 async function commands() {
     await import('./agent.js'); // the real import order (commands/index.js first)

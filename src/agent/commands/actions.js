@@ -773,7 +773,7 @@ export const actionsList = [
     {
         name: '!goToBed',
         description: 'Go to the nearest bed and sleep.',
-        perform: async function (agent, ...rest) {
+        perform: function (agent, ...rest) {
             // Round 17 P (rotn-data, the lead's addendum): any spawn change other than the Scroll of New Life itself (a
             // bed sets the spawn when you wake) ends the scroll's respawn point and its 32-block Zombie Player guard
             // for good. Once the scroll is used, never a bed.
