@@ -23,6 +23,11 @@
 // - canHarvest as prismarine-block: strict only for a block whose registry entry has harvestTools (vanilla);
 //   permissive for a modded block, whose extended entry has none (as live).
 //
+// - findBlocks / findBlock as mineflayer 4.33 (lib/plugins/blocks.js:116-130): per 16-cube section the matcher runs on
+//   the section's palette first (blocks with no position, as Block.fromStateId(stateId, 0)), then on positioned blocks;
+//   so a matcher that needs a position skips every section, as live (the #630 review's "exposed first" bug).
+// - A minimal mineflayer-collectblock (bot.collectBlock.collect: walk into reach through the pathfinder, mineflayer-tool's
+//   choice from items(), dig), so skills.collectBlock runs on a scenario (soak 15's refused collect in the pocket).
 // Not here (yet): the real mineflayer-pathfinder (stubs: 'noPath', 'teleport', or a test's own), crafting and other
 // windows (net-forge's fake-containers.js models the server side), moving mobs.
 //
@@ -36,10 +41,9 @@
 import { EventEmitter } from 'node:events';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
-import { getBlock, getItem, registryName } from '../../packages/rotn-data/index.js';
+import { getBlock, getItem, registryName, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { forgeDigTime, pickState } from '../../packages/forge-bridge/src/dig-time.js';
 import { dumpStackSizes } from '../../packages/forge-bridge/src/stack-sizes.js';
-import { loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 
 /** Window 0's slots (mineflayer's player inventory window). */
 export const SLOT = Object.freeze({ RESULT: 0, GRID: [1, 2, 3, 4], HEAD: 5, TORSO: 6, LEGS: 7, FEET: 8, MAIN: 9, HOTBAR: 36, OFF_HAND: 45, COUNT: 46 });
@@ -60,6 +64,8 @@ const fullOf = (n) => { try { return registryName(n); } catch { return n.include
  * minecraft-data 1.12.2 with the modded blocks and items a world uses added (synthetic ids). A copy: the shared
  * minecraft-data object is never changed.
  */
+let stackProps = null;
+
 export function makeRegistry() {
     const base = minecraftData('1.12.2');
     const reg = Object.create(base);
@@ -68,7 +74,9 @@ export function makeRegistry() {
     reg.itemsByName = { ...base.itemsByName };
     reg.items = { ...base.items };
     // The dump's stack sizes (StackUp) over copies of the entries that differ (vanilla too, as live; #628 review 2).
-    const { properties } = dumpStackSizes(loadRotnData(PACK_VERSION).dump?.items?.items, base);
+    // Computed once per process (#628 re-review: a world per test should not redo 9,710 items).
+    stackProps ??= dumpStackSizes(loadRotnData(PACK_VERSION).dump?.items?.items, base).properties;
+    const properties = stackProps;
     for (const [name, { stackSize }] of Object.entries(properties.items)) {
         const short = liveName(name);
         const e = reg.itemsByName[short] ?? reg.itemsByName[name];
@@ -110,6 +118,14 @@ function toolOf(item) {
 
 /** A block at p: the dump's state (or minecraft-data's entry), shaped as mineflayer's Block. */
 function makeBlock(reg, name, p, metadata = 0) {
+    // One template per name and metadata (a findBlocks scan builds many blocks); each block is a copy with its position.
+    reg.blockTemplates ??= new Map();
+    const tk = `${name}|${metadata}`;
+    if (!reg.blockTemplates.has(tk)) reg.blockTemplates.set(tk, blockTemplate(reg, name, metadata));
+    return { ...reg.blockTemplates.get(tk), position: p };
+}
+
+function blockTemplate(reg, name, metadata) {
     const full = fullOf(name);
     const st = pickState(getBlock(full), metadata);
     const live = liveName(full);
@@ -117,9 +133,12 @@ function makeBlock(reg, name, p, metadata = 0) {
     const liquid = st ? !!st.liquid : /water|lava/.test(live);
     const boundingBox = liquid ? 'empty' : st ? (st.collision?.length ? 'block' : 'empty') : (e.boundingBox ?? 'block');
     const block = {
-        name: live, type: e.id, metadata, position: p, boundingBox, material: st?.material ?? e.material,
+        name: live, type: e.id, metadata, position: null, boundingBox, material: st?.material ?? e.material,
         hardness: st?.hardness ?? e.hardness ?? null, harvestTool: st?.harvestTool ?? null, harvestLevel: st?.harvestLevel ?? 0,
         toolRequired: !!st?.toolRequired, liquid, state: st ?? null, harvestTools: e.harvestTools,
+        // prismarine-block's collision boxes ([x0, y0, z0, x1, y1, z1] per box) from the dump; none for a liquid or air.
+        shapes: liquid ? [] : st ? (st.collision ?? []).map(b => [...b]) : (boundingBox === 'block' ? [[0, 0, 0, 1, 1, 1]] : []),
+        diggable: (st?.hardness ?? e.hardness ?? 0) >= 0, transparent: st ? !st.opaque : boundingBox !== 'block',
         /** forge-bridge's rule for the item held (an item object, or null for the hand); args as Block.digTime. */
         digTimeWith(item, { inWater = false, notOnGround = false, effects = {} } = {}) {
             if (!st) return live === 'air' ? 0 : Infinity;
@@ -143,7 +162,9 @@ function makeBlock(reg, name, p, metadata = 0) {
 function makeTerrain(ground) {
     if (typeof ground === 'function') return ground;
     const layers = [...ground].sort((a, b) => a.below - b.below);
-    return (q) => layers.find(l => q.y < l.below)?.block ?? 'air';
+    const f = (q) => layers.find(l => q.y < l.below)?.block ?? 'air';
+    f.layers = layers;
+    return f;
 }
 
 /**
@@ -164,20 +185,24 @@ export function fakeWorld({ ground = DEFAULT_GROUND, set = {}, at = new Vec3(0, 
     const terrain = makeTerrain(ground);
     const cells = new Map(Object.entries(set));
     const nameAt = (q) => cells.get(key(q)) ?? terrain(q);
-    for (const n of new Set([...Object.values(set)])) reg.ensureBlock(n);
+    // Every block the world names is in the registry from the start (a lookup by name before any blockAt: mcdata's
+    // getBlockId, findBlocks' ids); a ground function's blocks join on their first blockAt.
+    for (const n of new Set([...Object.values(set), ...(terrain.layers ?? []).map(l => l.block), 'air'])) reg.ensureBlock(n);
     const calls = { dug: [], placed: [], refused: [], looks: [], equips: [], gotos: [], jumps: 0 };
     let now = 0;
     const clock = { now: () => now, advance: (ms) => { now += ms; } };
 
     const metas = new Map();
     const blockAt = (p) => { const q = new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)); return makeBlock(reg, nameAt(q), q, metas.get(key(q)) ?? 0); };
+    /** findBlocks' scan: the template as prototype and its own position (no copy); the result goes through blockAt. */
+    const scanBlock = (q) => { makeBlock(reg, nameAt(q), null, metas.get(key(q)) ?? 0); const b = Object.create(reg.blockTemplates.get(`${nameAt(q)}|${metas.get(key(q)) ?? 0}`)); b.position = q; return b; };
     const solidAt = (q) => blockAt(q).boundingBox === 'block';
     const world = {
         blockAt, nameAt,
         set: (p, name, metadata = 0) => { reg.ensureBlock(name); cells.set(key(p), name); if (metadata) metas.set(key(p), metadata); else metas.delete(key(p)); },
         fill: (a, b, name) => {
             reg.ensureBlock(name);
-            for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x++) for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y++) for (let z = Math.min(a.z, b.z); z <= Math.max(a.z, b.z); z++) cells.set(key({ x, y, z }), name);
+            for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x++) for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y++) for (let z = Math.min(a.z, b.z); z <= Math.max(a.z, b.z); z++) { cells.set(key({ x, y, z }), name); metas.delete(key({ x, y, z })); }
         },
     };
 
@@ -276,6 +301,8 @@ export function fakeWorld({ ground = DEFAULT_GROUND, set = {}, at = new Vec3(0, 
         if (!dest) dest = 'hand';
         if (!(dest in DEST)) throw new Error(`invalid destination: ${dest}`);
         const from = item.slot;
+        // #628 re-review: a stack on the cursor is in no slot; mineflayer would click slot null.
+        if (from == null || item === inventory.selectedItem) throw new Error(`${item.name} is on the cursor (selectedItem), not in a window slot: put it down first`);
         let to = DEST[dest] ?? SLOT.HOTBAR + qbs;
         calls.equips.push({ name: item.name, from, dest });
         if (from === to) return;
@@ -381,6 +408,79 @@ export function fakeWorld({ ground = DEFAULT_GROUND, set = {}, at = new Vec3(0, 
         return e;
     };
     bot.pathfinder = pathfinder === 'noPath' ? noPath() : pathfinder === 'teleport' ? teleport(bot, calls) : pathfinder;
+
+    // findBlocks as mineflayer 4.33 (lib/plugins/blocks.js): per 16-cube section, the matcher first runs on the
+    // section's palette, blocks with no position (Block.fromStateId(stateId, 0)); a section whose palette has no match
+    // is skipped. Then on each block in reach, positioned (with useExtraInfo a function: matcher and it). The whole
+    // reach is searched (mineflayer stops after a layer of sections with enough found): the nearest `count`, by distance.
+    const paletteOf = (sx, sy, sz) => {
+        const names = new Set();
+        const y0 = sy * 16;
+        if (terrain.layers) {
+            let lo = -Infinity;
+            for (const l of terrain.layers) { if (l.below > y0 && lo < y0 + 16) names.add(`${l.block}|0`); lo = l.below; }
+            if (lo < y0 + 16) names.add('air|0');
+        } else {
+            for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) for (let z = 0; z < 16; z++) names.add(`${terrain(new Vec3(sx * 16 + x, y0 + y, sz * 16 + z))}|0`);
+        }
+        for (const [k, n] of cells) {
+            const [x, y, z] = k.split(',').map(Number);
+            if (Math.floor(x / 16) === sx && Math.floor(y / 16) === sy && Math.floor(z / 16) === sz) names.add(`${n}|${metas.get(k) ?? 0}`);
+        }
+        return [...names].map(t => { const i = t.lastIndexOf('|'); return makeBlock(reg, t.slice(0, i), null, Number(t.slice(i + 1))); });
+    };
+    bot.findBlocks = (options = {}) => {
+        const matching = options.matching;
+        const ids = typeof matching === 'function' ? null : [].concat(matching);
+        const matcher = ids ? (b) => b !== null && ids.includes(b.type) : matching;
+        const point = (options.point ?? bot.entity.position).floored();
+        const maxDistance = options.maxDistance || 16;
+        const count = options.count || 1;
+        const extra = options.useExtraInfo || false;
+        const full = typeof extra === 'boolean' ? (b) => matcher(b) : (b) => matcher(b) && extra(b);
+        const found = [];
+        const lo = (v) => Math.floor((v - maxDistance) / 16), hi = (v) => Math.floor((v + maxDistance) / 16);
+        // Sections nearest first (by their nearest point); stop once `count` are found and no section left can hold
+        // a nearer block: the same result as a full search, fast when the targets are near (as mineflayer's layers).
+        const sections = [];
+        const gap = (v, s0) => Math.max(0, s0 - v, v - (s0 + 15));
+        for (let sx = lo(point.x); sx <= hi(point.x); sx++) for (let sy = Math.max(0, lo(point.y)); sy <= Math.min(15, hi(point.y)); sy++) for (let sz = lo(point.z); sz <= hi(point.z); sz++) {
+            const d = Math.hypot(gap(point.x, sx * 16), gap(point.y, sy * 16), gap(point.z, sz * 16));
+            if (d <= maxDistance) sections.push({ sx, sy, sz, d });
+        }
+        sections.sort((a, b) => a.d - b.d);
+        const dist = (q) => q.distanceTo(point);
+        for (const { sx, sy, sz, d } of sections) {
+            if (found.length >= count) {
+                found.sort((a, b) => dist(a) - dist(b));
+                if (d > dist(found[count - 1])) break;
+            }
+            if (extra !== true && !paletteOf(sx, sy, sz).some(b => matcher(b))) continue;
+            for (let x = sx * 16; x < sx * 16 + 16; x++) for (let y = sy * 16; y < sy * 16 + 16; y++) for (let z = sz * 16; z < sz * 16 + 16; z++) {
+                const q = new Vec3(x, y, z);
+                if (dist(q) > maxDistance) continue;
+                if (full(scanBlock(q))) found.push(q);
+            }
+        }
+        found.sort((a, b) => dist(a) - dist(b));
+        return found.slice(0, count);
+    };
+    bot.findBlock = (options) => { const [p] = bot.findBlocks(options); return p ? blockAt(p) : null; };
+
+    // A minimal mineflayer-collectblock (skills.collectBlock's plugin path): walk into reach through the pathfinder
+    // (noPath: it throws as the plugin does), the fastest tool from items() (mineflayer-tool), dig, the dig's drops.
+    bot.collectBlock = {
+        movements: null,
+        collect: async (target) => {
+            for (const block of [].concat(target)) {
+                const eye = bot.entity.position.offset(0, 1.62, 0);
+                if (eye.distanceTo(block.position.offset(0.5, 0.5, 0.5)) > 4.5) await bot.pathfinder.goto({ x: block.position.x, y: block.position.y + 1, z: block.position.z });
+                await bot.tool.equipForBlock(block);
+                await bot.dig(blockAt(block.position));
+            }
+        },
+        cancelTask: () => Promise.resolve(),
+    };
     Object.assign(bot, extra);
     return { bot, world, calls, clock, registry: reg, give, addEntity, stack };
 }
