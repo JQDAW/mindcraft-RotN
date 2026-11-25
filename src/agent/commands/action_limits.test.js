@@ -78,7 +78,10 @@ test('!putInChest whose chest never opens ends at its limit with a clear line, n
     const agent = fakeAgent();
     const t0 = Date.now();
     const out = await perform('!putInChest')(agent, 'cobblestone', 2);
-    assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+    // Soak 16 (the lead): the behaviour is asserted below (the time-limit line, no process kill, not executing); the
+    // wall clock only catches a hang. It was 2 s and failed in most full runs on the loaded CX33 (2.1-4.4 s; 1.3-1.7 s
+    // alone): 6 s, under this test's own 8 s timeout (T) and the action manager's 10 s kill.
+    assert.ok(Date.now() - t0 < 6000, `took ${Date.now() - t0} ms`);
     assert.equal(agent.calls.opened, 1);
     assert.equal(agent.calls.interrupts >= 1, true, 'the bot was interrupted');
     assert.equal(agent.calls.kills, 0, 'no process kill');

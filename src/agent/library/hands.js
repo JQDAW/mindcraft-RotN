@@ -92,6 +92,8 @@ export function installDigHands(bot) {
         const original = bot.dig;
         if (typeof original !== 'function' || original.rotnHands) return;
         const dig = async function (block, ...rest) {
+            // Soak 16 (C, #632 review 2): a dig watcher (the collect: "it gave" counts from its target's own dig).
+            try { bot.rotnDigHook?.(block); } catch { /* the dig goes on */ }
             const off = bot.inventory?.slots?.[45];
             if (off && isPickaxeItem(off) && !heldCanDig(bot, block)) {
                 await offHandToolBack(bot);
@@ -102,9 +104,12 @@ export function installDigHands(bot) {
             const r = await original.call(this ?? bot, block, ...rest);
             // Soak 16 (E): every dig that resolved, counted (the pathfinder's and the collect's digs come here too):
             // a command that dug is checked for a trapped bot after it (escape.escapeIfTrapped).
-            const d = bot.rotnDigs ??= { count: 0, last: null };
+            const d = bot.rotnDigs ??= { count: 0, last: null, log: [] };
             d.count++;
             d.last = { name: block?.name ?? null, at: block?.position ?? null };
+            // Soak 16 (C2): the last digs, numbered (n), for the collect's line (the walk's digs named apart).
+            (d.log ??= []).push({ n: d.count, ...d.last });
+            if (d.log.length > 32) d.log.shift();
             return r;
         };
         dig.rotnHands = true;

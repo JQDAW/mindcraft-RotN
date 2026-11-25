@@ -359,7 +359,7 @@ test('gate2 B: a stick picked up with a later break: the first break says no sti
     const bot = fakeBot({ bushes: [{ x: 8, sticks: 1, landsAt: at(12).offset(0.5, 0, 0.5) }, { x: 12, sticks: 1 }] });
     assert.equal(await skills.collectBlock(bot, 'stick', 2), true, bot.output);
     assert.deepEqual(bot.log.digs.map(d => d.pos), ['8,64,0', '12,64,0']);
-    assert.match(bot.output, /Broke deadbush: no stick yet\./);
+    assert.match(bot.output, /Broke deadbush at -?\d+, -?\d+, -?\d+: no stick yet\./);
     assert.ok(!/got no stick/.test(bot.output), bot.output); // the old wording is gone
     // Which break it came with is not known, so no note: the total is right.
     assert.match(bot.output, /Collected 2 stick\.$/m);
@@ -373,7 +373,7 @@ test('gate2 B: a stick picked up after the last break was counted is in the fina
     fast(t);
     const bot = fakeBot({ bushes: [{ x: 8, sticks: 0, late: 1 }] });
     assert.equal(await skills.collectBlock(bot, 'stick', 1), true, bot.output);
-    assert.match(bot.output, /Broke deadbush: no stick yet\./);
+    assert.match(bot.output, /Broke deadbush at -?\d+, -?\d+, -?\d+: no stick yet\./);
     assert.match(bot.output, /Collected 1 stick, late pickups included\./);
     assert.equal(bot.inventory.items().find(i => i.name === 'stick')?.count, 1);
 });

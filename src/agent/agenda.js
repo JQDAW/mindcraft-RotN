@@ -198,10 +198,12 @@ export const SHELTER_RESERVE_STEP = {
     // (the lead): on the pack's clock minutesToSunset never lies in 11-16 (about 18 before the morning freeze at 3001,
     // then 7.96: it counts none of the freeze): the window is read from sunsetEstimateMin, which counts the rest of the
     // freeze (18 at its start, 15 after 3 min, 10 after 8). Never at night (minutesToSunset 0).
+    // #630 clock-fix nit 1 (the lead): also due by minutesToSunset <= RESERVE_LEAD_MIN, as before, so the step is due
+    // from the freeze's start (7.96 there) for the model; the job's own start rule (ready) still reads the estimate.
     due: (s) => {
         const m = s.minutesToSunset?.() ?? Infinity;
         const est = s.sunsetEstimateMin?.() ?? m;
-        return m > 0 && est <= SHELTER_BLOCKS_LEAD_MIN && !s.jobWaiting?.('shelter_blocks');
+        return m > 0 && (m <= RESERVE_LEAD_MIN || est <= SHELTER_BLOCKS_LEAD_MIN) && !s.jobWaiting?.('shelter_blocks');
     },
     done: (s) => reserveHave(s) >= SHELTER_HOLD,
     // Only when goalNow fails: both cases, as goalNow tells them apart.
