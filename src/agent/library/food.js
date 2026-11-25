@@ -262,19 +262,37 @@ export function heldFoodPoints(bot) {
 }
 
 /**
+ * Soak 16 (F1, Fable verdict 5, the lead): food as a margin all day, not a 3-minute sunset run (food_floor and
+ * ate_when_low failed in 12 of 14 soaks). By day the bot should hold the night's need as it will be at sunset plus
+ * `margin` points: the bar at sunset is projected (drainPerMin a minute, between 0.3 at rest and 0.7 active, #611; the
+ * saturation spent by then). The food job fills it to the reserve + `fill`, so it is not due again for every
+ * piece eaten. An unknown time: the night's need at the bar now, + margin.
+ */
+export const DAY_FOOD = { margin: 4, drainPerMin: 0.5, fill: 2 };
+export function dayFoodReserve({ food, minutesToSunset }) {
+    if (!Number.isFinite(food)) return null;
+    const atSunset = Number.isFinite(minutesToSunset) ? Math.max(0, food - DAY_FOOD.drainPerMin * Math.max(0, minutesToSunset)) : food;
+    const need = nightFoodNeed({ food: atSunset, saturation: 0 });
+    return Math.round(Math.min(NIGHT_FOOD.cap + DAY_FOOD.margin, need + DAY_FOOD.margin) * 10) / 10;
+}
+
+/**
  * The food target the bot is short of now, or null: never at night (minutesToSunset 0: the night routine's
  * own rules then); in the before-night window (0 < minutes <= reserveLeadMin) the night's need (soak 14 F1:
- * nightFoodNeed, in points, against `held`); FOOD_TARGET.day by day once the agenda is done (`finished`);
- * and at any time but night when food is at FOOD_SHORT_AT or lower and no safe food is held. An unknown food
- * level: null. `held`: the points of safe food held (heldFoodPoints).
+ * nightFoodNeed, in points, against `held`); by day (soak 16, F1) the day reserve (dayFoodReserve) at any time,
+ * and FOOD_TARGET.day once the agenda is done (`finished`) or when food is at FOOD_SHORT_AT or lower and no safe
+ * food is held, whichever is more. An unknown food level: null. `held`: the points of safe food held (heldFoodPoints).
  */
 export function foodShortfall({ food, held, saturation = 0, minutesToSunset, finished = false, reserveLeadMin = 10 }) {
     if (!Number.isFinite(food)) return null;
     const m = Number.isFinite(minutesToSunset) ? minutesToSunset : Infinity;
     if (m <= 0) return null;
     if (m <= reserveLeadMin) { const need = nightFoodNeed({ food, saturation }); return need > 0 && held < need ? need : null; }
-    if (finished && held < FOOD_TARGET.day) return FOOD_TARGET.day;
-    if (food <= FOOD_SHORT_AT && held <= 0) return FOOD_TARGET.day;
-    return null;
+    const targets = [];
+    const day = dayFoodReserve({ food, minutesToSunset });
+    if (Number.isFinite(day) && held < day) targets.push(day);
+    if (finished && held < FOOD_TARGET.day) targets.push(FOOD_TARGET.day);
+    if (food <= FOOD_SHORT_AT && held <= 0) targets.push(FOOD_TARGET.day);
+    return targets.length ? Math.max(...targets) : null;
 }
 

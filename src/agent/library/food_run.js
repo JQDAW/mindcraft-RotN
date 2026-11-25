@@ -21,6 +21,9 @@ import * as skills from './skills.js';
  * 236 s a point by the #611 review, and kills 4 s later; walking for food costs about 0.7 points a minute). rounds: at most this many forage or hunt tries in one run.
  */
 export const FOOD_RUN = {
+    // Soak 16 (F2): the day food job (agenda_driver AUTO_JOBS.food): ripe food within 48, then animals within entity
+    // sight (64: Animania's tracking box), at most 4 min a run.
+    day: { maxMs: 4 * 60_000, forage: 48, hunt: 64 },
     sunset: { maxMs: 3 * 60_000, forage: 24, hunt: 32 },
     night: { maxMs: 4 * 60_000, forage: 16, hunt: 16 },
     hostileRange: 16, emergencyAt: 4, minHealth: 8, anyHealthAt: 2, backMs: 20_000, rounds: 12,

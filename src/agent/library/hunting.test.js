@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { isHuntableAnimal, mayBelongToPlayer, huntTarget, knownBases, trackBotPlaced, nearbyHuntable, huntAnimal, HUNT } from './hunting.js';
+import { isHuntableAnimal, mayBelongToPlayer, huntTarget, knownBases, trackBotPlaced, nearbyHuntable, huntAnimal, HUNT, matchesKind, retaliationRisk, weaponSweepOf, attackWeapon, SWEEP } from './hunting.js';
 
 __setRegistryForTest(minecraftData('1.12.2'));
 const key = (p) => `${p.x},${p.y},${p.z}`;
@@ -32,10 +32,11 @@ const HEALTH = { 7: 10 }; // 1.12 EntityLivingBase health: what a real animal's 
 const cow = (x, extra = {}) => ({ name: 'animania:cow_holstein', position: new Vec3(x + 0.5, 64, 0.5), ...extra, metadata: { ...HEALTH, ...(extra.metadata ?? {}) } });
 
 test('G4 #5: what may be hunted: vanilla adults and Animania\'s adult females; never young, males or hostile mobs', () => {
-    for (const name of ['cow', 'mooshroom', 'pig', 'rabbit', 'sheep', 'animania:cow_holstein', 'animania:sow_old_spot', 'animania:ewe_jacob', 'animania:doe_cottontail'])
+    // Soak 16 (F4): hogs too (no attack AI; 2-8 pork).
+    for (const name of ['cow', 'mooshroom', 'pig', 'rabbit', 'sheep', 'animania:cow_holstein', 'animania:sow_old_spot', 'animania:hog_old_spot', 'animania:ewe_jacob', 'animania:doe_cottontail'])
         assert.equal(isHuntableAnimal({ name, metadata: {} }), true, name);
     // #422 review 5: no chicken or hen (raw chicken is avoided food), no llama (no meat).
-    for (const name of ['chicken', 'animania:hen_wyandotte', 'llama', 'animania:calf_holstein', 'animania:piglet_old_spot', 'animania:bull_angus', 'animania:hog_old_spot', 'animania:ram_jacob', 'animania:rooster_wyandotte', 'zombie', 'wolf', 'villager'])
+    for (const name of ['chicken', 'animania:hen_wyandotte', 'llama', 'animania:calf_holstein', 'animania:piglet_old_spot', 'animania:bull_angus', 'animania:ram_jacob', 'animania:rooster_wyandotte', 'zombie', 'wolf', 'villager'])
         assert.equal(isHuntableAnimal({ name, metadata: {} }), false, name);
     assert.equal(isHuntableAnimal({ name: 'cow', metadata: { 12: true } }), false, 'a vanilla calf (the baby flag)');
 });
@@ -83,7 +84,7 @@ test('G4 #5: the target is the nearest animal that may not belong to a player; t
     const skipped = [];
     const t = huntTarget(bot, { skipped });
     assert.equal(t?.position.x, 9.5);
-    assert.deepEqual(skipped, ['animania:cow_holstein: it has a name tag', 'animania:cow_holstein: it is on a leash']);
+    assert.deepEqual(skipped, ['animania:cow_holstein (may belong to a player: it has a name tag)', 'animania:cow_holstein (may belong to a player: it is on a leash)']);
     assert.deepEqual(nearbyHuntable(bot), ['animania:cow_angus']);
     assert.equal(huntTarget(world({ animals: [cow(2, { metadata: { 2: 'Bessie' } })] })), null);
 });
@@ -187,4 +188,74 @@ test('soak 7 (c): a hunt takes the best weapon (equipHighestAttack) before its f
     assert.equal(await huntAnimal(bot, bot.entities[1], { equip: (b) => equipHighestAttack(b), maxMs: 2000 }), 'killed');
     assert.deepEqual(held, ['stone_sword']);
     assert.ok(logs.includes('[survival] weapon stone_sword (hunt)'), logs.join('\n'));
+});
+
+// Soak 16 (F4, F5; rotn-data's soak 15 food answer): hogs are food (no attack AI); a bull charges only what hurt it,
+// so it is no reason unless the weapon the bot will hit with may sweep onto it; the herd (same-breed cows) is
+// checked again during the chase.
+const bull = (x, extra = {}) => ({ name: 'animania:bull_holstein', position: new Vec3(x + 0.5, 64, 0.5), height: 1.6, ...extra, metadata: { ...HEALTH, ...(extra.metadata ?? {}) } });
+// The bot's attacks go through Better Combat's packet (bc_attack on, as on the soak server): attackPath 'bettercombat'.
+const BC = { bcAttack: { active: true } };
+const held = (bot, items, hand = null) => Object.assign(bot, { inventory: { items: () => items, slots: [] }, heldItem: hand, forge: BC });
+const item = (name) => ({ name, count: 1, metadata: 0 });
+
+test('soak 16 (F4): a hog is hunted like a sow, and "pig" finds both; a piglet never', () => {
+    assert.equal(isHuntableAnimal({ name: 'animania:hog_old_spot', metadata: {} }), true);
+    assert.equal(isHuntableAnimal({ name: 'animania:piglet_old_spot', metadata: {} }), false, 'no drop');
+    assert.equal(matchesKind({ name: 'animania:hog_old_spot' }, 'pig'), true);
+    assert.equal(matchesKind({ name: 'animania:sow_large_black' }, 'pig'), true);
+    // Soak 15 00:10:51: a lone hog with a bull 10 blocks off was refused; now it is the target.
+    const bot = held(world({ animals: [{ name: 'animania:hog_old_spot', position: new Vec3(4.5, 64, 0.5) }, bull(14)] }), [item('spartanweaponry:club_wood')]);
+    assert.equal(huntTarget(bot)?.name, 'animania:hog_old_spot');
+});
+
+test('soak 16 (F5): the sweep of the weapon the bot will hit with: swords sweep, clubs, axes and pickaxes do not, an unknown item may (2.5 blocks)', () => {
+    const bot = { forge: BC };
+    // #627 review 6: on the vanilla fallback path (no Better Combat packet) rotn-data has the club sweep like a sword,
+    // with no radius: reach 2.5.
+    assert.deepEqual(weaponSweepOf({}, item('spartanweaponry:club_wood')), { sweeps: true, reach: SWEEP.unknownReach }, 'the vanilla path');
+    assert.deepEqual(weaponSweepOf(bot, item('iron_sword')).sweeps, true);
+    assert.equal(weaponSweepOf(bot, item('spartanweaponry:club_wood')).sweeps, false);
+    assert.equal(weaponSweepOf(bot, item('stone_pickaxe')).sweeps, false);
+    assert.equal(weaponSweepOf(bot, item('pyrotech:crude_axe')).reach, 0);
+    const unknown = weaponSweepOf(bot, item('stick'));
+    assert.equal(unknown.sweeps, null, 'an item not listed may sweep');
+    assert.equal(unknown.reach, SWEEP.unknownReach);
+    assert.deepEqual(SWEEP, { margin: 0.9, unknownReach: 2.5 });
+    // The weapon after the hunt's equip, not the stick in hand: the club in the inventory.
+    const b = held(world(), [item('spartanweaponry:club_wood'), item('stick')], item('stick'));
+    assert.equal(attackWeapon(b).name, 'spartanweaponry:club_wood');
+});
+
+test('soak 16 (F5): a bull counts only within the sweep of the weapon: a club never; a sword when it stands within reach of the cow', () => {
+    const near = (weapon) => held(world({ animals: [cow(4), bull(5)] }), [item(weapon)]);
+    const c = near('spartanweaponry:club_wood');
+    assert.equal(retaliationRisk(c, c.entities[1]), null, 'a club does not sweep');
+    const s = near('iron_sword');
+    assert.match(retaliationRisk(s, s.entities[1]), /^a animania:bull_holstein 1\.0 blocks from it, within your weapon's sweep \(2\.\d blocks\): a hit on it would make it charge$/);
+    const far = held(world({ animals: [cow(4), bull(8)] }), [item('iron_sword')]);
+    assert.equal(retaliationRisk(far, far.entities[1]), null, '4 blocks off: out of the sword\'s sweep');
+    // A polar bear (fightBack false, calls for help) keeps the 16-block rule.
+    const bear = held(world({ animals: [cow(4), { name: 'polar_bear', position: new Vec3(14.5, 64, 0.5) }] }), [item('spartanweaponry:club_wood')]);
+    assert.match(retaliationRisk(bear, bear.entities[1]), /^a polar_bear within 16 blocks/);
+    // The herd: same-breed cows only (the breed's class); an Angus beside a Holstein is no herd.
+    const angus = held(world({ animals: [cow(4), cow(6, { name: 'animania:cow_angus' })] }), [item('spartanweaponry:club_wood')]);
+    assert.equal(retaliationRisk(angus, angus.entities[1]), null);
+    const herd = held(world({ animals: [cow(4), cow(6)] }), [item('spartanweaponry:club_wood')]);
+    assert.match(retaliationRisk(herd, herd.entities[1]), /^in a herd: another animania:cow_holstein within 16 blocks/);
+});
+
+test('soak 16 (F5): the herd rule is checked again during the chase: a herd that gathers ends the hunt as "risk", and the animal is skipped', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bot = held(world({ animals: [cow(4)] }), [item('spartanweaponry:club_wood')], item('spartanweaponry:club_wood'));
+    const target = bot.entities[1];
+    bot.pvp = { attack() {}, stop() {} };
+    const saved = HUNT.checkMs;
+    HUNT.checkMs = 5;
+    t.after(() => { HUNT.checkMs = saved; });
+    setTimeout(() => { bot.entities[2] = { id: 2, type: 'mob', name: 'animania:cow_holstein', metadata: { ...HEALTH }, position: new Vec3(7.5, 64, 0.5) }; }, 12);
+    const end = await huntAnimal(bot, target, { maxMs: 2000 });
+    assert.equal(end, 'risk');
+    assert.match(bot.rotnHuntRisk, /^in a herd: another animania:cow_holstein/);
+    assert.ok(bot.rotnHuntSkip.get(target.id) > Date.now(), 'left alone for a while');
 });
