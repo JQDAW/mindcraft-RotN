@@ -1,6 +1,33 @@
 # Status: skills-rotn
 
-Updated: 2026-11-22T01:34Z (from `date -u`)
+Updated: 2026-11-25T02:32Z (from `date -u`)
+
+## 2026-11-25: soaks 13 to 15 fixes, #619, soak 16 plan (summary, 2026-11-25T02:32Z by `date -u`)
+
+### Merged since the 2026-11-22 summary
+| PR | What | In tag |
+| --- | --- | --- |
+| #601 | Soak 13 cost: entity search within 64 (Animania's tracking box), memory summary turns, the goal texts | rotn-v0.1.20 |
+| #604 | Soak 13 scroll: per-side "no way out" lines, the kept-items rule, the morning scroll from the opened shelter with its roof taken down | rotn-v0.1.20 |
+| #612 | Soak 14 food (F1): eat at 8, the night's need in points, the sunset food run, the night emergency at food 4, provoked marks | rotn-v0.1.21 |
+| #614 | Soak 14 shelter (F2): the dig budget after the equip, the stall limit, the `[dig]` line with effects, Mining Fatigue in dig estimates, shelter blocks first after a daytime respawn, the stone pickaxe in the off hand | rotn-v0.1.21 |
+| #619 | Soak 15: the hands rule at the action boundary (the off-hand pickaxe into the inventory before an action, reflexes excepted; re-armed after, not after `!equip`, bounded to 4 s), a `bot.dig` wrapper, the 2x2 grid returned (cursor first, then `close_window` 0; "dropped" when the server had no room), between-action repairs, `!inventory` sections, no `!newAction` in the docs when insecure coding is off | none yet (after rotn-v0.1.21) |
+
+### Doing
+- **Soak 16 item E** (branch `agent/skills-rotn/soak16-escape`): one escape, wired everywhere. Plan `/home/rv/soak16-plan-skills.md`, lead decisions `/home/rv/soak16-lead-decisions.md`.
+- **Then, in order:** F (the day food reserve by script, hogs, the herd rule by same-breed cows, re-checked during the chase) while E is in review; R (the rock collect stays out of holes, the agenda text, a scripted `shelter_blocks` job); C (truthful Broke/Collected lines).
+
+### Follow-ups (noted, not scheduled)
+- **"No place 64 blocks … within 160"** (`respawn_relocate.js:142`, soak 14 respawn 2): the relocation search found no target, with the bot on open ground. E adds only the trapped check there (the lead's decision 4); why the search found nothing is a separate follow-up.
+- **`profiles/defaults/_default.json` examples still show `!newAction`** (#619 review 8): RotN `conversation_examples` in `profiles/`, in a later PR.
+- **#619 re-review notes (wording only):** any interrupting action (not only a reflex) skips the interrupted one's re-arm, except `!equip`; the "dropped" count can be skewed by a pickup during the 1 s wait.
+
+### To check in the next soak (all tested offline only; only in a tag that has #619)
+- `[hands] …` lines: the off-hand pickaxe taken out before a model action, `the stone_pickaxe from the off hand for <block>` from the dig wrapper, and `idle: … putting them back`.
+- `[inventory] …: closed the inventory to return the 2x2 grid: …`, with no `missing ingredient` loop after a rejected click.
+- `!inventory` replies with `IN THE 2x2 CRAFTING GRID`, `ON THE CURSOR` or `IN THE OFF HAND` lines.
+- No `!newAction` in the model's replies.
+
 
 ## 2026-11-22: soak 6 to 8 fixes, Better Combat prerequisites, soak 8's flooded pit (summary, 2026-11-22T01:34Z by `date -u`)
 

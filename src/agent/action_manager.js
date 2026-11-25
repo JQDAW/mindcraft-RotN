@@ -1,5 +1,6 @@
 import { safeStack } from './safe_error.js';
 import { clearReplan } from './replan.js';
+import { handsBefore, handsAfter } from './library/hands.js';
 
 export class ActionManager {
     constructor(agent) {
@@ -8,6 +9,7 @@ export class ActionManager {
         this.currentActionLabel = '';
         this.currentActionFn = null;
         this.timedout = false;
+        this.interruptedBy = null; // #619 review 6: the label of an action stopping the current one
         this.resume_func = null;
         this.resume_name = '';
         this.last_action_time = 0;
@@ -91,8 +93,10 @@ export class ActionManager {
             // also tell agent.bot to stop various actions
             if (this.executing) {
                 console.log(`action "${actionLabel}" trying to interrupt current action "${this.currentActionLabel}"`);
+                // #619 review 6: the interrupted action skips its re-arm (this one's after-step does it).
+                this.interruptedBy = actionLabel;
             }
-            await this.stop();
+            try { await this.stop(); } finally { this.interruptedBy = null; }
 
             // clear bot logs and reset interrupt code
             this.agent.clearBotLogs();
@@ -114,7 +118,14 @@ export class ActionManager {
             }
 
             // start the action
-            await actionFn();
+            // Soak 15 (the hands rule at the action boundary): the off-hand pickaxe where the tool choosers look, a
+            // clear cursor and an empty 2x2 grid before it; the pickaxe back in the off hand and the weapon in the
+            // main hand after it (rearmWeapon), however it ends.
+            const bot = this.agent.bot;
+            const before = handsBefore(bot, actionLabel); // null: nothing to move (no await)
+            if (before) await before;
+            try { await actionFn(); }
+            finally { await handsAfter(bot, actionLabel, { interruptedBy: this.interruptedBy }); }
 
             // mark action as finished + cleanup
             this.executing = false;
