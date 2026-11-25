@@ -94,6 +94,7 @@ export function attachClickDiagnostics(bot, {
         flush(); // an earlier one still waiting for its resend
         const rec = sent.get(packet.action) ?? { windowId: packet.windowId, slot: '?', mode: '?', button: '?', action: packet.action, client: null };
         pending = { rec, server: null, timer: setTimer(() => flush(), resendMs) };
+        pending.timer?.unref?.(); // #618 review 3: never what keeps the process alive
     });
     client.on('window_items', (packet) => {
         if (!pending || pending.server || packet?.windowId !== pending.rec.windowId) return;
@@ -106,6 +107,7 @@ export function attachClickDiagnostics(bot, {
         };
         clearTimer(pending.timer);
         pending.timer = setTimer(() => flush(), cursorMs); // the cursor packet follows at once
+        pending.timer?.unref?.();
     });
     client.on('set_slot', (packet) => {
         if (!pending?.server || packet?.windowId !== -1 || packet?.slot !== -1) return;
