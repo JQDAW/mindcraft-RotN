@@ -1,5 +1,5 @@
 # config/bettercombat.cfg of the pinned RotN 3.3.4 server pack zip (SHA-256 90642fd5...f5205); file SHA-256 5f25c1b46b9872086a097c3ad176ea3f0d74674b1a7c2e2b73ea82347486b43a.
-# Lines 315-353 (Custom Weapon Tweaker) and 866-871 (Item Class Whitelist), each prefixed with its line number and a tab.
+# Lines 315-353 (the Custom Weapon Tweaker block; entries 316-352) and 866-871 (the Item Class Whitelist block; entries 867-870), each prefixed with its line number and a tab.
 315	    S:"Custom Weapon Tweaker" <
 316	        [Weapon Substring=troll_weapon]		[Sound Type=BLUNT]		[Animation=CHOP]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=1.0]	[Knockback=2]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
 317	        [Weapon Substring=celeste]			[Sound Type=AXE]		[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]

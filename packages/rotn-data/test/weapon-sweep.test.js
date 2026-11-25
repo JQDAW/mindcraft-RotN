@@ -123,7 +123,6 @@ test('weaponSweep: the bot\'s weapons, the hand, enchantments and the vanilla pa
     assert.equal(s('spartanweaponry:greatsword_iron').radius, 2.1);
     assert.equal(s('spartanweaponry:longsword_iron').entry.substring, 'longsword_', 'longsword_ comes before _sword');
     for (const hand of ['hand', null, '', 'air']) assert.equal(s(hand).sweeps, false, String(hand));
-    assert.equal(s('minecraft:stick').weapon, false, 'not on the class whitelist');
     // The Sweeping enchantment and the potion add levels even to a Sweep 0 weapon.
     assert.equal(s('spartanweaponry:club_wood', { enchantment: 2 }).radius, 1.85);
     assert.equal(s('hand', { potion: 1 }).radius, 1.6);
@@ -132,6 +131,41 @@ test('weaponSweep: the bot\'s weapons, the hand, enchantments and the vanilla pa
     assert.equal(s('minecraft:iron_sword', { path: 'vanilla' }).sweeps, true);
     assert.equal(s('minecraft:stone_pickaxe', { path: 'vanilla' }).sweeps, false);
     assert.throws(() => s('minecraft:iron_sword', { path: 'nope' }), /unknown attack path/);
+});
+
+test('#621 review 2: an item weapons.json does not list is unknown (null), never "does not sweep"; the hand is known', () => {
+    const s = (item, opts) => pack.weaponSweep(item, opts);
+    for (const item of ['minecraft:stick', 'minecraft:dirt', 'betterwithmods:dirt_pile', 'somemod:unknown_blade']) {
+        assert.equal(pack.weaponsData.items[item], undefined, item);
+        assert.deepEqual(s(item), { item, path: 'bettercombat', weapon: null, entry: null, level: null, sweeps: null, radius: null, alsoWithinReach: true }, item);
+        const v = s(item, { path: 'vanilla' });
+        assert.equal(v.weapon, null, `${item} vanilla`);
+        assert.equal(v.sweeps, null, `${item} vanilla`);
+    }
+    // Unknown even with a Sweeping enchantment or the potion: the base level is not known.
+    assert.equal(s('minecraft:stick', { enchantment: 2 }).sweeps, null);
+    const hand = s('hand');
+    assert.equal(hand.weapon, false);
+    assert.equal(hand.sweeps, false);
+    assert.equal(hand.radius, 0);
+    assert.equal(s('hand', { path: 'vanilla' }).weapon, false);
+    assert.equal(s('hand', { path: 'vanilla' }).sweeps, false);
+    assert.match(data.unknownItems, /never 'does not sweep'/);
+});
+
+test('#621 review 3: on the vanilla path weapon means what it means on the Better Combat path (bcWeapon)', () => {
+    for (const [name, w] of Object.entries(pack.weaponsData.items)) {
+        const bc = pack.weaponSweep(name);
+        const v = pack.weaponSweep(name, { path: 'vanilla' });
+        assert.equal(v.weapon, bc.weapon, name);
+        assert.equal(v.weapon, !!w.bcWeapon, name);
+        assert.equal(v.sweeps, w.base === 'ItemSword', name);
+    }
+    // A pickaxe is a Better Combat weapon on both paths, but only an ItemSword sweeps on the vanilla one.
+    const pick = pack.weaponSweep('minecraft:stone_pickaxe', { path: 'vanilla' });
+    assert.equal(pick.weapon, true);
+    assert.equal(pick.sweeps, false);
+    assert.equal(data.sources.config.classWhitelistLines, '867-870');
 });
 
 test('every Better Combat weapon in weapons.json gets the same first match; 261 of them sweep; mod-id entries never match', () => {

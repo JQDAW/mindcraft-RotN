@@ -3,7 +3,7 @@
  "pack": "3.3.4",
  "description": "Which held items make a player's melee hit sweep (also hit mobs next to the struck one) on RotN 3.3.4, and how far from the struck mob the sweep reaches, for weaponSweep. Hand-written from the bytecode of Better Combat (ImmersiveCombat-12-13-25.jar, modid bettercombat 1.5.6) and the vanilla 1.12.2 server jar of the pinned pack zip, read with javap only, and from config/bettercombat.cfg; excerpts and copies in packages/rotn-data/test/fixtures/weapon-sweep-3.3.4/. confidence 'verified' = read from that bytecode and config; nothing here was watched in a run.",
  "confidence": "verified",
- "summary": "Better Combat's packet (the bot's attack path): the held item sweeps only if Better Combat treats it as a weapon (an ItemSword, ItemTool, ItemHoe or Spartan throwing weapon: weapons.json bcWeapon) and the first Custom Weapon Tweaker entry whose substring is in the item's registry path has Sweep 1 or more; plus the Sweeping enchantment level and the wards:effect_sweeping potion (amplifier + 1). Clubs, maces, hammers, axes, pickaxes, shovels, hoes, spears, pikes and katanas are Sweep 0; swords (_sword), sabres, longswords, cutlasses and blades 1; glaives, staves and scythes 2; greatswords 3. A sweep happens only when the main hit landed. It hits every other living mob whose position is within radius = 1 + the attacker's width (0.6 for a player) + 0.25 x (level - 1) blocks of the struck mob's position (1.6 at level 1, 1.85 at 2, 2.1 at 3) and within the attacker's reach plus that mob's width, at least 1.0 damage. The vanilla use_entity fallback sweeps with any ItemSword subclass instead (Spartan clubs included): mobs inside the struck mob's box grown by 1 sideways and 0.25 up and down, within 3 blocks of the player, only on a charged (> 0.9), grounded, non-crit, non-sprint hit.",
+ "summary": "Better Combat's packet (the bot's attack path): the held item sweeps only if Better Combat treats it as a weapon (an ItemSword, ItemTool, ItemHoe or Spartan throwing weapon: weapons.json bcWeapon) and the first Custom Weapon Tweaker entry whose substring is in the item's registry path has Sweep 1 or more; plus the Sweeping enchantment level and the wards:effect_sweeping potion (amplifier + 1). Clubs, maces, hammers, axes, pickaxes, shovels, hoes, spears, pikes and katanas are Sweep 0; swords (_sword), sabers (saber_), longswords, cutlasses and blades 1; glaives, staves and scythes 2; greatswords 3. A sweep happens only when the main hit landed. It hits every other living mob whose position is within radius = 1 + the attacker's width (0.6 for a player) + 0.25 x (level - 1) blocks of the struck mob's position (1.6 at level 1, 1.85 at 2, 2.1 at 3) and within the attacker's reach plus that mob's width, at least 1.0 damage. The vanilla use_entity fallback sweeps with any ItemSword subclass instead (Spartan clubs included): mobs inside the struck mob's box grown by 1 sideways and 0.25 up and down, within 3 blocks of the player, only on a charged (> 0.9), grounded, non-crit, non-sprint hit.",
  "sources": {
   "betterCombat": {
    "file": "mods/ImmersiveCombat-12-13-25.jar",
@@ -19,7 +19,7 @@
    "file": "config/bettercombat.cfg",
    "sha256": "5f25c1b46b9872086a097c3ad176ea3f0d74674b1a7c2e2b73ea82347486b43a",
    "tweakerLines": "316-352",
-   "classWhitelistLines": "866-871"
+   "classWhitelistLines": "867-870"
   },
   "minecraft": {
    "file": "minecraft_server.1.12.2.jar (pack root)",
@@ -232,7 +232,7 @@
   ]
  },
  "vanillaFallback": {
-  "rule": "EntityPlayer.attackTargetEntityWithCurrentItem (aed.f(vg)), used only when forge-bridge falls back to vanilla use_entity: a sweep when the swing is charged above 0.9, it is not a crit (falling) or a sprint hit, the player is on the ground and moving slower than its walking speed, and the main-hand item is an ItemSword (ajy) or a subclass (bytecode 318-356; Spartan clubs, sabres and the like extend ItemSword, weapons.json base). It hits living entities in the struck mob's box grown by (1, 0.25, 1) (595-609), other than the player and the struck mob, within 3 blocks of the player (getDistanceSq < 9.0, 672-679).",
+  "rule": "EntityPlayer.attackTargetEntityWithCurrentItem (aed.f(vg)), used only when forge-bridge falls back to vanilla use_entity: a sweep when the swing is charged above 0.9, it is not a crit (falling) or a sprint hit, the player is on the ground and moving slower than its walking speed, and the main-hand item is an ItemSword (ajy) or a subclass (bytecode 318-356; Spartan clubs, sabers and the like extend ItemSword, weapons.json base). It hits living entities in the struck mob's box grown by (1, 0.25, 1) (595-609), other than the player and the struck mob, within 3 blocks of the player (getDistanceSq < 9.0, 672-679).",
   "itemBase": "ItemSword",
   "boxGrow": {
    "x": 1,
@@ -244,5 +244,6 @@
  "unverified": [
   "Nothing was watched in a run.",
   "The Item Class Whitelist and blacklist check is taken from weapons.json bcWeapon (tools/build-weapons.mjs), not re-read here."
- ]
+ ],
+ "unknownItems": "weaponSweep reads Better Combat's weapon status from weapons.json (bcWeapon). An item weapons.json does not list (a held block or other non-tool item, or a name not on this pack) is answered as unknown: weapon, entry, level, sweeps and radius null, never 'does not sweep' (#621 review 2). The empty hand is known: no weapon, Sweep 0."
 }

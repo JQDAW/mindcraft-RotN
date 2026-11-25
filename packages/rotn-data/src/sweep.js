@@ -21,27 +21,33 @@ const isHand = (item) => item == null || item === '' || item === 'hand' || item 
  *   enchantment: the item's Sweeping level; potion: the attacker's wards:effect_sweeping level (amplifier + 1);
  *   attackerWidth: 0.6 for a player
  * @returns {object|null} bettercombat: { item, path, weapon, entry, level, sweeps, radius, alsoWithinReach: true };
- *   vanilla: { item, path, weapon, sweeps, boxGrow, maxPlayerDistance }. null when the data file is missing.
+ *   vanilla: { item, path, weapon, sweeps, boxGrow, maxPlayerDistance }. On both paths `weapon` is whether Better
+ *   Combat treats the item as a weapon (weapons.json bcWeapon). An item weapons.json does not list (any held item that
+ *   is not a melee tool or weapon, or a name this pack does not have) is unknown: weapon, entry, level, sweeps and
+ *   radius are null (#621 review 2), so a caller can treat it as "may sweep" rather than "does not". The empty hand is
+ *   known (weapon false). null when the data file is missing.
  */
 export function weaponSweep(catalog, item = 'hand', { path = 'bettercombat', enchantment = 0, potion = 0, attackerWidth } = {}) {
     const data = catalog.weaponSweepData;
     if (!data) return null;
+    if (path !== 'bettercombat' && path !== 'vanilla') throw new Error(`rotn-data: unknown attack path ${path}`);
     const raw = typeof item === 'object' && item !== null ? item.name : item;
     const name = isHand(raw) ? 'hand' : registryName(raw);
     const w = name === 'hand' ? null : catalog.weaponsData?.items?.[name] ?? null;
+    const unknown = name !== 'hand' && !w;
     const width = attackerWidth ?? data.betterCombat.attackerWidth;
+    const weapon = unknown ? null : !!w?.bcWeapon;
 
     if (path === 'vanilla') {
-        const sweeps = !!w && w.base === data.vanillaFallback.itemBase;
+        const sweeps = unknown ? null : !!w && w.base === data.vanillaFallback.itemBase;
         return {
-            item: name, path, weapon: sweeps, sweeps,
+            item: name, path, weapon, sweeps,
             boxGrow: sweeps ? { ...data.vanillaFallback.boxGrow } : null,
             maxPlayerDistance: sweeps ? data.vanillaFallback.maxPlayerDistance : null,
         };
     }
-    if (path !== 'bettercombat') throw new Error(`rotn-data: unknown attack path ${path}`);
+    if (unknown) return { item: name, path, weapon: null, entry: null, level: null, sweeps: null, radius: null, alsoWithinReach: true };
 
-    const weapon = !!w?.bcWeapon;
     const itemPath = name === 'hand' ? '' : name.slice(name.indexOf(':') + 1);
     const entry = weapon ? data.betterCombat.entries.find((e) => itemPath.includes(e.substring)) ?? null : null;
     const level = (entry?.sweep ?? 0) + Math.max(0, potion | 0) + Math.max(0, enchantment | 0);
