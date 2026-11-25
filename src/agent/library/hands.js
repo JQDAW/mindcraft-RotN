@@ -11,6 +11,26 @@
 
 import { offHandToolBack, rearmWeapon, isPickaxeItem } from './skills.js';
 import { clearCursor, returnGrid, GRID_SLOTS } from './inventory_sync.js';
+import { usesLeft } from './pickaxe.js';
+
+/**
+ * Soak 16 trap: the stone pickaxe broke on the walk that dug the bot in, and no line said so. A tool in hand with at
+ * most lastUses uses before a dig, gone from its slot checkMs after it: "[tool] <name> broke". The server's set_slot
+ * comes after the block change, so the check waits.
+ */
+export const TOOL_BREAK = { lastUses: 2, checkMs: 500 };
+function watchToolBreak(bot, tool, block) {
+    if (!tool?.name || !(usesLeft(tool) <= TOOL_BREAK.lastUses) || !Number.isInteger(tool.slot)) return;
+    setTimeout(() => {
+        try {
+            const now = bot.inventory?.slots?.[tool.slot];
+            if (now?.name === tool.name) return;
+            const p = block?.position;
+            bot.rotnToolBroke = { name: tool.name, at: Date.now(), on: block?.name ?? null };
+            console.log(`[tool] ${tool.name} broke (used up) on ${block?.name ?? 'a block'}${p ? ` at ${p.x}, ${p.y}, ${p.z}` : ''}`);
+        } catch { /* no line */ }
+    }, TOOL_BREAK.checkMs).unref?.();
+}
 
 /**
  * Before an action: the off-hand pickaxe where the tool choosers look, a clear cursor, an empty 2x2 grid. null (no
@@ -101,7 +121,9 @@ export function installDigHands(bot) {
                 if (pick && bot.heldItem?.name !== pick.name) { try { await bot.equip(pick, 'hand'); } catch { /* the dig says why */ } }
                 console.log(`[hands] the ${off.name} from the off hand for ${block?.name ?? 'the dig'}`);
             }
+            const tool = bot.heldItem;
             const r = await original.call(this ?? bot, block, ...rest);
+            watchToolBreak(bot, tool, block);
             // Soak 16 (E): every dig that resolved, counted (the pathfinder's and the collect's digs come here too):
             // a command that dug is checked for a trapped bot after it (escape.escapeIfTrapped).
             const d = bot.rotnDigs ??= { count: 0, last: null, log: [] };

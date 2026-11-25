@@ -21,6 +21,8 @@ import { returnGrid } from './inventory_sync.js';
 import * as lines from './collect_lines.js';
 import { digBudget, digLine, effectsText, DIG_STALL } from './pit.js';
 import { foodKey, foodValue } from "./food.js";
+import { pickaxeUses, PICKAXE } from './pickaxe.js';
+import { digRule } from './burrow.js';
 import { getItem as rotnItem, registryName as rotnRegistryName } from "../../../packages/rotn-data/index.js";
 /**
  * Soak 14, #612 review 8: the item classes (rotn-data's) !consume may eat or drink although rotn-data has no food
@@ -3514,6 +3516,37 @@ export async function giveToPlayer(bot, itemType, username, num=1) {
     return false;
 }
 
+/**
+ * Soak 16 trap (21:17-21:20, the lead's go): a destructive !goToCoordinates tunnelled 57 blocks across and 11 down
+ * through stone, used up the stone pickaxe (131 uses) on the way and ended "Unable to reach" in a tunnel it could not
+ * leave. The walks' rules now:
+ * - floor: no block broken below min(the start's y, the goal's y) - floorBelow (with a pickaxe), or below that min
+ *   (without one): a walk never digs deeper than both of its ends;
+ * - the pickaxe's last PICKAXE.walkKeepUses uses are never spent on a walk (no block that needs a pickaxe is broken
+ *   then); the escape may use them;
+ * - without such a pickaxe, no destructive fallback: only the non-destructive movements (and no stone at all).
+ * pickaxeMs: how long the pickaxe's uses are cached during a search (the cost function runs per block).
+ */
+export const WALK_GUARD = { floorBelow: 2, pickaxeMs: 1000, breakNever: 100 };
+export function walkFloorY(bot, goal, { pickaxe = pickaxeUses(bot) >= PICKAXE.walkKeepUses } = {}) {
+    const start = Math.floor(bot.entity?.position?.y ?? 0);
+    const goalY = Number.isFinite(goal?.y) ? Math.floor(goal.y) : start;
+    return Math.min(start, goalY) - (pickaxe ? WALK_GUARD.floorBelow : 0);
+}
+export function guardWalkBreaks(bot, movements, floorY) {
+    if (!Array.isArray(movements?.exclusionAreasBreak) || movements.rotnWalkGuard) return movements;
+    movements.rotnWalkGuard = { floorY };
+    let uses = null, usesAt = 0;
+    const usesNow = () => { const t = Date.now(); if (uses === null || t - usesAt > WALK_GUARD.pickaxeMs) { uses = pickaxeUses(bot); usesAt = t; } return uses; };
+    movements.exclusionAreasBreak.push((block) => (block?.position && block.position.y < floorY ? WALK_GUARD.breakNever : 0));
+    movements.exclusionAreasBreak.push((block) => {
+        let rule;
+        try { rule = digRule(block); } catch { rule = undefined; }
+        return rule && rule.type === 'pickaxe' && usesNow() < PICKAXE.walkKeepUses ? WALK_GUARD.breakNever : 0;
+    });
+    return movements;
+}
+
 export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noBuild = false } = {}) {
     /**
      * Navigate to the given goal. Use doors and attempt minimally destructive movements.
@@ -3540,7 +3573,12 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
     // ones here; a drop resting on leaves then led the bot up into the tree (G3 round 4 B).
     if (!canDig) nonDestructiveMovements.canDig = false;
 
-    const destructiveMovements = canDig ? plantSafe(fallSafe(new pf.Movements(bot))) : nonDestructiveMovements;
+    // Soak 16 trap: the walk's rules (WALK_GUARD): the break floor, the pickaxe's last uses kept, and no destructive
+    // fallback without a pickaxe that has them.
+    const pickaxeOk = pickaxeUses(bot) >= PICKAXE.walkKeepUses;
+    const floorY = walkFloorY(bot, goal, { pickaxe: pickaxeOk });
+    guardWalkBreaks(bot, nonDestructiveMovements, floorY);
+    const destructiveMovements = canDig && pickaxeOk ? guardWalkBreaks(bot, plantSafe(fallSafe(new pf.Movements(bot))), floorY) : nonDestructiveMovements;
     if (offTrees) for (const m of new Set([nonDestructiveMovements, destructiveMovements])) offTreeParts(bot, m);
     if (noBuild) for (const m of new Set([nonDestructiveMovements, destructiveMovements])) { m.allow1by1towers = false; m.scafoldingBlocks = []; }
 
@@ -3735,6 +3773,9 @@ export async function goToPosition(bot, x, y, z, min_distance=2) {
         }
         else {
             log(bot, `Unable to reach ${x}, ${y}, ${z}, you are ${Math.round(distance)} blocks away.`);
+            // Soak 16 trap (21:19:50): a walk that ended short is a failed walk too (actions.js POST_ESCAPE): it did not
+            // throw, so goToGoal's catch never stamped it and the post-condition never checked for a trap.
+            bot.rotnWalkFailedAt = Date.now();
             return false;
         }
     } catch (err) {

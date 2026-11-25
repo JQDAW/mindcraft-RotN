@@ -183,7 +183,8 @@ test('soak 16 (E3, E4): the post-condition: a command that dug and left the bot 
 test('soak 16 (E3): the commands with the post-condition, and how', async () => {
     await import('../agent.js'); // the real import order (commands/index.js first)
     const { POST_ESCAPE } = await import('../commands/actions.js');
-    assert.deepEqual(POST_ESCAPE, { collectBlocks: 'down-or-failed', digDown: 'deep', goToCoordinates: 'failed', searchForBlock: 'failed', goToRememberedPlace: 'failed', goToBed: 'failed', goToPlayer: 'failed' });
+    // Soak 16 trap (the lead's go): the walks are 'walk' (failed, or ended 3 or more below their start).
+    assert.deepEqual(POST_ESCAPE, { collectBlocks: 'down-or-failed', digDown: 'deep', goToCoordinates: 'walk', searchForBlock: 'walk', goToRememberedPlace: 'walk', goToBed: 'walk', goToPlayer: 'walk' });
 });
 
 test('soak 16 (E4): the lines for the model: out, interrupted, and a next step for each why', () => {
