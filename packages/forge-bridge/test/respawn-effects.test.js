@@ -110,11 +110,13 @@ test('respawn: bot.dig on dirt waits out a stale fatigue; after the respawn it f
     bot.writes.length = 0;
     const started = Date.now();
     const fresh = bot.dig(bot.blockAt(DIRT_AT), true).then(() => 'dug', (err) => err.message);
-    const result = await Promise.race([fresh, new Promise((resolve) => setTimeout(() => resolve('still digging after 3 s'), 3000))]);
+    const result = await Promise.race([fresh, new Promise((resolve) => setTimeout(() => resolve('still digging after 5 s'), 5000))]);
     const took = Date.now() - started;
     bot.stopDigging(); // a no-op once dug; without the fix it ends the 926 s dig
     assert.equal(result, 'dug');
-    assert.ok(took >= 700 && took < 1500, `dug in ${took} ms`);
+    // #610 review 4: the lower bound is mineflayer's own 750 ms timer; the upper bound leaves a loaded runner
+    // room (the stale effect would make it 926 s).
+    assert.ok(took >= 700 && took < 4000, `dug in ${took} ms`);
     assert.deepEqual(digs(bot), ['status 0', 'status 2'], 'START, then STOP');
 });
 

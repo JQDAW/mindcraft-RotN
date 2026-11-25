@@ -1,8 +1,21 @@
 # Status: net-forge
 
-Updated: 2026-11-18T16:28Z
+Updated: 2026-11-25
 
 Worktree `/home/mindcraft-RotN-worktrees/net-forge` on the CX33 dev server (was `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`).
+
+## Report to the lead: soak 15 forge-bridge PR, 2026-11-25
+
+- **Doing:** PR on `agent/net-forge/soak15-stack-diag` (from develop `a2d3917e`), the lead's go after the soak 15 review:
+  - **N1** (`/home/rv/soak15-net-forge-clicks.md`): `bot.registry` item stack sizes from rotn-data's dump (StackUp), applied in `initBot` before any window, so mineflayer predicts window clicks as the server does them (the 18 rejected clicks in soak 15).
+  - **N2:** one `[forge-bridge] click rejected:` line per rejected window click: the client's view before it and the server's resend after it (slot, cursor, 2×2 grid).
+  - **Dig refused** (`/home/rv/soak15-net-forge.md`, item 1): one `[forge-bridge] dig refused:` line per block and position: the held item, where each tool of the block's class is (hotbar, main, off hand, armour, grid, cursor) and the rule's times.
+  - **The #610 review nits** (`/home/rv/review-610.md`): the dimension-change effect resend cited from Forge's `PlayerList.transferPlayerToDimension` bytecode; "written" in the attack counts; a status line at spawn; the respawn test's timing bound.
+- **Done since the last report (merged):** #595 Forge dig time, #596 its nits, #610 respawn effects and attack counts.
+- **Reports filed (no code):** `/home/rv/soak14-net-forge.md`, `/home/rv/soak15-net-forge.md`, `/home/rv/soak15-net-forge-clicks.md`.
+- **Deferred by the lead:** the per-state `canHarvest` override; N4 (the server's cursor packet in the mineflayer patch).
+- **For skills-rotn (via the lead):** no skills code computes 64 items per slot (details in the PR). Grid leftovers after a failed 2×2 craft are theirs (close window 0 after clearing the cursor; no shift-clicks).
+- **Open requests:** none.
 
 ## Report to the lead: the three CX23 tasks, 2026-11-18T16:28Z
 
