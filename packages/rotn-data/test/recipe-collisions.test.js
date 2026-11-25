@@ -7,6 +7,10 @@ import assert from 'node:assert/strict';
 import { loadRotnData } from '../src/catalog.js';
 import { installRecipes, acceptsItems, convertRecipe } from '../src/registry-recipes.js';
 import { installRecipes as installFromIndex } from '../index.js';
+import { buildRecipeCollisions, scanCollisions, collisionListText } from '../tools/build-recipe-collisions.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const pack = loadRotnData('3.3.4');
 const data = pack.recipeCollisionsData;
@@ -75,6 +79,9 @@ test('installRecipes drops planks from 9 sticks; the index installs with the pac
     const planks = reg.recipes[reg.itemsByName.planks.id];
     assert.ok(planks.length > 0);
     for (const v of planks) assert.ok(!itemsOf(reg, v).every((s) => s.startsWith('minecraft:stick:')), 'no planks from sticks');
+    // #639 review 2: an explicit `shadowed: undefined` keeps the pack's collisions too.
+    const undef = dumpRegistry();
+    assert.equal(installFromIndex(undef, { shadowed: undefined }).dropped, 1);
     // `shadowed: null` keeps the dump as is (the recipe is still there, last resort for a caller that wants it).
     const raw = dumpRegistry();
     installFromIndex(raw, { shadowed: null });
@@ -144,4 +151,14 @@ test('the named cases: the first variant is the safe one; the shadowable one is 
     // nuggets also make minetraps nails, so a grid of another nugget the chain link accepts comes first.
     const chain = first('iceandfire:chain_link');
     assert.ok(!chain.includes('minecraft:iron_nugget:0'), chain.join(' '));
+});
+
+test('#639 review 1: the committed file is exactly tools/build-recipe-collisions.mjs\'s output from the dump', () => {
+    const built = buildRecipeCollisions(R);
+    const file = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../3.3.4/recipe-collisions.json'), 'utf8'));
+    assert.deepEqual(built, file);
+    // The tool's first-ranked list is the one net-forge's scan printed (83 recipes), whose header the report quotes.
+    const first = collisionListText(scanCollisions(R, false));
+    assert.match(first.split('\n')[0], /^recipe types \{"shaped":4036,"shapeless":2053\} scanned 5919 colliding 83$/);
+    assert.match(first, /^ancientbeasts:stick_wall -> 1 ancientbeasts:stick_wall:0x1 {2}\[3x3\] grid (minecraft:stick:0 ?){9}\n {4}also: dungeontactics:misc\/convenience\/planks_from_sticks -> 1 minecraft:planks:0x1$/m);
 });
