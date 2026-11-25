@@ -1,6 +1,6 @@
 # Status: rotn-lead
 
-Updated: 2026-11-24 22:05 UTC (from `date -u`)
+Updated: 2026-11-25 01:05 UTC (from `date -u`)
 
 
 ## CX23 deploy record (ADR 0011)
