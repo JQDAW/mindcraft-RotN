@@ -11,7 +11,17 @@
 //   hotbar, 45 off hand) and the cursor (selectedItem); items() is slots 9-44 only, and tool.equipForBlock chooses
 //   from items() only, as mineflayer-tool does. So a pickaxe in the off hand or on the cursor is out of reach of the
 //   dig code, which is soak 15's trap.
-// - A virtual clock: digs advance it by their dig time.
+// - A virtual clock, as a record only: a dig adds its dig time to it; nothing waits for it (the code under test still
+//   sleeps in real time, and moves here are instant).
+// - Moving: lookAt and look set the yaw; 'forward' moves one cell along it when that cell and the head cell above it
+//   are passable; 'forward' with 'jump' steps up one onto a solid block (the stair step escape.js's stepInto takes);
+//   'jump' alone lifts 1.2 under the first solid cell above the head; letting go lands on the first solid block below.
+// - equip / unequip as mineflayer 4.33's simple_inventory.js (the hand: select a hotbar slot that holds it or is empty,
+//   else the next LRU hotbar slot, and swap with moveSlotItem; other places: moveSlotItem); clickWindow (mode 0,
+//   left button), moveSlotItem, firstEmptyInventorySlot and firstEmptySlotRange as mineflayer and prismarine-windows.
+// - Stack sizes from the dump for every item (vanilla too, as live: forge-bridge's dumpStackSizes, #618).
+// - canHarvest as prismarine-block: strict only for a block whose registry entry has harvestTools (vanilla);
+//   permissive for a modded block, whose extended entry has none (as live).
 //
 // Not here (yet): the real mineflayer-pathfinder (stubs: 'noPath', 'teleport', or a test's own), crafting and other
 // windows (net-forge's fake-containers.js models the server side), moving mobs.
@@ -28,6 +38,8 @@ import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { getBlock, getItem, registryName } from '../../packages/rotn-data/index.js';
 import { forgeDigTime, pickState } from '../../packages/forge-bridge/src/dig-time.js';
+import { dumpStackSizes } from '../../packages/forge-bridge/src/stack-sizes.js';
+import { loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 
 /** Window 0's slots (mineflayer's player inventory window). */
 export const SLOT = Object.freeze({ RESULT: 0, GRID: [1, 2, 3, 4], HEAD: 5, TORSO: 6, LEGS: 7, FEET: 8, MAIN: 9, HOTBAR: 36, OFF_HAND: 45, COUNT: 46 });
@@ -55,6 +67,16 @@ export function makeRegistry() {
     reg.blocks = { ...base.blocks };
     reg.itemsByName = { ...base.itemsByName };
     reg.items = { ...base.items };
+    // The dump's stack sizes (StackUp) over copies of the entries that differ (vanilla too, as live; #628 review 2).
+    const { properties } = dumpStackSizes(loadRotnData(PACK_VERSION).dump?.items?.items, base);
+    for (const [name, { stackSize }] of Object.entries(properties.items)) {
+        const short = liveName(name);
+        const e = reg.itemsByName[short] ?? reg.itemsByName[name];
+        if (!e) continue;
+        const copy = { ...e, stackSize };
+        reg.itemsByName[e.name] = copy;
+        reg.items[e.id] = copy;
+    }
     let nextBlock = MODDED_BLOCK_ID;
     let nextItem = MODDED_ITEM_ID;
     reg.ensureBlock = (name) => {
@@ -97,7 +119,7 @@ function makeBlock(reg, name, p, metadata = 0) {
     const block = {
         name: live, type: e.id, metadata, position: p, boundingBox, material: st?.material ?? e.material,
         hardness: st?.hardness ?? e.hardness ?? null, harvestTool: st?.harvestTool ?? null, harvestLevel: st?.harvestLevel ?? 0,
-        toolRequired: !!st?.toolRequired, liquid, state: st ?? null,
+        toolRequired: !!st?.toolRequired, liquid, state: st ?? null, harvestTools: e.harvestTools,
         /** forge-bridge's rule for the item held (an item object, or null for the hand); args as Block.digTime. */
         digTimeWith(item, { inWater = false, notOnGround = false, effects = {} } = {}) {
             if (!st) return live === 'air' ? 0 : Infinity;
@@ -108,7 +130,8 @@ function makeBlock(reg, name, p, metadata = 0) {
             const item = heldItemType == null ? null : { name: reg.items[heldItemType]?.name ?? '' };
             return this.digTimeWith(item, { inWater, notOnGround, effects });
         },
-        canHarvest(heldItemType) { return Number.isFinite(this.digTime(heldItemType ?? null)); },
+        // prismarine-block: no harvestTools (a modded block's extended entry): any item; else the held type must be one.
+        canHarvest(heldItemType) { if (!this.harvestTools) return true; return !!(heldItemType != null && this.harvestTools[heldItemType]); },
     };
     return block;
 }
@@ -146,11 +169,12 @@ export function fakeWorld({ ground = DEFAULT_GROUND, set = {}, at = new Vec3(0, 
     let now = 0;
     const clock = { now: () => now, advance: (ms) => { now += ms; } };
 
-    const blockAt = (p) => { const q = new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)); return makeBlock(reg, nameAt(q), q); };
+    const metas = new Map();
+    const blockAt = (p) => { const q = new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)); return makeBlock(reg, nameAt(q), q, metas.get(key(q)) ?? 0); };
     const solidAt = (q) => blockAt(q).boundingBox === 'block';
     const world = {
         blockAt, nameAt,
-        set: (p, name) => { reg.ensureBlock(name); cells.set(key(p), name); },
+        set: (p, name, metadata = 0) => { reg.ensureBlock(name); cells.set(key(p), name); if (metadata) metas.set(key(p), metadata); else metas.delete(key(p)); },
         fill: (a, b, name) => {
             reg.ensureBlock(name);
             for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x++) for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y++) for (let z = Math.min(a.z, b.z); z <= Math.max(a.z, b.z); z++) cells.set(key({ x, y, z }), name);
@@ -161,13 +185,18 @@ export function fakeWorld({ ground = DEFAULT_GROUND, set = {}, at = new Vec3(0, 
     const slotArr = Array(SLOT.COUNT).fill(null);
     const stack = (name, count, metadata = 0, slot = null) => { const e = reg.ensureItem(name); return { name: e.name, type: e.id, count, metadata, stackSize: e.stackSize, slot }; };
     for (const [s, [n, c, m]] of Object.entries(slots)) slotArr[Number(s)] = stack(n, c, m ?? 0, Number(s));
+    const firstEmptySlotRange = (from, to) => { for (let i = from; i < to; i++) if (!slotArr[i]) return i; return null; };
     const inventory = {
         slots: slotArr,
         selectedItem: cursor ? stack(cursor[0], cursor[1], cursor[2] ?? 0) : null,
+        inventoryStart: SLOT.MAIN, inventoryEnd: SLOT.OFF_HAND, hotbarStart: SLOT.HOTBAR,
         items: () => slotArr.slice(SLOT.MAIN, SLOT.OFF_HAND).filter(Boolean),
         count: (type, metadata = null) => inventory.items().filter(i => i.type === type && (metadata == null || i.metadata === metadata)).reduce((n, i) => n + i.count, 0),
         findInventoryItem: (type, metadata = null) => inventory.items().find(i => i.type === type && (metadata == null || i.metadata === metadata)) ?? null,
         emptySlotCount: () => slotArr.slice(SLOT.MAIN, SLOT.OFF_HAND).filter(s => !s).length,
+        firstEmptySlotRange,
+        /** prismarine-windows: the hotbar first, then the main inventory; null when full. */
+        firstEmptyInventorySlot: (hotbarFirst = true) => (hotbarFirst ? firstEmptySlotRange(SLOT.HOTBAR, SLOT.OFF_HAND) : null) ?? firstEmptySlotRange(SLOT.MAIN, SLOT.OFF_HAND),
     };
     const put = (s, item) => { slotArr[s] = item && item.count > 0 ? Object.assign(item, { slot: s }) : null; };
     /** Gives items as a pickup does: onto matching stacks (hotbar, then main) up to the stack size, then into empty slots. */
@@ -213,26 +242,70 @@ export function fakeWorld({ ground = DEFAULT_GROUND, set = {}, at = new Vec3(0, 
         for (const [n, c, m] of onDig?.(block, bot) ?? []) give(n, c, m ?? 0);
         fall();
     });
-    bot.equip = promised((item, dest = 'hand') => {
+    // mineflayer 4.33's window clicks (mode 0, left button), on window 0 only: -999 drops the cursor; a slot picks
+    // up, puts down, merges up to the stack size or swaps with the cursor.
+    bot.currentWindow = null;
+    bot.clickWindow = promised((slot, mouseButton = 0, mode = 0) => {
+        if (mode !== 0 || mouseButton !== 0) throw new Error(`click mode ${mode} button ${mouseButton} is not modelled`);
+        const cur = inventory.selectedItem;
+        if (slot === -999) { inventory.selectedItem = null; return; }
+        const it = slotArr[slot];
+        if (!cur) { inventory.selectedItem = it ? Object.assign(it, { slot: null }) : null; put(slot, null); return; }
+        if (!it) { put(slot, cur); inventory.selectedItem = null; return; }
+        if (it.type === cur.type && it.metadata === cur.metadata) {
+            const n = Math.min(cur.count, it.stackSize - it.count);
+            it.count += n; cur.count -= n;
+            if (cur.count <= 0) inventory.selectedItem = null;
+            return;
+        }
+        put(slot, cur);
+        inventory.selectedItem = Object.assign(it, { slot: null });
+    });
+    bot.closeWindow = () => {};
+    /** mineflayer: click the source, click the destination, and put a swapped stack back in the source. */
+    bot.moveSlotItem = async (from, to) => {
+        await bot.clickWindow(from, 0, 0);
+        await bot.clickWindow(to, 0, 0);
+        if (inventory.selectedItem) await bot.clickWindow(from, 0, 0);
+    };
+    let nextQuickBarSlot = 0; // mineflayer's LRU over the hotbar when it is full
+    /** mineflayer 4.33 simple_inventory.js equip: by item.slot (or a type, found in the inventory). */
+    bot.equip = async (item, dest = 'hand') => {
+        if (typeof item === 'number') item = inventory.findInventoryItem(item);
+        if (item == null || typeof item !== 'object') throw new Error('Invalid item object in equip (item is null or typeof item is not object)');
+        if (!dest) dest = 'hand';
         if (!(dest in DEST)) throw new Error(`invalid destination: ${dest}`);
-        const from = slotArr.indexOf(item);
-        if (from < 0) throw new Error('Invalid item object in equip');
-        const to = DEST[dest] ?? SLOT.HOTBAR + qbs;
-        calls.equips.push({ name: item.name, from, to });
+        const from = item.slot;
+        let to = DEST[dest] ?? SLOT.HOTBAR + qbs;
+        calls.equips.push({ name: item.name, from, dest });
         if (from === to) return;
-        const was = slotArr[to];
-        put(to, item);
-        put(from, was);
-    });
-    bot.unequip = promised((dest = 'hand') => {
-        const from = DEST[dest] ?? SLOT.HOTBAR + qbs;
-        const it = slotArr[from];
-        if (!it) return;
-        const free = [...Array(36).keys()].map(i => SLOT.MAIN + i).find(s => s !== from && !slotArr[s]);
-        if (free === undefined) throw new Error('no room to unequip');
-        put(free, it);
-        put(from, null);
-    });
+        if (dest !== 'hand') { await bot.moveSlotItem(from, to); return; }
+        if (from >= SLOT.HOTBAR && from < SLOT.OFF_HAND) { bot.setQuickBarSlot(from - SLOT.HOTBAR); return; }
+        to = firstEmptySlotRange(SLOT.HOTBAR, SLOT.OFF_HAND);
+        if (to == null) { to = SLOT.HOTBAR + nextQuickBarSlot; nextQuickBarSlot = (nextQuickBarSlot + 1) % 9; }
+        bot.setQuickBarSlot(to - SLOT.HOTBAR);
+        await bot.moveSlotItem(from, to);
+    };
+    /** mineflayer 4.33 unequip: the hand selects an empty hotbar slot (else moves the held stack to a free slot, else
+     * tosses it); other places put their stack away into the first free slot (hotbar first). */
+    bot.unequip = async (dest = 'hand') => {
+        if (dest === 'hand') {
+            const empty = firstEmptySlotRange(SLOT.HOTBAR, SLOT.OFF_HAND);
+            if (empty != null) { bot.setQuickBarSlot(empty - SLOT.HOTBAR); return; }
+            const free = inventory.firstEmptyInventorySlot();
+            if (free == null) { put(SLOT.HOTBAR + qbs, null); return; } // tossed
+            await bot.clickWindow(SLOT.HOTBAR + qbs, 0, 0);
+            await bot.clickWindow(free, 0, 0);
+            return;
+        }
+        if (!(dest in DEST)) throw new Error(`invalid destination: ${dest}`);
+        const from = DEST[dest];
+        if (!slotArr[from]) return;
+        const free = inventory.firstEmptyInventorySlot();
+        if (free == null) throw new Error('no room to put it away');
+        await bot.clickWindow(from, 0, 0);
+        await bot.clickWindow(free, 0, 0);
+    };
     /** mineflayer-tool's choice: the fastest tool in items() (never the off hand, the grid or the cursor), or the hand. */
     bot.tool = {
         equipForBlock: async (block) => {
@@ -250,19 +323,53 @@ export function fakeWorld({ ground = DEFAULT_GROUND, set = {}, at = new Vec3(0, 
         if (bot.entity.position.floored().equals(target) || bot.entity.position.floored().offset(0, 1, 0).equals(target)) throw new Error('the bot is in the way');
         const held = bot.heldItem;
         if (!held) throw new Error('nothing held');
-        world.set(target, held.name);
-        calls.placed.push({ cell: key(target), name: held.name });
+        // #628 review 7: only a block can be placed, with the held stack's metadata.
+        if (!reg.blocksByName[held.name] && !getBlock(fullOf(held.name))) throw new Error(`${held.name} is not a block`);
+        world.set(target, held.name, held.metadata ?? 0);
+        calls.placed.push({ cell: key(target), name: held.name, metadata: held.metadata ?? 0 });
         held.count--;
         if (held.count <= 0) put(SLOT.HOTBAR + qbs, null);
     });
-    bot.setControlState = (c, on) => {
-        if (c !== 'jump') return;
-        if (on) { calls.jumps++; bot.entity.position = bot.entity.position.offset(0, 1.2, 0); bot.entity.onGround = false; return; }
-        fall();
+    // Moving (#628 review 1): the yaw from look/lookAt; forward steps one cell along it; forward + jump steps up one.
+    const controls = { forward: false, jump: false };
+    const passable = (q) => { const b = blockAt(q); return b.boundingBox === 'empty' && !b.liquid; };
+    const dir = () => { // mineflayer's yaw: 0 faces -z; the cell ahead along the major axis
+        const dx = -Math.sin(bot.entity.yaw), dz = -Math.cos(bot.entity.yaw);
+        return Math.abs(dx) >= Math.abs(dz) ? new Vec3(Math.sign(dx), 0, 0) : new Vec3(0, 0, Math.sign(dz));
     };
-    bot.clearControlStates = () => {};
-    bot.look = promised((yaw, pitch) => { calls.looks.push({ yaw, pitch }); bot.entity.yaw = yaw; });
-    bot.lookAt = promised((p) => { calls.looks.push({ at: p }); });
+    const feet = () => bot.entity.position.floored();
+    const moveTo = (q) => { bot.entity.position = q.offset(0.5, 0, 0.5); fall(); };
+    /** Under the first solid cell above the head: the highest the feet can be (a jump's cap; #628 review 6). */
+    const ceilingCap = (p) => { for (let y = p.y + 2; y <= p.y + 3; y++) if (!passable(new Vec3(p.x, y, p.z))) return y - bot.entity.height; return Infinity; };
+    /** A control switched on: forward (with jump: a step up) moves a cell; jump alone lifts. */
+    const apply = (changed) => {
+        const p = feet();
+        if (controls.forward) {
+            const ahead = p.plus(dir());
+            if (controls.jump && !passable(ahead) && passable(ahead.offset(0, 1, 0)) && passable(ahead.offset(0, 2, 0)) && passable(p.offset(0, 2, 0))) { moveTo(ahead.offset(0, 1, 0)); return; }
+            if (passable(ahead) && passable(ahead.offset(0, 1, 0))) { moveTo(ahead); return; }
+        }
+        if (changed === 'jump' && bot.entity.onGround) {
+            calls.jumps++;
+            bot.entity.position = bot.entity.position.offset(0, Math.min(1.2, Math.max(0, ceilingCap(p) - bot.entity.position.y)), 0);
+            bot.entity.onGround = false;
+        }
+    };
+    bot.setControlState = (c, on) => {
+        if (!(c in controls)) return;
+        controls[c] = !!on;
+        if (on) apply(c);
+        else if (c === 'jump') fall();
+    };
+    bot.clearControlStates = () => { controls.forward = false; controls.jump = false; fall(); };
+    bot.look = promised((yaw, pitch) => { calls.looks.push({ yaw, pitch }); bot.entity.yaw = yaw; bot.entity.pitch = pitch; });
+    bot.lookAt = promised((p) => {
+        const e = bot.entity.position.offset(0, 1.62, 0);
+        const dx = p.x - e.x, dy = p.y - e.y, dz = p.z - e.z;
+        if (dx !== 0 || dz !== 0) bot.entity.yaw = Math.atan2(-dx, -dz);
+        bot.entity.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+        calls.looks.push({ at: p });
+    });
     bot.nearestEntity = (filter = () => true) => {
         const p = bot.entity.position;
         return Object.values(bot.entities).filter(filter).sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0] ?? null;
