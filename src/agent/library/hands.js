@@ -15,16 +15,21 @@ import { clearCursor, returnGrid, GRID_SLOTS } from './inventory_sync.js';
 /**
  * Before an action: the off-hand pickaxe where the tool choosers look, a clear cursor, an empty 2x2 grid. null (no
  * await, nothing clicked) when there is nothing to do; else the promise of the moves.
+ * #619 (the lead): a mode action (a reflex, label "mode:...") keeps the pickaxe in the off hand: a fight starts at
+ * once, and every window click is another desync chance; its digs go through the bot.dig wrapper, and escape.js takes
+ * the pickaxe itself. Its cursor and grid are cleaned only when not empty (no click otherwise). rearmWeapon after, as
+ * for every action.
  */
 export function handsBefore(bot, label = 'an action') {
     const inv = bot?.inventory;
     if (!Array.isArray(inv?.slots)) return null;
     const off = inv.slots[45];
-    if (!(off && isPickaxeItem(off)) && !inv.selectedItem && !GRID_SLOTS.some(k => inv.slots[k])) return null;
-    return handsBeforeNow(bot, label);
+    const takePick = !String(label).startsWith('mode:') && !!(off && isPickaxeItem(off));
+    if (!takePick && !inv.selectedItem && !GRID_SLOTS.some(k => inv.slots[k])) return null;
+    return handsBeforeNow(bot, label, takePick);
 }
-async function handsBeforeNow(bot, label) {
-    try { await offHandToolBack(bot); } catch (err) { console.warn(`[hands] before ${label}: the off-hand pickaxe could not be taken back (${err?.message ?? err})`); }
+async function handsBeforeNow(bot, label, takePick) {
+    if (takePick) try { await offHandToolBack(bot); } catch (err) { console.warn(`[hands] before ${label}: the off-hand pickaxe could not be taken back (${err?.message ?? err})`); }
     try { const did = await clearCursor(bot); if (did) console.log(`[hands] before ${label}: ${did}`); } catch (err) { console.warn(`[hands] before ${label}: the cursor could not be cleared (${err?.message ?? err})`); }
     try { await returnGrid(bot, `before ${label}`); } catch (err) { console.warn(`[hands] before ${label}: the grid could not be returned (${err?.message ?? err})`); }
 }

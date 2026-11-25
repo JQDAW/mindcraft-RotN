@@ -117,7 +117,6 @@ test('soak 15: a dig outside any action, the pickaxe in the off hand and the clu
     const air = offHandBot();
     installDigHands(air.bot);
     air.bot.digTime = () => 100;
-    air.bot.dig = air.bot.dig; // still wrapped
     const equips = air.log.equips.length;
     await air.bot.dig(air.bot.blockAt(new Vec3(0, 63, 0))).catch(() => {});
     assert.equal(air.log.equips.length, equips, 'no equip when the held item can dig');
@@ -132,4 +131,27 @@ test('soak 15: !collectBlocks of stone (an action) with the pickaxe in the off h
     assert.deepEqual(log.dug, ['0,63,0'], bot.output);
     assert.equal(slots[45]?.name, 'stone_pickaxe', 're-armed');
     assert.equal(typeof ok, 'boolean');
+});
+
+test('#619 (the lead): a mode action (a reflex) with the pickaxe in slot 45 makes no window click before it runs; re-armed after as every action', async (t) => {
+    quiet(t);
+    const { bot, slots, log } = offHandBot();
+    const clicks = [];
+    bot.clickWindow = (...a) => { clicks.push(a); return Promise.resolve(); };
+    const moves = [];
+    const move = bot.moveSlotItem;
+    bot.moveSlotItem = (...a) => { moves.push(a); return move(...a); };
+    const agent = withActions(bot);
+    let before = null;
+    await agent.actions.runAction('mode:self_defense', () => {
+        before = { clicks: clicks.length, moves: moves.length, equips: log.equips.length, off: slots[45]?.name };
+    });
+    assert.deepEqual(before, { clicks: 0, moves: 0, equips: 0, off: 'stone_pickaxe' }, 'nothing moved before the reflex');
+    assert.equal(slots[45]?.name, 'stone_pickaxe', 'the pickaxe stays in the off hand');
+    assert.equal(bot.heldItem?.name, 'spartanweaponry:club_wood', 'the club in the main hand after (rearmWeapon)');
+    // An action from the model still takes it out first.
+    let off = null;
+    await agent.actions.runAction('action:digDown', () => { off = slots[45]?.name ?? null; });
+    assert.equal(off, null, 'an action: the pickaxe out of the off hand before it runs');
+    assert.equal(slots[45]?.name, 'stone_pickaxe', 're-armed');
 });
