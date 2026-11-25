@@ -65,6 +65,9 @@ const key = (p) => `${p.x},${p.y},${p.z}`;
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const feetOf = (bot) => bot.entity.position.floored();
 const solid = (b) => !!b && b.boundingBox === 'block' && !isLiquid(b) && !hurtsOnContact(b);
+// #630 review 3: a tree part (fall_safety.isTreePart: Dynamic Trees branches, trunk shells, leaves) or a vanilla log,
+// which isTreePart does not list (#624 review 8; fall_safety unchanged here).
+const treeLike = (b) => !!b && (isTreePart(b) || /(^|:)log2?$|_log$/.test(b.name ?? ''));
 
 /** Nothing but air (or unloaded) above p's head cell up to skyCheck: open sky. Water above is not. */
 export function openSky(bot, p) {
@@ -288,6 +291,8 @@ export function nextStep(bot, target, state) {
         const cells = [head2, to, to.offset(0, 1, 0)];
         const ours = new Set([key(p), key(p.offset(0, 1, 0)), ...cells.map(key)]);
         if (!solid(bot.blockAt(p.plus(d)))) continue; // the step stood on
+        // #630 review 3: never a step onto a tree part (up a trunk into the canopy, in a climb toward the sky).
+        if (treeLike(bot.blockAt(p.plus(d)))) continue;
         // #562 review 6: the new feet and head cells must not touch one of the bot's own cells that
         // holds a liquid (its head under water): dug, they would let that water through.
         if ([to, to.offset(0, 1, 0)].some(c => SIX.some(e => { const q = c.plus(e); return (q.equals(p) || q.equals(p.offset(0, 1, 0))) && isLiquid(bot.blockAt(q)); }))) continue;
@@ -445,8 +450,13 @@ async function byPathfinder(bot, target, state, deadline, say) {
 /** Stage 2: steps by hand (nextStep), at most maxSteps, until out. */
 async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
     const { maxSteps = ESCAPE.maxSteps, totalMs = ESCAPE.totalMs } = state.budget ?? {};
-    // #624 review 5: stairs and pillars only go up: a target below the feet (the ground under a canopy) is no climb.
-    if (target && target.y < feetOf(bot).y) return { why: `the ground is below you (open ground at ${at(target)}): climb down to it` };
+    // #624 review 5: stairs and pillars only go up: a target below the feet is no climb. On a tree (the ground under a
+    // canopy): say so. #624 re-review nit 3 (soak 16 R): elsewhere (a pocket whose nearest open ground is downhill,
+    // walled off) the climb goes up toward the sky instead of giving up.
+    if (target && target.y < feetOf(bot).y) {
+        if (treeLike(bot.blockAt(feetOf(bot).offset(0, -1, 0)))) return { why: `the ground is below you (open ground at ${at(target)}): climb down to it` };
+        target = null;
+    }
     for (let i = 0; i < maxSteps; i++) {
         if (isOut(bot, target, state.budget?.kind === 'day')) return { out: true };
         if (bot.interrupt_code) return { why: 'interrupted' };
@@ -610,4 +620,54 @@ export function stillTrapped(bot, now = Date.now()) {
         t.checkedAt = now;
     }
     return t.at;
+}
+
+/**
+ * Soak 16 (R, the lead): a block the bot may mine for an item (rocks from stone): exposed (a face touching air or
+ * a free cell) and, once broken, a walkable way (no digging) from its cell to open ground within targetRadius
+ * (openGround, as isTrapped). Soak 15: the collect took the nearest stone in 3-D, under the bot, block after
+ * block, 9 down. A block over open air drops the bot onto the first floor below (at most 3).
+ */
+// An unloaded neighbour (null) is not known to be enclosed (as walkable_exit): exposed, with a way out.
+const unknownAround = (bot, c) => SIX.some(d => bot.blockAt(c.plus(d)) == null);
+// #630 review 1: mineflayer's findBlocks first runs the matcher on each section's palette, on blocks with no position:
+// that pre-check must say yes (else every section is skipped); the real check runs on each positioned block.
+export function exposedBlock(bot, block) {
+    const c = block?.position;
+    if (!c) return true;
+    // #630 re-review 1: the state-id fast path (no Block objects: the section scan calls this for every stone in
+    // range): a neighbour that is air (state 0) or unloaded (undefined) exposes it. One pass over the six sides.
+    const sid = bot.world?.getBlockStateId;
+    if (typeof sid === 'function') {
+        for (const d of SIX) {
+            const id = sid.call(bot.world, c.plus(d));
+            if (id === undefined || id === 0) return true;
+        }
+        return false;
+    }
+    return unknownAround(bot, c) || SIX.some(d => passCell(bot.blockAt(c.plus(d))));
+}
+/** #630 review 5: one column memo for a whole pick (its base the bot's feet), shared by keepsWayOut's searches. */
+export function topMemo(bot) {
+    const top = new Map();
+    top.base = feetOf(bot).y;
+    return top;
+}
+export function keepsWayOut(bot, block, top = null) {
+    const c = block?.position;
+    if (!c || typeof bot?.blockAt !== 'function' || unknownAround(bot, c)) return true;
+    let from = c.clone ? c.clone() : new Vec3(c.x, c.y, c.z);
+    for (let k = 0; k < 3 && !solid(bot.blockAt(from.offset(0, -1, 0))); k++) {
+        // #630 review 4: never a drop through a liquid or onto a block that hurts (lava, a cactus, fire).
+        const below = bot.blockAt(from.offset(0, -1, 0));
+        if (isLiquid(below) || hurtsOnContact(below)) return false;
+        from = from.offset(0, -1, 0);
+    }
+    if (!solid(bot.blockAt(from.offset(0, -1, 0))) && !from.equals(c)) return false; // a drop of more than 3
+    // #630 re-review 4: the shared memo scans its columns from its base (the bot's feet) down to base - 12 only: for a
+    // candidate farther below, its own memo.
+    if (!top || c.y < top.base - 8) { top = new Map(); top.base = c.y; }
+    const free = new Set([key(c)]);
+    return !!walkableExit(bot, from, { maxNodes: WALK_EXIT.maxNodes, radius: ESCAPE.targetRadius, free,
+        until: (n) => !n.equals(c) && openGround(bot, n, top) });
 }

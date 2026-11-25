@@ -513,20 +513,22 @@ test('#291 nit: the pile the reserve asks for keeps its recipe variant (meta); o
 // the reserve is still due from the freeze on.
 test('CX23 soak: at the morning freeze the reserve says the minutes left with the freeze still to run, not the least certain time', (t) => {
     const items = [stack('pyrotech:rock', 0, 6)];
-    const at = (agentNow, frozenSince) => {
+    const at = (agentNow, frozenSince, expect = 'shelter_blocks') => {
         const agent = fakeAgent(t, items);
         agent.bot.time = { timeOfDay: MORNING_FREEZE };
         const clock = new NightClock({ log: () => {} });
         clock.observe(MORNING_FREEZE, frozenSince);
         agent._night = { clock };
         t.mock.timers.enable({ apis: ['Date'], now: agentNow });
-        assert.equal(agendaTick(agent, { now: agentNow }), 'shelter_blocks', 'due from the freeze on, as before');
+        assert.equal(agendaTick(agent, { now: agentNow }), expect);
         t.mock.timers.reset();
         return /Night is near: in about (\d+) min/.exec(agent.self_prompter.prompt)?.[1];
     };
     const base = (NIGHT_START - MORNING_FREEZE) / TICKS_PER_MIN; // ~7.96 min after the freeze
-    // Just frozen (the soak at 17:07): about 8 + 10 - 6 = 12 min, not 2.
-    assert.equal(at(100_000, 100_000), String(Math.round(base + FREEZE_MIN - 6)));
+    // #630 delta: due from SHELTER_BLOCKS_LEAD_MIN (16) by sunsetEstimateMin: just frozen (about 18 min) not yet; the
+    // other steps go on. Frozen for 3 min (the soak at 17:10): about 8 + 7 - 6 = 9 min, not 2.
+    at(100_000, 100_000, 'sticks');
+    assert.equal(at(500_000, 500_000 - 3 * 60_000), String(Math.round(base + FREEZE_MIN - 3 - 6)));
     // Frozen for 8 min: 2 min of the freeze left: about 4.
     assert.equal(at(1_000_000, 1_000_000 - 8 * 60_000), String(Math.round(base + 2 - 6)));
     // Frozen longer than the freeze: the least certain time again.
@@ -1670,4 +1672,141 @@ test('#627 review 4 and 7: the job stops for a hostile within 16 (as the sunset 
     assert.equal(s.agent._agenda_jobs.food.runs, 0, 'not counted');
     assert.ok(s.agent.said.at(-1).endsWith('; stopped early: not counted'));
     assert.equal(autoJobTick(s.agent, FOOD_RESERVE_STEP, st, { jobs, now: Date.now() + 1000 }), null, 'the gap holds');
+});
+
+// Soak 16 (R5, Fable S3, the lead): the shelter reserve's scripted body: cobblestone from the rocks held, then a
+// bounded rock collect (it stays out of holes), then cobblestone again; the model when nothing is in reach, or with no
+// pickaxe (a dirt shelter).
+test('soak 16 (R5): the shelter_blocks job crafts from the rocks held, collects the rest, crafts again; nothing in reach hands it to the model', async (t) => {
+    const pick = stack('stone_pickaxe', 0, 1);
+    const { agent } = jobAgent(t, [pick, stack('pyrotech:rock', 0, 8)], { timeOfDay: dayAt(7) });
+    const state = agendaState(agent.bot);
+    let held = 2;
+    state.shelterBlocks = () => held;
+    state.cobble = () => [{ have: 8, rock: 'pyrotech:rock', gives: 'cobblestone' }];
+    const crafts = [], collects = [];
+    const craft = (bot, n) => { crafts.push(n); held += n; return Promise.resolve(true); };
+    const collect = (bot, n) => { collects.push(n); held += 3; return Promise.resolve(true); };
+    let r = await AUTO_JOBS.shelter_blocks.run(agent, state, { craft, collect });
+    assert.deepEqual(crafts.slice(0, 1), [2], '2 cobblestone from the 8 rocks held');
+    assert.deepEqual(collects, [(SHELTER_HOLD - 4) * 4], 'the rest as rocks (4 a block)');
+    assert.equal(r.none, null);
+    assert.match(r.text, /^\+\d+ shelter blocks \(\d+ of 14; /);
+    // Nothing in reach: no rocks held, the collect gets nothing.
+    held = 0;
+    state.cobble = () => [];
+    // #630 review 6: "none found" only when the collect ended for lack of blocks, not on its time limit.
+    const ended = (reason) => (bot) => { bot.rotnCollectEnd = { at: Date.now(), short: true, lastWalkFailed: false, reason }; return Promise.resolve(false); };
+    r = await AUTO_JOBS.shelter_blocks.run(agent, state, { craft, collect: ended('time') });
+    assert.deepEqual([r.none, r.why], [null, 'the collect\'s time limit']);
+    r = await AUTO_JOBS.shelter_blocks.run(agent, state, { craft, collect: ended('none') });
+    assert.equal(r.none, 'none');
+    assert.equal(r.why, 'no loose rocks within 48 and no stone open to the air with a way out');
+    // The step's text then says so; with no pickaxe the job does not run (a dirt shelter: the model).
+    const s = agendaState(agent.bot);
+    s.jobFoundNone = (id) => (id === 'shelter_blocks' ? 'none' : null);
+    s.hasPickaxe = () => true;
+    assert.match(SHELTER_RESERVE_STEP.goalNow(s), /The block job found no loose rocks within 48 blocks and no stone open to the air with a way out here\./);
+    assert.match(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => false }), /^no pickaxe/);
+    // #630 review 7, re-review 3 (the lead): a run ends before the night routine starts (6 min before sunset): it needs
+    // 4 min + 1 min more, so 11 min before sunset at the latest; the reserve is due from 16.
+    assert.match(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => true, minutesToSunset: () => 10.5 }), /^too close to dusk \(10\.5 min to sunset; the night routine starts at 6\)$/);
+    assert.equal(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => true, minutesToSunset: () => 11 }), null);
+    const { SHELTER_BLOCKS_LEAD_MIN } = await import('./agenda.js');
+    assert.equal(SHELTER_BLOCKS_LEAD_MIN, 16);
+    assert.equal(SHELTER_RESERVE_STEP.due({ minutesToSunset: () => 15, shelterBlocks: () => 0, hasPickaxe: () => true }), true, 'due at 15 min');
+    assert.equal(SHELTER_RESERVE_STEP.due({ minutesToSunset: () => 17, shelterBlocks: () => 0, hasPickaxe: () => true }), false);
+    assert.doesNotMatch(SHELTER_RESERVE_STEP.goal, /mine stone with the pickaxe for more rocks/);
+    assert.match(SHELTER_RESERVE_STEP.goal, /takes the loose rock piles on the ground within 48 blocks first, then stone open to the air that leaves you a walkable way out/);
+});
+
+// Soak 16 (R, the lead's addendum): a hung job (its action never ends) is stale past its maxMs + a margin: the agenda
+// goes on, and the late end of the hung run changes nothing.
+test('soak 16 (R): the job watchdog: a job running past maxMs + 60 s is stale; agendaTick goes on; the hung run\'s late end is ignored', async (t) => {
+    const { JOB_WATCHDOG, runningJob } = await import('./agenda_driver.js');
+    const { agent } = jobAgent(t, []);
+    let release;
+    agent.actions.runAction = (label, fn) => new Promise(r => { release = r; }).then(fn);
+    const jobs = { food: { ...AUTO_JOBS.food, run: () => Promise.resolve({ why: 'late', none: 'none', text: 'late' }) } };
+    const t0 = 1_000_000;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, agendaState(agent.bot), { jobs, now: t0 }), 'food');
+    assert.equal(runningJob(agent, t0 + AUTO_JOBS.food.maxMs), 'food', 'still within its time');
+    assert.equal(runningJob(agent, t0 + AUTO_JOBS.food.maxMs + JOB_WATCHDOG.marginMs + 1), null, 'stale');
+    assert.ok(agent.said.some(l => /^agenda step food: the scripted job is stale \(running over 360 s\): stopping it; the agenda goes on without it$/.test(l)), agent.said.join('\n'));
+    const j = agent._agenda_jobs.food;
+    assert.deepEqual([j.running, j.lastEnd], [false, 'stale']);
+    release();
+    await flushJobs(); await flushJobs();
+    assert.equal(j.lastEnd, 'stale', 'the hung run\'s late end is ignored');
+    assert.equal(j.noneAt, null);
+});
+
+// #630 review 2: the stale job's hung action is stopped too; the tick after the gap finds no action running and starts
+// the job again (it waited forever on the hung one before). An action that never ends is waited on no longer than the
+// job's maxMs + the margin.
+test('#630 review 2: the watchdog stops the hung action; after the gap the job starts again; a never-ending other action is waited on only so long', async (t) => {
+    const { JOB_WATCHDOG, runningJob } = await import('./agenda_driver.js');
+    const { agent, runs } = jobAgent(t, []);
+    let stops = 0;
+    agent.actions.currentActionLabel = '';
+    agent.actions.stop = () => { stops++; agent.actions.executing = false; agent.actions.currentActionLabel = ''; return Promise.resolve(); };
+    agent.actions.runAction = (label, fn) => { runs.push(label); agent.actions.executing = true; agent.actions.currentActionLabel = label; return new Promise(() => {}); }; // hangs
+    const jobs = { food: { ...AUTO_JOBS.food, run: () => Promise.resolve({ why: 'x', none: null, text: 'x' }) } };
+    const state = agendaState(agent.bot);
+    const t0 = 1_000_000;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: t0 }), 'food');
+    const stale = t0 + AUTO_JOBS.food.maxMs + JOB_WATCHDOG.marginMs + 1;
+    assert.equal(runningJob(agent, stale), null);
+    assert.equal(stops, 1, 'the hung action is stopped');
+    assert.equal(agent.actions.executing, false);
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: stale + AUTO_JOBS.food.gapMs + 1 }), 'food', 'after the gap: the job again');
+    assert.deepEqual(runs, ['action:foodJob', 'action:foodJob']);
+    // Another action that never ends: waited on for at most maxMs + the margin, then the model.
+    const other = jobAgent(t, []);
+    other.agent.actions.executing = true;
+    assert.equal(autoJobTick(other.agent, FOOD_RESERVE_STEP, agendaState(other.agent.bot), { jobs, now: t0 }), 'food', 'waits');
+    assert.equal(autoJobTick(other.agent, FOOD_RESERVE_STEP, agendaState(other.agent.bot), { jobs, now: t0 + AUTO_JOBS.food.maxMs + JOB_WATCHDOG.marginMs + 1 }), null, 'no longer');
+});
+
+// #630 re-review 2: the wait on another action counts from when it began; it is cleared whenever nothing runs (and on a
+// new day), so a later wait is a fresh one.
+test('#630 re-review 2: waitSince is cleared when nothing runs and on a new day', (t) => {
+    const { agent } = jobAgent(t, []);
+    const jobs = { food: { ...AUTO_JOBS.food, run: () => Promise.resolve({ why: 'x', none: null, text: 'x' }) } };
+    const state = agendaState(agent.bot);
+    const t0 = 1_000_000;
+    agent.actions.executing = true;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: t0 }), 'food', 'waits');
+    assert.equal(agent._agenda_jobs.food.waitSince, t0);
+    agent.actions.executing = false;
+    agent._agenda_jobs.food.lastAt = t0; // in its gap: no run now
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: t0 + 1000 }), null);
+    assert.equal(agent._agenda_jobs.food.waitSince, null, 'cleared: nothing runs');
+    agent.actions.executing = true;
+    const later = t0 + AUTO_JOBS.food.maxMs + 120_000;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: later }), 'food', 'a fresh wait, not an old one past its limit');
+    agent.bot.time.day = 4;
+    autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: later + 1 });
+    assert.equal(agent._agenda_jobs.food.waitSince, later + 1, 'a new day: a fresh wait');
+});
+
+// #630 delta (the lead): on the pack's real clock. Before the morning freeze (t 2990) minutesToSunset is about 18;
+// at the freeze (t 3001, the time stands for 10 min) it reads 7.96 whatever the freeze left, and sunsetEstimateMin
+// counts the rest of the freeze. The shelter_blocks job's window (due and ready together) is real: during the freeze.
+test('#630 delta: the shelter_blocks job on the real clock: t 2990 not due; at the freeze for 0, 3 and 8 min: not due, due and ready, due but too close to dusk', (t) => {
+    const pick = stack('stone_pickaxe', 0, 1);
+    const at = (tod, frozen) => {
+        const agent = foodAgent(t, [pick], { timeOfDay: tod, finished: true });
+        const s = agendaState(agent.bot, { frozenMin: () => frozen });
+        return { s, due: SHELTER_RESERVE_STEP.due(s), ready: AUTO_JOBS.shelter_blocks.ready(agent, s), est: Math.round(s.sunsetEstimateMin() * 10) / 10, raw: Math.round(s.minutesToSunset() * 100) / 100 };
+    };
+    const before = at(2990, 0);
+    assert.deepEqual([before.raw >= 17.9, before.due], [true, false], `t 2990: ${before.raw}`);
+    const f0 = at(3001, 0), f3 = at(3001, 3), f8 = at(3001, 8);
+    assert.deepEqual([f0.raw, f3.raw, f8.raw], [7.96, 7.96, 7.96], 'minutesToSunset counts none of the freeze');
+    assert.deepEqual([f0.est, f3.est, f8.est], [18, 15, 10]);
+    assert.equal(f0.due, false, '18 min: not due yet');
+    assert.deepEqual([f3.due, f3.ready], [true, null], '15 min: due and ready (a run ends before the night routine)');
+    assert.equal(f8.due, true);
+    assert.match(f8.ready, /^too close to dusk \(10 min to sunset; the night routine starts at 6\)$/);
 });
