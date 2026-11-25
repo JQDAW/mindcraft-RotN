@@ -155,3 +155,73 @@ test('#619 (the lead): a mode action (a reflex) with the pickaxe in slot 45 make
     assert.equal(off, null, 'an action: the pickaxe out of the off hand before it runs');
     assert.equal(slots[45]?.name, 'stone_pickaxe', 're-armed');
 });
+
+// #619 review 1: the model's !equip sticks: no re-arm after it; the next action's after-step re-arms.
+test('#619 review 1: !equip("stone_pickaxe") keeps the pickaxe in the main hand; the next action re-arms', async (t) => {
+    quiet(t);
+    const { bot, slots } = offHandBot();
+    const agent = withActions(bot);
+    await agent.actions.runAction('action:equip', async () => { await skills.offHandToolBack(bot); await bot.equip(bot.inventory.items().find(i => i.name === 'stone_pickaxe'), 'hand'); });
+    assert.equal(bot.heldItem?.name, 'stone_pickaxe', 'the model\'s equip stays');
+    assert.notEqual(slots[45]?.name, 'stone_pickaxe');
+    await agent.actions.runAction('action:goToCoordinates', () => {});
+    assert.equal(slots[45]?.name, 'stone_pickaxe', 'the next action re-armed');
+    assert.equal(bot.heldItem?.name, 'spartanweaponry:club_wood');
+});
+
+// #619 review 10: an action that throws, or is stopped (no other action waiting), re-arms after it.
+test('#619 review 10: a throwing action and a stopped one re-arm after them', async (t) => {
+    quiet(t);
+    t.mock.method(console, 'error', () => {});
+    const a = offHandBot();
+    const r = await withActions(a.bot).actions.runAction('action:digDown', () => { throw new Error('boom'); });
+    assert.equal(r.success, false);
+    assert.equal(a.slots[45]?.name, 'stone_pickaxe', 're-armed after the throw');
+    assert.equal(a.bot.heldItem?.name, 'spartanweaponry:club_wood');
+    const s = offHandBot();
+    s.bot.interrupt_code = true; // the model's !stop: no other action waiting
+    await withActions(s.bot).actions.runAction('action:collectBlocks', () => {});
+    assert.equal(s.slots[45]?.name, 'stone_pickaxe', 're-armed after the stop');
+});
+
+// #619 review 6: interrupted by another action, the after-step is left to that action (it re-arms after itself);
+// the re-arm is bounded (HANDS.afterMs).
+test('#619 review 6: an action interrupted by a reflex skips its re-arm (the reflex re-arms); the re-arm is bounded', async (t) => {
+    quiet(t);
+    const { handsAfter, HANDS } = await import('./hands.js');
+    const { bot, slots } = offHandBot();
+    const agent = withActions(bot);
+    let release;
+    let rearms = 0;
+    const equip = bot.equip;
+    bot.equip = (item, dest) => { if (dest === 'off-hand') rearms++; return equip(item, dest); };
+    agent.actions.stop = async function () { while (this.executing) { release?.(); await new Promise(r => setTimeout(r, 5)); } };
+    const job = agent.actions.runAction('action:digDown', () => new Promise(r => { release = r; }));
+    await new Promise(r => setTimeout(r, 10));
+    await agent.actions.runAction('mode:self_defense', () => {});
+    await job;
+    assert.equal(rearms, 1, 'one re-arm: the reflex\'s, not the interrupted action\'s too');
+    assert.equal(slots[45]?.name, 'stone_pickaxe');
+    // The bound: a re-arm that never ends gives way after afterMs.
+    const slow = offHandBot();
+    slow.bot.equip = () => new Promise(() => {});
+    slow.slots[45] = null; slow.slots[20] = { ...PICK, slot: 20 };
+    const t0 = Date.now();
+    assert.equal(await handsAfter(slow.bot, 'action:collectBlocks', { afterMs: 50 }), 'timeout');
+    assert.ok(Date.now() - t0 < 1000);
+    assert.equal(HANDS.afterMs, 4000);
+});
+
+// #619 review 10: composes with #618's refused-dig log (forge-bridge) in both orders.
+test('#619 review 10: the dig wrapper and forge-bridge\'s refused-dig log compose in both orders', async (t) => {
+    quiet(t);
+    const { attachDigRefusedLog } = await import('../../../packages/forge-bridge/src/dig-refused.js');
+    for (const order of ['hands first', 'forge-bridge first']) {
+        const { bot, log } = offHandBot();
+        const lines = [];
+        if (order === 'hands first') { installDigHands(bot); attachDigRefusedLog(bot, null, { log: (l) => lines.push(l) }); }
+        else { attachDigRefusedLog(bot, null, { log: (l) => lines.push(l) }); installDigHands(bot); }
+        assert.equal(await skills.breakBlockAt(bot, 0, 63, 0), true, `${order}: ${bot.output}`);
+        assert.deepEqual(log.dug, ['0,63,0'], order);
+    }
+});

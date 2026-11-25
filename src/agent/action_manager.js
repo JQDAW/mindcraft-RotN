@@ -9,6 +9,7 @@ export class ActionManager {
         this.currentActionLabel = '';
         this.currentActionFn = null;
         this.timedout = false;
+        this.interruptedBy = null; // #619 review 6: the label of an action stopping the current one
         this.resume_func = null;
         this.resume_name = '';
         this.last_action_time = 0;
@@ -92,8 +93,10 @@ export class ActionManager {
             // also tell agent.bot to stop various actions
             if (this.executing) {
                 console.log(`action "${actionLabel}" trying to interrupt current action "${this.currentActionLabel}"`);
+                // #619 review 6: the interrupted action skips its re-arm (this one's after-step does it).
+                this.interruptedBy = actionLabel;
             }
-            await this.stop();
+            try { await this.stop(); } finally { this.interruptedBy = null; }
 
             // clear bot logs and reset interrupt code
             this.agent.clearBotLogs();
@@ -122,7 +125,7 @@ export class ActionManager {
             const before = handsBefore(bot, actionLabel); // null: nothing to move (no await)
             if (before) await before;
             try { await actionFn(); }
-            finally { await handsAfter(bot, actionLabel); }
+            finally { await handsAfter(bot, actionLabel, { interruptedBy: this.interruptedBy }); }
 
             // mark action as finished + cleanup
             this.executing = false;

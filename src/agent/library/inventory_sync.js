@@ -235,16 +235,40 @@ export async function returnGrid(bot, why, { waitMs = GRID_WAIT.ms, stepMs = GRI
         }
         const did = await clearCursor(bot);
         if (did) cursor = `; first ${did}`;
+        // #619 review 2: closing with a stack still on the cursor drops it: re-checked after the clear.
+        if (inv.selectedItem) {
+            console.warn(`[inventory] ${why}: ${named} left in the 2x2 grid, but the ${inv.selectedItem.name} is still on the cursor (closing would drop it): not closing`);
+            return { moved: [], left: stacks.map(g => g.slot), dropped: [] };
+        }
     }
-    if (typeof bot._client?.write !== 'function') return { moved: [], left: stacks.map(g => g.slot) };
+    if (typeof bot._client?.write !== 'function') return { moved: [], left: stacks.map(g => g.slot), dropped: [] };
+    // #619 review 3: with no room the server drops a grid stack (placeItemBackInInventory): what came back is what the
+    // inventory gained of that item; the rest was dropped. The grid's slots are sent before the inventory's, so the
+    // wait goes on until the gain is seen or the time is up.
+    const held = (name) => slots.slice(9, 46).reduce((n, s) => n + (s?.name === name ? s.count : 0), 0);
+    const names = [...new Set(stacks.map(g => g.name))];
+    const before = Object.fromEntries(names.map(n => [n, held(n)]));
+    const want = Object.fromEntries(names.map(n => [n, stacks.filter(g => g.name === n).reduce((a, g) => a + g.count, 0)]));
+    const gained = (n) => held(n) - before[n];
     bot._client.write('close_window', { windowId: 0 });
-    for (let waited = 0; waited < waitMs && GRID_SLOTS.some(k => slots[k]); waited += stepMs) await new Promise(r => setTimeout(r, stepMs));
+    const settled = () => !GRID_SLOTS.some(k => slots[k]) && names.every(n => gained(n) >= want[n]);
+    for (let waited = 0; waited < waitMs && !settled(); waited += stepMs) await new Promise(r => setTimeout(r, stepMs));
     const left = GRID_SLOTS.filter(k => slots[k]);
-    const moved = stacks.filter(g => !left.includes(g.slot));
+    const gone = stacks.filter(g => !left.includes(g.slot));
+    // Per item: what left the grid and was not gained was dropped (the later stacks of a name first).
+    const back = Object.fromEntries(names.map(n => [n, Math.max(0, gained(n))]));
+    const moved = [], dropped = [];
+    for (const g of gone) {
+        const b = Math.min(g.count, back[g.name]);
+        back[g.name] -= b;
+        if (b > 0) moved.push({ ...g, count: b });
+        if (g.count - b > 0) dropped.push({ ...g, count: g.count - b });
+    }
     console.log(`[inventory] ${why}: closed the inventory to return the 2x2 grid: ${named}${cursor}`
+        + (dropped.length ? `; no room for ${dropped.map(g => `${g.count} ${g.name}`).join(', ')}: dropped on the ground` : '')
         + (left.length ? `; the grid is still not empty: slots ${left.join(', ')}` : ''));
-    bot.rotnGridReturned = { at: Date.now(), moved };
-    return { moved, left };
+    bot.rotnGridReturned = { at: Date.now(), moved, dropped };
+    return { moved, left, dropped };
 }
 /** A craft in the 2x2 grid (no table): the grid emptied first, and again after it fails (net-forge's N3). */
 async function craftWithCleanGrid(bot, original, args) {

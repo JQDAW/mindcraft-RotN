@@ -25,19 +25,54 @@ export function handsBefore(bot, label = 'an action') {
     if (!Array.isArray(inv?.slots)) return null;
     const off = inv.slots[45];
     const takePick = !String(label).startsWith('mode:') && !!(off && isPickaxeItem(off));
-    if (!takePick && !inv.selectedItem && !GRID_SLOTS.some(k => inv.slots[k])) return null;
-    return handsBeforeNow(bot, label, takePick);
+    if (!takePick && !inv.selectedItem && !GRID_SLOTS.some(k => inv.slots[k]) && !bot.rotnHandsBusy) return null;
+    return withHandsLock(bot, () => handsBeforeNow(bot, label, takePick));
 }
+
+/**
+ * #619 review 4: the hands' window clicks one at a time: handsBefore waits for an idle repair still clicking, and
+ * idleHands never starts while one runs (bot.rotnHandsBusy: the promise of the running one).
+ */
+async function withHandsLock(bot, fn) {
+    while (bot.rotnHandsBusy) { try { await bot.rotnHandsBusy; } catch { /* its own warning */ } }
+    const run = Promise.resolve().then(fn);
+    bot.rotnHandsBusy = run;
+    try { return await run; } finally { if (bot.rotnHandsBusy === run) bot.rotnHandsBusy = null; }
+}
+
+/**
+ * afterMs (#619 review 6): the after-step's bound, so a slow server cannot push an interrupted action's end (and
+ * stop()) toward the action manager's 10 s kill.
+ */
+export const HANDS = { afterMs: 4000 };
+/** #619 review 1: the model's !equip sticks until its next action re-arms (no after-step for it). */
+const NO_REARM_AFTER = new Set(['action:equip']);
 async function handsBeforeNow(bot, label, takePick) {
     if (takePick) try { await offHandToolBack(bot); } catch (err) { console.warn(`[hands] before ${label}: the off-hand pickaxe could not be taken back (${err?.message ?? err})`); }
     try { const did = await clearCursor(bot); if (did) console.log(`[hands] before ${label}: ${did}`); } catch (err) { console.warn(`[hands] before ${label}: the cursor could not be cleared (${err?.message ?? err})`); }
     try { await returnGrid(bot, `before ${label}`); } catch (err) { console.warn(`[hands] before ${label}: the grid could not be returned (${err?.message ?? err})`); }
 }
 
-/** After an action: the pickaxe to the off hand, the weapon to the main hand (rearmWeapon), as #614. */
-export async function handsAfter(bot, label = 'an action') {
-    if (!bot?.inventory?.slots) return;
-    try { await rearmWeapon(bot); } catch (err) { console.warn(`[hands] after ${label}: re-arming failed (${err?.message ?? err})`); }
+/**
+ * After an action: the pickaxe to the off hand, the weapon to the main hand (rearmWeapon), as #614; within
+ * HANDS.afterMs. Not after the model's !equip (#619 review 1), and not when another action interrupted this one
+ * (`interruptedBy`, #619 review 6): that action's own after-step re-arms (unless it is an !equip, which keeps its
+ * item). Returns 'skipped', 'timeout' or 'done'.
+ */
+export async function handsAfter(bot, label = 'an action', { interruptedBy = null, afterMs = HANDS.afterMs } = {}) {
+    if (!bot?.inventory?.slots) return 'skipped';
+    if (NO_REARM_AFTER.has(label)) return 'skipped';
+    if (interruptedBy && !NO_REARM_AFTER.has(interruptedBy)) return 'skipped';
+    let timer;
+    const bound = new Promise(resolve => { timer = setTimeout(() => resolve('timeout'), afterMs); });
+    try {
+        const r = await Promise.race([withHandsLock(bot, () => rearmWeapon(bot)).then(() => 'done'), bound]);
+        if (r === 'timeout') console.warn(`[hands] after ${label}: re-arming took over ${afterMs / 1000} s; going on (it may still finish)`);
+        return r;
+    } catch (err) {
+        console.warn(`[hands] after ${label}: re-arming failed (${err?.message ?? err})`);
+        return 'done';
+    } finally { clearTimeout(timer); }
 }
 
 /** Whether the held item can dig the block (the Forge dig rule through bot.digTime); unknown: yes. */
@@ -84,7 +119,9 @@ export function installDigHands(bot) {
 export async function idleHands(agent) {
     const bot = agent?.bot;
     const inv = bot?.inventory;
-    if (!inv?.slots || agent.actions?.executing || agent.rotnIdleHandsBusy) return null;
+    // #619 review 4: never beside an action's clicks, a mode acting, or another repair.
+    if (!inv?.slots || agent.actions?.executing || agent.rotnIdleHandsBusy || bot.rotnHandsBusy) return null;
+    try { if (bot.modes?.anyActive?.()) return null; } catch { return null; }
     const grid = GRID_SLOTS.filter(k => inv.slots[k]);
     const cursor = inv.selectedItem?.name ?? null;
     if (!grid.length && !cursor) { agent.rotnIdleHandsSaid = null; return null; }
@@ -94,8 +131,10 @@ export async function idleHands(agent) {
     agent.rotnIdleHandsBusy = true;
     try {
         console.log(`[hands] idle: ${cursor ? `the ${cursor} on the cursor` : ''}${cursor && grid.length ? ' and ' : ''}${grid.length ? `stacks in the 2x2 grid (slots ${grid.join(', ')})` : ''}: putting them back`);
-        if (cursor && !grid.length) { const did = await clearCursor(bot); if (did) console.log(`[hands] idle: ${did}`); }
-        if (grid.length) await returnGrid(bot, 'between actions');
+        await withHandsLock(bot, async () => {
+            if (cursor && !grid.length) { const did = await clearCursor(bot); if (did) console.log(`[hands] idle: ${did}`); }
+            if (grid.length) await returnGrid(bot, 'between actions');
+        });
         return state;
     } catch (err) {
         console.warn(`[hands] idle repair failed: ${err?.message ?? err}`);

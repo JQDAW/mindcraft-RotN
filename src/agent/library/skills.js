@@ -255,6 +255,7 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
     // "you have no such rocks" while 19-43 rocks sat in the grid).
     const grid = await returnGrid(bot, 'before a craft').catch(() => null);
     if (grid?.moved?.length) log(bot, `${grid.moved.map(g => `${g.count} ${g.name}`).join(', ')} that were left in the crafting grid are back in your inventory.`);
+    if (grid?.dropped?.length) log(bot, `${grid.dropped.map(g => `${g.count} ${g.name}`).join(', ')} that were left in the crafting grid were dropped on the ground (no room in your inventory): pick them up.`);
     // "cobblestone": the kind the bot's rocks make (G3 round 3 A: sedimentary rocks make chalk cobble).
     if (isGenericCobble(itemName)) return await craftCobbleFromRocks(bot, num, ops);
     const run = currentRun(bot); // checked after each await (#225 review)
@@ -651,6 +652,7 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
                 // Soak 15 (N3): what the guard returned from the 2x2 grid after the failure, for the model.
                 const back = bot.rotnGridReturned;
                 if (back && Date.now() - back.at < 5000 && back.moved?.length) why += `; ${back.moved.map(g => `${g.count} ${g.name}`).join(', ')} left in the crafting grid are back in your inventory: try again`;
+                if (back && Date.now() - back.at < 5000 && back.dropped?.length) why += `; ${back.dropped.map(g => `${g.count} ${g.name}`).join(', ')} left in the crafting grid were dropped on the ground (no room): pick them up`;
                 break;
             }
             if (crafted.ended !== 'crafted') { // soak 9: timed out or stopped (said)

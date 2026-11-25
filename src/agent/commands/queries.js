@@ -94,15 +94,15 @@ export const queryList = [
             if (res === 'INVENTORY') {
                 res += ': Nothing';
             }
+            else if (agent.bot.game.gameMode === 'creative') {
+                res += '\n(You have infinite items in creative mode. You do not need to gather resources!!)';
+            }
             const grid = listOf(tally(slots.slice(1, 5)));
             if (grid) res += `\nIN THE 2x2 CRAFTING GRID (not usable until moved back; the next craft returns them first): ${grid}`;
             const cursor = bot.inventory?.selectedItem;
             if (cursor?.name) res += `\nON THE CURSOR: ${cursor.count} ${inventoryKey(cursor) ?? cursor.name}`;
             const off = slots[45];
-            if (off?.name) res += `\nIN THE OFF HAND: ${off.count} ${inventoryKey(off) ?? off.name}${/_pickaxe$/.test(off.name) ? ' (kept at a death; taken back for every dig)' : ''}`;
-            else if (agent.bot.game.gameMode === 'creative') {
-                res += '\n(You have infinite items in creative mode. You do not need to gather resources!!)';
-            }
+            if (off?.name) res += `\nIN THE OFF HAND: ${off.count} ${inventoryKey(off) ?? off.name}${/_pickaxe$/.test(off.name) ? ' (kept at a death; taken back when a dig needs it)' : ''}`;
 
             let helmet = bot.inventory.slots[5];
             let chestplate = bot.inventory.slots[6];

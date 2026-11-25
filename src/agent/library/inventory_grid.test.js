@@ -153,7 +153,11 @@ test('soak 15: !inventory names the 2x2 grid, the cursor and the off hand apart;
     assert.match(out, new RegExp(`- ${ROCK}:6: 19\\b`), 'the main list: only the inventory (19, not 23)');
     assert.match(out, new RegExp(`IN THE 2x2 CRAFTING GRID \\(not usable until moved back; the next craft returns them first\\): 4 ${ROCK}:6`));
     assert.match(out, /ON THE CURSOR: 3 betterwithmods:dirt_pile/);
-    assert.match(out, /IN THE OFF HAND: 1 stone_pickaxe \(kept at a death; taken back for every dig\)/);
+    assert.match(out, /IN THE OFF HAND: 1 stone_pickaxe \(kept at a death; taken back when a dig needs it\)/);
+    assert.doesNotMatch(out, /creative mode/);
+    // #619 review 7: the creative note follows a non-empty list (as upstream), never the off-hand line.
+    bot.game.gameMode = 'creative';
+    assert.match(getCommand('!inventory').perform({ bot }), /- stick: 5\n\(You have infinite items in creative mode[^\n]*\nIN THE 2x2 CRAFTING GRID/);
 });
 
 // Soak 15 (the lead): between actions the update loop repairs a cursor or 2x2-grid leftover, said once per state.
@@ -189,4 +193,56 @@ test('soak 15: getCommandDocs leaves out !newAction when allow_insecure_coding i
         settings.allow_insecure_coding = true;
         assert.match(getCommandDocs({ blocked_actions: [] }), /!newAction:/);
     } finally { settings.allow_insecure_coding = before; }
+});
+
+// #619 review 2: the cursor is re-checked after the clear: still holding a stack, nothing is closed (it would drop it).
+test('#619 review 2: a cursor the clear did not empty: no close_window', async (t) => {
+    const logs = capture(t);
+    const { bot, sent } = windowBot({ grid: { 4: item(ROCK, 6, 4) }, cursor: item('betterwithmods:dirt_pile', 0, 1) });
+    bot.clickWindow = (slot) => { sent.push(['click', slot]); return Promise.resolve(); }; // the server kept the cursor
+    const r = await returnGrid(bot, 'before a 2x2 craft');
+    assert.deepEqual(sent.map(s => s[0]), ['click'], 'the clear, then no close');
+    assert.deepEqual(r.left, [4]);
+    assert.ok(logs.some(l => /is still on the cursor \(closing would drop it\): not closing/.test(l)), logs.join('\n'));
+});
+
+// #619 review 3: a full inventory: the server drops what it cannot place back; the line and the craft say "dropped".
+test('#619 review 3: grid stacks the server could not place back are said dropped, not back in the inventory', async (t) => {
+    const logs = capture(t);
+    const inv = {}; for (let k = 9; k < 45; k++) inv[k] = item('dirt', 0, 64);
+    inv[20] = item(ROCK, 6, 62); // room for 2 more rocks in this stack (a 64 stack size here)
+    const { bot, slots, sent } = windowBot({ grid: { 3: item(ROCK, 6, 3), 4: item(ROCK, 6, 4) }, inv, returns: false });
+    bot._client.write = (name, data) => {
+        sent.push([name, data]);
+        setTimeout(() => { slots[3] = null; slots[4] = null; slots[20].count = 64; }, 10); // 2 placed back, 5 dropped
+    };
+    const r = await returnGrid(bot, 'after a failed craft', { waitMs: 200, stepMs: 10 });
+    assert.deepEqual(r.left, []);
+    assert.deepEqual(r.moved.map(g => [g.slot, g.count]), [[3, 2]]);
+    assert.deepEqual(r.dropped.map(g => [g.slot, g.count]), [[3, 1], [4, 4]]);
+    assert.match(logs.at(-1), new RegExp(`; no room for 1 ${ROCK}, 4 ${ROCK}: dropped on the ground$`));
+});
+
+// #619 review 4: the hands' clicks one at a time: no idle repair while handsBefore clicks, nor while a mode acts.
+test('#619 review 4: idleHands waits out handsBefore and a mode acting; handsBefore waits for an idle repair', async (t) => {
+    capture(t);
+    const { idleHands, handsBefore } = await import('./hands.js');
+    const { bot, sent } = windowBot({ grid: { 4: item(ROCK, 6, 4) } });
+    const agent = { bot, actions: { executing: false } };
+    bot.modes = { anyActive: () => true };
+    assert.equal(await idleHands(agent), null, 'a mode acts: no repair');
+    bot.modes.anyActive = () => false;
+    const before = handsBefore(bot, 'action:craftRecipe');
+    assert.ok(bot.rotnHandsBusy, 'handsBefore holds the lock');
+    assert.equal(await idleHands(agent), null, 'no repair beside it');
+    await before;
+    assert.equal(sent.filter(s => s[0] === 'close_window').length, 1, 'one close, from handsBefore');
+    // An idle repair running: handsBefore waits for it (its close first, then nothing left to do).
+    bot.inventory.slots[2] = { ...item(ROCK, 6, 1), slot: 2 };
+    const idle = idleHands(agent);
+    const next = handsBefore(bot, 'action:craftRecipe');
+    assert.ok(next, 'waits on the lock');
+    await Promise.all([idle, next]);
+    assert.equal(sent.filter(s => s[0] === 'close_window').length, 2, 'the idle close only; handsBefore found it done');
+    assert.equal(bot.rotnHandsBusy, null);
 });

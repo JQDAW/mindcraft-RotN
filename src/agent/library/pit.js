@@ -21,7 +21,7 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { isWall, handDiggable, dumpState } from './night.js';
 import { isLiquid, isEmpty, isFalling, tallyText, standsIn } from './shelter.js';
-import { log, breakBlockAt, goToGoal } from './skills.js';
+import { log, breakBlockAt, goToGoal, offHandToolBack } from './skills.js';
 import { worldSources } from './rotn_sources.js';
 import { blockMatcher } from './rotn_names.js';
 
@@ -295,7 +295,10 @@ export async function digWithin(bot, block, ms, { equip = null } = {}) {
         : p);
     if (bot.game?.gameMode !== 'creative') {
         const ok = await race((async () => {
-            if (equip) return !!(await equip()); // (the off-hand pickaxe: the action boundary and the dig wrapper, library/hands.js)
+            if (equip) return !!(await equip());
+            // #619 review 5: a mode action keeps the pickaxe in the off hand (library/hands.js), and equipForBlock reads
+            // inventory.items() and the main hand only: the pickaxe back first (nothing moves when none is there).
+            try { await offHandToolBack(bot); } catch { /* equipForBlock picks from what is there */ }
             try { await bot.tool?.equipForBlock?.(block); } catch { /* digs with what is in hand */ }
             return !(block.canHarvest && !block.canHarvest(bot.heldItem ? bot.heldItem.type : null));
         })(), Math.min(left(), DIG_STALL.equipMs)); // #614 review 7: the equip (and the off-hand move) has its own cap
