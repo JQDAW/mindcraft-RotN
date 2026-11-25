@@ -126,7 +126,7 @@ function deathSpotOk(agent, x, y, z) {
  */
 export const ACTION_LIMITS_MIN = {
     goToPlayer: 5, goToCoordinates: 5, standOnBlock: 5, searchForBlock: 5, searchForEntity: 5, moveAway: 5,
-    goToRememberedPlace: 5, goToBed: 5, goToSurface: 5, useOn: 2,
+    goToRememberedPlace: 5, goToBed: 5, goToSurface: 6, useOn: 2,
     collectBlocks: 10, attack: 3, attackPlayer: 3, buildShelter: 5, digDown: 5,
     craftRecipe: 4, smeltItem: 12, clearFurnace: 2, putInChest: 2, takeFromChest: 2, viewChest: 1,
     givePlayer: 2, placeHere: 1,
@@ -167,6 +167,26 @@ export async function withinLimit(agent, name, fn, ms) {
     skills.log(agent.bot, `!${name} failed: time limit of ${limitText(ms)} reached; stopped.`);
 }
 
+/**
+ * Soak 16 (E3, the lead): the commands after which a bot that dug and is now trapped (no walkable way to the sky) gets
+ * out first (escape.escapeIfTrapped, the day budget): 'always' after a dig; 'deep' (!digDown: a hole dug on purpose)
+ * only deeper than 2 below where it started; 'failed' (the walks) only when the walk itself failed (a walk that got
+ * where the model asked, underground included, is left there). Model commands only: never a reflex or a night job.
+ */
+export const POST_ESCAPE = { collectBlocks: 'always', digDown: 'deep',
+    goToCoordinates: 'failed', searchForBlock: 'failed', goToRememberedPlace: 'failed', goToBed: 'failed', goToPlayer: 'failed' };
+/** The escape's own minutes, added to a command's limit when its post-condition may run. */
+const POST_ESCAPE_MIN = 6;
+async function postEscape(agent, label, start) {
+    const kind = POST_ESCAPE[label];
+    if (!kind) return;
+    const bot = agent.bot;
+    if (kind === 'failed' && !((bot.rotnWalkFailedAt ?? 0) >= start.t)) return;
+    const { escapeIfTrapped } = await import('../library/escape.js');
+    const line = await escapeIfTrapped(bot, { digsBefore: start.digs, from: start.at, minDepth: kind === 'deep' ? 3 : 0 });
+    if (line) skills.log(bot, line);
+}
+
 function runAsAction (actionFn, resume = false, timeout = -1, label = null) {
     let actionLabel = label;  // Will be set on first use (given when a perform checks first, then runs this)
     
@@ -185,11 +205,21 @@ function runAsAction (actionFn, resume = false, timeout = -1, label = null) {
         }
 
         const limitMin = ACTION_LIMITS_MIN[actionLabel] ?? 0;
-        const actionFnWithAgent = limitMin > 0
+        const run = limitMin > 0
             ? () => withinLimit(agent, actionLabel, () => actionFn(agent, ...args), limitMin * 60_000)
             : async () => { await actionFn(agent, ...args); };
+        // Soak 16 (E3): the post-condition (POST_ESCAPE) after the command, within the same action (interruptible, the
+        // hands rule around it), with its own minutes on top of the command's limit.
+        const post = POST_ESCAPE[actionLabel];
+        const actionFnWithAgent = post
+            ? async () => {
+                const start = { t: Date.now(), digs: agent.bot.rotnDigs?.count ?? 0, at: agent.bot.entity?.position?.floored?.() ?? null };
+                await run();
+                await postEscape(agent, actionLabel, start);
+            }
+            : run;
         const code_return = await agent.actions.runAction(`action:${actionLabel}`, actionFnWithAgent,
-            { timeout: limitMin > 0 ? limitMin + 1 : timeout, resume });
+            { timeout: limitMin > 0 ? limitMin + 1 + (post ? POST_ESCAPE_MIN : 0) : timeout, resume });
         if (code_return.interrupted && !code_return.timedout)
             return;
         return code_return.message;

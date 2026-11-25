@@ -647,7 +647,7 @@ function planProblem(plan, site, radius, handExit, bot = null, tally = null) {
  * 32 dirt piles were held at dusk): cobblestone from rocks (each rock kind makes its own), dirt
  * from dirt piles. The caller counts again afterwards.
  */
-export async function craftMore(bot, what, short, craft, { spare = false } = {}) {
+export async function craftMore(bot, what, short, craft, { spare = false, why = null } = {}) {
     if (short <= 0) return;
     try {
         if (what === 'cobblestone' && cobbleChoices(bot).length > 0) {
@@ -662,7 +662,7 @@ export async function craftMore(bot, what, short, craft, { spare = false } = {})
                 const n = Math.min(left, Math.floor(piles / r.per));
                 if (n <= 0) continue;
                 const gives = formatName(botName(r.gives.name), r.gives.meta ?? 0);
-                log(bot, `${spare ? `Keeping ${left} dirt for repairs` : `The shelter needs ${left} more blocks`}: making ${n} ${gives} from your ${botName(r.name)} (${r.per} each).`);
+                log(bot, `${why ?? (spare ? `Keeping ${left} dirt for repairs` : `The shelter needs ${left} more blocks`)}: making ${n} ${gives} from your ${botName(r.name)} (${r.per} each).`);
                 await craft(bot, gives, n);
                 left -= n;
                 if (left <= 0) break;

@@ -3488,6 +3488,9 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
             log(bot, 'Walk stopped (interrupted).');
             return false;
         }
+        // Soak 16 (E): a walk that failed (no path, the time limit): the post-condition of a !goTo-type command
+        // escapes only after such a walk (actions.js POST_ESCAPE 'failed').
+        bot.rotnWalkFailedAt = Date.now();
         // we need to catch so we can clean up the door check interval, then rethrow the error
         throw err;
     }
@@ -4669,23 +4672,20 @@ export async function digDown(bot, distance = 10) {
     return true;
 }
 
-export async function goToSurface(bot) {
+export async function goToSurface(bot, { run = null } = {}) {
     /**
-     * Navigate to the surface (highest non-air block at current x,z).
-     * @param {MinecraftBot} bot, reference to the minecraft bot.
-     * @returns {Promise<boolean>} true if the surface was reached, false otherwise.
+     * Soak 16 (E, the lead): to the first open ground up the bot's column (escape.surfaceTarget: the ground under a
+     * canopy, never the leaves), by the one escape (library/escape.js: the pathfinder with digging and pack scaffolding,
+     * then stairs and pillars by hand; the day budget). Says what happened (escape.escapeText), never "Going to the
+     * surface" after a failure (soak 15). Returns whether the bot is out.
      **/
-    const pos = bot.entity.position;
-    for (let y = names112.WORLD_MAX_Y; y >= names112.WORLD_MIN_Y; y--) { // 1.12 height (B1); probably not the best way to find the surface but it works
-        const block = bot.blockAt(new Vec3(pos.x, y, pos.z));
-        if (!block || block.name === 'air') { // 1.12 has no cave_air (B1b)
-            continue;
-        }
-        await goToPosition(bot, block.position.x, block.position.y + 1, block.position.z, 0); // this will probably work most of the time but a custom mining and towering up implementation could be added if needed
-        log(bot, `Going to the surface at y=${y+1}.`);``
-        return true;
-    }
-    return false;
+    const esc = await import('./escape.js');
+    if (esc.isOut(bot, null, true)) { log(bot, esc.escapeText({ out: true, how: 'already', at: bot.entity.position.floored(), ms: 0 })); return true; }
+    const r = await (run ?? esc.escape)(bot, { budget: 'day', target: esc.surfaceTarget(bot) });
+    log(bot, esc.escapeText(r));
+    if (r?.out) bot.rotnTrapped = null;
+    else if (!r?.interrupted) bot.rotnTrapped = { at: r?.at ?? bot.entity.position.floored(), since: bot.rotnTrapped?.since ?? Date.now(), checkedAt: Date.now() };
+    return !!r?.out;
 }
 
 /**
