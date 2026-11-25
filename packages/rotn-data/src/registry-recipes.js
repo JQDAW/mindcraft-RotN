@@ -272,7 +272,13 @@ function ingredientMatchers(registry, r) {
     return out;
 }
 
-/** Whether a variant's items ({id, metadata}) fill a recipe's ingredients one to one (a multiset match, any order). */
+/**
+ * Whether a variant's items ({id, metadata}) fill a recipe's ingredients one to one (a multiset match, any order).
+ * It deliberately over-approximates the server's matcher (#639 review 3). Shape, offset and mirroring are ignored, and
+ * an item with a null (any) metadata matches any listed metadata. So it may call a variant shadowable when the server
+ * would not, which only moves that variant later. It never lets a grid the other recipe really matches count as safe,
+ * which is the safe direction.
+ */
 export function acceptsItems(matchers, items) {
     if (!matchers || matchers.length !== items.length) return false;
     const fits = (m, it) => m.has(it.id) && (m.get(it.id) === null || it.metadata === null || m.get(it.id).has(it.metadata));

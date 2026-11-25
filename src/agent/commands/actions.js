@@ -245,6 +245,24 @@ function runAsAction (actionFn, resume = false, timeout = -1, label = null) {
     return wrappedAction;
 }
 
+const useOnAction = runAsAction(async (agent, tool_name, target) => {
+    await skills.useToolOn(agent.bot, tool_name, target);
+}, false, -1, 'useOn');
+const goToBedAction = runAsAction(async (agent) => { await skills.goToBed(agent.bot); }, false, -1, 'goToBed');
+
+/**
+ * Round 17 P: the Scroll of New Life's use, {pos, at} or null: this session's (the night routine's respawnSet, round 17
+ * M) or the saved one (History.scrollUsed, kept in memory.json across restarts).
+ */
+export function scrollUsed(agent) {
+    const n = agent?._night?.respawnSet;
+    if (n) return n;
+    const h = agent?.history?.scrollUsed;
+    if (h && typeof h === 'object') return h;
+    // #645 review 1: no scroll held means used (memory.json is not reloaded on the CX23: load_memory is false).
+    return skills.scrollUsedOn(agent?.bot);
+}
+
 export const actionsList = [
     {
         name: '!newAction',
@@ -411,7 +429,7 @@ export const actionsList = [
     },
     {
         name: '!standOnBlock',
-        description: 'Stand on top of the block at x, y, z (give the coordinates of the block itself) and check that it is the block under your feet. Use it whenever you must stand on a block; say you are on it only after it says so.',
+        description: 'Stand on the block at x, y, z (the block\'s own coordinates) and check it is under your feet. Use it whenever you must stand on a block; say you are on it only after it says so.',
         params: {
             'type': {type: 'BlockName', description: 'The block to stand on, e.g. gold_block.'},
             'x': {type: 'float', description: 'The x coordinate of the block.', domain: [-Infinity, Infinity]},
@@ -440,7 +458,7 @@ export const actionsList = [
     },
     {
         name: '!searchForEntity',
-        description: 'Find and go to the nearest entity of a given type in a given range. A pig, cow, sheep or rabbit also finds the pack\'s Animania ones; the bot sees animals only within 64 blocks, and a miss lists the animals in sight.',
+        description: 'Go to the nearest entity of a type within a range. A pig, cow, sheep or rabbit also finds the pack\'s Animania ones; animals are seen only within 64 blocks, and a miss lists the animals in sight.',
         params: {
             'type': { type: 'string', description: 'The type of entity to go to.' },
             'search_range': { type: 'float', description: 'The range to search for the entity.', domain: [32, 512] }
@@ -596,7 +614,7 @@ export const actionsList = [
     {
         // G4 #5: wild food before hunting (rotn-data forageFood; library/foraging.js).
         name: '!forage',
-        description: 'Gather ripe wild food near you: picks the berries off Rustic wildberry bushes (right-click; the bush stays and regrows), breaks ripe wild herbs and HarvestCraft gardens, and picks up the food. Never a bare bush or an unripe herb, never the hawthorn, poison ivy or thorns, never a crop near fences, farmland, chests or houses (it may be a player\'s).',
+        description: 'Gather ripe wild food near you: picks wildberry bushes (right-click; they regrow), breaks ripe wild herbs and HarvestCraft gardens, picks the food up. Never a bare bush, an unripe herb, hawthorn, poison ivy or thorns, nor a crop near fences, farmland, chests or houses (it may be a player\'s).',
         perform: runAsAction(async (agent) => {
             await skills.forageNearby(agent.bot);
         })
@@ -636,7 +654,7 @@ export const actionsList = [
     },
         {
         name: '!placeHere',
-        description: 'Place a given block in the current location. A full block (dirt, cobblestone) goes under you by a jump, so you end up standing one block higher on it (a way up out of a pit or water); a torch or the like goes where you stand. Do NOT use to build structures, only use for single blocks/torches.',
+        description: 'Place one block where you stand. A full block (dirt, cobblestone) goes under you by a jump, so you stand one higher on it (a way up out of a pit or water); a torch or the like goes where you stand. Only single blocks or torches, never structures.',
         params: {'type': { type: 'BlockOrItemName', description: 'The block type to place.' }},
         perform: runAsAction(async (agent, type) => {
             // Soak 8 (the escape plan PR 2): the bot's own cell; a full block by a jump (escape.placeHere).
@@ -767,9 +785,14 @@ export const actionsList = [
     {
         name: '!goToBed',
         description: 'Go to the nearest bed and sleep.',
-        perform: runAsAction(async (agent) => {
-            await skills.goToBed(agent.bot);
-        })
+        perform: function (agent, ...rest) {
+            // Round 17 P (rotn-data, the lead's addendum): any spawn change other than the Scroll of New Life itself (a
+            // bed sets the spawn when you wake) ends the scroll's respawn point and its 32-block Zombie Player guard
+            // for good. Once the scroll is used, never a bed.
+            const used = scrollUsed(agent);
+            if (used) return skills.bedRefusalText(used);
+            return goToBedAction(agent, ...rest);
+        }
     },
     {
         name: '!stay',
@@ -1009,8 +1032,10 @@ export const actionsList = [
             'target': { type: 'string', description: 'The target as an entity type, block type, or "nothing" for no target.' }
         },
         // Bounded inside useToolOn (60 s); ACTION_LIMITS_MIN (2 min) is the backstop (G3 batch A: it hung).
-        perform: runAsAction(async (agent, tool_name, target) => {
-            await skills.useToolOn(agent.bot, tool_name, target);
-        })
+        perform: function (agent, tool_name, target, ...rest) {
+            // #645 review 6: right-clicking a bed sets the spawn too: refused once the Scroll of New Life is used.
+            if (/(^|:|_)bed$/.test(String(target ?? '')) && scrollUsed(agent)) return skills.bedRefusalText(scrollUsed(agent));
+            return useOnAction(agent, tool_name, target, ...rest);
+        }
     },
 ];

@@ -90,6 +90,21 @@ const hot = (b) => isLiquid(b) || /fire/.test(b?.name ?? '');
 // Full daylight (night.js, where the re-plan hold reads it too).
 export { isFullDay };
 
+/**
+ * Round 17 M and P: the Scroll of New Life was used at pos: the night state's respawnSet (the memory's Places) and the
+ * history's scrollUsed (saved: !goToBed refuses for good, a bed would end the scroll's respawn point).
+ */
+export function rememberScroll(agent, n, pos) {
+    const p = pos ? { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) } : null;
+    n.respawnSet = { pos, at: Date.now() };
+    if (agent?.bot) agent.bot.rotnScrollUsed = { pos: p, at: Date.now(), by: 'the night routine' };
+    if (agent?.history) {
+        agent.history.scrollUsed = { pos: p, at: Date.now() };
+        // #645 review 3: save is async: its rejection is caught here, not by a try.
+        Promise.resolve().then(() => agent.history.save?.()).catch(err => console.warn(`[night] the scroll's use was not saved: ${err?.message ?? err}`));
+    }
+}
+
 /** The night state of an agent, made on first use. */
 export function nightState(agent) {
     return agent._night ??= {
@@ -1786,7 +1801,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             else {
                 line(agent, `[night] setting the respawn point here at ${at(n.site)} with the Scroll of New Life (once): far from the spawn and every death spot, no hostile near`);
                 startJob(agent, n, SCROLL_LABEL, () => ops.useSpawnScroll(bot), (r) => {
-                    if (r?.used) { n.scrollUsed = true; n.respawnSet = { pos: n.site, at: Date.now() }; } // soak 13 (S2'): no second use here in the morning; round 17 M: the memory's Places
+                    if (r?.used) { n.scrollUsed = true; rememberScroll(agent, n, n.site); } // soak 13 (S2'): no second use here in the morning
                     line(agent, r?.used ? `[night] the respawn point is now ${at(n.site)}: a death within 32 blocks of it raises no player zombie (seen by ${r.by ?? 'the stack'}${r.tries > 1 ? `, on try ${r.tries}` : ''})`
                         : `[night] the Scroll of New Life was not used (${r?.why ?? 'no result'})`);
                 });
@@ -1836,7 +1851,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     const r = await ops.useSpawnScroll(bot);
                     // The lead: the roof comes down, so a zombie in the cell by day burns (unroofSpawn).
                     if (r?.used) {
-                        n.respawnSet = { pos: site, at: Date.now() }; // round 17 M: the memory's Places
+                        rememberScroll(agent, n, site);
                         r.roof = await (ops.unroofSpawn ?? unroofSpawn)(bot, site, { hostile: () => ops.hostileNear?.(bot, SCROLL.quiet) ?? null });
                         // #604 review 2 (soak 11 A3): the dig may leave a pickaxe in the main hand: the weapon back.
                         try { await (ops.rearmWeapon ?? rearmWeapon)(bot); } catch { /* best effort */ }
