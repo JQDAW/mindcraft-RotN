@@ -17,7 +17,7 @@ const EVIDENCE = path.join(ROOT, 'test/evidence/g4');
 const BASELINE = path.join(EVIDENCE, 'invariants-baseline.json');
 
 // One journal line at hh:mm:ss on 2026-11-25.
-const L = (time, msg) => `2026-11-25T${time}+00:00 node[1]: ${msg}`;
+const L = (time, msg, date = '2026-11-25') => `${date}T${time}+00:00 node[1]: ${msg}`;
 const REL = (n) => L('10:00:00', `[release] rotn-v0.1.${n}-0123456789ab`);
 const run = (lines, opts) => soakInvariants(lines.join('\n'), opts);
 
@@ -34,10 +34,13 @@ test('the known incidents are found (calibration)', () => {
     const s15 = rows['g4soak-15-20261124'];
     assert.equal(s15.I3_rejectedClicks, 9); // 18 lines, 9 clicks (#616 review 3)
     assert.equal(s15.I2_couldNotLeave, 2); // mornings 1 and 2 in the pocket at -58, 57, -50
-    assert.equal(s15.I7_gateThenAct, 1); // the cow 58 s after the bull refusal
+    assert.equal(s15.I7_gateThenAct, 1); // the cow: the hunt started 35 s after the bull refusal (#623 review 1)
     assert.equal(s15.I9_falseCollects, 2); // 22:41:56 and 00:01:20 (#616 review 2)
     assert.equal(s15.I4_digRefusedWithTool, 2);
-    assert.ok(s15.I1_trapped >= 1);
+    assert.equal(s15.I1_trapped, 1);
+    // Soaks 10 and 12's death loops are not traps: a death ends an episode (#623 review 2).
+    assert.equal(rows['g4soak-10-20261122'].I1_trapped, 0);
+    assert.equal(rows['g4soak-12-20261123'].I1_trapped, 0);
     const s14 = rows['g4soak-14-20261124'];
     assert.equal(s14.I6_lowestFood, 1);
     assert.equal(s14.I12_deathsUnnamed, 1); // the grove sprite
@@ -166,7 +169,7 @@ test('I9 false-collect: "it gave" then Collected 0; Broke in the same second as 
     assert.deepEqual(r.I9.first.map(f => f.kind), ['gave, then Collected 0', 'broke and refused in the same second']);
 });
 
-test('I10 death-loop: 3 deaths within 5 min of each other and 8 blocks of the first', () => {
+test('I10 death-loop: 3 deaths, each within 5 min and 24 blocks of the one before (chained)', () => {
     const d = (t, p) => L(t, `[death] died at ${p}; waiting for the respawn`);
     let r = run([d('10:00:00', '0, 64, 0'), d('10:02:00', '3, 64, 2'), d('10:06:30', '1, 65, 0'), d('10:30:00', '100, 64, 0')]);
     assert.deepEqual([r.I10.count, r.I10.deaths, r.I10.loopDeaths], [1, 4, 3]);
@@ -205,6 +208,57 @@ test('I12 unattributed-hurt: unknown hurt lines; mob deaths with no mob named in
     r = run(journal);
     assert.equal(r.I12.deathsUnnamed, null); // no server.log: not known
     assert.equal(run([REL(4), L('10:00:00', 'x')]).I12, null);
+});
+
+test('soak 15 in detail: the cow act and the trap episode (#623 review 1, 2)', () => {
+    const r = soakInvariants(fs.readFileSync(path.join(EVIDENCE, 'g4soak-15-20261124/driver.log'), 'utf8'));
+    assert.deepEqual(r.I7.first[0], { t: '00:02:41', line: 2473, mob: 'animania:cow_holstein', act: '00:03:16', actLine: 2564, afterS: 35 });
+    assert.equal(r.I1.first[0].t, '22:43:52');
+    assert.equal(r.I1.first[0].line, 890);
+});
+
+test('#623 review 2: a death ends a trap episode; an arrival resets the attempt gap; an episode across midnight', () => {
+    const fail = (t, d) => [L(t, 'Path not found, but attempting to navigate anyway using destructive movements.', d)];
+    let r = run([...fail('10:00:00'), ...fail('10:01:00'), L('10:01:30', '[death] died at 1, 2, 3; waiting for the respawn'), ...fail('10:02:00')]);
+    assert.equal(r.I1.count, 0);
+    // An arrival 1 s after a failure, then a failure 1 s later: a new attempt, not the old one.
+    r = run([...fail('10:00:00'), L('10:00:01', 'You have reached at 1, 2, 3.'), ...fail('10:00:02'), ...fail('10:01:00'), ...fail('10:02:00')]);
+    assert.deepEqual([r.I1.count, r.I1.attempts], [1, 3]);
+    r = run([...fail('23:58:00'), ...fail('23:59:30'), ...fail('00:01:00', '2026-11-26')]);
+    assert.deepEqual([r.I1.count, r.I1.longestMin], [1, 3]);
+});
+
+test('#623 review 1: I7 acts are a hunt start whose next hunting line names the mob, or a !attack on it that ran', () => {
+    const refusal = L('10:00:00', '[reflex] hunting: left alone, it may belong to a player: animania:cow_holstein: a animania:bull_holstein within 16 blocks');
+    let r = run([REL(21), refusal, L('10:00:35', '[survival] weapon spartanweaponry:club_wood (hunt)'), L('10:00:58', '[reflex] hunting animania:cow_holstein: stuck (left alone for 5 min)')]);
+    assert.equal(r.I7.first[0].afterS, 35);
+    r = run([REL(21), refusal, L('10:00:35', '[survival] weapon spartanweaponry:club_wood (hunt)'), L('10:00:58', '[reflex] hunting animania:sow_old_spot: stuck (left alone for 5 min)')]);
+    assert.equal(r.I7.count, 0); // a hunt of another mob
+    r = run([REL(21), refusal, L('10:00:10', "parsed command: { commandName: '!attack', args: [ 'animania:cow_holstein' ] }")]);
+    assert.equal(r.I7.first[0].afterS, 10);
+});
+
+test('#623 review 3: the #618 limit line is not a click; past the cap the [inventory] count is used when larger', () => {
+    const fb = (t) => L(t, '[forge-bridge] click rejected: window 0 slot 4 (mode 0, button 0, action 1); client …; server …');
+    const inv = (t) => L(t, '[inventory] craft: Error: Server rejected transaction for clicking on slot 4, on window with id 0. Resyncing and trying once more.');
+    const limit = L('10:09:00', '[forge-bridge] click rejected: 2 lines logged; further rejections on this connection are not');
+    let r = run([fb('10:00:00'), inv('10:00:00'), fb('10:01:00'), inv('10:01:00'), limit, inv('10:10:00'), inv('10:11:00')]);
+    assert.deepEqual([r.I3.count, r.I3.source], [4, '[inventory] (click rejected capped)']);
+    r = run([fb('10:00:00'), fb('10:01:00'), limit]);
+    assert.deepEqual([r.I3.count, r.I3.source], [2, 'click rejected (capped)']);
+});
+
+test('#623 review 4: I12 is null with a note when the journal and server.log death counts differ', () => {
+    const r = run([REL(20), L('10:00:08', '[death] died at 1, 2, 3; waiting for the respawn')], { serverText: '' });
+    assert.equal(r.I12.deathsUnnamed, null);
+    assert.equal(r.I12.note, 'death counts differ: journal 1, server.log 0');
+    assert.match(render(r, 'x'), /death counts differ: journal 1, server\.log 0/);
+});
+
+test('#623 review 7: render prints I8 never-ran replies; an old-format I5 row has no need', () => {
+    const r = run([L('10:00:00', 'Generated response: !attack("x")'), L('10:00:05', '[night] food for the night: food worth 0 hunger held, food 10; less than 6: staying sealed anyway')]);
+    assert.match(render(r, 'x'), /never ran: 10:00:00 \(driver\.log:1\)/);
+    assert.equal('need' in r.I5.first[0], false);
 });
 
 test('render and renderTable print n/a for lines a release did not print', () => {

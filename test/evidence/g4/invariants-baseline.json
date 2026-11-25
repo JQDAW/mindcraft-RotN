@@ -2,7 +2,7 @@
   "g4soak-m1-20261108": {
     "release": null,
     "I1_trapped": 5,
-    "I1_longestMin": 13.3,
+    "I1_longestMin": 2.5,
     "I2_couldNotLeave": 0,
     "I2_sameShelterNights": 0,
     "I3_rejectedClicks": 1,
@@ -61,8 +61,8 @@
   },
   "g4soak-3-20261118": {
     "release": "rotn-v0.1.5",
-    "I1_trapped": 2,
-    "I1_longestMin": 3,
+    "I1_trapped": 0,
+    "I1_longestMin": 0,
     "I2_couldNotLeave": 0,
     "I2_sameShelterNights": 0,
     "I3_rejectedClicks": 1,
@@ -122,7 +122,7 @@
   "g4soak-5-20261120": {
     "release": "rotn-v0.1.11",
     "I1_trapped": 4,
-    "I1_longestMin": 13.8,
+    "I1_longestMin": 12.7,
     "I2_couldNotLeave": 0,
     "I2_sameShelterNights": 0,
     "I3_rejectedClicks": 1,
@@ -271,8 +271,8 @@
   },
   "g4soak-10-20261122": {
     "release": "rotn-v0.1.16",
-    "I1_trapped": 1,
-    "I1_longestMin": 19.9,
+    "I1_trapped": 0,
+    "I1_longestMin": 0,
     "I2_couldNotLeave": 0,
     "I2_sameShelterNights": 0,
     "I3_rejectedClicks": 0,
@@ -331,8 +331,8 @@
   },
   "g4soak-12-20261123": {
     "release": "rotn-v0.1.18",
-    "I1_trapped": 1,
-    "I1_longestMin": 3.4,
+    "I1_trapped": 0,
+    "I1_longestMin": 0,
     "I2_couldNotLeave": 1,
     "I2_sameShelterNights": 0,
     "I3_rejectedClicks": 1,

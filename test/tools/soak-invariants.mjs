@@ -18,25 +18,35 @@
 //   I1  trapped              path-failure episodes: at least `minAttempts` failed path attempts (`Path not found`,
 //                            `Unable to reach`, `NoPath`, `Took to long to decide path`; lines within `attemptGapS`
 //                            of each other are one attempt), each within `gapMin` of the last, with no arrival
-//                            (`You have reached`, `escape done`, `dug out`, `left the shelter`) in between.
+//                            (`You have reached`, `escape done`, `dug out`, `left the shelter`) or death in between
+//                            (#623 review 2: a death loop is not a trap). It understates an enclosed trap: a short
+//                            move inside the pocket (`You have reached` 1 block away) ends the episode, so soak 15's
+//                            trap (22:41 to 00:01) shows as one 3.4-min episode; I2 shows the rest. Exact once the
+//                            path-failure lines carry the bot's position.
 //   I2  enclosed-morning     `could not leave the shelter … after N tries` lines; nights spent in the same shelter as
 //                            the night before (`in the shelter at X until morning`, X repeated).
 //   I3  rejected-click       rejected window clicks: one per `[forge-bridge] click rejected:` line (#618) when the
 //                            journal has them, else one per `[inventory] <op>: … Server rejected transaction` line
 //                            (the first try and `the second try failed too`; each click logs further copies through
-//                            the craft and the agent, which are not counted).
+//                            the craft and the agent, which are not counted). #618 logs at most 50 `click rejected:`
+//                            lines and then one limit line (`… lines logged; further rejections … are not`), which
+//                            is not a click: with it, the count is the larger of the two sources (#623 review 3).
 //   I4  dig-refused-with-tool `[forge-bridge] dig refused:` lines (#618) whose rule gives a tool the bot carries a
 //                            finite time (a usable tool out of the hand); before #618, Tool Progression refusals
 //                            (`needs a better tool`, `dig time for … is Infinity`) while the latest inventory
-//                            listing names a pickaxe. n/a before rotn-v0.1.19.
+//                            listing names a pickaxe. n/a before rotn-v0.1.19. The two sources count differently
+//                            (#623 review 8): #618's line names where the tool is and is once per block and position;
+//                            the older rule only knows a pickaxe was listed, so it counts every refusal it sees.
 //   I5  sunset-food-short    food-for-the-night lines (each sunset, and each night shelter after a respawn) with food
 //                            held below the night's need: `held H points, the night needs about N`
 //                            with H < N (rotn-v0.1.21 on), `food worth W hunger held, … less than T` (before);
 //                            and the sunset food runs with their `+P points`. n/a where no sunset food line exists.
 //   I6  starving             food lines at `lowFood` or less, the lowest food, `no safe food` runs longer than
 //                            `noSafeFoodMin` with no eat, and `(by starving)` hurt lines.
-//   I7  gate-then-act        a hunt of, or a hit from, a mob within `afterS` of a refusal of that mob (`left alone,
-//                            it may belong to a player: X`, `Not attacking X`). n/a before rotn-v0.1.19.
+//   I7  gate-then-act        an act on a mob within `afterS` of a refusal of that mob (`left alone, it may belong to a
+//                            player: X`, `Not attacking X`): a hunt started (`[survival] weapon … (hunt)` whose next
+//                            hunting line names X; #623 review 1), a `!attack("X")` that ran, a hunting line for X,
+//                            or a hit from X. Timed from the first of these. n/a before rotn-v0.1.19.
 //   I8  refused-command      model commands refused by design (`newAction not allowed`, an invalid item or block
 //                            name, a parameter out of range) and model replies with a command that never ran (no
 //                            `parsed command` or `Agent executed: !…` before the next reply).
@@ -47,7 +57,8 @@
 //                            reasoning tokens, and the summaries' share of the spend.
 //   I12 unattributed-hurt    `(by unknown)` hurt lines; deaths the server puts on a mob (`was slain by`, `was shot
 //                            by`) whose last hurt line within `hurtS` before it names no mob (or none came). n/a before
-//                            rotn-v0.1.5 (no hurt lines; M1 and soak 2).
+//                            rotn-v0.1.5 (no hurt lines; M1 and soak 2). Deaths pair with server.log's in order; when the
+//                            two counts differ the pairing is not trusted: null, with a note (#623 review 4).
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -74,6 +85,7 @@ const ARRIVED = /^(You have reached\b|\[respawn\] escape done|\[night\] (morning
 const COULD_NOT_LEAVE = /^\[night\] morning: could not leave the shelter at (-?\d+, -?\d+, -?\d+) after \d+ tries/;
 const IN_SHELTER = /^\[night\] in the shelter at (-?\d+, -?\d+, -?\d+) until morning$/;
 const CLICK_REJECTED = /^\[forge-bridge\] click rejected: /;
+const CLICK_LIMIT = /^\[forge-bridge\] click rejected: \d+ lines logged; further rejections/;
 const INV_REJECTED = /^\[inventory\] \S+: (the second try failed too: )?(Error: )?Server rejected transaction for clicking on slot (\d+)/;
 const DIG_REFUSED = /^\[forge-bridge\] dig refused: (\S+) at (-?\d+, -?\d+, -?\d+)/;
 const TOOL_REFUSAL = /(\S+) needs a better tool \(Tool Progression\)|dig time for (\S+) is Infinity/;
@@ -88,6 +100,8 @@ const HURT = /^\[survival\] hurt ([\d.]+) health [\d.]+->([\d.]+) \(by ([^)]*)\)
 const LEFT_ALONE = /^\[reflex\] hunting: left alone, it may belong to a player: (\S+):/;
 const NOT_ATTACKING = /^Not attacking (\S+): /;
 const HUNTING = /^\[reflex\] hunting (\S+): /;
+const HUNT_START = /^\[survival\] weapon \S+ \(hunt\)$/;
+const ATTACK_PARSED = /^parsed command: \{ commandName: '!attack', args: \[ '([^']+)' \] \}/;
 const REFUSED_CMD = /newAction not allowed|^(Agent executed: \S+ and got: )?Invalid (item|block) type|Param '\S+' must be/;
 const REPLY = /^Generated response: /;
 const REPLY_CMD = /![a-zA-Z]+\(/;
@@ -140,7 +154,7 @@ function trapped(lines) {
     let lastFailT = -Infinity;
     const close = () => { if (cur && cur.attempts >= p.minAttempts) episodes.push(cur); cur = null; };
     for (const l of lines) {
-        if (ARRIVED.test(l.msg)) { close(); continue; }
+        if (ARRIVED.test(l.msg) || DEATH.test(l.msg)) { close(); lastFailT = -Infinity; continue; }
         if (!FAIL_PATH.test(l.msg)) continue;
         if (l.t - lastFailT <= p.attemptGapS * 1000) { lastFailT = l.t; continue; } // the same attempt
         if (cur && l.t - cur.lastT > p.gapMin * 60_000) close();
@@ -161,10 +175,14 @@ function enclosedMorning(lines) {
 }
 
 function rejectedClicks(lines) {
-    const fb = lines.filter(l => CLICK_REJECTED.test(l.msg));
-    if (fb.length) return { count: fb.length, source: 'click rejected', secondTries: null, first: firsts(fb.map(at)) };
+    const limit = lines.some(l => CLICK_LIMIT.test(l.msg));
+    const fb = lines.filter(l => CLICK_REJECTED.test(l.msg) && !CLICK_LIMIT.test(l.msg));
     const inv = lines.filter(l => INV_REJECTED.test(l.msg));
-    return { count: inv.length, source: '[inventory]', secondTries: inv.filter(l => /the second try failed too/.test(l.msg)).length, first: firsts(inv.map(l => ({ ...at(l), slot: Number(INV_REJECTED.exec(l.msg)[3]) }))) };
+    const secondTries = inv.filter(l => /the second try failed too/.test(l.msg)).length;
+    const invFirst = firsts(inv.map(l => ({ ...at(l), slot: Number(INV_REJECTED.exec(l.msg)[3]) })));
+    if (fb.length && !limit) return { count: fb.length, source: 'click rejected', secondTries: null, first: firsts(fb.map(at)) };
+    if (fb.length && fb.length >= inv.length) return { count: fb.length, source: 'click rejected (capped)', secondTries: null, first: firsts(fb.map(at)) };
+    return { count: inv.length, source: fb.length ? '[inventory] (click rejected capped)' : '[inventory]', secondTries, first: invFirst };
 }
 
 function digRefusedWithTool(lines, rel) {
@@ -205,7 +223,7 @@ function sunsetFood(lines) {
     if (!sunsets.length) return null;
     const runs = lines.filter(l => FOOD_RUN.test(l.msg)).map(l => ({ ...at(l), points: Number(FOOD_RUN.exec(l.msg)[1]) }));
     const short = sunsets.filter(s => s.short);
-    return { count: short.length, nightFoodLines: sunsets.length, foodRuns: runs.length, foodRunPoints: runs.reduce((s, r) => s + r.points, 0), first: firsts(short.map(s => ({ ...at(s.l), food: s.food, held: s.held, need: s.need }))) };
+    return { count: short.length, nightFoodLines: sunsets.length, foodRuns: runs.length, foodRunPoints: runs.reduce((s, r) => s + r.points, 0), first: firsts(short.map(s => ({ ...at(s.l), food: s.food, held: s.held, ...(s.need == null ? {} : { need: s.need }) }))) };
 }
 
 function starving(lines) {
@@ -229,6 +247,15 @@ function starving(lines) {
     };
 }
 
+/** Whether lines[i] is an act on `mob`: a hunt started on it, a !attack on it that ran, a hunting line or a hit. */
+function actsOn(lines, i, mob) {
+    const { msg } = lines[i];
+    if (HUNT_START.test(msg)) return lines.slice(i + 1).find(x => HUNTING.test(x.msg))?.msg.match(HUNTING)[1] === mob;
+    const a = ATTACK_PARSED.exec(msg);
+    if (a) return a[1] === mob;
+    return HUNTING.exec(msg)?.[1] === mob || HURT.exec(msg)?.[3] === mob;
+}
+
 function gateThenAct(lines, rel) {
     if (rel.patch < SINCE.I7) return null;
     const p = INVARIANTS.gateThenAct;
@@ -239,7 +266,7 @@ function gateThenAct(lines, rel) {
     }
     const out = [];
     for (const r of refusals) {
-        const act = lines.find(l => l.t > r.l.t && l.t - r.l.t <= p.afterS * 1000 && ((HUNTING.exec(l.msg)?.[1] === r.mob) || (HURT.exec(l.msg)?.[3] === r.mob)));
+        const act = lines.find((l, i) => l.t > r.l.t && l.t - r.l.t <= p.afterS * 1000 && actsOn(lines, i, r.mob));
         if (act) out.push({ ...at(r.l), mob: r.mob, act: hms(act.t), actLine: act.n, afterS: Math.round((act.t - r.l.t) / 1000) });
     }
     return { count: out.length, refusals: refusals.length, first: firsts(out) };
@@ -306,6 +333,7 @@ function unattributed(lines, serverText, rel) {
     const firstDeaths = [];
     if (serverText != null) {
         const sd = serverDeaths(serverText);
+        if (sd.length !== deaths.length) return { count: unknown.length, deathsUnnamed: null, note: `death counts differ: journal ${deaths.length}, server.log ${sd.length}`, first: firsts(unknown.map(at)), deathsFirst: [] };
         deathsUnnamed = 0;
         deaths.forEach((d, k) => {
             const cause = sd[k]?.cause;
@@ -393,12 +421,13 @@ export function render(r, name = 'soak') {
     row('I4', 'dig-refused-with-tool', r.I4, r.I4 && `${r.I4.count} of ${r.I4.refusals} tool refusals with a usable tool carried (${r.I4.source})`);
     row('I5', 'sunset-food-short', r.I5, r.I5 && `${r.I5.count} of ${r.I5.nightFoodLines} food-for-the-night lines short of the night's need; ${r.I5.foodRuns} sunset food runs (+${r.I5.foodRunPoints} points)`);
     row('I6', 'starving', r.I6, `${r.I6.count} food lines at ${INVARIANTS.starving.lowFood} or less (lowest ${cell(r.I6.lowestFood)}), ${r.I6.noSafeFoodRuns} "no safe food" runs over ${INVARIANTS.starving.noSafeFoodMin} min (longest ${r.I6.longestNoSafeFoodMin} min), ${r.I6.starvingHurt} starving hurt lines`);
-    row('I7', 'gate-then-act', r.I7, r.I7 && `${r.I7.count} of ${r.I7.refusals} refusals followed by a hunt of, or a hit from, that mob within ${INVARIANTS.gateThenAct.afterS} s`);
+    row('I7', 'gate-then-act', r.I7, r.I7 && `${r.I7.count} of ${r.I7.refusals} refusals followed by an act on that mob (a hunt started, a !attack that ran, a hunting line or a hit) within ${INVARIANTS.gateThenAct.afterS} s`);
     row('I8', 'refused-command', r.I8, `${r.I8.count} commands refused by design, ${r.I8.neverRan} replies with a command that never ran`);
+    for (const f of r.I8.neverRanFirst ?? []) o.push(`    never ran: ${f.t} (driver.log:${f.line})`);
     row('I9', 'false-collect', r.I9, r.I9 && `${r.I9.count} false "Broke …" lines`);
     row('I10', 'death-loop', r.I10, `${r.I10.count} loops (${r.I10.loopDeaths} of ${r.I10.deaths} deaths)`);
     row('I11', 'summary-cost', r.I11, `${r.I11.count} of ${r.I11.summaries} memory summaries over ${INVARIANTS.summaryCost.bigReasoning} reasoning tokens (max ${r.I11.maxReasoning}); summaries ${cell(r.I11.share)}% of the spend`);
-    row('I12', 'unattributed-hurt', r.I12, r.I12 && `${r.I12.count} "(by unknown)" hurt lines; ${cell(r.I12.deathsUnnamed)} deaths by a mob with no mob named before them${r.I12.deathsUnnamed == null ? ' (no server.log)' : ''}`);
+    row('I12', 'unattributed-hurt', r.I12, r.I12 && `${r.I12.count} "(by unknown)" hurt lines; ${cell(r.I12.deathsUnnamed)} deaths by a mob with no mob named before them${r.I12.deathsUnnamed == null ? ` (${r.I12.note ?? 'no server.log'})` : ''}`);
     for (const d of r.I12?.deathsFirst ?? []) o.push(`    death ${d.t} (driver.log:${d.line}), server: ${d.server} (server.log:${d.serverLine})`);
     return o.join('\n');
 }
