@@ -1573,12 +1573,12 @@ test('soak 16 (F2): a run that found nothing within reach hands the step to the 
     assert.equal(runs.length, 2);
 });
 
-test('soak 16 (F2): no job run in the before-night window (the night routine has food from there), or over another action', (t) => {
+test('soak 16 (F2): no job run in the before-night window (the night routine has food from there); over another action it waits (#627 review 1)', (t) => {
     const { agent, runs } = jobAgent(t, [], { timeOfDay: dayAt(7) });
     assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, agendaState(agent.bot), { now: 1 }), null);
     const busy = jobAgent(t, []);
     busy.agent.actions.executing = true;
-    assert.equal(autoJobTick(busy.agent, FOOD_RESERVE_STEP, agendaState(busy.agent.bot), { now: 1 }), null);
+    assert.equal(autoJobTick(busy.agent, FOOD_RESERVE_STEP, agendaState(busy.agent.bot), { now: 1 }), 'food', 'waits: the step id, no model');
     assert.deepEqual([...runs, ...busy.runs], []);
 });
 
@@ -1591,11 +1591,83 @@ test('soak 16 (F2): the food job\'s run: foodRun with the day profile (forage 48
     assert.deepEqual([calls[0].forage, calls[0].hunt, calls[0].maxMs], [48, 64, 240_000]);
     // Food 15 at 19.6 min to sunset: 5.2 at sunset, need 9.6, reserve 13.6; 4.2 held: need 13.6 + 2 - 4.2 = 11.4.
     assert.equal(Math.round(calls[0].need * 10) / 10, 11.4);
-    assert.equal(r.none, false);
+    assert.equal(r.none, null);
     assert.equal(r.text, '+2.8 food points in 30 s (enough)');
     r = await AUTO_JOBS.food.run(agent, state, { foodRun: fake('no ripe wild food and no animal to hunt within 64 blocks') });
-    assert.equal(r.none, true);
+    assert.equal(r.none, 'none');
     r = await AUTO_JOBS.food.run(agent, state, { foodRun: fake('no ripe wild food, and no weapon to hunt with') });
-    assert.equal(r.none, true, 'no weapon: the model (the weapon reserve) decides');
+    assert.equal(r.none, 'noWeapon', 'no weapon: its own end (#627 review 3)');
     assert.equal(calls[0].stop(), null, 'nothing near: no stop');
+});
+
+// #627 review 1, 2, 5 (the lead): at the agendaTick level. Food due while another action runs: the tick waits for
+// it (the food step, no model run, no FOOD_DAY_RUN counted); while the job runs, the food step stays current even
+// once the reserve is reached (the model is not started on the next step over the job).
+test('#627 review 1: food due while another action runs: agendaTick waits (no model prompt, foodDay.runs unchanged), then starts the job', async (t) => {
+    const { agent, runs } = jobAgent(t, []);
+    agent.actions.executing = true; // the model's !collectBlocks, say
+    const before = agent.agenda.foodDay?.runs ?? 0;
+    assert.equal(agendaTick(agent, { now: 0 }), 'food');
+    assert.ok(!agent.self_prompter.prompt, 'the model is not prompted for food');
+    assert.equal(agent.agenda.foodDay?.runs ?? 0, before, 'no FOOD_DAY_RUN counted');
+    assert.deepEqual(runs, []);
+    agent.actions.executing = false;
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'food');
+    await flushJobs();
+    assert.deepEqual(runs, ['action:foodJob']);
+});
+
+test('#627 review 2: while the food job runs and the reserve is reached, the food step stays current: the model is not started on the next step', async (t) => {
+    const { agent } = jobAgent(t, []);
+    let release;
+    agent.actions.runAction = (label, fn) => { agent.actions.executing = true; return new Promise(r => { release = r; }).then(fn).finally(() => { agent.actions.executing = false; }); };
+    const jobs = AUTO_JOBS;
+    const saved = jobs.food.run;
+    jobs.food.run = () => Promise.resolve({ why: 'enough', none: null, text: 'enough' });
+    t.after(() => { jobs.food.run = saved; });
+    assert.equal(agendaTick(agent, { now: 0 }), 'food');
+    // The job finds food: 4 bread (16.8 points, over the reserve).
+    agent.bot.inventory = { items: () => [stack('bread', 0, 4), stack('stone_axe', 0, 1)], slots: [] };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'food', 'the job\'s step, not "rocks"');
+    assert.ok(!agent.self_prompter.prompt, 'no model run over the job');
+    release();
+    await flushJobs(); await flushJobs();
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'rocks', 'the job ended: the agenda goes on');
+});
+
+test('#627 review 3: nothing ripe and no weapon: its own text (make a weapon), and the job runs again once armed', async (t) => {
+    const { agent, runs } = jobAgent(t, [], { armed: false });
+    const jobs = { food: { ...AUTO_JOBS.food, run: () => Promise.resolve({ why: 'no ripe wild food, and no weapon to hunt with', none: 'noWeapon', text: 'none' }) } };
+    const state = agendaState(agent.bot);
+    state.jobFoundNone = (id) => { const j = agent._agenda_jobs?.[id]; return j?.noneAt ? j.noneKind : null; };
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: 1 }), 'food');
+    await flushJobs(); await flushJobs();
+    assert.ok(agent.said.at(-1).endsWith('; no weapon: the model makes one'), agent.said.at(-1));
+    const later = Date.now() + AUTO_JOBS.food.gapMs + 1;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: later }), null, 'unarmed, still here: the model');
+    assert.match(FOOD_RESERVE_STEP.goalNow(state, {}), /^The food job found no ripe wild food within 48 blocks, and you hold no weapon to hunt the animals in sight: make a weapon first/);
+    assert.doesNotMatch(FOOD_RESERVE_STEP.goalNow(state, {}), /walk about 100 blocks/);
+    state.hasWeapon = () => true;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: later }), 'food', 'armed: the job again, same place');
+    assert.equal(runs.length, 2);
+});
+
+test('#627 review 4 and 7: the job stops for a hostile within 16 (as the sunset run); a run stopped within 30 s is not counted, the 3-min gap holds', async (t) => {
+    const { agent } = jobAgent(t, []);
+    const state = agendaState(agent.bot);
+    let stop = null;
+    await AUTO_JOBS.food.run(agent, state, { foodRun: (bot, opts) => { stop = opts.stop; return Promise.resolve({ points: 0, ms: 1, why: 'enough' }); } });
+    assert.equal(stop(), null, 'nothing near');
+    agent.bot.entities[5] = { id: 5, type: 'mob', name: 'zombie', position: new Vec3(14.5, 64, 0.5), metadata: { 7: 20 } };
+    assert.match(stop() ?? '', /^a zombie within 16 blocks$/);
+    // Stopped early: not counted.
+    const s = jobAgent(t, []);
+    s.agent.actions.runAction = (label, fn) => { s.runs.push(label); return Promise.resolve(fn()).then(() => ({ interrupted: true })); };
+    const jobs = { food: { ...AUTO_JOBS.food, run: () => Promise.resolve({ why: 'stopped', none: null, text: 'stopped' }) } };
+    const st = agendaState(s.agent.bot);
+    assert.equal(autoJobTick(s.agent, FOOD_RESERVE_STEP, st, { jobs, now: 1 }), 'food');
+    await flushJobs(); await flushJobs();
+    assert.equal(s.agent._agenda_jobs.food.runs, 0, 'not counted');
+    assert.ok(s.agent.said.at(-1).endsWith('; stopped early: not counted'));
+    assert.equal(autoJobTick(s.agent, FOOD_RESERVE_STEP, st, { jobs, now: Date.now() + 1000 }), null, 'the gap holds');
 });

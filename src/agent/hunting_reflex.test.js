@@ -178,6 +178,7 @@ test('#448, soak 16 (F5): a bull is no reason unless the weapon\'s sweep reaches
     assert.deepEqual(nearbyHuntable(beside.bot), []);
     // With a club (no sweep) the same bull beside the cow is no reason.
     const club = huntAgent({ animals: [cow(1, 4), bull(2, 5)], armed: false, items: [{ name: 'spartanweaponry:club_wood', count: 1, metadata: 0, type: 9001 }] });
+    club.bot.forge = { bcAttack: { active: true } }; // Better Combat's packet: no sweep for a club (#627 review 6: the path)
     assert.equal(retaliationRisk(club.bot, club.bot.entities[1], { weapon: { name: 'spartanweaponry:club_wood' } }), null);
     // A herd: two Holsteins 3 apart.
     const herd = huntAgent({ animals: [cow(1, 4), cow(2, 7)] });

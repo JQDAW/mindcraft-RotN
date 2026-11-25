@@ -206,7 +206,8 @@ function tickState(agent) {
  */
 export const AUTO_JOBS = {
     food: {
-        label: 'action:foodJob', perDay: 4, gapMs: 3 * 60_000, moveOn: 32,
+        // shortMs (#627 review 7): a run stopped (a reflex, a command) within this does not count toward perDay.
+        label: 'action:foodJob', perDay: 4, gapMs: 3 * 60_000, moveOn: 32, shortMs: 30_000,
         ready: (agent, state) => {
             const m = state.minutesToSunset?.() ?? Infinity;
             if (!(m > RESERVE_LEAD_MIN)) return 'not in full daylight (the night routine has food from the before-night window on)';
@@ -214,7 +215,7 @@ export const AUTO_JOBS = {
         },
         run: async (agent, state, { foodRun: runFood = null } = {}) => {
             const bot = agent.bot;
-            const [{ foodRun: realRun, FOOD_RUN }, { DAY_FOOD }, threats] = await Promise.all([import('./library/food_run.js'), import('./library/food.js'), import('./library/threats.js')]);
+            const [{ foodRun: realRun, FOOD_RUN }, { DAY_FOOD }, night] = await Promise.all([import('./library/food_run.js'), import('./library/food.js'), import('./night_routine.js')]);
             const foodRun = runFood ?? realRun;
             const target = foodTargetNow(state, { finished: !!agent.agenda?.finished });
             const held = state.foodHeld?.() ?? 0;
@@ -222,11 +223,15 @@ export const AUTO_JOBS = {
             const stop = () => {
                 const m = state.minutesToSunset?.() ?? Infinity;
                 if (!(m > RESERVE_LEAD_MIN)) return 'the before-night window';
-                try { return threats.threatPlan(bot) ? 'a threat came near' : null; } catch { return null; }
+                // #627 review 4: a hostile within FOOD_RUN.hostileRange (16), as the sunset run (night_routine.hostileNear).
+                try { const mob = night.hostileNear(bot, FOOD_RUN.hostileRange); return mob ? `${mob.name ? `a ${mob.name}` : 'a hostile mob'} within ${FOOD_RUN.hostileRange} blocks` : null; } catch { return null; }
             };
             const r = await foodRun(bot, { ...FOOD_RUN.day, need, stop });
-            const none = /^no ripe wild food(,| and) (no animal to hunt|and no weapon)/.test(r?.why ?? '');
-            return { why: r?.why ?? 'no result', none, text: `+${r?.points ?? 0} food points in ${Math.round((r?.ms ?? 0) / 1000)} s (${r?.why ?? 'no result'})` };
+            const why = r?.why ?? 'no result';
+            // none: nothing in reach here ('none': the model picks a direction); 'noWeapon' (#627 review 3): nothing ripe
+            // and no weapon to hunt the animals in sight with (the model makes one, or looks for wild food elsewhere).
+            const none = /^no ripe wild food, and no weapon/.test(why) ? 'noWeapon' : /^no ripe wild food and no animal to hunt/.test(why) ? 'none' : null;
+            return { why, none, text: `+${r?.points ?? 0} food points in ${Math.round((r?.ms ?? 0) / 1000)} s (${why})` };
         },
     },
 };
@@ -235,11 +240,17 @@ function jobWaiting(agent, id, now = Date.now()) {
     const j = jobOf(agent, id);
     return !!j && !j.running && j.lastEnd != null && !j.lastNone && now - j.lastAt < (AUTO_JOBS[agent.agenda?.steps?.find?.(s => s.id === id)?.autoJob ?? id]?.gapMs ?? 0);
 }
+/** Where the last run found nothing in reach: its kind ('none' | 'noWeapon') while the bot is still there, else null. */
 function jobFoundNone(agent, id) {
     const j = jobOf(agent, id);
     const here = agent?.bot?.entity?.position;
     const spec = AUTO_JOBS[id];
-    return !!j?.noneAt && !!here && here.distanceTo(j.noneAt) < (spec?.moveOn ?? 32);
+    return j?.noneAt && here && here.distanceTo(j.noneAt) < (spec?.moveOn ?? 32) ? (j.noneKind ?? 'none') : null;
+}
+/** #627 review 2: the step whose job runs now, or null: the agenda keeps it current until the job ends. */
+export function runningJob(agent) {
+    for (const [id, j] of Object.entries(agent?._agenda_jobs ?? {})) if (j?.running) return id;
+    return null;
 }
 
 /**
@@ -250,33 +261,43 @@ export function autoJobTick(agent, step, state, { jobs = AUTO_JOBS, now = Date.n
     const spec = step?.autoJob ? jobs[step.autoJob] : null;
     if (!spec || typeof agent.actions?.runAction !== 'function') return null;
     const all = agent._agenda_jobs ??= {};
-    const j = all[step.id] ??= { day: null, runs: 0, lastAt: -Infinity, lastEnd: null, lastNone: false, noneAt: null, running: false };
+    const j = all[step.id] ??= { day: null, runs: 0, lastAt: -Infinity, lastEnd: null, lastNone: false, noneAt: null, noneKind: null, running: false };
     if (j.running) return step.id;
     const day = state.day?.() ?? Math.floor(now / (20 * 60_000));
     if (j.day !== day) Object.assign(j, { day, runs: 0 });
-    if (agent.actions.executing) return null; // never over another action (the next tick tries)
     if (j.runs >= spec.perDay) return null; // the model, as before the job
-    if (j.noneAt && agent.bot?.entity?.position?.distanceTo(j.noneAt) < spec.moveOn) return null; // the model picks a direction
+    // Nothing in reach here: the model picks a direction (or, with no weapon, makes one: once armed the job runs again).
+    if (j.noneAt && agent.bot?.entity?.position?.distanceTo(j.noneAt) < spec.moveOn && !(j.noneKind === 'noWeapon' && state.hasWeapon?.())) return null;
     if (now - j.lastAt < spec.gapMs) return null;
     let notReady = null;
     try { notReady = spec.ready?.(agent, state) ?? null; } catch (err) { notReady = safeError(err); }
     if (notReady) return null;
+    // #627 review 1: the job would run but another action is running: wait for it (the step id: no model run is started
+    // for food, and none is counted against FOOD_DAY_RUNS); the next tick starts the job.
+    if (agent.actions.executing) return step.id;
     j.runs++;
     j.running = true;
     j.lastAt = now;
     const sp = agent.self_prompter;
     if (sp?.isActive?.() && ownsPrompt(agent)) { sp.stop(false); agent._agenda_paused = true; }
     say(agent, `agenda step ${step.id}: the scripted job (run ${j.runs} of ${spec.perDay} today)`);
-    let result = null;
+    let result = null, stopped = false;
+    const started = Date.now();
     Promise.resolve(agent.actions.runAction(spec.label, async () => { result = await spec.run(agent, state); }))
-        .catch(err => { result = { why: safeError(err), none: false, text: `failed: ${safeError(err)}` }; })
+        .then((ret) => { stopped = !!ret?.interrupted || result?.why === 'stopped'; })
+        .catch(err => { result = { why: safeError(err), none: null, text: `failed: ${safeError(err)}` }; })
         .finally(() => {
             j.running = false;
             j.lastAt = Date.now();
-            j.lastEnd = result?.why ?? 'no result';
+            j.lastEnd = result?.why ?? (stopped ? 'stopped' : 'no result');
             j.lastNone = !!result?.none;
+            j.noneKind = result?.none ?? null;
             j.noneAt = result?.none ? (agent.bot?.entity?.position?.clone?.() ?? null) : null;
-            say(agent, `agenda step ${step.id}: the scripted job ended: ${result?.text ?? j.lastEnd}${result?.none ? '; the model picks a direction' : ''}`);
+            // #627 review 7 (the lead): a run stopped (a reflex, a command) within shortMs is not counted; the gap holds.
+            const short = stopped && j.lastAt - started < (spec.shortMs ?? 0);
+            if (short) j.runs = Math.max(0, j.runs - 1);
+            const then = result?.none === 'noWeapon' ? '; no weapon: the model makes one' : result?.none ? '; the model picks a direction' : short ? '; stopped early: not counted' : '';
+            say(agent, `agenda step ${step.id}: the scripted job ended: ${result?.text ?? j.lastEnd}${then}`);
         });
     return step.id;
 }
@@ -342,6 +363,10 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     }
 
     const state = tickState(agent);
+    // #627 review 2: while a step's scripted job runs, that step stays current (the model is not started on the next
+    // step over the job, whose own commands would stop it; the food job fills to the reserve + 2 before it ends).
+    const busy = runningJob(agent);
+    if (busy) return busy;
     const { step, newlyDone, retried = [], waiting = false } = agenda.evaluate(state);
     // #463 decision: each retry of a stuck step, with its fresh budget, is said.
     for (const r of retried) {

@@ -88,6 +88,9 @@ const NOT_SWEEPING_NAME = /(^|[:_])(club|axe|pickaxe|shovel|mace|hammer|warhamme
 function sweepLevelOf(item) {
     try { return (item?.enchants ?? []).find(e => /sweeping/.test(e?.name ?? ''))?.lvl ?? 0; } catch { return 0; }
 }
+// The wards:effect_sweeping level (amplifier + 1) from the bot's effects, by the effect's registry name. forge-bridge's
+// registry may not name a modded effect: then this reads 0 (as if the potion were not there; the enchantment and
+// the item's own sweep still count). #627 review 6: a comment, no lookup by number (the id is the server's).
 function sweepPotionOf(bot) {
     for (const [id, e] of Object.entries(bot?.entity?.effects ?? {})) {
         const name = bot?.registry?.effects?.[e?.id ?? id]?.name ?? e?.name ?? '';
@@ -99,7 +102,9 @@ export function weaponSweepOf(bot, item) {
     const fn = rotnData.weaponSweep;
     if (typeof fn === 'function') {
         let r = null;
-        try { r = fn(item?.name ? item : 'hand', { enchantment: sweepLevelOf(item), potion: sweepPotionOf(bot) }); } catch { r = null; }
+        // #627 review 6: on the attack path the bot will use (Better Combat's packet, or the vanilla fallback, where
+        // only swords sweep and rotn-data gives no radius: then reach is SWEEP.unknownReach).
+        try { r = fn(item?.name ? item : 'hand', { path: attackPath(bot), enchantment: sweepLevelOf(item), potion: sweepPotionOf(bot) }); } catch { r = null; }
         if (r) return { sweeps: r.sweeps ?? null, reach: r.sweeps === false ? 0 : Number.isFinite(r.radius) && r.radius > 0 ? r.radius + SWEEP.margin : SWEEP.unknownReach };
     }
     const name = item?.name ?? '';

@@ -421,7 +421,10 @@ export const FOOD_RESERVE_STEP = {
         const m = s.minutesToSunset?.() ?? Infinity;
         const night = m > 0 && m <= RESERVE_LEAD_MIN && foodShort(s, ctx) !== null;
         // Soak 16 (F2): the scripted food job found nothing in reach here: the model only picks a direction.
-        const none = s.jobFoundNone?.('food')
+        const kind = s.jobFoundNone?.('food');
+        const none = kind === 'noWeapon'
+            ? 'The food job found no ripe wild food within 48 blocks, and you hold no weapon to hunt the animals in sight: make a weapon first (a wooden club from 2 logs), or look for ripe wild food elsewhere; the food job runs again by itself once you hold one. '
+            : kind
             ? 'The food job (ripe wild food within 48 blocks, animals within 64) found nothing here. Choose a direction you have not been, walk about 100 blocks there with !goToCoordinates, and the food job runs again there by itself. '
             : '';
         return none + `Food: you hold food worth ${held} points in your inventory; `

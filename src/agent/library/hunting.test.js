@@ -194,7 +194,9 @@ test('soak 7 (c): a hunt takes the best weapon (equipHighestAttack) before its f
 // so it is no reason unless the weapon the bot will hit with may sweep onto it; the herd (same-breed cows) is
 // checked again during the chase.
 const bull = (x, extra = {}) => ({ name: 'animania:bull_holstein', position: new Vec3(x + 0.5, 64, 0.5), height: 1.6, ...extra, metadata: { ...HEALTH, ...(extra.metadata ?? {}) } });
-const held = (bot, items, hand = null) => Object.assign(bot, { inventory: { items: () => items, slots: [] }, heldItem: hand });
+// The bot's attacks go through Better Combat's packet (bc_attack on, as on the soak server): attackPath 'bettercombat'.
+const BC = { bcAttack: { active: true } };
+const held = (bot, items, hand = null) => Object.assign(bot, { inventory: { items: () => items, slots: [] }, heldItem: hand, forge: BC });
 const item = (name) => ({ name, count: 1, metadata: 0 });
 
 test('soak 16 (F4): a hog is hunted like a sow, and "pig" finds both; a piglet never', () => {
@@ -208,7 +210,10 @@ test('soak 16 (F4): a hog is hunted like a sow, and "pig" finds both; a piglet n
 });
 
 test('soak 16 (F5): the sweep of the weapon the bot will hit with: swords sweep, clubs, axes and pickaxes do not, an unknown item may (2.5 blocks)', () => {
-    const bot = {};
+    const bot = { forge: BC };
+    // #627 review 6: on the vanilla fallback path (no Better Combat packet) rotn-data has the club sweep like a sword,
+    // with no radius: reach 2.5.
+    assert.deepEqual(weaponSweepOf({}, item('spartanweaponry:club_wood')), { sweeps: true, reach: SWEEP.unknownReach }, 'the vanilla path');
     assert.deepEqual(weaponSweepOf(bot, item('iron_sword')).sweeps, true);
     assert.equal(weaponSweepOf(bot, item('spartanweaponry:club_wood')).sweeps, false);
     assert.equal(weaponSweepOf(bot, item('stone_pickaxe')).sweeps, false);
