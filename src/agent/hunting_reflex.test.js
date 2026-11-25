@@ -80,7 +80,8 @@ test('G4 #5 forage: ripe wild food comes before a hunt; a bare bush, an unripe h
     assert.deepEqual(await hunt(bare), [], 'nothing ripe, no animal: nothing');
     const yard = withCrops(huntAgent({ animals: [] }), { '6,64,0': ['harvestcraft:aridgarden', 0], '9,64,0': ['oak_fence', 0] });
     assert.deepEqual(await hunt(yard), [], 'a garden by a fence may be a player\'s');
-    assert.deepEqual(await hunt(withCrops(huntAgent({ food: 18, animals: [] }), { '6,64,0': ['rustic:wildberry_bush', 1] })), [], 'food not due: no foraging either');
+    // Soak 16 (F1): "not due" is the day reserve held (food 18: 8.2 at sunset, need 6.6, + 4 = 10.6; 3 bread 12.6).
+    assert.deepEqual(await hunt(withCrops(huntAgent({ food: 18, animals: [], items: [{ name: 'bread', metadata: 0, count: 3 }] }), { '6,64,0': ['rustic:wildberry_bush', 1] })), [], 'food not due: no foraging either');
 });
 
 test('#427 review: a forage run that got nothing (bushes out of reach) does not hold food up: the next tick hunts', async (t) => {
@@ -161,16 +162,24 @@ test('#431 review 7 (owed): an older hunt\'s unstuck stop is not held against th
 
 // #448 (soak 2's 22:48 "gored to death"): an Animania bull charges whoever hurts it or its herd,
 // and Animania cows call every cow of their breed within 16 when one is hurt.
-test('#448: no hunt near a bull or of a cow in a herd that calls for help; a lone cow is hunted; !attack says why', async (t) => {
+test('#448, soak 16 (F5): a bull is no reason unless the weapon\'s sweep reaches it; a cow in a herd of its breed is not hunted; a lone cow is; !attack says why', async (t) => {
     t.mock.method(console, 'log', () => {});
     const { retaliationRisk, nearbyHuntable } = await import('./library/hunting.js');
     const bull = (id, x) => ({ id, name: 'animania:bull_holstein', type: 'mob', position: new Vec3(x + 0.5, 64, 0.5), height: 1.6, metadata: { 7: 10 } });
     const angus = (id, x) => cow(id, x, { name: 'animania:cow_angus' });
-    // A bull 10 blocks off: nothing is hunted, and the reason names it.
+    // Soak 16 (rotn-data): a bull charges only what hurt it. 10 blocks from the cow, out of the sword's sweep: hunted.
     const withBull = huntAgent({ animals: [cow(1, 4), bull(2, 14)] });
-    assert.deepEqual(await hunt(withBull), [], 'no hunt near a bull');
-    assert.match(retaliationRisk(withBull.bot, withBull.bot.entities[1]), /^a animania:bull_holstein within 16 blocks/);
-    assert.deepEqual(nearbyHuntable(withBull.bot), []);
+    assert.equal(retaliationRisk(withBull.bot, withBull.bot.entities[1]), null);
+    assert.deepEqual(await hunt(withBull), ['mode:hunting'], 'a bull 10 blocks off is no reason');
+    // Beside the cow, within the sword's sweep: refused, the reason says so.
+    const beside = huntAgent({ animals: [cow(1, 4), bull(2, 5)] });
+    assert.deepEqual(await hunt(beside), [], 'a sword could sweep onto the bull');
+    assert.match(retaliationRisk(beside.bot, beside.bot.entities[1]), /^a animania:bull_holstein 1\.0 blocks from it, within your weapon's (possible )?sweep \(\d\.\d blocks\): a hit on it would make it charge$/);
+    assert.deepEqual(nearbyHuntable(beside.bot), []);
+    // With a club (no sweep) the same bull beside the cow is no reason.
+    const club = huntAgent({ animals: [cow(1, 4), bull(2, 5)], armed: false, items: [{ name: 'spartanweaponry:club_wood', count: 1, metadata: 0, type: 9001 }] });
+    club.bot.forge = { bcAttack: { active: true } }; // Better Combat's packet: no sweep for a club (#627 review 6: the path)
+    assert.equal(retaliationRisk(club.bot, club.bot.entities[1], { weapon: { name: 'spartanweaponry:club_wood' } }), null);
     // A herd: two Holsteins 3 apart.
     const herd = huntAgent({ animals: [cow(1, 4), cow(2, 7)] });
     assert.deepEqual(await hunt(herd), [], 'no hunt of a herd that calls for help');
@@ -179,15 +188,15 @@ test('#448: no hunt near a bull or of a cow in a herd that calls for help; a lon
     const lone = huntAgent({ animals: [cow(1, 4), angus(2, 7)] });
     assert.equal(retaliationRisk(lone.bot, lone.bot.entities[1]), null);
     assert.deepEqual(await hunt(lone), ['mode:hunting']);
-    // A bull 20 from the cow but 15 from the bot still counts (the walk takes the bot near it).
+    // A bull 20 from the cow but 15 from the bot: no reason any more (it never comes for the bot unhurt).
     const behind = huntAgent({ animals: [cow(1, 4), bull(2, -15)] });
-    assert.match(retaliationRisk(behind.bot, behind.bot.entities[1]), /bull_holstein within 16/);
-    // !attack refuses with the reason.
-    const cmd = huntAgent({ animals: [cow(1, 4), bull(2, 14)] });
+    assert.equal(retaliationRisk(behind.bot, behind.bot.entities[1]), null);
+    // !attack refuses a herd with the reason.
+    const cmd = huntAgent({ animals: [cow(1, 4), cow(2, 7)] });
     cmd.bot.pvp = { attack: () => assert.fail('never attacked'), stop() {} };
     cmd.actions.runAction = (label, fn) => Promise.resolve(fn()).then(() => ({ message: cmd.bot.output, interrupted: false }));
     await executeCommand(cmd, '!attack("animania:cow_holstein")');
-    assert.match(cmd.bot.output, /Not attacking animania:cow_holstein: a animania:bull_holstein within 16 blocks \(it charges whoever hurts it or its herd; never hunt near one\)\. Find a lone one, away from bulls\./);
+    assert.match(cmd.bot.output, /Not attacking animania:cow_holstein: in a herd: another animania:cow_holstein within 16 blocks, and its kind calls the herd when one is hurt\. Find a lone one, away from others of its breed \(with a sword, also away from bulls\)\./);
 });
 
 test('#453 review 2 and 3: the model never !attacks a never-fight animal, hurt or not; a task giver may, warned; a giver may override the bull and herd refusal, never ownership; both reasons are said', async (t) => {
@@ -216,22 +225,27 @@ test('#453 review 2 and 3: the model never !attacks a never-fight animal, hurt o
     r = await run([bull(1, 2, { metadata: { 7: 24, 2: 'Ferdinand' } })], '!attack("animania:bull_holstein")', { sender: 'JQDAW' });
     assert.deepEqual(r.hit, []);
     assert.match(r.out, /it may belong to a player \(it has a name tag\)/);
-    // A cow near a bull: the model is refused; a giver gets it, warned.
-    r = await run([cow(1, 4), bull(2, 14)], '!attack("animania:cow_holstein")');
+    // A cow beside a bull, with a sword (its sweep could reach the bull): the model is refused; a giver gets it, warned.
+    r = await run([cow(1, 4), bull(2, 5)], '!attack("animania:cow_holstein")');
     assert.deepEqual(r.hit, []);
-    r = await run([cow(1, 4), bull(2, 14)], '!attack("animania:cow_holstein")', { sender: 'JQDAW' });
+    r = await run([cow(1, 4), bull(2, 5)], '!attack("animania:cow_holstein")', { sender: 'JQDAW' });
     assert.deepEqual(r.hit, [1]);
-    assert.match(r.out, /Warning: JQDAW asked for it, so attacking animania:cow_holstein although a animania:bull_holstein within 16 blocks/);
+    assert.match(r.out, /Warning: JQDAW asked for it, so attacking animania:cow_holstein although a animania:bull_holstein 1\.0 blocks from it/);
+    // Soak 16 (F5): the bull 10 blocks off: no reason, the model's !attack goes ahead.
+    r = await run([cow(1, 4), bull(2, 14)], '!attack("animania:cow_holstein")');
+    assert.deepEqual(r.hit, [1]);
     // Refused for two reasons (a named cow, and a lone-in-a-herd one): both are said.
     r = await run([cow(1, 4, { metadata: { 7: 10, 2: 'Bessie' } }), cow(2, 7)], '!attack("animania:cow_holstein")');
     assert.deepEqual(r.hit, []);
-    assert.match(r.out, /Not attacking animania:cow_holstein: it may belong to a player \(it has a name tag\); and in a herd: another animania:cow_holstein within 16 blocks.*\. Find a lone, wild one away from bulls, fences, farms and houses\./);
+    assert.match(r.out, /Not attacking animania:cow_holstein: it may belong to a player \(it has a name tag\); and in a herd: another animania:cow_holstein within 16 blocks.*\. Find a lone, wild one away from others of its breed, fences, farms and houses\./);
 });
 
 test('G4 #5: the hunting reflex does nothing when food is not due, at dusk or night, with a threat near, when busy, or sheltered', async (t) => {
     t.mock.method(console, 'log', () => {});
-    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16 })), [], 'food 16: not due');
-    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], items: [{ name: 'bread', metadata: 0, count: 2 }] })), [], 'food held: the eating reflex eats it');
+    // Soak 16 (F1): due is below the day reserve (food 16: 6.2 at sunset, need 8.6, + 4 = 12.6; food 12: 16.6).
+    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16, items: [{ name: 'bread', metadata: 0, count: 3 }] })), [], 'food 16, 12.6 points held: not due');
+    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], items: [{ name: 'bread', metadata: 0, count: 4 }] })), [], 'food 12, 16.8 points held: not due');
+    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16 })), ['mode:hunting'], 'food 16, nothing held: the day reserve is short');
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], timeOfDay: NIGHT_START + 100 })), [], 'night');
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], timeOfDay: NIGHT_START - 1000 })), [], 'dusk: the night routine');
     const zombie = { id: 9, name: 'zombie', type: 'mob', metadata: {}, position: new Vec3(4.5, 64, 0.5), height: 1.95 };
@@ -247,7 +261,7 @@ test('G4 #5: the hunting reflex never hunts an animal that may belong to a playe
     t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6, { metadata: { 2: 'Bessie' } })] })), []);
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], blocks: { '9,64,0': 'fence' } })), [], 'near a fence');
-    assert.ok(logs.includes('[reflex] hunting: left alone, it may belong to a player: animania:cow_holstein: it has a name tag'), logs.join('\n'));
+    assert.ok(logs.includes('[reflex] hunting: left alone: animania:cow_holstein (may belong to a player: it has a name tag)'), logs.join('\n'));
 });
 
 test('G4 #5: !attack refuses an animal that may belong to a player, and takes a wild one of the same kind', async (t) => {
