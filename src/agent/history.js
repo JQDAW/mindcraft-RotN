@@ -38,12 +38,14 @@ export function summaryChunkSize(maxMessages) {
  */
 export { MEMORY_MODES, memoryMode };
 
+/** Round 17 M (#637 review 4): how the old notes open the turns a code-mode summary call reads. */
+export const OLD_NOTES_PREFIX = 'Your old notes: ';
+
 /**
  * Round 17 M: a chunk the summary model reads in code mode: one with a user turn not marked untrusted (#637 review 6:
  * a player's words that are not an [untrusted: ...] line; another bot's words count too, though this pack runs one).
  * Self-prompts, agenda nudges and command results are system turns, the bot's own are assistant turns: never.
  */
-export const OLD_NOTES_PREFIX = 'Your old notes: ';
 export function hasPlayerTurn(turns) {
     return turns.some(t => t?.role === 'user' && !isUntrustedTurn(t));
 }

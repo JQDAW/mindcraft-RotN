@@ -14,9 +14,17 @@ export const QUIET_MS = 5_000;
 export const MIN_GAP_MS = 60_000;
 
 /** Record that a reflex (mode) interrupted `interruptedAction`. No LLM call. */
-export function requestReplan(agent, modeName, interruptedAction, { now = Date.now(), log = (l) => console.log(l), note = null, due = false } = {}) {
+export function requestReplan(agent, modeName, interruptedAction, { now = Date.now(), log = (l) => console.log(l), note = null, due = false, reflex = true } = {}) {
     if (!agent.replan) agent.replan = { modes: {}, interrupted: null, first_at: now, last_at: now };
     const r = agent.replan;
+    // #642 review 9: reflex false (the trapped job): no "Reflexes (...) ran" in the note, its own log line.
+    if (!reflex) {
+        if (note) r.notes = [...(r.notes || []).slice(-2), note];
+        if (due) r.due = true;
+        r.last_at = now;
+        log(`[${modeName}] re-plan requested${due ? ' (due)' : ''}; no LLM call now.`);
+        return;
+    }
     r.modes[modeName] = (r.modes[modeName] || 0) + 1;
     if (interruptedAction) r.interrupted = interruptedAction;
     if (note) r.notes = [...(r.notes || []).slice(-2), note]; // D3: what happened (the bot's own state only)
