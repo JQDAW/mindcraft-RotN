@@ -564,13 +564,14 @@ export function escapeText(r) {
         : /no block to pillar|blocks for pillars are spent|used the \d+ blocks/.test(why)
         ? 'Make dirt from dirt piles (4 piles each) or planks, then !goToSurface again (the cobblestone kept for the night\'s shelter is not used).'
         : /falling/.test(why)
-        ? 'Start sideways, away from the falling block: !breakBlockAt the block beside you on another side, step into it, then !goToSurface.'
+        // Round 17 P (the lead): only real commands (no command digs one chosen block; !breakBlockAt is a skill).
+        ? 'Start sideways, away from the falling block: !moveAway(3) (it digs a way if it must), then !goToSurface.'
         : /liquid|water|lava/.test(why)
         ? 'Dig away from the liquid, on the other side, then !goToSurface.'
         : /ran out|steps were not enough/.test(why)
         ? '!goToSurface goes on from here, a bit higher each time.'
         : /could not dig/.test(why)
-        ? 'That block needs a better tool: dig another side with !breakBlockAt, then !goToSurface.'
+        ? 'That block needs a better tool: !moveAway(3) to get beside it (it digs a way if it must), then !goToSurface.'
         : '!goToSurface tries again from here.';
     return `You are trapped at ${at(r.at)}: no walkable way to open ground within ${ESCAPE.targetRadius} blocks. The escape stopped after ${secs} s (dug ${r.dug}, placed ${r.placed}): ${why}. ${next}`;
 }
