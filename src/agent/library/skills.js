@@ -4326,8 +4326,9 @@ export async function useDoor(bot, door_pos=null) {
  */
 export function scrollUsedOn(bot) {
     if (bot?.rotnScrollUsed) return bot.rotnScrollUsed;
-    const held = carriedItems(bot).some(i => /(^|:)spawnscroll$/.test(i?.name ?? '') && /lifescroll/.test(i?.name ?? ''))
-        || /(^|:)spawnscroll$/.test(bot?.inventory?.selectedItem?.name ?? '');
+    // #645 nit: one test for every place it may be (the inventory, the off hand, the cursor).
+    const isScroll = (i) => /(^|:)spawnscroll$/.test(i?.name ?? '') && /lifescroll/.test(i?.name ?? '');
+    const held = carriedItems(bot).some(isScroll) || isScroll(bot?.inventory?.selectedItem);
     if (!bot?.inventory || held) return null;
     return { pos: null, at: null, by: 'no Scroll of New Life held' };
 }
