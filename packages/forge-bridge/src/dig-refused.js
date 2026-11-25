@@ -10,13 +10,17 @@
 //   hardness 0.9); held planks:1 (no pickaxe level); pickaxe tools: stone_pickaxe (level 0) off hand;
 //   rule: held Infinity, stone_pickaxe 350 ms
 //
-// The tools listed are those of the block's harvest tool class (pickaxe when the block names none),
+// The tools listed are those of the block's harvest tool class (pickaxe when the block names none,
+// then labelled "pickaxe tools (default class)", #618 review 4),
 // wherever they are in the player window: hotbar <n>, main <slot>, off hand, armour <slot>, grid
 // <slot> (the 2x2 crafting grid), cursor. "rule" is the installed digTime for each, as if held.
 
 const ATTACHED = Symbol.for('mindcraft-rotn.digRefusedLog');
 const INFINITY_ERR = /dig time for .+ is Infinity/;
-export const DIG_REFUSED = { maxKeys: 1000 };
+// #618 review 1: at most maxLines lines per connection (a bot), then one notice, as click-diagnostics.js.
+export const DIG_REFUSED = { maxLines: 100 };
+/** The notice after the last line (harness-ops' soak-invariants matches this text). */
+export const digRefusedCapLine = (maxLines) => `dig refused: ${maxLines} lines logged; further refusals on this connection are not`;
 
 /** Where a slot of the player window is, in words. */
 export function slotPlace(slot) {
@@ -77,17 +81,18 @@ export function digRefusedLine(bot, block, sources) {
         : 'none carried';
     const times = [`held ${ms(timeWith(held))}`, ...found.map((f) => `${itemName(f.item)} ${ms(timeWith(f.item))}`)];
     return `dig refused: ${block.name}:${block.metadata ?? 0} at ${p.x}, ${p.y}, ${p.z} (${rule}); held ${heldText}; `
-        + `${cls} tools: ${tools}; rule: ${times.join(', ')}`;
+        + `${cls} tools${state?.harvestTool ? '' : ' (default class)'}: ${tools}; rule: ${times.join(', ')}`;
 }
 
 /**
  * Wraps bot.dig: when it throws the rule's Infinity, logs digRefusedLine once per block (name and
- * meta) and position, then rethrows unchanged. Installed once mineflayer has added bot.dig.
- * @returns {{ lines: number }}
+ * meta) and position, then rethrows unchanged. Installed once mineflayer has added bot.dig. After
+ * maxLines lines one notice (digRefusedCapLine), then no more lines; report.dropped counts the rest.
+ * @returns {{ lines: number, dropped: number }}
  */
-export function attachDigRefusedLog(bot, sources, { log = (m) => console.log(`[forge-bridge] ${m}`), maxKeys = DIG_REFUSED.maxKeys } = {}) {
+export function attachDigRefusedLog(bot, sources, { log = (m) => console.log(`[forge-bridge] ${m}`), maxLines = DIG_REFUSED.maxLines } = {}) {
     if (bot[ATTACHED]) return bot[ATTACHED];
-    const report = { lines: 0 };
+    const report = { lines: 0, dropped: 0 };
     bot[ATTACHED] = report;
     const seen = new Set();
     const install = () => {
@@ -101,10 +106,17 @@ export function attachDigRefusedLog(bot, sources, { log = (m) => console.log(`[f
                     try {
                         const p = block?.position;
                         const key = `${block?.name}:${block?.metadata}@${p?.x},${p?.y},${p?.z}`;
-                        if (!seen.has(key) && seen.size < maxKeys) {
-                            seen.add(key);
-                            const line = digRefusedLine(bot, block, sources);
-                            if (line) { report.lines++; log(line); }
+                        if (!seen.has(key)) {
+                            if (report.lines >= maxLines) report.dropped++;
+                            else {
+                                seen.add(key);
+                                const line = digRefusedLine(bot, block, sources);
+                                if (line) {
+                                    report.lines++;
+                                    log(line);
+                                    if (report.lines === maxLines) log(digRefusedCapLine(maxLines));
+                                }
+                            }
                         }
                     } catch { /* the diagnostic never changes the dig's outcome */ }
                 }

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { createRequire } from 'node:module';
 import { attachDigTime, dumpDigSources } from '../src/dig-time.js';
-import { attachDigRefusedLog, digRefusedLine, slotPlace } from '../src/dig-refused.js';
+import { attachDigRefusedLog, digRefusedLine, digRefusedCapLine, slotPlace, DIG_REFUSED } from '../src/dig-refused.js';
 import * as rotnData from '../../rotn-data/index.js';
 
 const require = createRequire(import.meta.url);
@@ -104,4 +104,35 @@ test('other errors pass through with no line; attaching twice wraps once; before
     const stone = bot.blockAt(new Vec3(8, 64, 8));
     await assert.rejects(late.dig(stone), /is Infinity/);
     assert.equal(logs.length, 1, 'installed on inject_allowed');
+});
+
+test('#618 review 1: at most maxLines lines per connection, then one notice; later refusals are counted, not logged', async () => {
+    const { bot, sources } = fakeBot();
+    const logs = [];
+    const report = attachDigRefusedLog(bot, sources, { log: (m) => logs.push(m), maxLines: 2 });
+    for (const x of [8, 9, 8]) await assert.rejects(bot.dig(bot.blockAt(new Vec3(x, 64, 8)), true), /is Infinity/);
+    // a third position: past the cap
+    const third = bot.blockAt(new Vec3(9, 64, 8));
+    third.position = new Vec3(9, 65, 8); // another position for the same kind of block
+    await assert.rejects(bot.dig(third, true), /is Infinity/);
+    assert.equal(logs.length, 3);
+    assert.match(logs[0], /^dig refused: stone:0 at 8, 64, 8 /);
+    assert.match(logs[1], /^dig refused: stone:0 at 9, 64, 8 /);
+    assert.equal(logs[2], 'dig refused: 2 lines logged; further refusals on this connection are not');
+    assert.equal(logs[2], digRefusedCapLine(2));
+    assert.deepEqual(report, { lines: 2, dropped: 1 });
+    assert.equal(DIG_REFUSED.maxLines, 100);
+    assert.equal(digRefusedCapLine(100), 'dig refused: 100 lines logged; further refusals on this connection are not');
+});
+
+test('#618 review 4: a block that names no harvest tool lists the pickaxe class as the default', () => {
+    const { bot, sources, item } = fakeBot();
+    const stone = bot.blockAt(new Vec3(8, 64, 8));
+    bot.inventory.slots[45] = item('stone_pickaxe');
+    const noTool = { ...sources, stateOf: () => ({ harvestTool: null, harvestLevel: -1, toolRequired: true, hardness: -1 }) };
+    assert.match(digRefusedLine(bot, stone, noTool),
+        /\(no harvest tool, hardness -1\); held nothing \(no pickaxe level\); pickaxe tools \(default class\): stone_pickaxe \(level 0\) off hand; rule: /);
+    const notInDump = { ...sources, stateOf: () => null };
+    assert.match(digRefusedLine(bot, stone, notInDump), /\(not in the dump\); held nothing \(no pickaxe level\); pickaxe tools \(default class\): /);
+    assert.match(digRefusedLine(bot, stone, sources), /\(pickaxe level 0, hardness 1\.5\); held nothing \(no pickaxe level\); pickaxe tools: stone_pickaxe/, 'a named class: no label');
 });

@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { setImmediate } from 'node:timers';
 import { createRequire } from 'node:module';
 import { attachClickDiagnostics, describeItem, rejectedClickLine } from '../src/click-diagnostics.js';
 
@@ -102,4 +103,72 @@ test('describeItem and the line text', () => {
     assert.equal(describeItem({ type: 40000, count: 2 }), '#40000 x2');
     assert.equal(rejectedClickLine({ windowId: 0, slot: 1, mode: 0, button: 1, action: 7, client: null }, null, 500),
         'click rejected: window 0 slot 1 (mode 0, button 1, action 7); client before the click: not recorded; server: no resend within 500 ms');
+});
+
+// #618 review 2: through mineflayer 4.33's real bot.clickWindow. On 1.12 it writes window_click and
+// applies the click to its own window only when the server accepts it (acceptClick in
+// confirmTransaction). The line's "client before the click" depends on that order: were mineflayer
+// to apply the click before writing it (as its 1.17+ path does), the view recorded at the write would
+// already be the predicted one.
+function realInventoryBot(respond) {
+    const bot = new EventEmitter();
+    bot.registry = registry;
+    bot.version = '1.12.2';
+    bot.supportFeature = (f) => registry.supportFeature(f);
+    bot.QUICK_BAR_START = 36;
+    bot.lastDigTime = null;
+    bot.game = { gameMode: 'survival' };
+    bot.writes = [];
+    bot._client = new EventEmitter();
+    bot._client.write = (name, params) => {
+        bot.writes.push([name, params]);
+        if (name === 'window_click') setImmediate(() => respond(bot, params));
+    };
+    require('mineflayer/lib/plugins/inventory.js')(bot, { hideErrors: true });
+    return bot;
+}
+
+test('#618 review 2: the real bot.clickWindow writes before it applies the click, so the line has the view the click was built on', async () => {
+    const logs = [];
+    const answers = [true, false]; // the first click accepted, the second rejected
+    const bot = realInventoryBot((b, params) => {
+        const accepted = answers.shift();
+        b._client.emit('transaction', { windowId: 0, action: params.action, accepted });
+        if (!accepted) {
+            const items = new Array(46).fill(EMPTY);
+            items[12] = notch(DIRT, 8); // the server did perform it: the dirt is in slot 12
+            b._client.emit('window_items', { windowId: 0, items });
+            b._client.emit('set_slot', { windowId: -1, slot: -1, item: EMPTY });
+        }
+    });
+    attachClickDiagnostics(bot, { log: (m) => logs.push(m) });
+    bot.inventory.updateSlot(11, new Item(DIRT, 8));
+
+    // Accepted: picked up. mineflayer applies it on the confirm (the cursor holds the dirt afterwards).
+    await bot.clickWindow(11, 0, 0);
+    assert.equal(bot.inventory.selectedItem?.count, 8, 'applied after the server accepted it');
+    assert.equal(bot.inventory.slots[11], null);
+    assert.deepEqual(logs, []);
+    const first = bot.writes.find(([n]) => n === 'window_click')[1];
+    assert.equal(first.item?.blockId, DIRT, 'the clicked item sent is the slot as it was before the click');
+
+    // Rejected: put down on slot 12. The line shows the view at the write (cursor: the 8 dirt, slot 12 empty).
+    await assert.rejects(bot.clickWindow(12, 0, 0), /Server rejected transaction for clicking on slot 12/);
+    assert.equal(logs.length, 1);
+    const action = bot.writes.filter(([n]) => n === 'window_click')[1][1].action;
+    assert.equal(logs[0], `click rejected: window 0 slot 12 (mode 0, button 0, action ${action}); client before the click: slot -, cursor dirt x8, grid [-, -, -, -]; server after it: slot dirt x8, cursor -, grid [-, -, -, -]`);
+    assert.ok(bot.writes.some(([n, p]) => n === 'transaction' && p.action === action && p.accepted === true), 'mineflayer acknowledged the rejection');
+});
+
+test('#618 review 3: the resend and cursor timers do not keep the process alive', () => {
+    const { bot } = fakeBot();
+    const made = [];
+    const setTimer = (fn, ms) => { const h = setTimeout(fn, ms); made.push(h); return h; };
+    attachClickDiagnostics(bot, { log: () => {}, setTimer, clearTimer: clearTimeout });
+    bot._client.write('window_click', clickPacket(11, 1));
+    bot._client.emit('transaction', { windowId: 0, action: 1, accepted: false });
+    bot._client.emit('window_items', { windowId: 0, items: new Array(46).fill(EMPTY) });
+    assert.equal(made.length, 2, 'the 1 s resend timer and the 150 ms cursor timer');
+    assert.ok(made.every((h) => h.hasRef() === false), 'both unref\'d');
+    made.forEach(clearTimeout);
 });
