@@ -153,7 +153,7 @@ test('review 1: the count is the real gain: piles that drop nothing give "Collec
     t.mock.method(console, 'log', () => {});
     const bot = fakeBot({ blocks: [block('pyrotech:rock', 0, at(1)), block('pyrotech:rock', 0, at(2))], dropsOf: () => [] });
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 2), false);
-    assert.match(bot.output, /Broke pyrotech:rock: no pyrotech:rock yet\./);
+    assert.match(bot.output, /Broke pyrotech:rock at -?\d+, -?\d+, -?\d+: no pyrotech:rock yet\./);
     assert.match(bot.output, /Collected 0 pyrotech:rock\./);
 });
 
@@ -308,3 +308,43 @@ test('#416 review 2: a crafting table near a recent death spot is still picked u
     assert.equal((piles.output.match(/Some were left alone: within 24 blocks of where you died recently/g) ?? []).length, 1, piles.output);
 });
 
+
+// Soak 16 (C, the lead): truthful lines. Soak 15: "Broke pyrotech_compat:rock_igneous: no pyrotech:rock yet" with
+// nothing picked up (a dig the server may have kept); "Broke …metamorphic_stone: no pyrotech:rock yet (it gave 4
+// betterwithmods:dirt_pile)" (the walk's own dirt); a drop that crafts into rocks named as nothing.
+test('soak 16 (C1): a block the server kept after the dig resolved: "was not broken", not counted, never "Broke"', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    const kept = block('stone', 0, at(2));
+    const bot = fakeBot({ items, blocks: [kept], dropsOf: () => [] });
+    bot.dig = (b) => { bot.calls.dug.push(b); return Promise.resolve(); }; // resolves; the block stays (the server put it back)
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), false);
+    assert.match(bot.output, /stone:0 at 2, 64, 0 was not broken: the server kept it; skipping it\./);
+    assert.doesNotMatch(bot.output, /Broke stone/);
+});
+
+test('soak 16 (C2): the walk\'s own digs on the way are named apart from the target\'s gain', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    const target = block('stone', 0, at(3));
+    const bot = fakeBot({ items, blocks: [target], dropsOf: () => [] }); // the stone gives nothing here
+    bot.rotnDigs = { count: 0, log: [] };
+    const goto = bot.pathfinder.goto;
+    bot.pathfinder.goto = (goal) => {
+        // The walk digs a dirt block in its way: 4 dirt piles come in (the dig wrapper logs it, library/hands.js).
+        bot.rotnDigs.count++;
+        bot.rotnDigs.log.push({ n: bot.rotnDigs.count, name: 'dirt', at: new Vec3(1, 64, 0) });
+        items.push({ name: 'betterwithmods:dirt_pile', metadata: 0, count: 4, type: 9100 });
+        return goto(goal);
+    };
+    await skills.collectBlock(bot, 'pyrotech:rock', 1);
+    assert.match(bot.output, /Broke stone at 3, 64, 0: no pyrotech:rock yet \(since the walk began: 4 betterwithmods:dirt_pile\)\. The walk dug 1 dirt on the way\./);
+});
+
+test('soak 16 (C3): a drop that crafts into the item asked for says so (cobblestone: 4 rocks each, the pack\'s recipe)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    const bot = fakeBot({ items, blocks: [block('stone', 0, at(2))], dropsOf: () => [['cobblestone', 0, 1]] });
+    await skills.collectBlock(bot, 'pyrotech:rock', 1);
+    assert.match(bot.output, /Broke stone at 2, 64, 0: no pyrotech:rock yet \(it gave 1 cobblestone \(crafts into 4 pyrotech:rock each\)\)\./);
+});

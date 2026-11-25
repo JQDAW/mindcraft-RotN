@@ -18,6 +18,7 @@ import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, 
 import { logAte, fightJournal, swingLine, logWeapon, mobName } from "./survival_log.js";
 import { waitText } from './wait_text.js';
 import { returnGrid } from './inventory_sync.js';
+import * as lines from './collect_lines.js';
 import { digBudget, digLine, effectsText, DIG_STALL } from './pit.js';
 import { foodKey, foodValue } from "./food.js";
 import { getItem as rotnItem, registryName as rotnRegistryName } from "../../../packages/rotn-data/index.js";
@@ -1683,6 +1684,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             let cancelled = false; // #356 review 1: the block's time limit passed; a fell still running ends
             const before = heldByKey();
             const allBefore = allHeld();
+            const digsFrom = bot.rotnDigs?.count ?? 0; // soak 16 (C2): the walk's own digs, named apart
             const breakIt = async () => {
                 if (isLiquid) return await useToolOnBlock(bot, 'bucket', block);
                 // By hand when the block has no collision box (a rock pile), or when a rule's tool must
@@ -1753,6 +1755,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 log(bot, `Gave up on ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: ${bot.interrupt_code ? 'stopped' : `time limit of ${secsText(blockMs)} reached`}.`);
             }
             else success = res;
+            // Soak 16 (C1): "Broke" only once the block is gone: a dig the server cancels resolves on mineflayer's
+            // predicted air, and the server puts the block back. Not a fell (the tree comes down as one), a liquid, or
+            // a stop. Kept: given up, no count.
+            if (success && !isLiquid && !fellsTree(block) && block.position && !bot.interrupt_code && await lines.stillThere(bot, block)) {
+                success = false;
+                givenUp.push(block.position.clone ? block.position.clone() : block.position);
+                log(bot, lines.notBrokenText(block));
+            }
             if (missed && res !== TIMED_OUT && walkMisses < CL.unreachableTargets) {
                 walkMisses++;
                 i--; // round 10 B: like a leaf out of reach, no attempt (at most CL.unreachableTargets)
@@ -1795,9 +1805,16 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                     // Say what it did give (round 5 A rerun: a felled spruce gave logs, and the line
                     // named only the missing stick), and that sticks are rare from felling.
                     const other = Object.entries(allHeld()).map(([key, n]) => [key, n - (allBefore[key] ?? 0)]).filter(([, d]) => d > 0);
-                    const gave = other.length ? ` (it gave ${other.map(([key, d]) => `${d} ${key}`).join(', ')})` : '';
+                    // Soak 16 (C2, C3): where the target is; what came in since the walk began, a drop that crafts into the
+                    // item asked for said so (cobblestone -> 4 rocks); the walk's own digs on the way named apart (soak 15:
+                    // "it gave 4 dirt piles" were the walk's dirt, not the stone's).
+                    const walk = lines.walkDigsText(bot, digsFrom, block.position);
+                    const items = other.map(([key, d]) => { const c = lines.craftsInto(key, targets); return `${d} ${key}${c ? ` (crafts into ${c} each)` : ''}`; }).join(', ');
+                    const gave = items ? ` (${walk ? 'since the walk began: ' : 'it gave '}${items})` : '';
+                    const walked = walk ? ` The walk dug ${walk} on the way.` : '';
+                    const pos = block.position ? ` at ${block.position.x}, ${block.position.y}, ${block.position.z}` : '';
                     const rare = baseType === 'stick' && fellsTree(block) ? ' A felled tree drops few sticks, often none.' : '';
-                    log(bot, `Broke ${block.name}: no ${blockType} yet${gave}.${rare}`);
+                    log(bot, `Broke ${block.name}${pos}: no ${blockType} yet${gave}.${walked}${rare}`);
                 }
             }
             if (run.aborted) break;
