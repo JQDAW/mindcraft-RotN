@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, requireRotnData, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachDigTime, dumpDigSources, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting, attachAttackCounts, attachRespawnEffectsLog } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, requireRotnData, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachDigTime, dumpDigSources, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting, attachAttackCounts, attachRespawnEffectsLog, applyStackSizes, attachClickDiagnostics, attachDigRefusedLog } from '../../packages/forge-bridge/index.js';
 import { loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -211,6 +211,13 @@ export function initBot(username, { onMsaCode, loadRotnData: loadRd = () => load
                 bridge.on('registries', (snap) => {
                     forge.registryReport = extendRegistry(bot.registry, snap, { log: (m) => console.log(`[forge-bridge] ${m}`) });
                     forge.stateIdRemap = attachStateIdRemap(bot.registry, stateIdTable, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                    // Soak 15 (rejected window clicks): the server's item stack sizes (StackUp), so mineflayer's window
+                    // predicts each click as the server does it. Here, before any window arrives.
+                    try {
+                        forge.stackSizes = applyStackSizes(bot.registry, rd.dump?.items?.items, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                    } catch (e) {
+                        console.warn(`[forge-bridge] stack sizes not applied, the window keeps 64 for modded items: ${e.message}`);
+                    }
                     // #256 review: modded blocks get what a player collides with (rotn-data's playerCollision, #269;
                     // rock piles and plants walk-through, Dynamic Trees leaves a half-height box), not the full cube
                     // extendRegistry defaults to.
@@ -226,7 +233,10 @@ export function initBot(username, { onMsaCode, loadRotnData: loadRd = () => load
                     // a block Tool Progression keeps from the held tool is Infinity), for bot.dig, pathfinder and
                     // equipForBlock. Installed on the world's Block class when the first column loads.
                     try {
-                        forge.digTime = attachDigTime(bot, dumpDigSources(rd, bot.registry), { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                        const digSources = dumpDigSources(rd, bot.registry);
+                        forge.digTime = attachDigTime(bot, digSources, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                        // Soak 15: a dig the rule refuses names the held item and where each tool of the block's class is.
+                        forge.digRefused = attachDigRefusedLog(bot, digSources);
                     } catch (e) {
                         console.warn(`[forge-bridge] Forge dig times not installed, digging keeps prismarine's vanilla times: ${e.message}`);
                     }
@@ -286,6 +296,8 @@ export function initBot(username, { onMsaCode, loadRotnData: loadRd = () => load
     // each death, the end); and the effects a respawn dropped (patches/mineflayer clears them).
     forge.attackCounts = attachAttackCounts(bot, { stats: () => forge.bcAttack.stats });
     forge.respawnEffects = attachRespawnEffectsLog(bot);
+    // Soak 15 (N2): each window click the server rejects, with the client's view and the server's resend.
+    forge.clickDiagnostics = attachClickDiagnostics(bot);
 
     // Throttle position packets to avoid kicks on Paper/Spigot servers. Inside each
     // 50 ms window the newest position and look are kept and merged, so the server

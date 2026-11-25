@@ -58,19 +58,21 @@ index 496cf63..813a667 100644
        enchantments,
        bot.entity.effects
 diff --git a/node_modules/mineflayer/lib/plugins/entities.js b/node_modules/mineflayer/lib/plugins/entities.js
-index 666b0b3..2180e0e 100644
+index 666b0b3..71b7baa 100644
 --- a/node_modules/mineflayer/lib/plugins/entities.js
 +++ b/node_modules/mineflayer/lib/plugins/entities.js
-@@ -573,6 +573,25 @@
+@@ -573,6 +573,27 @@
      bot.emit('entityEffectEnd', entity, effect)
    })
  
 +  // mindcraft-rotn (soak 14): a respawn gives the player a new entity, which has no effects, as the
 +  // vanilla client's new player entity has none; the server sends no remove_entity_effect for the
 +  // effects the old one had. Kept, a starvation death's Mining Fatigue IV (Hunger Overhaul) made
-+  // every later dig time minutes long. Effects still active (after a dimension change) are sent
-+  // again after the respawn packet. Each dropped effect ends with entityEffectEnd, and the bot
-+  // emits respawnEffectsCleared with the list when there was any.
++  // every later dig time minutes long. Effects still active after a dimension change are sent
++  // again after the respawn packet (Forge 14.23.5.2860 PlayerList.transferPlayerToDimension with
++  // an ITeleporter: SPacketRespawn at bytecode 41-72, then one SPacketEntityEffect per active
++  // effect at 177-226; a death's recreatePlayerEntity sends none). Each dropped effect ends with
++  // entityEffectEnd, and the bot emits respawnEffectsCleared with the list when there was any.
 +  bot._client.on('respawn', () => {
 +    const entity = bot.entity
 +    if (!entity?.effects) return
