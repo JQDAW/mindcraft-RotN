@@ -23,6 +23,14 @@
 //                            move inside the pocket (`You have reached` 1 block away) ends the episode, so soak 15's
 //                            trap (22:41 to 00:01) shows as one 3.4-min episode; I2 shows the rest. Exact once the
 //                            path-failure lines carry the bot's position.
+//                            Escape episodes (soak 16, the lead; rotn-v0.1.15 on, n/a before): an escape run from its
+//                            start (`[escape] trapped at …`, `[escape] stuck at …`, `[night] …: getting out first (escape
+//                            N of M)`; a start within `escapeJoinS` of an open episode's last line joins it) to its end:
+//                            cleared (`[escape] out at … in S s`, `[night] the escape got out at …`), or not cleared
+//                            (`[escape] still stuck at … after S s …: why`, `[night] the escape failed (why)`, a death).
+//                            A cleared one is listed with its duration; an uncleared one fires I1: I1's count is the
+//                            path-failure episodes plus the uncleared escapes. An escape still open at the journal's
+//                            end (a soak still running) is listed as open and does not fire.
 //   I2  enclosed-morning     `could not leave the shelter … after N tries` lines; nights spent in the same shelter as
 //                            the night before (`in the shelter at X until morning`, X repeated).
 //   I3  rejected-click       rejected window clicks: one per `[forge-bridge] click rejected:` line (#618) when the
@@ -69,7 +77,7 @@ import { fileURLToPath } from 'node:url';
 import { parseJournal as spendJournal, calls as spendCalls } from './soak-spend.mjs';
 
 export const INVARIANTS = {
-    trapped: { minAttempts: 3, gapMin: 10, attemptGapS: 2 },
+    trapped: { minAttempts: 3, gapMin: 10, attemptGapS: 2, escapeJoinS: 30 },
     starving: { lowFood: 4, noSafeFoodMin: 5 },
     gateThenAct: { afterS: 60 },
     falseCollect: { collectS: 30 },
@@ -79,12 +87,20 @@ export const INVARIANTS = {
 };
 
 /** The first release (rotn-v0.1.N) whose journal has each invariant's lines. */
-export const SINCE = { I4: 19, I7: 19, I9: 19, I12: 5 };
+export const SINCE = { I1escape: 15, I4: 19, I7: 19, I9: 19, I12: 5 };
 
 const JOURNAL = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:[+-]\d\d:\d\d|Z)) \S+?: ?(.*)$/;
 const RELEASE = /^\[release\] rotn-v(\d+)\.(\d+)\.(\d+)-/;
 const FAIL_PATH = /^(Path not found|Unable to reach|(Error: |Code execution triggered catch: )?NoPath|(Error: )?Timeout: Took to long to decide path)/;
 const ARRIVED = /^(You have reached\b|\[respawn\] escape done|\[night\] (morning: )?(dug out|left the shelter)|\[night\] morning: (dug out|left the shelter))/;
+const ESCAPE_START = /^(\[escape\] (trapped|stuck) at (-?\d+, -?\d+, -?\d+)|\[night\] .*: getting out first \(escape \d+ of \d+\)$)/;
+const ESCAPE_STEP = /^\[escape\] /;
+const GO_TO_SURFACE = /^parsed command: \{ commandName: '!goToSurface'/;
+const MORNING_ESCAPE = /^\[night\] morning: .*climbing out with the escape/;
+const ESCAPE_OUT = /^\[escape\] out at (-?\d+, -?\d+, -?\d+) \(([^;]*); dug (\d+), placed (\d+)\) in ([\d.]+) s$/;
+const ESCAPE_STUCK = /^\[escape\] still stuck at (-?\d+, -?\d+, -?\d+) after ([\d.]+) s \(dug (\d+), placed (\d+)\): (.*)$/;
+const NIGHT_ESCAPE_OUT = /^\[night\] the escape got out at (-?\d+, -?\d+, -?\d+)$/;
+const NIGHT_ESCAPE_FAILED = /^\[night\] the escape failed \((.*)\)$/;
 const COULD_NOT_LEAVE = /^\[night\] morning: could not leave the shelter at (-?\d+, -?\d+, -?\d+) after \d+ tries/;
 const IN_SHELTER = /^\[night\] in the shelter at (-?\d+, -?\d+, -?\d+) until morning$/;
 const CLICK_REJECTED = /^\[forge-bridge\] click rejected: /;
@@ -152,7 +168,49 @@ export function serverDeaths(text) {
 const at = (l) => ({ t: hms(l.t), line: l.n });
 const firsts = (list, n = 3) => list.slice(0, n);
 
-function trapped(lines) {
+/**
+ * The escape episodes (I1, soak 16): [{t, line, at, by, result: 'cleared'|'not cleared'|'open', seconds, endLine, how?, why?}].
+ * `by`: 'trap check' (`[escape] trapped`), 'night' (the night routine's `getting out first`), '!goToSurface' (its
+ * `parsed command` line within `escapeJoinS` before), 'morning' (`[night] morning: … climbing out with the escape`
+ * just before), else 'other'; `at` is the start position when a line names it.
+ */
+export function escapeEpisodes(lines) {
+    const p = INVARIANTS.trapped;
+    const out = [];
+    let cur = null;
+    let callerLine = null; // the last !goToSurface or morning-escape line, for `by`
+    const end = (l, result, extra = {}) => {
+        // The escape's own seconds when its end line gives them, else the journal's (whole seconds).
+        const seconds = extra.seconds ?? Math.round((l.t - cur.from.t) / 100) / 10;
+        out.push({ t: hms(cur.from.t), line: cur.from.n, at: cur.at, by: cur.by, result, endLine: l.n, ...extra, seconds });
+        cur = null;
+    };
+    for (const l of lines) {
+        if (GO_TO_SURFACE.test(l.msg)) callerLine = { l, by: '!goToSurface' };
+        else if (MORNING_ESCAPE.test(l.msg)) callerLine = { l, by: 'morning' };
+        const start = ESCAPE_START.exec(l.msg);
+        if (start) {
+            if (cur && l.t - cur.lastT <= p.escapeJoinS * 1000) { cur.lastT = l.t; cur.last = l; if (!cur.at && start[3]) cur.at = start[3]; continue; }
+            if (cur) end(cur.last, 'not cleared', { why: 'no end line before the next escape' });
+            const caller = callerLine && l.t - callerLine.l.t <= p.escapeJoinS * 1000 ? callerLine.by : 'other';
+            cur = { from: l, lastT: l.t, last: l, at: start[3] ?? null, by: start[2] === 'trapped' ? 'trap check' : start[2] ? caller : 'night' };
+            callerLine = null;
+            continue;
+        }
+        if (!cur) continue; // a [night] end line after an [escape] end closed the episode, or a stray step
+        let m;
+        if ((m = ESCAPE_OUT.exec(l.msg))) { end(l, 'cleared', { seconds: Number(m[5]), how: m[2], dug: Number(m[3]), placed: Number(m[4]), to: m[1] }); continue; }
+        if ((m = ESCAPE_STUCK.exec(l.msg))) { end(l, 'not cleared', { seconds: Number(m[2]), dug: Number(m[3]), placed: Number(m[4]), why: m[5] }); continue; }
+        if ((m = NIGHT_ESCAPE_OUT.exec(l.msg))) { end(l, 'cleared', { to: m[1] }); continue; }
+        if ((m = NIGHT_ESCAPE_FAILED.exec(l.msg))) { end(l, 'not cleared', { why: m[1] }); continue; }
+        if (DEATH.test(l.msg)) { end(l, 'not cleared', { why: 'died' }); continue; }
+        if (ESCAPE_STEP.test(l.msg)) { cur.lastT = l.t; cur.last = l; }
+    }
+    if (cur) out.push({ t: hms(cur.from.t), line: cur.from.n, at: cur.at, by: cur.by, result: 'open', seconds: Math.round((cur.last.t - cur.from.t) / 100) / 10, endLine: null });
+    return out;
+}
+
+function trapped(lines, rel) {
     const p = INVARIANTS.trapped;
     const episodes = [];
     let cur = null;
@@ -168,7 +226,14 @@ function trapped(lines) {
     }
     close();
     const list = episodes.map(e => ({ ...at(e.from), until: hms(e.last.t), untilLine: e.last.n, attempts: e.attempts, minutes: Math.round((e.last.t - e.from.t) / 6000) / 10 }));
-    return { count: list.length, attempts: list.reduce((s, e) => s + e.attempts, 0), longestMin: list.reduce((m, e) => Math.max(m, e.minutes), 0), first: firsts(list) };
+    const esc = rel.patch < SINCE.I1escape ? null : escapeEpisodes(lines);
+    const failed = esc ? esc.filter(e => e.result === 'not cleared').length : 0;
+    const cleared = esc ? esc.filter(e => e.result === 'cleared') : [];
+    return {
+        count: list.length + failed, pathEpisodes: list.length, attempts: list.reduce((s, e) => s + e.attempts, 0), longestMin: list.reduce((m, e) => Math.max(m, e.minutes), 0), first: firsts(list),
+        escapes: esc ? esc.length : null, escapesNotCleared: esc ? failed : null, escapesCleared: esc ? cleared.length : null,
+        longestClearedS: esc ? cleared.reduce((m, e) => Math.max(m, e.seconds), 0) : null, escapeList: esc ? esc.slice(0, 20) : null,
+    };
 }
 
 function enclosedMorning(lines) {
@@ -372,7 +437,7 @@ export function soakInvariants(text, { serverText = null } = {}) {
     const rel = releaseOf(lines);
     return {
         release: rel.tag, from: lines[0] ? hms(lines[0].t) : null, to: lines.at(-1) ? hms(lines.at(-1).t) : null, lines: lines.length,
-        I1: trapped(lines),
+        I1: trapped(lines, rel),
         I2: enclosedMorning(lines),
         I3: rejectedClicks(lines),
         I4: digRefusedWithTool(lines, rel),
@@ -392,7 +457,7 @@ export function baselineRow(r) {
     const c = (x, k = 'count') => (x == null ? null : x[k]);
     return {
         release: r.release,
-        I1_trapped: c(r.I1), I1_longestMin: c(r.I1, 'longestMin'),
+        I1_trapped: c(r.I1), I1_longestMin: c(r.I1, 'longestMin'), I1_escapes: c(r.I1, 'escapes'), I1_escapesNotCleared: c(r.I1, 'escapesNotCleared'),
         I2_couldNotLeave: c(r.I2), I2_sameShelterNights: c(r.I2, 'sameShelterNights'),
         I3_rejectedClicks: c(r.I3),
         I4_digRefusedWithTool: c(r.I4), I4_refusals: c(r.I4, 'refusals'), I4_capped: r.I4 == null ? null : !!r.I4.capped,
@@ -434,7 +499,12 @@ export function render(r, name = 'soak') {
         o.push(`- ${id} ${title}: ${detail}`);
         for (const f of x.first ?? []) o.push(`    ${f.t}${f.line ? ` (driver.log:${f.line})` : ''}${Object.entries(f).filter(([k]) => !['t', 'line'].includes(k)).map(([k, v]) => ` ${k} ${v}`).join('')}`);
     };
-    row('I1', 'trapped', r.I1, `${r.I1.count} episodes, ${r.I1.attempts} failed path attempts, longest ${r.I1.longestMin} min`);
+    row('I1', 'trapped', r.I1, `${r.I1.count} (${r.I1.pathEpisodes} path-failure episodes, ${r.I1.attempts} failed path attempts, longest ${r.I1.longestMin} min; `
+        + (r.I1.escapes == null ? 'escapes n/a)' : `${r.I1.escapesNotCleared} of ${r.I1.escapes} escape episodes not cleared, ${r.I1.escapesCleared} cleared, the longest cleared in ${r.I1.longestClearedS} s)`));
+    for (const e of r.I1.escapeList ?? []) {
+        const how = e.result === 'cleared' ? ` to ${e.to}${e.how ? ` (${e.how}; dug ${e.dug}, placed ${e.placed})` : ''}` : e.why ? `: ${e.why}` : '';
+        o.push(`    escape ${e.t} (driver.log:${e.line})${e.at ? ` at ${e.at}` : ''} by ${e.by}: ${e.result} in ${e.seconds} s${how}${e.endLine ? ` (driver.log:${e.endLine})` : ''}`);
+    }
     row('I2', 'enclosed-morning', r.I2, `${r.I2.count} "could not leave the shelter", ${r.I2.sameShelterNights} nights in the same shelter as the night before`);
     row('I3', 'rejected-click', r.I3, `${r.I3.count} rejected clicks (from ${r.I3.source}${r.I3.secondTries != null ? `; ${r.I3.secondTries} second tries failed too` : ''})`);
     row('I4', 'dig-refused-with-tool', r.I4, r.I4 && `${r.I4.capped ? 'at least ' : ''}${r.I4.count} of ${r.I4.capped ? 'at least ' : ''}${r.I4.refusals} tool refusals with a usable tool carried (${r.I4.source}${r.I4.capped ? '; refusals past the cap line are not logged' : ''})`);
@@ -451,7 +521,7 @@ export function render(r, name = 'soak') {
     return o.join('\n');
 }
 
-const COLS = [['I1_trapped', 'I1 trap'], ['I1_longestMin', 'min'], ['I2_couldNotLeave', 'I2'], ['I3_rejectedClicks', 'I3 clicks'], ['I4_digRefusedWithTool', 'I4'], ['I5_nightFoodShort', 'I5 short'], ['I5_nightFoodLines', 'night food'], ['I6_lowestFood', 'I6 low'], ['I6_noSafeFoodRuns', 'nsf runs'], ['I7_gateThenAct', 'I7'], ['I8_refusedCommands', 'I8'], ['I8_neverRan', 'never ran'], ['I9_falseCollects', 'I9'], ['I10_deathLoops', 'I10 loops'], ['I10_deaths', 'deaths'], ['I11_bigSummaries', 'I11 big'], ['I11_shareOfSpend', 'sum %'], ['I12_unknownHurt', 'I12 unk'], ['I12_deathsUnnamed', 'unnamed']];
+const COLS = [['I1_trapped', 'I1 trap'], ['I1_longestMin', 'min'], ['I1_escapes', 'esc'], ['I1_escapesNotCleared', 'esc fail'], ['I2_couldNotLeave', 'I2'], ['I3_rejectedClicks', 'I3 clicks'], ['I4_digRefusedWithTool', 'I4'], ['I5_nightFoodShort', 'I5 short'], ['I5_nightFoodLines', 'night food'], ['I6_lowestFood', 'I6 low'], ['I6_noSafeFoodRuns', 'nsf runs'], ['I7_gateThenAct', 'I7'], ['I8_refusedCommands', 'I8'], ['I8_neverRan', 'never ran'], ['I9_falseCollects', 'I9'], ['I10_deathLoops', 'I10 loops'], ['I10_deaths', 'deaths'], ['I11_bigSummaries', 'I11 big'], ['I11_shareOfSpend', 'sum %'], ['I12_unknownHurt', 'I12 unk'], ['I12_deathsUnnamed', 'unnamed']];
 
 /** The table across soaks, as Markdown. */
 export function renderTable(rows) {

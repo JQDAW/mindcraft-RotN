@@ -49,6 +49,13 @@ test('the known incidents are found (calibration)', () => {
     assert.equal(rows['g4soak-12-20261123'].I10_loopDeaths, 15); // deaths 2-16 at the scroll's respawn point
     assert.ok(rows['g4soak-10-20261122'].I10_loopDeaths >= 80); // the spawn loop, split where the bot lived over 5 min
     assert.equal(rows['g4soak-13-20261124'].I11_bigSummaries, 6);
+    // Escape episodes (soak 16, the lead): the trap at 9, 68, -63 fires I1 through 4 uncleared escapes; soak 11's one
+    // escape cleared; before rotn-v0.1.15 (soak 8) there was no escape.js: n/a.
+    const s16 = rows['g4soak-16-20261125'];
+    assert.deepEqual([s16.I1_trapped, s16.I1_escapes, s16.I1_escapesNotCleared], [5, 7, 4]);
+    assert.deepEqual([rows['g4soak-11-20261122'].I1_escapes, rows['g4soak-11-20261122'].I1_escapesNotCleared], [1, 0]);
+    assert.equal(rows['g4soak-8-20261121'].I1_escapes, null);
+    assert.equal(rows['g4soak-9-20261122'].I1_escapes, 0);
     // Lines a release did not print are n/a, never 0.
     for (const n of ['g4soak-m1-20261108', 'g4soak-2-20261108']) {
         assert.equal(rows[n].I4_digRefusedWithTool, null);
@@ -67,6 +74,95 @@ test('I1 trapped: failed path attempts close together; lines within 2 s are one 
     assert.equal(r.I1.count, 0);
     r = run([...fail('10:00:00'), ...fail('10:01:00'), ...fail('10:12:00'), ...fail('10:13:00')]);
     assert.equal(r.I1.count, 0); // 2 + 2 attempts, split by the 11-min gap
+});
+
+test('I1 escape episodes: start to out (cleared, its seconds) or still stuck (not cleared, fires I1); n/a before rotn-v0.1.15', () => {
+    const r = run([
+        REL(22),
+        // A trap check, joined by the escape's own start line; the pathfinder's step; out by hand.
+        L('10:00:00', '[escape] trapped at -42, 65, -12 after digging (8 cells searched, no walkable way to the sky): getting out first'),
+        L('10:00:00', '[escape] stuck at -42, 65, -12: getting out to -42, 70, -12 (dry ground under open sky) (up to 13 steps, 5 min)'),
+        L('10:00:06', '[escape] the pathfinder found a way (5 moves): walking it'),
+        L('10:02:07', '[escape] out at -41, 69, -12 (by hand; dug 0, placed 3) in 126.6 s'),
+        // !goToSurface: not cleared.
+        L('10:10:00', "parsed command: { commandName: '!goToSurface', args: [] }"),
+        L('10:10:00', '[escape] stuck at 9, 68, -63: getting out to 9, 79, -63 (dry ground under open sky) (up to 19 steps, 5 min)'),
+        L('10:10:05', '[escape] the pathfinder found no way (timeout); digging out by hand'),
+        L('10:10:05', '[escape] still stuck at 9, 68, -63 after 5.1 s (dug 0, placed 0): no stair step, and no room to pillar up above 9, 68, -63'),
+        // The morning's escape.
+        L('10:20:00', '[night] morning: no side of the shelter at 9, 68, -63 away from a zombie at 9, 75, -62 to open yet after 3 tries; climbing out with the escape (stairs and pillars by hand if the pathfinder finds no way)'),
+        L('10:20:00', '[escape] stuck at 9, 68, -63: getting out upward (the sky starts at y 79)'),
+        L('10:20:01', '[escape] still stuck at 9, 68, -63 after 0.8 s (dug 0, placed 0): no stair step, and no room to pillar up above 9, 68, -63'),
+        // The night routine's escape with escape.js lines: one episode, the [night] end line after it is not another.
+        L('10:30:00', '[night] the walk to better ground found no way out: getting out first (escape 1 of 2)'),
+        L('10:30:00', '[escape] stuck at 1, 60, 1: getting out to 1, 64, 1 (dry ground under open sky) (up to 6 steps, 5 min)'),
+        L('10:30:04', '[escape] out at 1, 64, 2 (pathfinder; dug 2, placed 0) in 3.9 s'),
+        L('10:30:04', '[night] the escape got out at 1, 64, 2'),
+        // The night routine's escape alone (already under the sky), and one that failed.
+        L('10:40:00', '[night] the walk to better ground found no way out: getting out first (escape 2 of 2)'),
+        L('10:40:00', '[night] the escape got out at -7, 65, 30'),
+        L('10:50:00', '[night] could not get out of the water (no dry ground within 8 blocks): getting out first (escape 1 of 2)'),
+        L('10:50:09', '[night] the escape failed (no stair step)'),
+        // A death ends an open escape as not cleared.
+        L('11:00:00', "parsed command: { commandName: '!goToSurface', args: [] }"),
+        L('11:00:00', '[escape] stuck at 10, 68, -63: getting out to 10, 79, -63 (dry ground under open sky) (up to 19 steps, 5 min)'),
+        L('11:00:40', '[death] died at 10, 75, -62; waiting for the respawn'),
+        // Still running at the journal's end (a partial journal): open, does not fire.
+        L('11:10:00', '[escape] stuck at 5, 50, 5: getting out upward (the sky starts at y 70)'),
+        L('11:10:03', '[escape] the pathfinder found a way (12 moves): walking it'),
+    ]);
+    const e = r.I1.escapeList;
+    assert.deepEqual(e.map(x => [x.t, x.by, x.result, x.seconds]), [
+        ['10:00:00', 'trap check', 'cleared', 126.6],
+        ['10:10:00', '!goToSurface', 'not cleared', 5.1],
+        ['10:20:00', 'morning', 'not cleared', 0.8],
+        ['10:30:00', 'night', 'cleared', 3.9],
+        ['10:40:00', 'night', 'cleared', 0],
+        ['10:50:00', 'night', 'not cleared', 9],
+        ['11:00:00', '!goToSurface', 'not cleared', 40],
+        ['11:10:00', 'other', 'open', 3],
+    ]);
+    assert.deepEqual(e[0], { t: '10:00:00', line: 2, at: '-42, 65, -12', by: 'trap check', result: 'cleared', endLine: 5, seconds: 126.6, how: 'by hand', dug: 0, placed: 3, to: '-41, 69, -12' });
+    assert.equal(e[1].why, 'no stair step, and no room to pillar up above 9, 68, -63');
+    assert.equal(e[3].at, '1, 60, 1'); // the night start names no cell; escape.js's start line does
+    assert.equal(e[5].why, 'no stair step');
+    assert.equal(e[6].why, 'died');
+    // I1 fires on the 4 uncleared escapes (no path-failure episode here); the open one does not count.
+    assert.deepEqual([r.I1.count, r.I1.pathEpisodes, r.I1.escapes, r.I1.escapesNotCleared, r.I1.escapesCleared, r.I1.longestClearedS], [4, 0, 8, 4, 3, 126.6]);
+    const text = render(r, 'synthetic');
+    assert.match(text, /- I1 trapped: 4 \(0 path-failure episodes, 0 failed path attempts, longest 0 min; 4 of 8 escape episodes not cleared, 3 cleared, the longest cleared in 126\.6 s\)/);
+    assert.match(text, /escape 10:00:00 \(driver\.log:2\) at -42, 65, -12 by trap check: cleared in 126\.6 s to -41, 69, -12 \(by hand; dug 0, placed 3\) \(driver\.log:5\)/);
+    assert.match(text, /escape 10:40:00 \(driver\.log:17\) by night: cleared in 0 s to -7, 65, 30/);
+    // Before rotn-v0.1.15 (no escape.js): n/a, and the count is the path episodes alone.
+    const old = run([REL(14), L('10:10:05', '[escape] still stuck at 9, 68, -63 after 5.1 s (dug 0, placed 0): x')]);
+    assert.deepEqual([old.I1.count, old.I1.escapes, old.I1.escapesNotCleared, old.I1.escapeList], [0, null, null, null]);
+    assert.match(render(old), /escapes n\/a\)/);
+});
+
+test('I1 escape episodes: a start within 30 s of an open one joins it; a later start closes it as not cleared', () => {
+    const r = run([
+        REL(22),
+        L('10:00:00', '[escape] stuck at 1, 2, 3: getting out upward (the sky starts at y 9)'),
+        L('10:00:20', '[escape] stuck at 1, 2, 3: getting out upward (the sky starts at y 9)'),
+        L('10:05:00', '[escape] stuck at 4, 5, 6: getting out upward (the sky starts at y 9)'),
+        L('10:05:02', '[escape] out at 4, 9, 6 (by hand; dug 4, placed 0) in 2.0 s'),
+    ]);
+    assert.deepEqual(r.I1.escapeList.map(x => [x.t, x.result, x.why ?? null, x.endLine]), [['10:00:00', 'not cleared', 'no end line before the next escape', 3], ['10:05:00', 'cleared', null, 5]]);
+});
+
+test('soak 16 in detail: the trap at 9, 68, -63 fires I1 through its 4 uncleared escapes', () => {
+    const r = soakInvariants(fs.readFileSync(path.join(EVIDENCE, 'g4soak-16-20261125/driver.log'), 'utf8'));
+    assert.deepEqual([r.I1.count, r.I1.pathEpisodes, r.I1.escapes, r.I1.escapesNotCleared], [5, 1, 7, 4]);
+    assert.deepEqual(r.I1.escapeList.map(e => [e.t, e.line, e.by, e.result, e.endLine]), [
+        ['20:41:29', 932, 'trap check', 'cleared', 941],
+        ['21:20:07', 1826, '!goToSurface', 'not cleared', 1828],
+        ['21:52:31', 2001, 'morning', 'not cleared', 2004],
+        ['21:53:14', 2050, '!goToSurface', 'not cleared', 2052],
+        ['21:54:09', 2150, '!goToSurface', 'not cleared', 2177],
+        ['22:07:04', 2760, 'night', 'cleared', 2762],
+        ['22:07:07', 2770, 'night', 'cleared', 2772],
+    ]);
+    assert.equal(r.I1.escapeList[4].why, 'interrupted');
 });
 
 test('I2 enclosed-morning: "could not leave" lines and a night in the same shelter as the night before', () => {
