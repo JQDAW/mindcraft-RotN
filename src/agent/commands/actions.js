@@ -238,6 +238,19 @@ function runAsAction (actionFn, resume = false, timeout = -1, label = null) {
     return wrappedAction;
 }
 
+const goToBedAction = runAsAction(async (agent) => { await skills.goToBed(agent.bot); }, false, -1, 'goToBed');
+
+/**
+ * Round 17 P: the Scroll of New Life's use, {pos, at} or null: this session's (the night routine's respawnSet, round 17
+ * M) or the saved one (History.scrollUsed, kept in memory.json across restarts).
+ */
+export function scrollUsed(agent) {
+    const n = agent?._night?.respawnSet;
+    if (n) return n;
+    const h = agent?.history?.scrollUsed;
+    return h && typeof h === 'object' ? h : null;
+}
+
 export const actionsList = [
     {
         name: '!newAction',
@@ -760,9 +773,14 @@ export const actionsList = [
     {
         name: '!goToBed',
         description: 'Go to the nearest bed and sleep.',
-        perform: runAsAction(async (agent) => {
-            await skills.goToBed(agent.bot);
-        })
+        perform: async function (agent, ...rest) {
+            // Round 17 P (rotn-data, the lead's addendum): any spawn change other than the Scroll of New Life itself (a
+            // bed sets the spawn when you wake) ends the scroll's respawn point and its 32-block Zombie Player guard
+            // for good. Once the scroll is used, never a bed.
+            const used = scrollUsed(agent);
+            if (used) return `Not going to bed: the Scroll of New Life set your respawn point${used.pos ? ` at ${used.pos.x}, ${used.pos.y}, ${used.pos.z}` : ''}, and sleeping in a bed would end it for good (no respawn there, and a Zombie Player at every death again). Shelter for the night instead.`;
+            return goToBedAction(agent, ...rest);
+        }
     },
     {
         name: '!stay',

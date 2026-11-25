@@ -65,6 +65,9 @@ export class History {
         this.notes = '';
         this.facts = emptyFacts();
         this._factsLogged = null;
+        // Round 17 P: the Scroll of New Life's use ({pos, at}), kept across restarts in both memory modes: a bed must
+        // never end it (!goToBed refuses).
+        this.scrollUsed = null;
 
         // Maximum number of messages to keep in context before saving chunk to memory
         this.max_messages = settings.max_messages;
@@ -206,6 +209,7 @@ export class History {
                 // Code mode keeps the notes and the fact records; the summary mode its summary.
                 memory: code ? '' : this.memory,
                 ...(code ? { notes: this.notes, facts: this.facts } : {}),
+                scrollUsed: this.scrollUsed,
                 turns: this.turns,
                 self_prompting_state: this.agent.self_prompter.state,
                 self_prompt: this.agent.self_prompter.isStopped() ? null : this.agent.self_prompter.prompt,
@@ -239,6 +243,8 @@ export class History {
             if (this.memoryMode !== 'code' && data.memory && !this.memory)
                 console.warn(`[memory] the saved memory was not a summary (${typeof data.memory === 'string' ? `"${data.memory.trim().slice(0, 60)}"` : typeof data.memory}); starting with none`);
             this.turns = data.turns || [];
+            const su = data.scrollUsed;
+            this.scrollUsed = su && typeof su === 'object' ? { pos: Number.isFinite(su.pos?.x) ? { x: su.pos.x, y: su.pos.y, z: su.pos.z } : null, at: su.at ?? null } : null;
             console.log('Loaded memory:', this.memoryMode === 'code' ? `notes "${this.notes}"` : this.memory);
             return data;
         } catch (error) {
