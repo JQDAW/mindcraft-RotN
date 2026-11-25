@@ -239,9 +239,9 @@ The new rule shows in the run: after each eat back to 9, the next fall to 8 logg
   - `betterwithmods:dirt_slab` (22:51:10).
   - `undergroundbiomes:metamorphic_cobble:6` 3 times (23:20:22, 23:21:10, 23:24:22).
   - At 00:07:20 the craft as `undergroundbiomes:metamorphic_cobble` worked.
-- **`Server rejected transaction`:** 18 lines, which are **9 rejected clicks** (each click logs two lines):
+- **`Server rejected transaction`:** 18 lines, which are **9 rejected clicks**. An equip logs one line (`driver.log:742`, `1650`, `1753`); a failed craft logs five lines for its two clicks:
   - 3 equips on slot 39: 22:41:56, 23:21:08, 23:23:44;
-  - 6 craft clicks: 22:50:16, 22:50:56 and 22:50:59–22:51:00, two each (slot 11, then slot 4).
+  - 6 craft clicks, two per failed craft: 22:50:16 (slot 11, then slot 4), 22:50:56 (slot 4 twice) and 22:50:59–22:51:00 (slot 4 twice).
 
   The `[inventory]` lines resynced, and 3 times `the second try failed too` (all on day 1's dirt crafts).
   - **The click rejections:** net-forge's soak 15 click note (relayed by the lead) ties them to StackUp's real stack sizes (dirt piles and rocks stack to 256), which mineflayer's registry does not know. Not proven here.
@@ -302,7 +302,7 @@ The hunting reflex provoked the cow (Day 3 above); the model's cow `!attack` rep
   - `Broke undergroundbiomes:metamorphic_cobble: no undergroundbiomes:metamorphic_cobble yet (it gave 16 pyrotech_compat:rock_metamorphic:6)`, then `Collected 0 undergroundbiomes:metamorphic_cobble.` (00:01:20, `driver.log:2235`–`2236`). The block dropped rocks, so the collect counted 0 although the dig worked.
 - **skills-rotn / rotn-data, `metamorphic_cobble:6`:** the craft from `pyrotech_compat:rock_metamorphic:6` worked twice on day 1 (22:42:15, 22:43:01), then failed 3 times with `missing ingredient` (23:20:22 to 23:24:22) while the bot held 19 to 43 of those rocks. At 00:07:20 the craft as `undergroundbiomes:metamorphic_cobble` worked. The model blamed a bundle; the lines don't say why.
 - **skills-rotn, the cow:** the hunting reflex refused a `cow_holstein` at 00:02:41 because a bull was within 16 blocks. Yet it hunted one 35 s later (00:03:16 to 00:03:39), and the cow hit back twice (health 20 → 12). Why?
-- **skills-rotn, the sunset-3 food run:** it ended `+0 points (no ripe wild food and no animal to hunt within 32 blocks)` (00:11:32). Yet a hog and a bull were near from 00:10:45 to 00:11:20 (`driver.log:3344`–`3423`). Was that the bull rule or the 32-block cap?
+- **skills-rotn, the sunset-3 food run:** it ended `+0 points (no ripe wild food and no animal to hunt within 32 blocks)` (00:11:32). Yet a hog and a bull were near from 00:10:45 to 00:11:21 (`driver.log:3344`–`3423`). Was that the bull rule or the 32-block cap?
 - **rotn-data, red mushrooms:** two breaks of `red_mushroom` gave no drop (00:09:58, 00:10:04). Is that a pack drop rule?
 - **skills-rotn, memory summaries:** the largest reasoning cost was on day 3. One summary used 31,458 reasoning tokens for 499 characters.
 
