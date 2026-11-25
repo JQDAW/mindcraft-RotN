@@ -4,10 +4,13 @@
 //
 // - the soak 15 trap: the stone pickaxe in the off hand, then on the cursor: the client's rule refuses
 //   at once (no packet) and initBot's dig-refused line says where the pickaxe is;
+// - an ABORT: the block is sent back;
 // - a client/server difference: the client holds the pickaxe, the server's held slot has planks. The
-//   client predicts air and bot.dig resolves; the server never breaks the block and sends it back
-//   (skills-rotn's soak 15 question C: "Broke ..." while the block is still there);
-// - an early STOP (Mining Fatigue on the server only): the block is sent back, then broken by the one
+//   client predicts air and bot.dig resolves; the server never breaks the block, sends it back and holds
+//   its delayed-destroy slot (skills-rotn's soak 15 question C: "Broke ..." while the block is still
+//   there); a later early STOP on another block is ignored; once the server holds the pickaxe the held
+//   block breaks;
+// - an early STOP (Mining Fatigue on the server only): the block is sent back, then broken by the
 //   delayed destroy;
 // - soak 14's respawn: a death drops the effects (#610's patch); a dimension change resends them.
 
@@ -68,28 +71,53 @@ test('digging through real mineflayer against the server\'s rule: refused, sent 
     assert.equal(dig.state.digs.at(-1).outcome, 'broken');
     assert.equal(block(10).name, 'air');
 
+    // An ABORT also sends the block back (processPlayerDigging, offset 446; #629 review 2).
+    const changes = [];
+    bot._client.on('block_change', (pk) => changes.push(pk));
+    const aborted = bot.dig(block(8), true).catch((e) => e.message);
+    await until(() => dig.state.digs.at(-1)?.status === 0 && dig.state.digs.at(-1).pos.x === 8);
+    bot.stopDigging();
+    assert.equal(await aborted, 'Digging aborted');
+    assert.ok(await until(() => dig.state.digs.at(-1).status === 1));
+    assert.equal(dig.state.digs.at(-1).outcome, 'aborted, sent back');
+    assert.ok(await until(() => changes.some((pk) => pk.location.x === 8 && pk.type !== 0)), 'the stone sent back');
+    assert.equal(block(8).name, 'stone');
+
     // The client holds the pickaxe, the server's held slot has planks (a view that parted silently). The
-    // client predicts air and bot.dig resolves; the server's rule says never and sends the block back.
+    // client predicts air and bot.dig resolves; the server's rule says never, sends the block back and
+    // holds its one delayed-destroy slot for it (#629 review 1).
     c.state.inv[36] = { id: ids['minecraft:planks'], count: 1, meta: 0 }; // the server only
     await within(5000, bot.dig(block(7), true), 'dig');
     assert.ok(await until(() => dig.state.digs.at(-1).status === 2), 'the STOP reached the server'); // bot.dig resolves on its own predicted air
-    assert.equal(dig.state.digs.at(-1).outcome, 'sent back (never breaks)');
+    assert.equal(dig.state.digs.at(-1).outcome, 'sent back, delayed destroy held');
     assert.ok(await until(() => block(7).name === 'stone'), 'the client sees the stone again');
-    await sleep(800);
-    assert.equal(dig.blockAt(at(7)).name, 'minecraft:stone', 'never broken');
+    // A later early STOP on another block arms nothing while the slot is held.
+    await within(5000, bot.dig(block(5), true), 'dig');
+    assert.ok(await until(() => dig.state.digs.at(-1).status === 2 && dig.state.digs.at(-1).pos.x === 5));
+    assert.equal(dig.state.digs.at(-1).outcome, 'sent back (a delayed destroy is already held: ignored)');
+    assert.ok(await until(() => block(5).name === 'stone'));
+    await sleep(500);
+    assert.deepEqual([dig.blockAt(at(7)).name, dig.blockAt(at(5)).name], ['minecraft:stone', 'minecraft:stone'], 'neither breaks with planks');
+    assert.deepEqual(dig.state.delayed?.pos, at(7), 'the slot is still held for the first block');
+    // The server's held item becomes the pickaxe: the next tick breaks the held block; the other stays.
+    c.setInventory({ 36: { id: ids['minecraft:stone_pickaxe'], count: 1 } });
+    assert.ok(await until(() => block(7).name === 'air', 3000), 'broken by the delayed destroy once a valid tool is held');
+    assert.equal(dig.state.digs.at(-1).outcome, 'broken by the delayed destroy');
+    assert.equal(dig.state.delayed, null, 'released');
+    assert.equal(dig.blockAt(at(5)).name, 'minecraft:stone', 'its STOP was ignored: it stays');
 
     // An early STOP: Mining Fatigue I on the server only (x 0.3: 2000 ms) against the client's 600 ms.
-    c.setInventory({ 36: { id: ids['minecraft:stone_pickaxe'], count: 1 } });
     await until(() => bot.heldItem?.name === 'stone_pickaxe');
     dig.state.effects = { 4: { amplifier: 0 } };
     const started = Date.now();
     await within(5000, bot.dig(block(6), true), 'dig');
-    await until(() => dig.state.digs.at(-1).status === 2);
+    await until(() => dig.state.digs.at(-1).status === 2 && dig.state.digs.at(-1).pos.x === 6);
     const stop = dig.state.digs.at(-1);
-    assert.equal(stop.outcome, 'sent back, delayed destroy armed');
+    assert.equal(stop.outcome, 'sent back, delayed destroy held');
     assert.ok(stop.f < 0.7, `f ${stop.f}`);
-    assert.ok(await until(() => block(6).name === 'stone', 1000), 'sent back first');
-    assert.ok(await until(() => block(6).name === 'air', 3000), 'then broken by the delayed destroy');
+    // #629 review 6: wide windows, so a loaded runner does not flake.
+    assert.ok(await until(() => block(6).name === 'stone', 3000), 'sent back first');
+    assert.ok(await until(() => block(6).name === 'air', 8000), 'then broken by the delayed destroy');
     assert.ok(Date.now() - started >= 1800, `${Date.now() - started} ms: at progress 1.0, about 2000 ms after the START`);
     assert.equal(dig.state.digs.at(-1).outcome, 'broken by the delayed destroy');
     dig.state.effects = {};

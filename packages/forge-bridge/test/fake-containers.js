@@ -297,6 +297,8 @@ export function attachFakeContainers(client, opts) {
     client.on('close_window', (p) => {
         state.closed.push(p.windowId);
         if (state.tableWindow) { // closeContainer closes the open container, whatever the packet's id
+            // Not modelled (#629 review 4): the table's own close (Container.onContainerClosed drops the cursor;
+            // FastWorkbench returns its grid). Only the grid's count is recorded.
             state.closedTableGrid = state.tableWindow.grid.slice(1).filter(Boolean).length;
             state.tableWindow = null;
             return;
