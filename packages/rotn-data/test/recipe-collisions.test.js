@@ -154,11 +154,14 @@ test('the named cases: the first variant is the safe one; the shadowable one is 
 });
 
 test('#639 review 1: the committed file is exactly tools/build-recipe-collisions.mjs\'s output from the dump', () => {
-    const built = buildRecipeCollisions(R);
+    // #643 nit 1: each mode is scanned once, for both the file and the list text.
+    const scans = { any: scanCollisions(R, true), first: scanCollisions(R, false) };
+    const built = buildRecipeCollisions(R, scans);
     const file = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../3.3.4/recipe-collisions.json'), 'utf8'));
     assert.deepEqual(built, file);
+    assert.match(file.description, / 170 recipes were not scanned /);
     // The tool's first-ranked list is the one net-forge's scan printed (83 recipes), whose header the report quotes.
-    const first = collisionListText(scanCollisions(R, false));
+    const first = collisionListText(scans.first);
     assert.match(first.split('\n')[0], /^recipe types \{"shaped":4036,"shapeless":2053\} scanned 5919 colliding 83$/);
     assert.match(first, /^ancientbeasts:stick_wall -> 1 ancientbeasts:stick_wall:0x1 {2}\[3x3\] grid (minecraft:stick:0 ?){9}\n {4}also: dungeontactics:misc\/convenience\/planks_from_sticks -> 1 minecraft:planks:0x1$/m);
 });

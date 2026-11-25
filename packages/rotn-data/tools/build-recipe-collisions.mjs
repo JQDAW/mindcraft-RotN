@@ -20,7 +20,7 @@
 //
 // Usage: node packages/rotn-data/tools/build-recipe-collisions.mjs [--check] [--list first|any]
 //   --check compares with the committed file and exits 1 on a difference; --list prints a mode's list in
-//   collide.cjs's text format instead (for diffing against an old scan). About 20 s per mode.
+//   collide.cjs's text format instead (for diffing against an old scan). About 10 s to build or check the file (both modes), 5 s for one --list.
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -160,17 +160,19 @@ export const DROP = {
     'dungeontactics:misc/convenience/planks_from_sticks': '9 sticks in the 3x3 grid; the server\'s ancientbeasts:stick_wall (9 sticks) is registered first and always wins (soak 16, seen in the journal), so this recipe can never be crafted here',
 };
 
-/** recipe-collisions.json's content from the dump's recipes. */
-export function buildRecipeCollisions(dumpRecipes) {
-    const any = scanCollisions(dumpRecipes, true);
-    const first = scanCollisions(dumpRecipes, false);
+/**
+ * recipe-collisions.json's content from the dump's recipes.
+ * @param {object[]} dumpRecipes recipes.json's `recipes`
+ * @param {{any?: object, first?: object}} [scans] scanCollisions results to reuse (any mode, first-ranked mode)
+ */
+export function buildRecipeCollisions(dumpRecipes, { any = scanCollisions(dumpRecipes, true), first = scanCollisions(dumpRecipes, false) } = {}) {
     const collisions = {};
     for (const o of any.out) collisions[o.a.id] = [...new Set(o.others.map((b) => b.id))].sort();
     const sorted = Object.fromEntries(Object.keys(collisions).sort().map((k) => [k, collisions[k]]));
     return {
         format: 'rotn-recipe-collisions/1',
         pack: '3.3.4',
-        description: 'Crafting recipes whose grid, as mineflayer lays it out, another recipe with a different result also matches on the server, for installRecipes. A grid matched by two recipes gives the one registered first (CraftingManager.REGISTRY order), which the dump does not record, so the bot may get the other recipe\'s result (soak 16: 9 sticks made ancientbeasts:stick_wall, not planks). Built by tools/build-recipe-collisions.mjs from the dump (net-forge\'s soak 16 scan, /home/rv/soak16-net-forge-recipe.md section 4): for each recipe A, the grid mineflayer lays out (shaped at the top left, shapeless into the last free slots; 2x2 without a table, 3x3 with one) with any stack each ingredient allows, checked against every other recipe B with the server\'s matcher (any offset, mirrored, ore stacks, wildcard metadata, shapeless as a multiset); a pair where B\'s result differs is listed under A. Recipes that are dynamic, failed the sample grid or have an ingredient with no stack are not scanned; CraftTweaker conditions and NBT are not modelled.',
+        description: `Crafting recipes whose grid, as mineflayer lays it out, another recipe with a different result also matches on the server, for installRecipes. A grid matched by two recipes gives the one registered first (CraftingManager.REGISTRY order), which the dump does not record, so the bot may get the other recipe's result (soak 16: 9 sticks made ancientbeasts:stick_wall, not planks). Built by tools/build-recipe-collisions.mjs from the dump (net-forge's soak 16 scan, /home/rv/soak16-net-forge-recipe.md section 4): for each recipe A, the grid mineflayer lays out (shaped at the top left, shapeless into the last free slots; 2x2 without a table, 3x3 with one) with any stack each ingredient allows, checked against every other recipe B with the server's matcher (any offset, mirrored, ore stacks, wildcard metadata, shapeless as a multiset); a pair where B's result differs is listed under A. ${dumpRecipes.length - any.scanned} recipes were not scanned (dynamic, or CraftTweaker ingredients the dumper could not read: a failed sample grid or an ingredient with no stack); CraftTweaker conditions and NBT are not modelled.`,
         use: 'installRecipes drops the recipes in `drop` and, for each recipe in `collisions`, puts the variants one of its listed recipes also accepts (a multiset match of the variant\'s items to that recipe\'s ingredients) after every other variant of the same result. So recipes[0] and bot.recipesFor\'s first choice are a grid only one recipe matches whenever such a variant exists; a variant that may be shadowed is still offered last.',
         sources: { scan: 'tools/build-recipe-collisions.mjs (net-forge\'s soak 16 scan, /home/rv/soak16-net-forge-recipe.md section 4)', dump: 'packages/rotn-data/3.3.4/recipes.json.br' },
         drop: { ...DROP },
