@@ -92,6 +92,8 @@ export function installDigHands(bot) {
         const original = bot.dig;
         if (typeof original !== 'function' || original.rotnHands) return;
         const dig = async function (block, ...rest) {
+            // Soak 16 (C, #632 review 2): a dig watcher (the collect: "it gave" counts from its target's own dig).
+            try { bot.rotnDigHook?.(block); } catch { /* the dig goes on */ }
             const off = bot.inventory?.slots?.[45];
             if (off && isPickaxeItem(off) && !heldCanDig(bot, block)) {
                 await offHandToolBack(bot);

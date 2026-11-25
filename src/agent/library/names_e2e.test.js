@@ -66,7 +66,8 @@ function fakeBot({ blocks = [], items = [] } = {}) {
         blockAt: (pos) => blocks.find(b => b.position.equals(pos)) ?? null,
         tool: { equipForBlock: () => Promise.resolve() },
         armorManager: { equipAll: () => Promise.resolve() },
-        collectBlock: { collect: (block) => { calls.collect.push(block); return Promise.resolve(); } },
+        // Soak 16 (C1): the block is gone after its collect, as on a server (a block still there reads "was not broken").
+        collectBlock: { collect: (block) => { calls.collect.push(block); const k = blocks.indexOf(block); if (k >= 0) blocks.splice(k, 1); return Promise.resolve(); } },
         pathfinder: { setMovements() {}, stop() {}, goto: () => Promise.resolve(), getPathTo: () => ({ status: 'success', path: [] }) },
         toss: (type, metadata, n) => { calls.toss.push({ type, metadata, n }); const s = items.find(i => i.type === type && (metadata == null || i.metadata === metadata)); if (s) s.count -= n; return Promise.resolve(); },
         equip: (item, dest) => { calls.equip.push({ name: item.name, metadata: item.metadata, dest }); bot.heldItem = item; return Promise.resolve(); },

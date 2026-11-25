@@ -1455,6 +1455,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     // count short, the end of the collect says so (bot.rotnCollectEnd) for its post-condition; one target out of
     // reach on the way (a cave collect that skipped one ore) is not.
     let lastWalkFailed = false;
+    let keptMisses = 0; // #632 review 3: blocks the server kept (no attempt used), at most CL.unreachableTargets
+    const allStart = allHeld(); // #632 review 1: what came in over the whole collect, for the final line
     // CX23 soak: no target within DEATH_SPOT_RADIUS of a recent death spot for deathSpotMs: a
     // player zombie rose there and never leaves (the agenda dug dirt among them, death after death).
     // #416 review 2: not for a crafting table the bot placed and picks up again (pickUpTable).
@@ -1685,6 +1687,11 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             const before = heldByKey();
             const allBefore = allHeld();
             const digsFrom = bot.rotnDigs?.count ?? 0; // soak 16 (C2): the walk's own digs, named apart
+            // #632 review 2 and 4 (the lead): "it gave" counts from the target's own dig (seen by the bot.dig wrapper,
+            // library/hands.js) or its fell; the walk's window ends there (a fell's cuts and later digs are not the walk).
+            let targetStart = null;
+            const markTarget = () => { targetStart ??= { held: allHeld(), n: bot.rotnDigs?.count ?? 0 }; };
+            bot.rotnDigHook = (b) => { if (block.position && b?.position && b.position.x === block.position.x && b.position.y === block.position.y && b.position.z === block.position.z) markTarget(); };
             const breakIt = async () => {
                 if (isLiquid) return await useToolOnBlock(bot, 'bucket', block);
                 // By hand when the block has no collision box (a rock pile), or when a rule's tool must
@@ -1693,6 +1700,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 // crush the bot (G3 round 3 B): cut it safely (fellTree), and collect its logs after
                 // the fall, around the tree (G3 smoke C+D).
                 if (fellsTree(block)) {
+                    markTarget(); // #632 review 4: the fell begins: its cuts are the target's, not the walk's
                     const r = await fellTree(bot, block, run, refusedTrees, { cancelled: () => cancelled });
                     for (const p of r.skip) givenUp.push(p);
                     return r.cut;
@@ -1762,6 +1770,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 success = false;
                 givenUp.push(block.position.clone ? block.position.clone() : block.position);
                 log(bot, lines.notBrokenText(block));
+                // #632 review 3: a kept block uses no attempt (at most CL.unreachableTargets such): the next target is tried.
+                if (keptMisses < CL.unreachableTargets) { keptMisses++; i--; }
             }
             if (missed && res !== TIMED_OUT && walkMisses < CL.unreachableTargets) {
                 walkMisses++;
@@ -1804,14 +1814,17 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 if (gained === 0) {
                     // Say what it did give (round 5 A rerun: a felled spruce gave logs, and the line
                     // named only the missing stick), and that sticks are rare from felling.
-                    const other = Object.entries(allHeld()).map(([key, n]) => [key, n - (allBefore[key] ?? 0)]).filter(([, d]) => d > 0);
+                    const from = targetStart?.held ?? allBefore; // #632 review 2: from the target's own dig
+                    const other = Object.entries(allHeld()).map(([key, n]) => [key, n - (from[key] ?? 0)]).filter(([, d]) => d > 0);
                     // Soak 16 (C2, C3): where the target is; what came in since the walk began, a drop that crafts into the
                     // item asked for said so (cobblestone -> 4 rocks); the walk's own digs on the way named apart (soak 15:
                     // "it gave 4 dirt piles" were the walk's dirt, not the stone's).
-                    const walk = lines.walkDigsText(bot, digsFrom, block.position);
-                    const items = other.map(([key, d]) => { const c = lines.craftsInto(key, targets); return `${d} ${key}${c ? ` (crafts into ${c} each)` : ''}`; }).join(', ');
-                    const gave = items ? ` (${walk ? 'since the walk began: ' : 'it gave '}${items})` : '';
-                    const walked = walk ? ` The walk dug ${walk} on the way.` : '';
+                    const walk = lines.walkDigsText(bot, digsFrom, block.position, targetStart?.n ?? Infinity);
+                    const items = other.map(([key, d]) => { const c = lines.craftsInto(key, targets); return `${d} ${key}${c ? ` (${lines.craftsIntoText(c)})` : ''}`; }).join(', ');
+                    const gave = items ? ` (it gave ${items})` : '';
+                    // The walk's own gain (before the target's dig), named with its digs.
+                    const walkGain = targetStart ? Object.entries(targetStart.held).map(([key, n]) => [key, n - (allBefore[key] ?? 0)]).filter(([, d]) => d > 0) : [];
+                    const walked = walk ? ` The walk dug ${walk} on the way${walkGain.length ? ` (${walkGain.map(([key, d]) => `${d} ${key}`).join(', ')})` : ''}.` : '';
                     const pos = block.position ? ` at ${block.position.x}, ${block.position.y}, ${block.position.z}` : '';
                     const rare = baseType === 'stick' && fellsTree(block) ? ' A felled tree drops few sticks, often none.' : '';
                     log(bot, `Broke ${block.name}${pos}: no ${blockType} yet${gave}.${walked}${rare}`);
@@ -1852,6 +1865,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         }
         finally {
             bot.rotnCollectTarget = null;
+            bot.rotnDigHook = null; // #632 review 2: the watcher is this attempt's
         }
         
         if (bot.interrupt_code)
@@ -1884,7 +1898,16 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     const details = gainedNames.length && !(gainedNames.length === 1 && gainedNames[0][0] === blockType)
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
     sayDeathSkips(); // #416 nit: also when the collect ended otherwise (a time limit, its attempts)
-    log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.`);
+    // #632 review 1 (soak 15: "Collected 0 … (it gave 16 rocks)"): fewer than asked, and what came in crafts into the
+    // item asked for (4 rocks make 1 cobble): said, with the craft.
+    let craftNote = '';
+    if (collected < num) {
+        const hints = Object.entries(allHeld()).map(([key, n]) => [key, n - (allStart[key] ?? 0)]).filter(([, d]) => d > 0)
+            .map(([key, d]) => { const c = lines.craftsInto(key, targets); return c && d >= c.per ? `${d} ${key} (${lines.craftsIntoText(c)}: !craftRecipe("${c.name}", ${Math.floor(d / c.per) * c.count}))` : null; })
+            .filter(Boolean);
+        if (hints.length) craftNote = ` What came in crafts into it: ${hints.join('; ')}.`;
+    }
+    log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.${craftNote}`);
     bot.rotnCollectEnd = { at: Date.now(), short: collected < num, lastWalkFailed };
     return collected > 0;
 }
