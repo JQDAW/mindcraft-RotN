@@ -622,9 +622,10 @@ export class Agent {
         await this.bot.modes.update();
         // Soak 15: between actions, a stack left on the cursor or in the 2x2 grid is put back (said once).
         if (!this.actions?.executing) await idleHands(this);
-        autonomyTick(this); // control holds > tasks > agenda; no LLM call (E2, E3)
+        const autonomy = autonomyTick(this); // control holds > tasks > agenda; no LLM call (E2, E3)
         // Soak 16 trap: idle and trapped: the scripted escape, else one due re-plan; the post-agenda pickaxe reserve.
-        try { trappedTick(this); } catch (err) { console.warn(`[trapped] tick: ${err?.message ?? err}`); }
+        // #642 review 1: only when autonomyTick started nothing this tick.
+        try { trappedTick(this, { autonomy }); } catch (err) { console.warn(`[trapped] tick: ${err?.message ?? err}`); }
         this.self_prompter.update(delta);
         await this.checkTaskDone();
     }

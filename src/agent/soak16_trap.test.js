@@ -9,10 +9,11 @@ import { setImmediate } from 'node:timers';
 import { pocketUnderRock, fakeWorld, SLOT } from '../../test/fixtures/fake-world.mjs';
 import { __setRegistryForTest } from '../utils/mcdata.js';
 import { nextStep, escape, escapeText, isTrapped, surfaceTarget, ESCAPE, ESCAPE_HOLD } from './library/escape.js';
-import { pickaxePlan, makePickaxe, bestPickaxe, usesLeft, PICKAXE } from './library/pickaxe.js';
+import { pickaxePlan, makePickaxe, bestPickaxe, usesLeft, walkKeep, walkPickaxeOk, tableCell, placeTableIn, PICKAXE } from './library/pickaxe.js';
 import { walkFloorY, guardWalkBreaks, WALK_GUARD } from './library/skills.js';
 import { installDigHands, TOOL_BREAK } from './library/hands.js';
-import { trappedTick, TRAP_JOB, PICKAXE_RESERVE } from './trapped_job.js';
+import { trappedTick, idleForJob, TRAP_JOB, PICKAXE_RESERVE, AUTONOMY_IDLE } from './trapped_job.js';
+import { takeReplanNote } from './replan.js';
 
 const V = (x, y, z) => new Vec3(x, y, z);
 const quiet = (t) => { t.mock.method(console, 'log', () => {}); t.mock.method(console, 'warn', () => {}); };
@@ -67,9 +68,12 @@ test('soak 16 trap (1): the pickaxe plan from soak 16\'s bag: 1 cobble into rock
     assert.equal(usesLeft({ name: 'stone_pickaxe', metadata: 131 }), 1);
 });
 
-test('soak 16 trap (1): the real escape in the pocket with soak 16\'s bag: it makes the stone pickaxe first, then gets out', async (t) => {
-    quiet(t);
-    const w = pocketUnderRock({ slots: BAG });
+test('soak 16 trap (1): the real escape in a tunnel end with soak 16\'s bag: the climb is blocked for want of a pickaxe, one is made (the table in the tunnel cell), then it gets out', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    // The walk's tunnel behind the bot (1, 56, 0) is open: the only room for a table (#642 review 4).
+    const w = pocketUnderRock({ slots: BAG, set: { '0,56,0': 'air', '0,57,0': 'air', '1,56,0': 'air' } });
     useRegistry(t, w.bot);
     const crafts = [];
     const craft = (bot, item, n) => {
@@ -84,11 +88,42 @@ test('soak 16 trap (1): the real escape in the pocket with soak 16\'s bag: it ma
     assert.equal(r.out, true, JSON.stringify({ why: r.why, at: r.at }));
     assert.equal(r.pickaxe, 'made');
     assert.ok(w.calls.dug.length > 0);
+    // #642 review 6: the pathfinder and the climb first; the craft only after the why named the missing pickaxe.
+    const order = lines.filter(l => /^\[escape\]|^\[pickaxe\]/.test(l));
+    const craftAt = order.findIndex(l => /made a stone pickaxe; climbing again/.test(l));
+    assert.ok(order.findIndex(l => /digging out by hand/.test(l)) >= 0 && order.findIndex(l => /digging out by hand/.test(l)) < craftAt, order.join('\n'));
+    assert.ok(order.some(l => /\[pickaxe\] placed the crafting table at \(1, 56, 0\)/.test(l)), order.join('\n'));
+    // With hostiles given (the respawn escape among player zombies): no craft at all.
+    const z = pocketUnderRock({ slots: BAG, set: { '0,56,0': 'air', '0,57,0': 'air', '1,56,0': 'air' } });
+    let zc = 0;
+    const rz = await escape(z.bot, { budget: 'day', target: surfaceTarget(z.bot), craft: () => { zc++; return Promise.resolve(true); }, hostiles: [V(5, 56, 5)] });
+    assert.deepEqual([rz.out, zc], [false, 0]);
+    assert.match(rz.why, /needs a pickaxe \(you carry none\)/);
     // Without the makings: no craft, and the why says what is missing (the model's line names the recipe).
     const bare = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] } });
     const r2 = await escape(bare.bot, { budget: 'day', target: surfaceTarget(bare.bot), craft: () => { throw new Error('no craft'); } });
     assert.equal(r2.out, false);
-    assert.match(r2.why, /needs a pickaxe \(you carry none\)/);
+    assert.match(r2.why, /needs a pickaxe \(you carry none\); a stone pickaxe needs 3 rocks/);
+});
+
+test('#642 review 4: the table cell in a true 1x2 stone pocket: none ("no room for a crafting table here"); dirt beside: dug first; never the bot\'s cells', async (t) => {
+    quiet(t);
+    const stone = pocketUnderRock({ slots: BAG });
+    useRegistry(t, stone.bot);
+    assert.equal(tableCell(stone.bot), null);
+    assert.deepEqual(await placeTableIn(stone.bot), { why: 'no room for a crafting table here' });
+    const crafts = [];
+    const r = await makePickaxe(stone.bot, { craft: (b, i) => { crafts.push(i); return Promise.resolve(true); } });
+    assert.deepEqual([r.made, r.why], [false, 'no room for a crafting table here']);
+    assert.ok(!crafts.includes('stone_pickaxe'));
+    // Dirt beside the feet: dug by hand, then the table there.
+    const dirt = pocketUnderRock({ slots: BAG, set: { '0,56,0': 'air', '0,57,0': 'air', '0,56,1': 'dirt' } });
+    const spot = tableCell(dirt.bot);
+    assert.deepEqual([spot.cell.toString(), spot.dig], ['(0, 56, 1)', true]);
+    const placed = await placeTableIn(dirt.bot);
+    assert.equal(placed.cell.toString(), '(0, 56, 1)');
+    assert.equal(dirt.bot.blockAt(V(0, 56, 1)).name, 'crafting_table');
+    assert.equal(dirt.bot.blockAt(V(0, 56, 0)).name, 'air', 'the bot\'s own cells stay free');
 });
 
 test('soak 16 trap (2): the walks\' break floor and the pickaxe\'s last uses (WALK_GUARD)', (t) => {
@@ -104,8 +139,14 @@ test('soak 16 trap (2): the walks\' break floor and the pickaxe\'s last uses (WA
     assert.equal(cost('dirt', 66), WALK_GUARD.breakNever, 'below the floor: never');
     assert.equal(cost('dirt', 67), 0);
     assert.equal(cost('undergroundbiomes:metamorphic_stone', 70), 0, 'a fresh pickaxe digs stone on a walk');
-    // The pickaxe with fewer than walkKeepUses uses left: a walk breaks no block that needs a pickaxe (the escape may).
-    w.bot.inventory.slots[SLOT.OFF_HAND].metadata = 131 - PICKAXE.walkKeepUses + 2;
+    // #642 review 8: the uses kept are 20% of the tool's (27 of the stone pickaxe's 132), at least 4.
+    assert.equal(walkKeep({ name: 'stone_pickaxe' }), 27);
+    assert.equal(walkKeep({ name: 'unknown:thing' }), PICKAXE.keepMin);
+    w.bot.inventory.slots[SLOT.OFF_HAND].metadata = 131 - 27; // 28 uses left: still digs
+    assert.equal(walkPickaxeOk(w.bot), true);
+    // With 27 or fewer left: a walk breaks no block that needs a pickaxe (the escape may).
+    w.bot.inventory.slots[SLOT.OFF_HAND].metadata = 131 - 26;
+    assert.equal(walkPickaxeOk(w.bot), false);
     const m2 = guardWalkBreaks(w.bot, { exclusionAreasBreak: [] }, 0);
     assert.equal(m2.exclusionAreasBreak.reduce((n, f) => n + f({ name: 'undergroundbiomes:metamorphic_stone', metadata: 0, position: V(0, 70, 0) }), 0), WALK_GUARD.breakNever);
     assert.equal(m2.exclusionAreasBreak.reduce((n, f) => n + f({ name: 'dirt', metadata: 0, position: V(0, 70, 0) }), 0), 0, 'dirt by hand is fine');
@@ -136,6 +177,16 @@ test('soak 16 trap (2): goToCoordinates that ends "Unable to reach" is a failed 
     const down = { entity: { position: V(0.5, 60, 0.5) }, rotnDigs: { count: 3 } };
     await postEscape({ bot: down }, 'goToCoordinates', { t: Date.now(), digs: 1, at: V(0, 64, 0) }, { escapeIfTrapped: fake });
     assert.deepEqual(runs, [0, 3]);
+    // #642 review 7: a walk that reached a goal 3 or more below its start on purpose (a bed or a saved place
+    // underground): no check at all.
+    const t1 = Date.now();
+    const bed = { entity: { position: V(0.5, 58, 0.5) }, rotnDigs: { count: 3 }, rotnWalkReached: { at: t1 + 1, y: 58 } };
+    assert.equal(await postEscape({ bot: bed }, 'goToBed', { t: t1, digs: 1, at: V(0, 64, 0) }, { escapeIfTrapped: fake }), null);
+    assert.deepEqual(runs, [0, 3], 'no escape check');
+    // The real goToPosition records the goal it reached.
+    w.bot.pathfinder.goto = () => { w.bot.entity.position = V(100.5, 64, 0.5); return Promise.resolve(); };
+    assert.equal(await skills.goToPosition(bot, 100, 64, 0, 2), true);
+    assert.equal(bot.rotnWalkReached.y, 64);
 });
 
 test('soak 16 trap: a held tool that breaks on a dig is logged ("[tool] <name> broke")', async (t) => {
@@ -150,6 +201,28 @@ test('soak 16 trap: a held tool that breaks on a dig is logged ("[tool] <name> b
     await bot.dig({ name: 'undergroundbiomes:metamorphic_stone', position: V(9, 70, -63) });
     t.mock.timers.tick(TOOL_BREAK.checkMs);
     assert.ok(lines.includes('[tool] stone_pickaxe broke (used up) on undergroundbiomes:metamorphic_stone at 9, 70, -63'), lines.join('\n'));
+    // #642 review 5: a worn pickaxe (2 uses) moved to the off hand after the dig is no break.
+    const worn = { name: 'stone_pickaxe', metadata: 130, count: 1, slot: 36 };
+    slots[36] = worn;
+    bot.heldItem = worn;
+    bot.dig = () => { slots[45] = { ...worn, slot: 45 }; slots[36] = null; bot.heldItem = null; return Promise.resolve(); };
+    installDigHands(bot);
+    lines.length = 0;
+    await bot.dig({ name: 'stone', position: V(0, 60, 0) });
+    t.mock.timers.tick(TOOL_BREAK.checkMs);
+    assert.ok(!lines.some(l => /broke/.test(l)), lines.join('\n'));
+    // On the cursor: no break either.
+    slots[45] = null;
+    slots[36] = { ...worn };
+    bot.heldItem = slots[36];
+    bot.dig = () => { bot.inventory.selectedItem = { ...worn }; slots[36] = null; bot.heldItem = null; return Promise.resolve(); };
+    bot.dig.rotnHands = false;
+    installDigHands(bot);
+    await bot.dig({ name: 'stone', position: V(0, 60, 0) });
+    t.mock.timers.tick(TOOL_BREAK.checkMs);
+    assert.ok(!lines.some(l => /broke/.test(l)), lines.join('\n'));
+    bot.inventory.selectedItem = null;
+    bot.dig = () => Promise.resolve();
     // A fresh pickaxe moved away by the model is no break.
     slots[36] = { name: 'stone_pickaxe', metadata: 3, count: 1, slot: 36 };
     bot.heldItem = slots[36];
@@ -161,57 +234,122 @@ test('soak 16 trap: a held tool that breaks on a dig is logged ("[tool] <name> b
 
 function idleAgent(bot, extra = {}) {
     const runs = [];
+    const opts = [];
     return {
-        bot, runs,
-        actions: { executing: false, runAction: (label, fn) => { runs.push(label); return Promise.resolve(fn()); } },
+        bot, runs, opts,
+        actions: { executing: false, runAction: (label, fn, o) => { runs.push(label); opts.push(o); return Promise.resolve(fn()); } },
         self_prompter: { isActive: () => false },
         _night: { state: 'day' },
         ...extra,
     };
 }
+const TRAP_WHY = 'no stair step, and no room to pillar up above 0, 56, 0: 0, 58, 0 is undergroundbiomes:metamorphic_stone, which needs a pickaxe (you carry none)';
 
-test('soak 16 trap (3): idle and trapped with the standing budget spent: the scripted escape runs, then one due re-plan per hold per cell', async (t) => {
-    quiet(t);
+test('soak 16 trap (3): idle and trapped with the standing budget spent: the escape runs (keepReplan), then one due re-plan said as being trapped', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
     const w = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] } });
     useRegistry(t, w.bot);
+    w.bot.time = { day: 1 };
     const agent = idleAgent(w.bot);
     let escapes = 0;
-    const run = () => { escapes++; return Promise.resolve({ out: false, why: 'no stair step, and no room to pillar up above 0, 56, 0: 0, 58, 0 is undergroundbiomes:metamorphic_stone, which needs a pickaxe (you carry none)', dug: 0, placed: 0, at: V(0, 56, 0), ms: 5000 }); };
     let now = 1_000_000;
-    assert.equal(trappedTick(agent, { now, run }), 'escape');
+    const run = () => { escapes++; return Promise.resolve({ out: false, why: TRAP_WHY, dug: 0, placed: 0, at: V(0, 56, 0), ms: 5000 }); };
+    assert.equal(trappedTick(agent, { now, run, autonomy: 'goal:open:spent' }), 'escape');
     await new Promise(setImmediate);
-    assert.deepEqual([escapes, agent.runs], [1, [TRAP_JOB.label]]);
-    assert.equal(w.bot.rotnEscapeFails.length, 1);
-    // The fail is fresh (Date.now() in the job): the next look is a due re-plan, not a second escape.
-    w.bot.rotnEscapeFails[0].t = now;
+    assert.deepEqual([escapes, agent.runs, agent.opts], [1, [TRAP_JOB.label], [{ keepReplan: true }]], '#642 review 2');
+    w.bot.rotnEscapeFails[0].t = now; // the job's Date.now(): on the test's clock
     now += TRAP_JOB.checkMs;
     assert.equal(trappedTick(agent, { now, run }), 'replan');
     assert.equal(agent.replan?.due, true);
-    assert.match(agent.replan.notes.at(-1), /You are trapped at 0, 56, 0: no walkable way to open ground\. The escape failed here \(.*needs a pickaxe \(you carry none\)\)\. You have no pickaxe: a stone pickaxe is 3 rocks and 2 sticks/);
-    now += TRAP_JOB.checkMs;
-    assert.equal(trappedTick(agent, { now, run }), 'held', 'once per hold per cell');
-    assert.equal(escapes, 1);
-    // After the hold: the escape again.
-    now += ESCAPE_HOLD.ms;
-    assert.equal(trappedTick(agent, { now, run }), 'escape');
+    // #642 review 9: no "Reflexes (trapped) ran" and no "[reflex] trapped interrupted 'nothing'".
+    const note = takeReplanNote(agent);
+    assert.match(note, /^You are trapped at 0, 56, 0: no walkable way to open ground, and the escape failed here \(.*needs a pickaxe \(you carry none\)\)\. You have no pickaxe: a stone pickaxe is 3 rocks and 2 sticks/);
+    assert.doesNotMatch(note, /Reflexes/);
+    assert.ok(lines.includes('[trapped] re-plan requested (due); no LLM call now.'), lines.join('\n'));
+    assert.ok(!lines.some(l => /\[reflex\] trapped/.test(l)));
 });
 
-test('soak 16 trap (3): no job while an action runs, a reflex acts, at night, on a hold, or while self-prompting', (t) => {
+test('#642 review 3: bounded: re-plans at most once per hold and replansPerDay per place and day; after ESCAPE_HOLD.fails failures no more escapes or re-plans until the bot moves or the next day', async (t) => {
+    quiet(t);
+    const w = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] } });
+    useRegistry(t, w.bot);
+    w.bot.time = { day: 1 };
+    const agent = idleAgent(w.bot);
+    let now = 1_000_000;
+    let escapes = 0;
+    const run = () => { escapes++; return Promise.resolve({ out: false, why: TRAP_WHY, dug: 0, placed: 0, at: V(0, 56, 0), ms: 5000 }); };
+    const results = [];
+    // Walk the clock through several holds: each escape fails at once (stamped at the test's clock).
+    for (let k = 0; k < 40; k++) {
+        const r = trappedTick(agent, { now, run, clock: () => now });
+        if (r === 'escape') await new Promise(setImmediate);
+        if (r) results.push(r);
+        now += TRAP_JOB.checkMs;
+    }
+    const n = (x) => results.filter(r => r === x).length;
+    assert.equal(escapes, ESCAPE_HOLD.fails, results.join(','));
+    assert.ok(n('replan') <= TRAP_JOB.replansPerDay, results.join(','));
+    assert.equal(results.at(-1), 'gave-up');
+    // Still the same day and place: given up.
+    now += ESCAPE_HOLD.windowMs;
+    assert.equal(trappedTick(agent, { now, run, clock: () => now }), 'gave-up');
+    // The next day at the same place: the escape again.
+    w.bot.time = { day: 2 };
+    now += TRAP_JOB.checkMs;
+    assert.equal(trappedTick(agent, { now, run, clock: () => now }), 'escape');
+    await new Promise(setImmediate);
+    // More than ESCAPE_HOLD.cells away (the same day): a new place, the escape again.
+    const moved = idleAgent(w.bot);
+    moved._trapJob = agent._trapJob;
+    agent._trapJob.places.forEach(p => { p.gaveUp = true; });
+    w.world.set(V(5, 56, 0), 'air'); // a second pocket, 5 blocks away
+    w.world.set(V(5, 57, 0), 'air');
+    w.bot.entity.position = V(5.5, 56, 0.5);
+    w.bot.rotnTrapped = null;
+    now += TRAP_JOB.checkMs;
+    assert.equal(trappedTick(moved, { now, run, clock: () => now }), 'escape');
+    // A cap per place and day on the re-plans, even with fresh holds: never more than replansPerDay.
+    const agent2 = idleAgent(w.bot);
+    w.bot.entity.position = V(0.5, 56, 0.5);
+    w.bot.rotnEscapeFails = [];
+    let replans = 0;
+    for (let k = 0; k < 10; k++) {
+        w.bot.rotnEscapeFails = [{ at: V(0, 56, 0), t: now, why: TRAP_WHY }]; // one fresh fail each hold: never "gave up"
+        if (trappedTick(agent2, { now, run }) === 'replan') replans++;
+        now += ESCAPE_HOLD.ms + 1;
+    }
+    assert.equal(replans, TRAP_JOB.replansPerDay);
+});
+
+test('#642 review 1 and 10: no job when autonomyTick started something, beside the walk-away, tree, night or respawn jobs, in the dusk wait, while an action runs, a reflex acts, on a hold, or while self-prompting', (t) => {
     quiet(t);
     const w = pocketUnderRock();
     useRegistry(t, w.bot);
+    const never = () => { throw new Error('no'); };
+    for (const autonomy of ['relocating', 'tree', 'night:building', 'escaping', 'task:t1', 'rocks', 'goal', 'yield', 'paused'])
+        assert.equal(trappedTick(idleAgent(w.bot), { now: 5e6, run: never, autonomy }), null, autonomy);
+    assert.ok(AUTONOMY_IDLE.has('goal:open:spent') && AUTONOMY_IDLE.has(null));
     const busy = [
         { actions: { executing: true, runAction() {} } },
         { _night: { state: 'inside' } },
+        { _night: { state: 'day', duskAt: 1 } },
+        { _night: { state: 'day', job: Promise.resolve() } },
+        { _relocate: { job: Promise.resolve() } },
+        { _tree: { job: Promise.resolve() } },
+        { _escape: { job: Promise.resolve() } },
         { control: { hold: { kind: 'stop' } } },
         { self_prompter: { isActive: () => true } },
     ];
-    for (const extra of busy) assert.equal(trappedTick(idleAgent(w.bot, extra), { now: 5e6, run: () => { throw new Error('no'); } }), null, JSON.stringify(Object.keys(extra)));
+    for (const extra of busy) {
+        assert.equal(idleForJob(idleAgent(w.bot, extra)), false, JSON.stringify(Object.keys(extra)));
+        assert.equal(trappedTick(idleAgent(w.bot, extra), { now: 5e6, run: never }), null);
+    }
     w.bot.modes = { anyActive: () => true };
     assert.equal(trappedTick(idleAgent(w.bot), { now: 5e6 }), null);
 });
 
-test('soak 16 trap: the post-agenda pickaxe reserve: the stone_pickaxe step done, none carried, the makings held: crafted by script, twice a day at most', async (t) => {
+test('soak 16 trap: the post-agenda pickaxe reserve: the stone_pickaxe step done, none carried, the makings held: crafted by script in an idle gap (keepReplan)', async (t) => {
     quiet(t);
     const w = fakeWorld({ at: V(0, 64, 0), slots: BAG });
     useRegistry(t, w.bot);
@@ -220,10 +358,9 @@ test('soak 16 trap: the post-agenda pickaxe reserve: the stone_pickaxe step done
     const crafted = [];
     const craft = (bot, item, n) => { crafted.push(item); if (item === 'stone_pickaxe') w.give('stone_pickaxe', 1); else w.give(item, 4 * n); return Promise.resolve(true); };
     assert.equal(trappedTick(agent, { now: 1e6, craft }), 'pickaxe');
-    await new Promise(setImmediate);
-    await new Promise(setImmediate);
+    for (let k = 0; k < 20 && !bestPickaxe(w.bot); k++) await new Promise(setImmediate);
     assert.ok(bestPickaxe(w.bot), 'a pickaxe now');
-    assert.deepEqual(agent.runs, [PICKAXE_RESERVE.label]);
+    assert.deepEqual([agent.runs, agent.opts], [[PICKAXE_RESERVE.label], [{ keepReplan: true }]]);
     assert.equal(crafted.at(-1), 'stone_pickaxe');
     assert.equal(trappedTick(agent, { now: 1e6 + TRAP_JOB.checkMs, craft }), null, 'held one now: nothing');
     // Not before the agenda's pickaxe step (the agenda makes the first one).

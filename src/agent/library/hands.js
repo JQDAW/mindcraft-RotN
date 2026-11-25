@@ -23,8 +23,9 @@ function watchToolBreak(bot, tool, block) {
     if (!tool?.name || !(usesLeft(tool) <= TOOL_BREAK.lastUses) || !Number.isInteger(tool.slot)) return;
     setTimeout(() => {
         try {
-            const now = bot.inventory?.slots?.[tool.slot];
-            if (now?.name === tool.name) return;
+            // #642 review 5: moved, not broken: any slot (the off hand too) or the cursor holding that tool, as worn or less.
+            const held = [...(bot.inventory?.slots ?? []), bot.inventory?.selectedItem].some(i => i?.name === tool.name && (i.metadata ?? 0) >= (tool.metadata ?? 0));
+            if (held) return;
             const p = block?.position;
             bot.rotnToolBroke = { name: tool.name, at: Date.now(), on: block?.name ?? null };
             console.log(`[tool] ${tool.name} broke (used up) on ${block?.name ?? 'a block'}${p ? ` at ${p.x}, ${p.y}, ${p.z}` : ''}`);

@@ -259,6 +259,9 @@ function fallingNear(bot, p) {
     return '';
 }
 
+/** The why of a climb blocked for want of a pickaxe (digWhy's text). */
+export const NO_PICKAXE = /needs a pickaxe \(you carry none\)/;
+
 /**
  * Soak 16 trap (21:20, "no room to pillar"): why a cell cannot be dug for the escape, naming the cell and its block,
  * or null when it can: empty already, or diggable (burrow.burrowDiggable: by hand or a held tool, never a tree part),
@@ -561,20 +564,26 @@ export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = 
             await craftMore(bot, 'dirt', want, craft, { why: `Climbing out of here needs blocks to stand on` });
             state.crafted = Math.max(0, countOf(softItems(bot)) - before);
         }
-        // Soak 16 trap (21:20): no pickaxe (used up by the walk that dug the bot in): every stone cell is undiggable, so
-        // the pathfinder and the climb by hand cannot dig a thing. One is made first from what the bot carries.
-        if (!bestPickaxe(bot)) {
-            const tableNear = (() => { try { return !!bot.findBlock?.({ matching: (b) => /crafting_table$/.test(b?.name ?? ''), maxDistance: ESCAPE.tableReach }); } catch { return false; } })();
-            const r = await makePickaxe(bot, { craft, tableNear, say });
-            state.pickaxe = r.made ? 'made' : r.why;
-            say(r.made ? '[escape] no pickaxe: made a stone pickaxe first' : `[escape] no pickaxe, and none can be made here: ${r.why}`);
-        }
         const first = await byPathfinder(bot, target, state, deadline, say);
         if (first.out) return report(done(true, 'pathfinder'), say);
         if (bot.interrupt_code) return report(done(false, null, 'interrupted'), say);
         say(`[escape] ${first.why}; digging out by hand`);
         const second = await byHand(bot, target, state, deadline, { moveTo, pillar });
-        return report(second.out ? done(true, 'by hand') : done(false, null, second.why), say);
+        if (second.out) return report(done(true, 'by hand'), say);
+        // Soak 16 trap (21:20), #642 review 6: the way out is blocked for want of a pickaxe (used up by the walk that dug
+        // the bot in: every stone cell is undiggable): one is made from what the bot carries, then the climb again.
+        // Only after the pathfinder and the climb said so, and never with hostiles near (the respawn escape: no craft
+        // among player zombies).
+        if (NO_PICKAXE.test(second.why ?? '') && !state.away.length && !bestPickaxe(bot) && !bot.interrupt_code && Date.now() < deadline) {
+            const tableNear = (() => { try { return !!bot.findBlock?.({ matching: (b) => /crafting_table$/.test(b?.name ?? ''), maxDistance: ESCAPE.tableReach }); } catch { return false; } })();
+            const r = await makePickaxe(bot, { craft, tableNear, say });
+            state.pickaxe = r.made ? 'made' : r.why;
+            say(r.made ? '[escape] no pickaxe: made a stone pickaxe; climbing again' : `[escape] no pickaxe, and none can be made here: ${r.why}`);
+            if (!r.made) return report(done(false, null, `${second.why}; ${r.why}`), say);
+            const third = await byHand(bot, target, state, deadline, { moveTo, pillar });
+            return report(third.out ? done(true, 'by hand') : done(false, null, third.why), say);
+        }
+        return report(done(false, null, second.why), say);
     } catch (err) {
         return report(done(false, null, err?.message ?? String(err)), say);
     } finally {

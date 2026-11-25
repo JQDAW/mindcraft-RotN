@@ -193,6 +193,10 @@ export async function postEscape(agent, label, start, { escapeIfTrapped = null }
     // (bot.rotnCollectEnd), never for one target out of reach on the way.
     const end = bot.rotnCollectEnd;
     const collectShort = kind === 'down-or-failed' && (end?.at ?? 0) >= start.t && (end.lastWalkFailed || end.short);
+    // #642 review 7: a walk that reached a goal whose own y is 3 or more below its start went down on purpose (a bed or a
+    // saved place underground): no check.
+    const reached = bot.rotnWalkReached;
+    if (kind === 'walk' && !walkFailed && start.at && (reached?.at ?? 0) >= start.t && reached.y <= start.at.y - 3) return null;
     const minDepth = kind === 'deep' ? 3 : kind === 'down-or-failed' && !collectShort ? 3 : kind === 'walk' && !walkFailed ? 3 : 0;
     const run = escapeIfTrapped ?? (await import('../library/escape.js')).escapeIfTrapped;
     const line = await run(bot, { digsBefore: start.digs, from: start.at, minDepth });

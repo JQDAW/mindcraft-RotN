@@ -21,7 +21,7 @@ import { returnGrid } from './inventory_sync.js';
 import * as lines from './collect_lines.js';
 import { digBudget, digLine, effectsText, DIG_STALL } from './pit.js';
 import { foodKey, foodValue } from "./food.js";
-import { pickaxeUses, PICKAXE } from './pickaxe.js';
+import { walkPickaxeOk } from './pickaxe.js';
 import { digRule } from './burrow.js';
 import { getItem as rotnItem, registryName as rotnRegistryName } from "../../../packages/rotn-data/index.js";
 /**
@@ -3526,13 +3526,13 @@ export async function giveToPlayer(bot, itemType, username, num=1) {
  * leave. The walks' rules now:
  * - floor: no block broken below min(the start's y, the goal's y) - floorBelow (with a pickaxe), or below that min
  *   (without one): a walk never digs deeper than both of its ends;
- * - the pickaxe's last PICKAXE.walkKeepUses uses are never spent on a walk (no block that needs a pickaxe is broken
- *   then); the escape may use them;
+ * - the pickaxe's last uses (pickaxe.walkKeep: 20% of its uses, #642 review 8) are never spent on a walk (no block
+ *   that needs a pickaxe is broken then); the escape may use them;
  * - without such a pickaxe, no destructive fallback: only the non-destructive movements (and no stone at all).
  * pickaxeMs: how long the pickaxe's uses are cached during a search (the cost function runs per block).
  */
 export const WALK_GUARD = { floorBelow: 2, pickaxeMs: 1000, breakNever: 100 };
-export function walkFloorY(bot, goal, { pickaxe = pickaxeUses(bot) >= PICKAXE.walkKeepUses } = {}) {
+export function walkFloorY(bot, goal, { pickaxe = walkPickaxeOk(bot) } = {}) {
     const start = Math.floor(bot.entity?.position?.y ?? 0);
     const goalY = Number.isFinite(goal?.y) ? Math.floor(goal.y) : start;
     return Math.min(start, goalY) - (pickaxe ? WALK_GUARD.floorBelow : 0);
@@ -3540,13 +3540,13 @@ export function walkFloorY(bot, goal, { pickaxe = pickaxeUses(bot) >= PICKAXE.wa
 export function guardWalkBreaks(bot, movements, floorY) {
     if (!Array.isArray(movements?.exclusionAreasBreak) || movements.rotnWalkGuard) return movements;
     movements.rotnWalkGuard = { floorY };
-    let uses = null, usesAt = 0;
-    const usesNow = () => { const t = Date.now(); if (uses === null || t - usesAt > WALK_GUARD.pickaxeMs) { uses = pickaxeUses(bot); usesAt = t; } return uses; };
+    let ok = null, okAt = 0;
+    const pickaxeOk = () => { const t = Date.now(); if (ok === null || t - okAt > WALK_GUARD.pickaxeMs) { ok = walkPickaxeOk(bot); okAt = t; } return ok; };
     movements.exclusionAreasBreak.push((block) => (block?.position && block.position.y < floorY ? WALK_GUARD.breakNever : 0));
     movements.exclusionAreasBreak.push((block) => {
         let rule;
         try { rule = digRule(block); } catch { rule = undefined; }
-        return rule && rule.type === 'pickaxe' && usesNow() < PICKAXE.walkKeepUses ? WALK_GUARD.breakNever : 0;
+        return rule && rule.type === 'pickaxe' && !pickaxeOk() ? WALK_GUARD.breakNever : 0;
     });
     return movements;
 }
@@ -3579,7 +3579,7 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
 
     // Soak 16 trap: the walk's rules (WALK_GUARD): the break floor, the pickaxe's last uses kept, and no destructive
     // fallback without a pickaxe that has them.
-    const pickaxeOk = pickaxeUses(bot) >= PICKAXE.walkKeepUses;
+    const pickaxeOk = walkPickaxeOk(bot);
     const floorY = walkFloorY(bot, goal, { pickaxe: pickaxeOk });
     guardWalkBreaks(bot, nonDestructiveMovements, floorY);
     const destructiveMovements = canDig && pickaxeOk ? guardWalkBreaks(bot, plantSafe(fallSafe(new pf.Movements(bot))), floorY) : nonDestructiveMovements;
@@ -3773,6 +3773,8 @@ export async function goToPosition(bot, x, y, z, min_distance=2) {
         const distance = bot.entity.position.distanceTo(new Vec3(x, y, z));
         if (distance <= min_distance+1) {
             log(bot, `You have reached at ${x}, ${y}, ${z}.`);
+            // #642 review 7: a goal reached on purpose (its own y) for the walk post-condition (actions.js).
+            bot.rotnWalkReached = { at: Date.now(), y: Math.floor(y) };
             return true;
         }
         else {
