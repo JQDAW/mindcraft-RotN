@@ -139,7 +139,7 @@ test('installRotnRecipes: mineflayer\'s Recipe, bound before the install, sees R
     const before = registry.recipes;
     const report = mc.installRotnRecipes();
     assert.equal(registry.recipes, before, 'the same object');
-    assert.ok(report.results > 3000 && report.recipes === 6089 && report.resultNotInRegistry === 0, JSON.stringify(report));
+    assert.ok(report.results > 3000 && report.recipes + report.dropped === 6089 && report.dropped === 1 && report.resultNotInRegistry === 0, JSON.stringify(report));
     const id = (n) => registry.itemsByName[n].id;
     const names = (r) => r.delta.filter((d) => d.count < 0).map((d) => [mc.getItemName(d.id), d.metadata, -d.count]);
 

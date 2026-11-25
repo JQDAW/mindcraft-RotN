@@ -252,6 +252,47 @@ export function convertRecipe(registry, r, { maxVariants = DEFAULT_MAX_VARIANTS,
 }
 
 /**
+ * A dump recipe's ingredients as registry-id matchers ({ ids: Map(id -> Set(meta) | null for any) }), or null
+ * when one ingredient has no stack in the registry (that recipe then accepts nothing the bot can lay out).
+ */
+function ingredientMatchers(registry, r) {
+    const cells = (Array.isArray(r?.slots) ? r.slots : (r?.ingredients ?? [])).filter(Boolean);
+    const out = [];
+    for (const c of cells) {
+        const ids = new Map();
+        for (const s of c.stacks ?? []) {
+            const id = itemId(registry, s.name);
+            if (id === null) continue;
+            if (s.meta === WILDCARD_META || s.meta === undefined || s.meta === null) ids.set(id, null);
+            else if (ids.get(id) !== null) ids.set(id, (ids.get(id) ?? new Set()).add(s.meta));
+        }
+        if (ids.size === 0) return null;
+        out.push(ids);
+    }
+    return out;
+}
+
+/** Whether a variant's items ({id, metadata}) fill a recipe's ingredients one to one (a multiset match, any order). */
+export function acceptsItems(matchers, items) {
+    if (!matchers || matchers.length !== items.length) return false;
+    const fits = (m, it) => m.has(it.id) && (m.get(it.id) === null || it.metadata === null || m.get(it.id).has(it.metadata));
+    const used = new Array(items.length).fill(false);
+    const place = (k) => {
+        if (k === matchers.length) return true;
+        for (let i = 0; i < items.length; i++) {
+            if (used[i] || !fits(matchers[k], items[i])) continue;
+            used[i] = true;
+            if (place(k + 1)) return true;
+            used[i] = false;
+        }
+        return false;
+    };
+    return place(0);
+}
+
+const variantItems = (v) => (v.inShape ? v.inShape.flat() : (v.ingredients ?? [])).filter(Boolean);
+
+/**
  * The table's own properties (values or lazy getters), to put back with restoreRecipeTable.
  * @param {object} table registry.recipes
  */
@@ -274,15 +315,35 @@ export function restoreRecipeTable(table, snapshot) {
  * (stats().errors, firstError), so reading registry.recipes[id] (bot.recipesFor) never throws.
  * @param {object} registry bot.registry (prismarine-registry, extended by forge-bridge)
  * @param {object[]} dumpRecipes the dump's recipes.json `recipes` list
- * @param {{maxVariants?: number}} [opts]
- * @returns {{results: number, recipes: number, resultNotInRegistry: number, stats: () => object}}
+ * @param {{maxVariants?: number, shadowed?: {drop?: object, collisions?: object}|null}} [opts]
+ *   shadowed (recipe-collisions.json, soak 16): `drop` (recipe id -> reason) are left out; for a recipe in
+ *   `collisions` (recipe id -> recipe ids whose grid it may share), its variants one of those recipes also
+ *   accepts go after every other variant of the same result, so the first variant is one only it matches.
+ * @returns {{results: number, recipes: number, resultNotInRegistry: number, dropped: number, stats: () => object}}
  */
-export function installRecipes(registry, dumpRecipes, { maxVariants = DEFAULT_MAX_VARIANTS } = {}) {
+export function installRecipes(registry, dumpRecipes, { maxVariants = DEFAULT_MAX_VARIANTS, shadowed = null } = {}) {
     if (!registry || typeof registry !== 'object') throw new TypeError('installRecipes: a registry is required');
+    const drop = new Set(Object.keys(shadowed?.drop ?? {}));
+    const collisions = shadowed?.collisions ?? {};
+    const byId = new Map((dumpRecipes ?? []).filter((r) => r?.id).map((r) => [r.id, r]));
+    const matcherCache = new Map();
+    const matchersOf = (rid) => {
+        if (!matcherCache.has(rid)) matcherCache.set(rid, byId.has(rid) ? ingredientMatchers(registry, byId.get(rid)) : null);
+        return matcherCache.get(rid);
+    };
+    /** Whether another recipe listed for r also accepts this variant's items (the server may make that one). */
+    const shadowable = (r, v) => {
+        const others = collisions[r?.id];
+        if (!others?.length) return false;
+        const items = variantItems(v);
+        return others.some((o) => acceptsItems(matchersOf(o), items));
+    };
     // 1. Index by result id first; nothing in the registry is changed yet.
     const byResult = new Map();
     let resultNotInRegistry = 0;
+    let dropped = 0;
     for (const r of dumpRecipes ?? []) {
+        if (drop.has(r?.id)) { dropped++; continue; }
         const id = itemId(registry, r?.result?.name ?? '');
         if (id === null) { resultNotInRegistry++; continue; }
         if (!byResult.has(id)) byResult.set(id, []);
@@ -290,13 +351,14 @@ export function installRecipes(registry, dumpRecipes, { maxVariants = DEFAULT_MA
     }
     if (!registry.recipes || typeof registry.recipes !== 'object') registry.recipes = {};
     const target = registry.recipes;
-    const built = { results: 0, variants: 0, skipped: {}, truncated: 0, errors: 0, firstError: null };
+    const built = { results: 0, variants: 0, skipped: {}, truncated: 0, errors: 0, firstError: null, shadowedLast: 0 };
     const failed = (e, what) => {
         built.errors++;
         if (!built.firstError) built.firstError = `${what}: ${e?.message ?? e}`;
     };
     const buildFor = (id, list) => {
         const variants = [];
+        const late = [];
         // Likeliest first; on a tie metadata 0 (oak planks, not acacia), then the dump's order. A recipe
         // whose score cannot be computed sorts last; its conversion below records the error once.
         const score = (r) => { try { return recipeScore(r); } catch { return Infinity; } };
@@ -307,12 +369,13 @@ export function installRecipes(registry, dumpRecipes, { maxVariants = DEFAULT_MA
                 const c = convertRecipe(registry, r, { maxVariants });
                 if (c.skipped) built.skipped[c.skipped] = (built.skipped[c.skipped] ?? 0) + 1;
                 if (c.truncated) built.truncated++;
-                variants.push(...c.variants);
+                for (const v of c.variants) (shadowable(r, v) ? late : variants).push(v);
             } catch (e) {
                 failed(e, `recipe ${r?.id ?? '?'}`);
             }
         }
-        return variants;
+        built.shadowedLast += late.length;
+        return variants.concat(late);
     };
     // 2. Swap the contents; on any error put the previous contents back.
     const snapshot = snapshotRecipeTable(target);
@@ -343,6 +406,7 @@ export function installRecipes(registry, dumpRecipes, { maxVariants = DEFAULT_MA
         results: byResult.size,
         recipes: [...byResult.values()].reduce((a, l) => a + l.length, 0),
         resultNotInRegistry,
+        dropped,
         /** What lazy building has done so far (errors: recipes skipped because their conversion threw). */
         stats: () => ({ ...built, skipped: { ...built.skipped } }),
     };
