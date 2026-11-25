@@ -37,6 +37,57 @@ index f128f71..0f3af20 100644
    bot._client.on('explosion', (packet) => {
      // explosion
      const p = new Vec3(packet.x, packet.y, packet.z)
+diff --git a/node_modules/mineflayer/lib/plugins/craft.js b/node_modules/mineflayer/lib/plugins/craft.js
+index a5fe563..d6fecce 100644
+--- a/node_modules/mineflayer/lib/plugins/craft.js
++++ b/node_modules/mineflayer/lib/plugins/craft.js
+@@ -131,14 +131,42 @@
+ 
+       async function grabResult () {
+         assert.strictEqual(window.selectedItem, null)
+-        // Causes a double-emit on 1.12+ --nickelpro
+-        // put the recipe result in the output
+-        const item = new Item(recipe.result.id, recipe.result.count, recipe.result.metadata)
+-        window.updateSlot(0, item)
++        // mindcraft-rotn (soak 16): take the result the server shows, never the recipe's own. The server
++        // sends slot 0 (set_slot) from the grid click, before that click's confirm, which every click
++        // here waits for; so window.slots[0] is the server's result. Two recipes can take the same grid
++        // (RotN: 9 sticks are planks_from_sticks and ancientbeasts:stick_wall), and the server makes
++        // the first in its registry. Writing recipe.result over it and clicking had the click rejected
++        // after the server had used up the grid. Now: a different item is not clicked (the caller's
++        // window close gives the grid back); the same item with another count is taken as it is.
++        const want = recipe.result
++        const server = window.slots[0] || await serverResult()
++        const label = (id, metadata, count) => `${(bot.registry.items[id] && bot.registry.items[id].name) || id}${metadata ? ':' + metadata : ''} x${count}`
++        const expected = label(want.id, want.metadata, want.count)
++        if (!server || server.type !== want.id || (want.metadata != null && server.metadata !== want.metadata)) {
++          const made = server ? label(server.type, server.metadata, server.count) : null
++          bot.emit('craftResultRefused', { windowId: window.id, windowType: window.type, expected, server: made })
++          throw new Error(made
++            ? `crafting: the server makes ${made} from this grid, not ${expected}`
++            : `crafting: the server has no result for this grid (expected ${expected})`)
++        }
+         await bot.putAway(0)
+         await updateOutShape()
+       }
+ 
++      // mindcraft-rotn: the server's slot 0 when it is not there yet (up to 500 ms), else null.
++      function serverResult () {
++        return new Promise((resolve) => {
++          const onUpdate = (oldItem, newItem) => { if (newItem) done(newItem) }
++          const timer = setTimeout(() => done(null), 500)
++          function done (item) {
++            clearTimeout(timer)
++            window.removeListener('updateSlot:0', onUpdate)
++            resolve(item)
++          }
++          window.on('updateSlot:0', onUpdate)
++        })
++      }
++
+       async function updateOutShape () {
+         if (!recipe.outShape) {
+           for (let i = 1; i <= w * h; i++) {
 diff --git a/node_modules/mineflayer/lib/plugins/digging.js b/node_modules/mineflayer/lib/plugins/digging.js
 index 496cf63..813a667 100644
 --- a/node_modules/mineflayer/lib/plugins/digging.js
