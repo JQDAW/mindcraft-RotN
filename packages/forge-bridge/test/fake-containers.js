@@ -11,14 +11,28 @@
 //   it comes before the transaction.
 // - FastWorkbench opens with FML OpenGui (gui 0), then window_items for that window.
 //
-// Only what bot.craft, bot.placeBlock, bot.activateBlock and bot.consume use is modelled:
-// click mode 0 (left and right button). Any other mode is rejected and recorded.
-// Max stack sizes come from opts.maxStack (64 otherwise); NBT is not modelled.
+// Only what bot.craft, bot.placeBlock, bot.activateBlock, bot.consume and skills' equips use is
+// modelled: click modes 0 (left and right button) and 2 (number key: Container.slotClick SWAP
+// returns an empty stack, so the server accepts every such click and echoes nothing). Any other
+// mode is rejected and recorded.
+// Max stack sizes come from opts.maxStack (64 otherwise; dumpMaxStack gives the pack's StackUp
+// sizes from rotn-data's dump); NBT is not modelled.
+// close_window (fake-server task, item 2): NetHandlerPlayServer.processCloseWindow closes the open
+// container whatever the packet's id (EntityPlayerMP.closeContainer, oq.r). For the player's own
+// window, ContainerPlayer.onContainerClosed (agi.b) first runs Container.onContainerClosed (afr.b),
+// which drops the cursor stack with no packet, clears the crafting result (no packet), then
+// clearContainer (afr.a(aed, amu, tv)) gives each 2x2 grid stack to
+// InventoryPlayer.placeItemBackInInventory (aec.a(amu, aip)): storeItemStack (aec.d: the held slot,
+// then the off hand, then inventory 0-35, where a stack merges below both its own and the slot's
+// limit), else getFirstEmptyStack (aec.k: 0-35, the hotbar first), else it is dropped; each placed
+// part is sent as set_slot window -2 (an inventory index, which mineflayer ignores). The next tick's
+// detectAndSendChanges sends the changed window-0 slots (not after a click, so not quantity-only).
 // This is a model, not a server: the live probe batch is still the proof.
 
 import { encodeOpenGui } from '../src/channels.js';
 
 const DEFAULT_MAX_STACK = 64;
+const TICK_MS = 50;
 const EMPTY = { blockId: -1 };
 
 const stack = (id, count = 1, meta = 0) => ({ id, count, meta });
@@ -28,6 +42,37 @@ const fromWire = (w) => (!w || w.blockId === -1 ? null : stack(w.blockId, w.item
 const same = (a, b) => (!a && !b) || (a && b && a.id === b.id && a.count === b.count && a.meta === b.meta);
 
 export { stack };
+
+/**
+ * The pack's item stack sizes (StackUp, rotn-data's dump) for the item ids a test's registries
+ * use: { id: stackSize }, for opts.maxStack. `ids`: { registryName: id }.
+ */
+export function dumpMaxStack(dumpItems, ids) {
+    const out = {};
+    for (const [name, id] of Object.entries(ids)) {
+        const size = dumpItems?.[name]?.stackSize;
+        if (Number.isInteger(size) && size > 0) out[id] = size;
+    }
+    return out;
+}
+
+/**
+ * Where mineflayer's view of window 0 and the cursor differs from the server model's: a list of
+ * "slot N: client X, server Y" (slot 0, the crafting result, is left out: the server never sends
+ * it when a close clears it). Empty when they agree. The silent divergence no rejection shows.
+ */
+export function inventoryDiff(window, state) {
+    const name = (s) => (s ? `${s.id}x${s.count}${s.meta ? `:${s.meta}` : ''}` : '-');
+    const client = (it) => (it ? { id: it.type, count: it.count, meta: it.metadata ?? 0 } : null);
+    const out = [];
+    for (let s = 1; s < 46; s++) {
+        const c = client(window.slots[s]);
+        if (!same(c, state.inv[s])) out.push(`slot ${s}: client ${name(c)}, server ${name(state.inv[s])}`);
+    }
+    const cc = client(window.selectedItem);
+    if (!same(cc, state.cursor)) out.push(`cursor: client ${name(cc)}, server ${name(state.cursor)}`);
+    return out;
+}
 
 /**
  * RotN 3.3.4's hunger, as the server computes it on normal difficulty (server.properties
@@ -97,6 +142,7 @@ export function attachFakeContainers(client, opts) {
         tableWindow: null, // { id, grid: Array(10) } while FastWorkbench is open
         pending: null, // { windowId, action } after a rejected click
         clicks: [], rejected: [], ignored: [], unsupported: [], placed: [], uses: [], closed: [],
+        swaps: [], dropped: [], returned: [], // mode-2 clicks; stacks dropped and grid stacks put back by a close of window 0
     };
     let nextWindowId = 0;
 
@@ -196,12 +242,34 @@ export function attachFakeContainers(client, opts) {
         return before;
     }
 
+    // Container.slotClick SWAP (mode 2, button = hotbar index): swap the slot with that hotbar slot.
+    // The crafting result (slot 0) and armour validity are not modelled: a swap on slot 0 is recorded
+    // in unsupported and changes nothing.
+    function swapClick(windowId, slot, button) {
+        if (slot === 0 || slot < 0) { state.unsupported.push({ windowId, slot, mode: 2, mouseButton: button }); return; }
+        const hot = windowId === 0 ? 36 + button : 37 + button; // the table maps player slot n to n + 1
+        if (hot === slot) return;
+        const h = get(windowId, hot);
+        const s = get(windowId, slot);
+        if (!h && !s) return;
+        set(windowId, hot, s ? { ...s } : null);
+        set(windowId, slot, h ? { ...h } : null);
+        if (slot >= 1 && slot <= (windowId === 0 ? 4 : 9)) updateResult(windowId);
+    }
+
     client.on('window_click', (p) => {
         state.clicks.push(p);
         // processClickWindow only acts on the open container: while the table is open, a
         // window-0 click is dropped silently (no transaction), as on a real server.
         const open = state.tableWindow ? p.windowId === state.tableWindow.id : p.windowId === 0;
         if (!open || (state.pending && state.pending.windowId === p.windowId)) { state.ignored.push(p); return; }
+        if (p.mode === 2 && p.mouseButton >= 0 && p.mouseButton <= 8) {
+            swapClick(p.windowId, p.slot, p.mouseButton);
+            state.swaps.push(p);
+            // SWAP returns EMPTY; the client sends no item for mode 2: always equal, accepted, no echo.
+            client.write('transaction', { windowId: p.windowId, action: p.action, accepted: true });
+            return;
+        }
         if (p.mode !== 0) {
             state.unsupported.push(p);
             client.write('transaction', { windowId: p.windowId, action: p.action, accepted: false });
@@ -228,11 +296,56 @@ export function attachFakeContainers(client, opts) {
 
     client.on('close_window', (p) => {
         state.closed.push(p.windowId);
-        if (state.tableWindow && p.windowId === state.tableWindow.id) {
+        if (state.tableWindow) { // closeContainer closes the open container, whatever the packet's id
             state.closedTableGrid = state.tableWindow.grid.slice(1).filter(Boolean).length;
             state.tableWindow = null;
+            return;
         }
+        closePlayerWindow();
     });
+
+    // The window slot of an InventoryPlayer index (0-8 hotbar, 9-35 main, 40 off hand).
+    const slotOfIndex = (i) => (i === 40 ? 45 : i < 9 ? 36 + i : i);
+    const mergeable = (a, b) => a && b && a.id === b.id && a.meta === b.meta && a.count < max(a.id);
+    // aec.d storeItemStack: the held slot, the off hand, then 0-35; aec.k getFirstEmptyStack: 0-35.
+    function storeIndex(st) {
+        if (mergeable(inv[slotOfIndex(state.held)], st)) return state.held;
+        if (mergeable(inv[45], st)) return 40;
+        for (let i = 0; i < 36; i++) if (mergeable(inv[slotOfIndex(i)], st)) return i;
+        return -1;
+    }
+    function firstEmptyIndex() {
+        for (let i = 0; i < 36; i++) if (!inv[slotOfIndex(i)]) return i;
+        return -1;
+    }
+    // aec.a(amu, aip) placeItemBackInInventory.
+    function placeBack(st) {
+        let left = { ...st };
+        while (left.count > 0) {
+            let i = storeIndex(left);
+            if (i === -1) i = firstEmptyIndex();
+            if (i === -1) { state.dropped.push({ ...left, why: 'no room' }); return; }
+            const slot = slotOfIndex(i);
+            const have = inv[slot];
+            const n = Math.min(left.count, max(left.id) - (have?.count ?? 0));
+            inv[slot] = have ? { ...have, count: have.count + n } : { ...left, count: n };
+            left = { ...left, count: left.count - n };
+            state.returned.push({ slot, id: st.id, count: n });
+            client.write('set_slot', { windowId: -2, slot: i, item: toWire(inv[slot]) }); // mineflayer ignores window -2
+        }
+    }
+    // ContainerPlayer.onContainerClosed (agi.b), then the next tick's detectAndSendChanges.
+    function closePlayerWindow() {
+        const before = inv.map(copy);
+        if (state.cursor) { state.dropped.push({ ...state.cursor, why: 'cursor' }); state.cursor = null; } // afr.b: no packet
+        inv[0] = null; // craftResult.clear(): no packet (a crafting slot is never sent by sendSlotContents)
+        const grid = [1, 2, 3, 4].map((k) => inv[k]).filter(Boolean);
+        for (const k of [1, 2, 3, 4]) inv[k] = null;
+        for (const g of grid) placeBack(g);
+        setTimeout(() => {
+            for (let s = 1; s < 46; s++) if (!same(before[s], inv[s])) client.write('set_slot', { windowId: 0, slot: s, item: toWire(inv[s]) });
+        }, TICK_MS);
+    }
 
     client.on('block_place', (p) => {
         const at = p.location;
@@ -342,6 +455,17 @@ export function attachFakeContainers(client, opts) {
             client.write('window_items', { windowId: 0, items: windowItems(0) });
             return n;
         },
+        /** Replace window 0 and the cursor ({slot: {id, count, meta}}) and resend them, as after a login. */
+        setInventory(slots, cursor = null) {
+            for (let s = 0; s < inv.length; s++) inv[s] = null;
+            for (const [slot, st] of Object.entries(slots)) inv[Number(slot)] = stack(st.id, st.count, st.meta ?? 0);
+            state.cursor = cursor ? stack(cursor.id, cursor.count, cursor.meta ?? 0) : null;
+            state.pending = null;
+            client.write('window_items', { windowId: 0, items: windowItems(0) });
+            client.write('set_slot', { windowId: -1, slot: -1, item: toWire(state.cursor) });
+        },
+        /** The server's window 0 and cursor ({ slots: [...46], cursor }), copies. */
+        serverView() { return { slots: inv.map(copy), cursor: copy(state.cursor) }; },
         /** Move RotN's crafting table (a setblock of minecraft:crafting_table). */
         setTable(pos) { state.table = pos ? { ...pos } : null; },
     };
