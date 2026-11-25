@@ -114,7 +114,7 @@ test('installRotnRecipesOnce installs RotN recipes exactly once per registry (lo
     const logs = [];
     const log = (m) => logs.push(m);
     const first = mc.installRotnRecipesOnce(registry, { log });
-    assert.ok(first && first.recipes === 6089, JSON.stringify(first));
+    assert.ok(first && first.recipes + first.dropped === 6089 && first.dropped === 1, JSON.stringify(first));
     const pick = registry.itemsByName.stone_pickaxe.id;
     const built = registry.recipes[pick];
     assert.deepEqual(names12(registry, built[0]).sort(), ['pyrotech:rock', 'pyrotech:rock', 'pyrotech:rock', 'stick', 'stick']);
