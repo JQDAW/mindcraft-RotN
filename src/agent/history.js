@@ -1,6 +1,7 @@
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
 import { NPCData } from './npc/data.js';
 import settings from './settings.js';
+import { buildMemory, emptyFacts, MEMORY_FACTS, MEMORY_MODES, memoryMode } from './memory_facts.js';
 
 
 // A turn from or about a non-giver: flagged by add(), or (for a turn saved without the flag)
@@ -29,6 +30,19 @@ export function summaryChunkSize(maxMessages) {
     return Number.isFinite(maxMessages) ? Math.max(5, maxMessages - SUMMARY_KEEP) : 5;
 }
 
+/**
+ * Round 17 M: the profile's "memory" key. "code" (profiles/rotn-bot.json): $MEMORY is built from the game state
+ * (memory_facts.js) plus the bot's notes, and the summary model runs only for a chunk with a task giver's words, its
+ * reply being the notes. "summary" (or none: upstream's profiles): today's model summary every chunk. The switch is
+ * the way back if soak 17 shows worse play (the human's approval is conditional).
+ */
+export { MEMORY_MODES, memoryMode };
+
+/** Round 17 M: a chunk the summary model reads in code mode: one with a task giver's (trusted player's) own turn. */
+export function hasPlayerTurn(turns) {
+    return turns.some(t => t?.role === 'user' && !isUntrustedTurn(t));
+}
+
 export class History {
     constructor(agent) {
         this.agent = agent;
@@ -40,8 +54,13 @@ export class History {
 
         this.turns = [];
 
-        // Natural language memory as a summary of recent messages + previous memory
-        this.memory = '';
+        // Natural language memory as a summary of recent messages + previous memory ("summary" mode); in "code"
+        // mode (round 17 M) the memory is built from the game state, and only the notes are kept here.
+        this._summary = '';
+        this.notes = '';
+        this.facts = emptyFacts();
+        this._summarizing = false;
+        this._factsLogged = null;
 
         // Maximum number of messages to keep in context before saving chunk to memory
         this.max_messages = settings.max_messages;
@@ -55,6 +74,33 @@ export class History {
         // and improves the quality of the memory summary
     }
 
+    get memoryMode() { return memoryMode(this.agent); }
+
+    /**
+     * $MEMORY. "summary": the model's summary, as upstream. "code": the facts from the game state now plus the notes
+     * (while the notes are being summarized, the notes alone: the summary prompt's "old memory").
+     */
+    get memory() {
+        if (this.memoryMode !== 'code') return this._summary;
+        if (this._summarizing) return this.notes;
+        let text;
+        try { text = buildMemory(this.agent, { facts: this.facts, notes: this.notes }); } catch (err) {
+            console.warn(`[memory] facts could not be built (${err?.message ?? err}); the notes alone`);
+            return this.notes;
+        }
+        // One line when the text changes, for the evidence (round 17 M check 1): the facts as the model saw them.
+        if (text !== this._factsLogged) {
+            this._factsLogged = text;
+            console.log(`[memory] facts ${text.length} chars: ${text.replace(/\n/g, ' / ')}`);
+        }
+        return text;
+    }
+
+    set memory(value) {
+        if (this.memoryMode === 'code') this.notes = typeof value === 'string' ? value : '';
+        else this._summary = value;
+    }
+
     getHistory() { // expects an Examples object
         // Only role and content go to the model (the untrusted flag is ours, E3).
         return this.turns.map(({ role, content }) => ({ role, content }));
@@ -66,15 +112,26 @@ export class History {
         // restarted 5 times. A null, empty, non-text or failure reply, or a throw, keeps the
         // previous memory.
         let reply;
+        this._summarizing = true;
         try {
             reply = await this.agent.prompter.promptMemSaving(turns);
         } catch (err) {
             console.warn(`[memory] summary failed (${err?.message ?? err}); keeping the previous memory`);
             return;
+        } finally {
+            this._summarizing = false;
         }
         if (!isMemoryReply(reply)) {
             const what = typeof reply === 'string' ? (reply.trim() ? `failure reply "${reply.trim()}"` : 'an empty reply') : `a ${reply === null ? 'null' : typeof reply} reply`;
             console.warn(`[memory] summary returned ${what}; keeping the previous memory`);
+            return;
+        }
+        if (this.memoryMode === 'code') {
+            // Round 17 M: the reply is the notes, at most MEMORY_FACTS.notesMax chars.
+            let notes = reply.trim().replace(/\s+/g, ' ');
+            if (notes.length > MEMORY_FACTS.notesMax) notes = notes.slice(0, MEMORY_FACTS.notesMax - 3) + '...';
+            this.notes = notes;
+            console.log("Memory updated to: ", this.notes);
             return;
         }
         this.memory = reply.trim();
@@ -127,7 +184,10 @@ export class History {
             // A non-giver's words must not become a "long-term reminder" in $MEMORY, which every
             // later prompt (self-prompts included) trusts (#174 review 1): they are left out.
             const trusted = chunk.filter(t => !isUntrustedTurn(t));
-            if (trusted.length > 0) {
+            // Round 17 M: in code mode the facts need no summary; only a task giver's words are worth the call.
+            if (trusted.length > 0 && this.memoryMode === 'code' && !hasPlayerTurn(trusted)) {
+                console.log(`[memory] summary skipped (no player turn) turns ${trusted.length} kept ${this.turns.length}`);
+            } else if (trusted.length > 0) {
                 // Soak 13 (C2, the lead): one marker per summary call, numbers only, for the harness's count.
                 console.log(`[memory] summary turns ${trusted.length} kept ${this.turns.length}`);
                 await this.summarizeMemories(trusted);
@@ -138,8 +198,11 @@ export class History {
 
     async save() {
         try {
+            const code = this.memoryMode === 'code';
             const data = {
-                memory: this.memory,
+                // Code mode keeps the notes and the fact records; the summary mode its summary.
+                memory: code ? '' : this.memory,
+                ...(code ? { notes: this.notes, facts: this.facts } : {}),
                 turns: this.turns,
                 self_prompting_state: this.agent.self_prompter.state,
                 self_prompt: this.agent.self_prompter.isStopped() ? null : this.agent.self_prompter.prompt,
@@ -163,11 +226,17 @@ export class History {
             const data = JSON.parse(readFileSync(this.memory_fp, 'utf8'));
             // A memory.json from before round 5 A may hold a failure reply as the memory ("My brain
             // disconnected, try again."): dropped, so it never reaches $MEMORY (#268 follow-up 4).
-            this.memory = isMemoryReply(data.memory) ? data.memory : '';
-            if (data.memory && !this.memory)
+            if (this.memoryMode === 'code') {
+                // Round 17 M: an old summary is the model's narration (some of it wrong): dropped; the notes and the
+                // fact records come back.
+                this.notes = typeof data.notes === 'string' ? data.notes.slice(0, MEMORY_FACTS.notesMax) : '';
+                this.facts = { ...emptyFacts(), ...(data.facts && typeof data.facts === 'object' ? data.facts : {}) };
+                if (data.memory) console.log('[memory] the saved summary is not used (code-built memory)');
+            } else this.memory = isMemoryReply(data.memory) ? data.memory : '';
+            if (this.memoryMode !== 'code' && data.memory && !this.memory)
                 console.warn(`[memory] the saved memory was not a summary (${typeof data.memory === 'string' ? `"${data.memory.trim().slice(0, 60)}"` : typeof data.memory}); starting with none`);
             this.turns = data.turns || [];
-            console.log('Loaded memory:', this.memory);
+            console.log('Loaded memory:', this.memoryMode === 'code' ? `notes "${this.notes}"` : this.memory);
             return data;
         } catch (error) {
             console.error('Failed to load history:', error);
@@ -178,5 +247,6 @@ export class History {
     clear() {
         this.turns = [];
         this.memory = '';
+        this.facts = emptyFacts();
     }
 }

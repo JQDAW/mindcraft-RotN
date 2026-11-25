@@ -4,6 +4,7 @@ import { canonicalName } from "../library/rotn_names.js";
 import { actionsList } from './actions.js';
 import settings from '../settings.js';
 import { queryList } from './queries.js';
+import { memoryMode, recordFailure, failureWhy, looksFailed } from '../memory_facts.js';
 
 let suppressNoDomainWarning = true;
 
@@ -238,6 +239,13 @@ export async function executeCommand(agent, message, context = {}) {
             return `Command ${command.name} was given ${numArgs} args, but requires ${numParams(command)} args.`;
         else {
             const result = await command.perform(agent, ...parsed.args, context);
+            // Round 17 M: a failed action goes into the code-built memory's Recent failures (queries never do).
+            if (isAction(command.name) && looksFailed(result)) {
+                try {
+                    const args = (parsed.args ?? []).map(a => (typeof a === 'string' ? JSON.stringify(a) : String(a))).join(', ');
+                    recordFailure(agent.history?.facts, { cmd: `${command.name}${args ? `(${args})` : ''}`, why: failureWhy(result), pos: agent.bot?.entity?.position ?? null });
+                } catch (err) { console.warn(`[memory] failure not recorded: ${err?.message ?? err}`); }
+            }
             return result;
         }
     }
@@ -264,6 +272,8 @@ export function getCommandDocs(agent) {
         // Soak 15 (the lead): !newAction is refused at run time with allow_insecure_coding false (3 refusals in soak
         // 15, two with a correct pillar plan): the model is not offered it.
         if (command.name === '!newAction' && !settings.allow_insecure_coding) continue;
+        // Round 17 M: notes are kept only with the code-built memory.
+        if (command.name === '!note' && memoryMode(agent) !== 'code') continue;
         docs += command.name + ': ' + command.description + '\n';
         if (command.params) {
             docs += 'Params:\n';
