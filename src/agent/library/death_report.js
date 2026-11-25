@@ -10,6 +10,7 @@
 // few seconds after the respawn. The server clears the slots one tick before it sends health 0,
 // so the "before" is the fullest of the last few samples taken while alive.
 
+import { recordDeath } from '../memory_facts.js';
 import { requestReplan } from '../replan.js';
 import { safeError } from '../safe_error.js';
 import { nightPhase } from './night.js';
@@ -453,6 +454,8 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
     if (!r) return null;
     const lastFell = agent.bot?.rotnLastFell;
     const byTree = treeDeath(r, lastFell);
+    // Round 17 M: the code-built memory's Deaths line (a cause word, never the server's text).
+    try { recordDeath(agent.history?.facts, { at: r.at ?? now, pos: r.pos, cause: r.cause, byTree: !!byTree }); } catch { /* no record */ }
     // Which stand the cut was from (#268 review 1: round 5 must show cuts from under leaves are safe).
     const stand = byTree && lastFell ? ` [its last cut was from ${lastFell.underLeaves ? "under the tree's leaves" : 'under no canopy'}]` : '';
     console.log(`[death] ${r.line}${byTree && !r.cause ? ' (likely the tree it had just cut)' : ''}${stand}`);

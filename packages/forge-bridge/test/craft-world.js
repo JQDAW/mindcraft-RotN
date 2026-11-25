@@ -144,7 +144,8 @@ export async function stopCraftWorld({ server, bot } = {}) {
  * @param {string[]} o.itemNames registry names of the items in the sync
  * @param {string[]} [o.blockNames] extra block names in the sync (air, stone, the table are always in)
  * @param {object} o.inventory window 0 at login, { slot: { name, count, meta } }
- * @param {object[]} [o.recipes] fake-containers recipes, by name ({ shapeless: [names], result: name })
+ * @param {object[]} [o.recipes] fake-containers recipes, by name ({ shapeless: [names] } or { shaped: [[name|null]] },
+ *   result: name, count?), matched first to last as the server's registry
  * @param {object[]} [o.digBlocks] [{ x, y, z, name }] for the dig model; omitted: no dig model
  * @param {object} [o.effects] the server player's effects for the dig model
  * @returns {Promise<{ server, bot, containers: () => object, dig: () => object, ids: object }>}
@@ -162,7 +163,10 @@ export async function startRotnWorld({ itemNames, blockNames = [], inventory, re
         client.write('map_chunk', { x: 0, z: 0, groundUp: true, bitMap: 1 << 4, chunkData: chunkData(), blockEntities: [] });
         const containers = attachFakeContainers(client, {
             table: TABLE,
-            recipes: recipes.map(r => ({ shapeless: r.shapeless.map(n => ids[n]), result: { id: ids[r.result], count: r.count ?? 1 } })),
+            recipes: recipes.map(r => ({
+                ...(r.shaped ? { shaped: r.shaped.map(row => row.map(n => (n ? ids[n] : null))) } : { shapeless: r.shapeless.map(n => ids[n]) }),
+                result: { id: ids[r.result], count: r.count ?? 1 },
+            })),
             blocks: {}, foods: {},
             maxStack: dumpMaxStack(rd.dump.items.items, ids),
             inventory: Object.fromEntries(Object.entries(inventory).map(([slot, st]) => [slot, { id: ids[st.name], count: st.count, meta: st.meta ?? 0 }])),
