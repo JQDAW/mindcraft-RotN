@@ -125,6 +125,9 @@ export class RotnData {
         // Which held items make a melee hit sweep, and how far (weapon-sweep.json, hand-written from Better Combat's
         // and vanilla's bytecode and config/bettercombat.cfg).
         this.weaponSweepData = readJson(dir, 'weapon-sweep') ?? null;
+        // Recipes another recipe with a different result may shadow on the server, and recipes it can never
+        // make (recipe-collisions.json, from net-forge's soak 16 scan), for installRecipes' ordering.
+        this.recipeCollisionsData = readJson(dir, 'recipe-collisions') ?? null;
 
         this.dump = {};
         for (const f of DUMP_FILES) this.dump[f] = readJson(dir, f);
