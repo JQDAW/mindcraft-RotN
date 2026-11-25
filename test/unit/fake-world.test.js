@@ -5,10 +5,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
-import { fakeWorld, pocketUnderRock, holeAtSpawn, openShaft, noPath, teleport, SLOT, DEFAULT_GROUND, liveName } from '../fixtures/fake-world.mjs';
+import { fakeWorld, pocketUnderRock, holeAtSpawn, openShaft, noPath, teleport, makeRegistry, fixtureStats, SLOT, DEFAULT_GROUND, liveName } from '../fixtures/fake-world.mjs';
 import { __setRegistryForTest } from '../../src/utils/mcdata.js';
 import { isTrapped, isOut, surfaceTarget } from '../../src/agent/library/escape.js';
-import { goToSurface } from '../../src/agent/library/skills.js';
+import { goToSurface, collectBlock } from '../../src/agent/library/skills.js';
 
 const V = (x, y, z) => new Vec3(x, y, z);
 const quiet = (t) => { t.mock.method(console, 'log', () => {}); t.mock.method(console, 'warn', () => {}); };
@@ -298,4 +298,90 @@ test('openShaft (#624 review 1): 12 deep and open to the sky; not out at the bot
     assert.equal(isTrapped(bot).trapped, true);
     assert.equal(surfaceTarget(bot).y, 64);
     assert.equal(openShaft({ depth: 9 }).bot.entity.position.y, 55);
+});
+
+// The #630 review's follow-up: findBlocks as mineflayer 4.33 (lib/plugins/blocks.js:116-130), the palette pass first.
+test('findBlocks runs the matcher on each section\'s palette first (position-less blocks), then on positioned blocks', () => {
+    const { bot } = pocketUnderRock();
+    const seen = [];
+    const r = bot.findBlocks({ matching: (b) => { seen.push(b.position); return b.name === 'undergroundbiomes:metamorphic_stone'; }, maxDistance: 8, count: 1 });
+    assert.equal(seen[0], null, 'the first call is a palette block, with no position');
+    assert.ok(seen.some(p => p !== null));
+    assert.equal(r.length, 1);
+    assert.equal(r[0].distanceTo(V(0, 56, 0)), 1, 'the nearest: a wall, the floor or the roof of the pocket');
+    // A matcher that needs a position skips every section, as live (the #630 review's bug: "exposed first").
+    assert.deepEqual(bot.findBlocks({ matching: (b) => b.position != null && b.name === 'undergroundbiomes:metamorphic_stone', maxDistance: 8, count: 1 }), []);
+    assert.equal(bot.findBlocks({ matching: (b) => b.position == null || b.name === 'undergroundbiomes:metamorphic_stone', maxDistance: 8, count: 1 }).length, 1);
+});
+
+test('findBlocks: ids or a function; useExtraInfo as a second matcher; count nearest first; maxDistance; findBlock; overrides in the palette', () => {
+    const { bot, world } = fakeWorld({ at: V(0, 64, 0) });
+    world.set(V(5, 64, 0), 'gravel');
+    world.set(V(-3, 64, 0), 'gravel');
+    world.set(V(0, 64, 30), 'gravel');
+    const gravel = bot.registry.blocksByName.gravel.id;
+    assert.deepEqual(bot.findBlocks({ matching: gravel, maxDistance: 16, count: 5 }).map(String), ['(-3, 64, 0)', '(5, 64, 0)']);
+    assert.deepEqual(bot.findBlocks({ matching: [gravel], maxDistance: 40, count: 5 }).map(String), ['(-3, 64, 0)', '(5, 64, 0)', '(0, 64, 30)']);
+    assert.deepEqual(bot.findBlocks({ matching: gravel, maxDistance: 16, count: 5, useExtraInfo: (b) => b.position.x > 0 }).map(String), ['(5, 64, 0)']);
+    assert.equal(bot.findBlock({ matching: (b) => b.name === 'gravel', maxDistance: 16 }).position.toString(), '(-3, 64, 0)');
+    assert.deepEqual(bot.findBlocks({ matching: (b) => b.name === 'obsidian', maxDistance: 16 }), []);
+    // A ground function's palette is read from its cells.
+    const f = fakeWorld({ ground: (q) => (q.y === 10 && q.x === 2 && q.z === 0 ? 'gold_ore' : q.y < 60 ? 'stone' : 'air'), at: V(0, 12, 0) });
+    assert.deepEqual(f.bot.findBlocks({ matching: (b) => b.name === 'gold_ore', maxDistance: 8, count: 3 }).map(String), ['(2, 10, 0)']);
+});
+
+test('the real collectBlock on pocketUnderRock: a stone collect with the pickaxe in the off hand, and in the hand', async (t) => {
+    quiet(t);
+    const off = pocketUnderRock();
+    useRegistry(t, off.bot);
+    const got = await collectBlock(off.bot, 'undergroundbiomes:metamorphic_stone', 1);
+    // Soak 15 (22:41:56): with the pickaxe out of items() the dig is refused with the Tool Progression line; a collect
+    // that takes the pickaxe back first (skills-rotn's fixes) gets it with no refusal. Either way, never a silent miss.
+    if (got) {
+        assert.equal(off.calls.refused.length, 0);
+        assert.equal(off.bot.inventory.slots[SLOT.OFF_HAND], null);
+    } else {
+        assert.match(off.bot.output, /undergroundbiomes:metamorphic_stone needs a better tool \(Tool Progression\)/);
+        assert.ok(off.calls.refused.length >= 1);
+    }
+    const inHand = pocketUnderRock({ slots: { 36: ['stone_pickaxe', 1] } });
+    useRegistry(t, inHand.bot);
+    assert.equal(await collectBlock(inHand.bot, 'undergroundbiomes:metamorphic_stone', 1), true, inHand.bot.output);
+    assert.equal(inHand.calls.dug.length, 1);
+    assert.equal(inHand.calls.dug[0].name, 'undergroundbiomes:metamorphic_stone');
+    assert.equal(inHand.calls.refused.length, 0);
+});
+
+test('#628 re-review nits: fill clears metadata; equip of the cursor stack says why; the layer blocks are in the registry at once; the stack sizes are computed once', async () => {
+    const { bot, world } = fakeWorld({ slots: { 36: ['planks', 2, 1] }, cursor: ['stick', 1] });
+    await bot.placeBlock(bot.blockAt(V(3, 63, 0)), V(0, 1, 0));
+    assert.equal(bot.blockAt(V(3, 64, 0)).metadata, 1);
+    world.fill(V(3, 64, 0), V(3, 64, 0), 'planks');
+    assert.equal(bot.blockAt(V(3, 64, 0)).metadata, 0);
+    await assert.rejects(bot.equip(bot.inventory.selectedItem, 'hand'), /stick is on the cursor \(selectedItem\), not in a window slot/);
+    const p = pocketUnderRock();
+    assert.ok(p.bot.registry.blocksByName['undergroundbiomes:metamorphic_stone'], 'before any blockAt');
+    // Cached: computed once in the process, however many worlds (#631 review 3: a counter, not a clock).
+    for (let i = 0; i < 5; i++) makeRegistry();
+    assert.equal(fixtureStats.stackSizeComputations, 1);
+    assert.equal(makeRegistry().itemsByName.stick.stackSize, 256);
+});
+
+test('#631 review 1, 5: the fake collect stands next to the block (a look-at-block goal), never on it; diggable as prismarine-block on 1.12.2', async () => {
+    const { bot, calls } = fakeWorld({ at: V(0, 64, 0), pathfinder: 'teleport', slots: { 36: ['stone_pickaxe', 1] } });
+    const target = bot.blockAt(V(10, 63, 0)); // dirt in the ground, 10 away
+    await bot.collectBlock.collect(target);
+    const goal = calls.gotos[0];
+    assert.deepEqual([goal.x, goal.y, goal.z, goal.lookAtBlock], [10, 63, 0, true]);
+    const stand = bot.entity.position.floored();
+    assert.notDeepEqual([stand.x, stand.z], [10, 0], 'not on the block it digs');
+    assert.ok(stand.distanceTo(V(10, 63, 0)) <= 1.5, `next to it: ${stand}`);
+    assert.equal(bot.blockAt(V(10, 63, 0)).name, 'air');
+    // prismarine-block copies minecraft-data's diggable: on 1.12.2 air is true (as the live bot sees it), water false.
+    assert.equal(minecraftData('1.12.2').blocksByName.air.diggable, true);
+    const water = fakeWorld({ set: { '0,64,0': 'water', '1,64,0': 'undergroundbiomes:metamorphic_stone' } }).bot;
+    assert.deepEqual([bot.blockAt(V(0, 70, 0)).diggable, bot.blockAt(V(0, 60, 0)).diggable, water.blockAt(V(0, 64, 0)).diggable, water.blockAt(V(1, 64, 0)).diggable], [true, true, false, true]);
+    // No free cell beside it (a block inside stone): the stub finds no path, as the real plugin would fail.
+    const deep = fakeWorld({ at: V(0, 64, 0), pathfinder: 'teleport' });
+    await assert.rejects(deep.bot.collectBlock.collect(deep.bot.blockAt(V(10, 40, 0))), /No path/);
 });
