@@ -36,6 +36,7 @@ import { safeError } from './safe_error.js';
 import { isGiverGoal, say } from './agenda_driver.js';
 import { placesToLeave } from './respawn_relocate.js';
 import { waitText } from './library/wait_text.js';
+import { escape } from './library/escape.js';
 export { waitText }; // #588 re-review nit 2: one helper (library/wait_text.js)
 
 /**
@@ -381,7 +382,8 @@ export async function breakLoop(bot, { burrow = burrowAway, fight = defendInPlac
     return { broke: 'fought', why: b?.why ?? b?.stopped ?? 'no step' };
 }
 
-export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, log = (l) => console.log(l), walkable = walkableExit, dig = stairOut, breaker = breakLoop, arm = preArm } = {}) {
+export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, log = (l) => console.log(l), walkable = walkableExit, dig = stairOut, breaker = breakLoop, arm = preArm,
+    climb = (bot, opts = {}) => escape(bot, { budget: 'day', ...opts }) } = {}) {
     const r = agent._escape ??= { forDeath: null, tries: 0, job: null, endedAt: null };
     if (r.job) return 'escaping';
     try { noteRespawn(agent, now); } catch { /* the escape still runs */ }
@@ -447,8 +449,15 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
             const from = bot.entity.position;
             if (!walkable(bot, from, { reach: WALK_EXIT.reach })) {
                 const out = await dig(bot, from, { hostiles: hostilesNear(bot, ESCAPE_RUN.nightHostile), maxBlocks: DIG_OUT.maxBlocks });
-                if (!out?.to) { result = { arrived: false, ms: 0, stopped: 'enclosed', why: out?.why ?? 'no result' }; return; }
-                log(`[respawn] dug out of the enclosed respawn spot at ${at(from)}: ${out.dug} block${out.dug === 1 ? '' : 's'}, now at ${at(out.to)}`);
+                if (out?.to) log(`[respawn] dug out of the enclosed respawn spot at ${at(from)}: ${out.dug} block${out.dug === 1 ? '' : 's'}, now at ${at(out.to)}`);
+                else {
+                    // Soak 16 (E3): no quick dig-out: the one escape (the day budget) before giving up.
+                    log(`[respawn] no quick dig-out of the enclosed respawn spot at ${at(from)} (${out?.why ?? 'no result'}): climbing out with the escape`);
+                    // #624 nit: at night away from the hostiles, as stairOut.
+                    const e = await climb(bot, { hostiles: hostilesNear(bot, ESCAPE_RUN.nightHostile) });
+                    if (!e?.out) { result = { arrived: false, ms: 0, stopped: 'enclosed', why: `${out?.why ?? 'no result'}; the escape: ${e?.why ?? 'no result'}` }; return; }
+                    log(`[respawn] climbed out of the enclosed respawn spot at ${at(from)}: now at ${at(e.at)} (the escape: ${e.how}; dug ${e.dug}, placed ${e.placed})`);
+                }
             }
             result = await run(bot, why.places);
         }, { keepReplan: true }))

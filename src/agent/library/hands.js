@@ -99,7 +99,13 @@ export function installDigHands(bot) {
                 if (pick && bot.heldItem?.name !== pick.name) { try { await bot.equip(pick, 'hand'); } catch { /* the dig says why */ } }
                 console.log(`[hands] the ${off.name} from the off hand for ${block?.name ?? 'the dig'}`);
             }
-            return original.call(this ?? bot, block, ...rest);
+            const r = await original.call(this ?? bot, block, ...rest);
+            // Soak 16 (E): every dig that resolved, counted (the pathfinder's and the collect's digs come here too):
+            // a command that dug is checked for a trapped bot after it (escape.escapeIfTrapped).
+            const d = bot.rotnDigs ??= { count: 0, last: null };
+            d.count++;
+            d.last = { name: block?.name ?? null, at: block?.position ?? null };
+            return r;
         };
         dig.rotnHands = true;
         bot.dig = dig;

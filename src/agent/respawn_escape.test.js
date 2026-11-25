@@ -617,7 +617,8 @@ const stubs = (over = {}) => {
     const s = { runs: [], digs: [], breaks: 0, logs: [] };
     s.opts = { log: (l) => s.logs.push(l), run: (bot, places) => { s.runs.push(places.map(p => p.what)); return Promise.resolve({ arrived: true, ms: 1 }); },
         walkable: () => new Vec3(0, 0, 0), dig: (bot, from) => { s.digs.push(from); return Promise.resolve({ to: null, dug: 0, why: 'stub' }); },
-        breaker: () => { s.breaks++; return Promise.resolve({ broke: 'fought', why: 'no step' }); }, arm: () => Promise.resolve(false), ...over };
+        breaker: () => { s.breaks++; return Promise.resolve({ broke: 'fought', why: 'no step' }); }, arm: () => Promise.resolve(false),
+        climb: () => { s.climbs = (s.climbs ?? 0) + 1; return Promise.resolve({ out: false, why: 'stub climb' }); }, ...over };
     return s;
 };
 
@@ -656,7 +657,9 @@ test('soak 12 (B(ii) step 2): a respawn spot with no walkable way out is dug out
     await flush(); await flush();
     assert.equal(t.runs.length, 0);
     assert.equal(shut._escape.tries, 0, 'no try used');
-    assert.ok(t.logs.some(l => /no walkable way out of .* and no dig-out \(stub\)/.test(l)), t.logs.join('\n'));
+    // Soak 16 (E3): the escape is tried before giving up.
+    assert.equal(t.climbs, 1, 'the escape before the loop breaker');
+    assert.ok(t.logs.some(l => /no walkable way out of .* and no dig-out \(stub; the escape: stub climb\)/.test(l)), t.logs.join('\n'));
     respawnEscapeTick(shut, { now: now + 500, ...t.opts });
     await flush(); await flush();
     assert.equal(t.breaks, 1, 'the loop breaker');
@@ -908,4 +911,17 @@ test('soak 13 (S1): a "no walkable way out" refusal names, side by side, the cel
     scrollRefusal(s13Agent({ cells: s13Ring('dirt'), held: club, items: [club] }), S13_SITE, { explain: (t) => ok.push(t) });
     scrollRefusal(s13Agent({ cells: {}, held: club }), S13_SITE, { pit: true, explain: (t) => ok.push(t) });
     assert.deepEqual(ok, []);
+});
+
+test('soak 16 (E3): an enclosed respawn spot with no quick dig-out: the escape gets the bot out, then the run', async () => {
+    const now = 1_000_000;
+    const shut = agentAt(RESPAWN.offset(0.5, 0, 0.5), { deaths: [[16, 64, -46]], now, lastAgo: 6_000 });
+    shut.bot.time.timeOfDay = NIGHT_T;
+    shut.bot.entities[9] = zmb(9, RESPAWN.offset(6, 0, 3));
+    const t = stubs({ walkable: () => null, climb: (bot) => { t.climbs = (t.climbs ?? 0) + 1; return Promise.resolve({ out: true, how: 'by hand', dug: 5, placed: 1, at: RESPAWN.offset(2, 4, 0) }); } });
+    respawnEscapeTick(shut, { now, ...t.opts });
+    await flush(); await flush();
+    assert.equal(t.climbs, 1);
+    assert.ok(t.logs.includes('[respawn] climbed out of the enclosed respawn spot at -70, 65, 87: now at -68, 69, 87 (the escape: by hand; dug 5, placed 1)'), t.logs.join('\n'));
+    assert.equal(t.runs.length, 1, 'then the run');
 });

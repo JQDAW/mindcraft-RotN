@@ -15,6 +15,7 @@ import { isPlayerZombie, shelterEnemy } from './library/threats.js';
 import { safeError } from './safe_error.js';
 import { isGiverGoal } from './agenda_driver.js';
 import { dimensionKey, sameDimension } from './library/death_report.js';
+import { escape, isTrapped, surfaceTarget } from './library/escape.js';
 
 /**
  * tries: walks per death (or per zombie trigger) when one is interrupted (#416 review 3: a reflex,
@@ -119,7 +120,8 @@ async function walkTo(bot, target) {
  * agenda and the model's goal wait), else null. Never throws.
  */
 export function relocateTick(agent, { now = Date.now(), clock = Date.now, walk = walkTo, log = (l) => console.log(l),
-    onTree = standsOnTree, descend = (bot) => descendFromTree(bot) } = {}) {
+    onTree = standsOnTree, descend = (bot) => descendFromTree(bot),
+    trapped = (bot) => isTrapped(bot).trapped, climb = (bot) => escape(bot, { budget: 'day', target: surfaceTarget(bot) }) } = {}) {
     const r = agent._relocate ??= { forDeath: null, triedAt: -Infinity, job: null };
     if (r.job) return 'relocating';
     // #416 review 1: a goal a task giver typed, or self-prompting a bot-to-bot conversation paused,
@@ -139,7 +141,29 @@ export function relocateTick(agent, { now = Date.now(), clock = Date.now, walk =
     const deaths = why.places.filter(p => p.what === 'death spot').length;
     const what = [why.places.some(p => p.what === 'spawn') ? 'the spawn' : null, deaths ? `${deaths} recent death spot${deaths === 1 ? '' : 's'}` : null].filter(Boolean).join(' and ');
     const target = targetAwayFrom(bot.entity.position, why.places, { surfaceOk: dryAt(bot) });
-    if (!target) { log(`[respawn] no place ${RELOCATE.away} blocks from ${what} within ${RELOCATE.maxTarget}; the agenda resumes here`); return null; }
+    if (!target) {
+        // Soak 16 (E3, the lead's decision 4): only the trapped check here (why the search found no place is a
+        // separate follow-up): trapped where it stands, the one escape (the day budget) first.
+        let shut = false;
+        try { shut = !!trapped(bot); } catch { shut = false; }
+        if (!shut) { log(`[respawn] no place ${RELOCATE.away} blocks from ${what} within ${RELOCATE.maxTarget}; the agenda resumes here`); return null; }
+        log(`[respawn] no place ${RELOCATE.away} blocks from ${what} within ${RELOCATE.maxTarget}, and trapped at ${at(bot.entity.position.floored())} (no walkable way to open ground): getting out first`);
+        // #624 review 3: as the walk away below: the agenda's self-prompting waits (its commands would stop the escape).
+        if (agent.self_prompter?.isActive?.()) agent.self_prompter.stop(false);
+        agent._agenda_paused = true;
+        let out = null;
+        r.job = Promise.resolve()
+            .then(() => agent.actions.runAction('action:escape', async () => { out = await climb(bot); }, { keepReplan: true }))
+            .catch(err => { log(`[respawn] the escape failed: ${safeError(err)}`); return null; })
+            .then(() => {
+                r.job = null;
+                if (out?.out) { log(`[respawn] out at ${at(out.at)} (the escape: ${out.how}); the agenda resumes`); return; }
+                // A failed escape leaves the bot trapped: the agenda's prompt says so (escape.stillTrapped).
+                if (out && !out.interrupted) bot.rotnTrapped = { at: out.at ?? bot.entity.position.floored(), since: Date.now(), checkedAt: Date.now() };
+                log(`[respawn] still trapped after the escape (${out?.why ?? 'no result'}); the agenda resumes with "get out first"`);
+            });
+        return 'relocating';
+    }
     log(`[respawn] ${why.kind === 'death' ? 'after a death' : 'a player zombie is at the spawn'}: moving at least ${RELOCATE.away} blocks from ${what}, towards ${target.x}, ${target.z}, before the agenda resumes`);
     // The agenda's self-prompting waits (as at night): its commands would stop the walk.
     if (agent.self_prompter?.isActive?.()) agent.self_prompter.stop(false);

@@ -41,7 +41,9 @@ export const WALK_EXIT = { reach: 8, maxNodes: 400 };
  * (the side cell free at its level first). `free`: cells counted as free (to be dug, or a shelter
  * wall the bot can take down). Returns the cell reached, or null.
  */
-export function walkableExit(bot, from, { reach = WALK_EXIT.reach, maxNodes = WALK_EXIT.maxNodes, free = new Set() } = {}) {
+// Soak 16 (E): until(cell): a goal of its own (escape.isTrapped: a cell with sky above) in place of `reach`; radius:
+// no cell farther than this horizontally is searched.
+export function walkableExit(bot, from, { reach = WALK_EXIT.reach, maxNodes = WALK_EXIT.maxNodes, free = new Set(), until = null, radius = Infinity } = {}) {
     const start = new Vec3(Math.floor(from.x), Math.floor(from.y), Math.floor(from.z));
     if (typeof bot?.blockAt !== 'function') return start; // no world to look at: not known to be enclosed
     const floor = bot.blockAt(start.offset(0, -1, 0));
@@ -51,7 +53,7 @@ export function walkableExit(bot, from, { reach = WALK_EXIT.reach, maxNodes = WA
     const queue = [start];
     while (queue.length && seen.size <= maxNodes) {
         const c = queue.shift();
-        if (hdist(c, start) >= reach) return c;
+        if (until ? until(c) : hdist(c, start) >= reach) return c;
         for (const d of HORIZONTAL) {
             const side = c.plus(d);
             const next = [];
@@ -59,7 +61,7 @@ export function walkableExit(bot, from, { reach = WALK_EXIT.reach, maxNodes = WA
             else if (passable(bot, c.offset(0, 2, 0), free) && stand(side.offset(0, 1, 0))) next.push(side.offset(0, 1, 0));
             else if (passable(bot, side, free) && passable(bot, side.offset(0, 1, 0), free) && stand(side.offset(0, -1, 0))) next.push(side.offset(0, -1, 0));
             for (const n of next) {
-                if (seen.has(key(n))) continue;
+                if (seen.has(key(n)) || hdist(n, start) > radius) continue;
                 seen.add(key(n));
                 queue.push(n);
             }

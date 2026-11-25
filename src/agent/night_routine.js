@@ -1638,7 +1638,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.pit = pit;
                 n.digAt = null; // digging seen at an earlier shelter is not this one's
                 n.repairStall = null;
-                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false, scrollTried: false, scrollUsed: false, morningScrollTried: false, digOutTried: false });
+                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false, scrollTried: false, scrollUsed: false, morningScrollTried: false, digOutTried: false, climbTried: false });
                 n.checkedAt = null; // set by the next tick, on its clock
                 bot.rotnSheltered = true;
                 // Gate2 B: where the bot was and what it stood on, for the line if it is ever out of it.
@@ -1753,7 +1753,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.state = 'day';
                 n.site = null;
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
-                    burrowSteps: 0, burrowNoneAt: null, digOutTried: false, ...MORNING_CLEAR });
+                    burrowSteps: 0, burrowNoneAt: null, digOutTried: false, climbTried: false, ...MORNING_CLEAR });
                 line(agent, text);
             };
             // Soak 13 (S2', the lead): out of the shelter in the morning, its side now open, the Scroll of New Life
@@ -1798,6 +1798,18 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 });
                 return 'night:inside';
             };
+            // Soak 16 (E3, the lead): soak 15's morning found "no stairs up within 4 steps" on every side of a pocket 7-8
+            // below the surface and handed the bot back enclosed. The last resort before the hand-back is now the one
+            // escape (library/escape.js: the pathfinder with digging and pack scaffolding, then stairs and pillars by
+            // hand, the morning budget), once a morning.
+            const climbOut = (why, failed) => {
+                n.climbTried = true;
+                line(agent, `[night] morning: ${why}; climbing out with the escape (stairs and pillars by hand if the pathfinder finds no way)`);
+                startJob(agent, n, ESCAPE_LABEL, () => ops.escape(bot), (r) => {
+                    if (r?.out) { handBack(`[night] morning: climbed out of the shelter at ${at(n.site)} to ${at(r.at)} (the escape: ${r.how}; dug ${r.dug}, placed ${r.placed}); back to work`); return; }
+                    failed(r);
+                });
+            };
             const failedTry = (why) => {
                 n.exitTries = (n.exitTries ?? 0) + 1;
                 if (n.exitTries < EXIT_TRIES) {
@@ -1805,6 +1817,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     line(agent, `[night] morning: ${why} (try ${n.exitTries} of ${EXIT_TRIES}); trying again in ${RETRY_MS / 1000} s`);
                 } else if (n.pit && !n.digOutTried && ops.stairOut) {
                     digOutOfHole(why);
+                } else if (!n.climbTried && ops.escape) {
+                    climbOut(`${why} after ${EXIT_TRIES} tries`, (r) => handBack(`[night] morning: could not leave the shelter at ${at(n.site)} after ${EXIT_TRIES} tries (${why}; the escape: ${r?.why ?? 'no result'}); back to work, still enclosed: dig a way out`));
                 } else {
                     handBack(`[night] morning: could not leave the shelter at ${at(n.site)} after ${EXIT_TRIES} tries (${why}); back to work, still enclosed: dig a way out`);
                 }
@@ -1824,7 +1838,10 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     if (r?.to) { handBack(`[night] morning: dug out of the hole shelter at ${at(n.site)} to ${at(r.to)} (${r.dug} block${r.dug === 1 ? '' : 's'}); back to work`); return; }
                     const choice = mob ? (ops.morningChoice ?? morningChoice)(bot, n.site, { pit: false }) : null;
                     if (choice?.action !== 'fight') {
-                        handBack(`[night] morning: could not leave the shelter at ${at(n.site)} (${r?.why ?? 'no way out'}${choice ? `; no fight: ${choice.why}` : ''}); back to work, still enclosed: dig a way out`);
+                        const enclosed = (e) => handBack(`[night] morning: could not leave the shelter at ${at(n.site)} (${r?.why ?? 'no way out'}${choice ? `; no fight: ${choice.why}` : ''}${e ? `; the escape: ${e.why ?? 'no result'}` : ''}); back to work, still enclosed: dig a way out`);
+                        // Soak 16 (E3): the escape before the hand-back.
+                        if (!n.climbTried && ops.escape) climbOut(`no quick dig-out (${r?.why ?? 'no way out'})`, enclosed);
+                        else enclosed(null);
                         return;
                     }
                     Object.assign(n, { morningAct: 'fight', morningWhy: choice.why, morningLeaving: false, exitTries: 0, exitAt: null });

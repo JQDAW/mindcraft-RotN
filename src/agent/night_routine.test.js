@@ -3994,7 +3994,7 @@ test('soak 12 (B(ii) step 6), #593 review 8: the gather stops on its own stop be
 
 // Soak 12 (D3): morning 3 at -69, 65, 87: a zombie on the hole shelter's rim in shade (it never burns or
 // leaves, rotn-data), three leave tries, then "back to work, still enclosed: dig a way out".
-async function holeMorning({ stair, choice = null, opened = null } = {}) {
+async function holeMorning({ stair, choice = null, opened = null, climb = null, pit = true } = {}) {
     const { MORNING: RULE, EXIT_TRIES } = await import('./night_routine.js');
     const agent = fakeAgent({ t: NIGHT });
     const zombie = { id: 2, name: 'zombie', type: 'mob', position: new Vec3(2.5, 66, 0.5) };
@@ -4008,8 +4008,10 @@ async function holeMorning({ stair, choice = null, opened = null } = {}) {
     if (choice) o.morningChoice = (bot, site, { pit }) => (pit ? { action: 'leave', why: 'a hole shelter' } : choice);
     o.opens = [];
     o.openToward = (bot, feet, toward) => { o.opens.push(toward); return Promise.resolve(opened); };
+    o.climbs = 0;
+    if (climb) o.escape = (bot) => { o.climbs++; return Promise.resolve(climb); };
     nightTick(agent, { now: 0, ops: o }); await settle(agent);
-    nightState(agent).pit = true;
+    nightState(agent).pit = pit;
     agent.bot.time.timeOfDay = MORNING;
     for (let now = 10, k = 0; k < 4 + EXIT_TRIES + Math.ceil(RULE.waitMs / RETRY_MS) && nightState(agent).state !== 'day' && !o.opens.length; k++, now += RETRY_MS) {
         nightTick(agent, { now, ops: o }); await settle(agent);
@@ -4518,4 +4520,47 @@ test('#614 review 10: a hole shelter that cannot be left (pitOut fails): back to
     assert.equal(nightState(s.agent).state, 'inside');
     assert.equal(nightState(s.agent).pit, true);
     assert.deepEqual(s.runs, []);
+});
+
+// Soak 16 (E3, the lead): soak 15's morning found no stairs up within 4 steps on every side of a pocket 7-8 below the
+// surface and handed the bot back enclosed. Now the one escape (library/escape.js) runs before the hand-back.
+test('soak 16 (E3): no quick dig-out and no fight: the escape climbs out before any hand-back; failed, the hand-back names its why', async (t) => {
+    quiet(t);
+    const none = { to: null, dug: 0, why: 'no way out within 6 quick blocks, away from the hostiles' };
+    const out = await holeMorning({ stair: none, choice: { action: 'leave', why: 'no weapon' }, climb: { out: true, how: 'by hand', dug: 9, placed: 1, at: new Vec3(3, 72, 0) } });
+    await settle(out.agent);
+    assert.equal(out.o.climbs, 1, out.agent.chat.join('\n'));
+    assert.ok(out.agent.chat.some(l => /^\[night\] morning: no quick dig-out \(no way out within 6 quick blocks, away from the hostiles\); climbing out with the escape/.test(l)), out.agent.chat.join('\n'));
+    assert.ok(out.agent.chat.includes('[night] morning: climbed out of the shelter at 0, 64, 0 to 3, 72, 0 (the escape: by hand; dug 9, placed 1); back to work'), out.agent.chat.join('\n'));
+    assert.ok(!out.agent.chat.some(l => /still enclosed/.test(l)));
+    const stuck = await holeMorning({ stair: none, choice: { action: 'leave', why: 'no weapon' }, climb: { out: false, why: 'no stair step, and no block to pillar up with', dug: 2, placed: 0 } });
+    await settle(stuck.agent);
+    assert.equal(stuck.o.climbs, 1);
+    assert.ok(stuck.agent.chat.some(l => /could not leave the shelter at 0, 64, 0 \(no way out within 6 quick blocks, away from the hostiles; no fight: no weapon; the escape: no stair step, and no block to pillar up with\); back to work, still enclosed: dig a way out$/.test(l)), stuck.agent.chat.join('\n'));
+});
+
+test('soak 16 (E3): a shelter on the ground whose leave tries all failed: the escape before the hand-back, once a morning', async (t) => {
+    quiet(t);
+    const { MORNING: RULE, EXIT_TRIES } = await import('./night_routine.js');
+    const agent = fakeAgent({ t: NIGHT });
+    Object.assign(agent.bot, { health: 20, inventory: { items: () => [{ name: 'stone_axe', count: 1 }], slots: [] }, entities: {} });
+    const o = ops();
+    o.hostileNear = () => null;
+    o.digOut = () => Promise.resolve(null); // no side opens
+    o.stairs = [];
+    o.stairOut = () => { o.stairs.push(1); return Promise.resolve(null); };
+    o.climbs = 0;
+    o.escape = () => { o.climbs++; return Promise.resolve({ out: true, how: 'pathfinder', dug: 3, placed: 0, at: new Vec3(5, 64, 0) }); };
+    nightTick(agent, { now: 0, ops: o }); await settle(agent);
+    nightState(agent).pit = false;
+    agent.bot.time.timeOfDay = MORNING;
+    for (let now = 10, k = 0; k < 4 + EXIT_TRIES + Math.ceil(RULE.waitMs / RETRY_MS) && nightState(agent).state !== 'day'; k++, now += RETRY_MS) {
+        nightTick(agent, { now, ops: o }); await settle(agent);
+    }
+    const r = { agent, o };
+    await settle(r.agent);
+    assert.equal(r.o.climbs, 1, r.agent.chat.join('\n'));
+    assert.equal(r.o.stairs.length, 0, 'no hole: no stairOut');
+    assert.ok(r.agent.chat.some(l => /after 3 tries; climbing out with the escape/.test(l)), r.agent.chat.join('\n'));
+    assert.ok(r.agent.chat.includes('[night] morning: climbed out of the shelter at 0, 64, 0 to 5, 64, 0 (the escape: pathfinder; dug 3, placed 0); back to work'), r.agent.chat.join('\n'));
 });

@@ -81,11 +81,15 @@ test('useDoor with no door nearby returns false instead of throwing', async () =
     assert.match(bot.output, /Could not find a door to use/);
 });
 
-test('goToSurface scans the 1.12 height, 255 down to 0', async () => {
+// Soak 16 (E): goToSurface no longer walks to the column's highest block (soak 15: a canopy); it runs the one escape
+// (library/escape.js, escape_day.test.js) toward the ground up the bot's column. It still reads only the 1.12 height.
+test('goToSurface reads only the 1.12 height (0 to 255) and runs the escape with the day budget', async () => {
     const ys = [];
     const bot = { output: '', entity: { position: new Vec3(0, 64, 0) }, blockAt: (pos) => { ys.push(pos.y); return null; } };
-    assert.equal(await skills.goToSurface(bot), false);
-    assert.equal(Math.max(...ys), 255);
-    assert.equal(Math.min(...ys), 0);
-    assert.equal(ys.length, 256);
+    const runs = [];
+    const run = (b, opts) => { runs.push(opts.budget); return Promise.resolve({ out: false, why: 'no pathfinder', dug: 0, placed: 0, at: new Vec3(0, 64, 0), ms: 0 }); };
+    assert.equal(await skills.goToSurface(bot, { run }), false);
+    assert.deepEqual(runs, ['day']);
+    assert.ok(ys.length > 0 && ys.every(y => y >= 0 && y <= 255), `${Math.min(...ys)}..${Math.max(...ys)}`);
+    assert.match(bot.output, /You are trapped at 0, 64, 0/);
 });
