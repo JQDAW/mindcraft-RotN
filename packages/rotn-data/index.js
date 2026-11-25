@@ -76,9 +76,10 @@ export const networkRemap = (blockIds) => pack().networkRemap(blockIds);
  * @param {{recipes?: object[], maxVariants?: number}} [opts] recipes: the dump's recipe list to use
  *        (default: the pinned pack's); mcdata.installRotnRecipesOnce passes its injected catalog's
  */
-// The pack's recipe collisions (recipe-collisions.json) apply unless the caller passes `shadowed` (null turns them off).
-export const installRecipes = (registry, { recipes, ...opts } = {}) => installRecipesInto(registry, recipes ?? pack().dump.recipes?.recipes ?? [],
-    { shadowed: pack().recipeCollisionsData, ...opts });
+// The pack's recipe collisions (recipe-collisions.json) apply unless the caller passes `shadowed`: null turns them off,
+// an object replaces them; a missing or undefined `shadowed` keeps the pack's (#639 review 2).
+export const installRecipes = (registry, { recipes, shadowed, ...opts } = {}) => installRecipesInto(registry, recipes ?? pack().dump.recipes?.recipes ?? [],
+    { ...opts, shadowed: shadowed === undefined ? pack().recipeCollisionsData : shadowed });
 /**
  * Replace bot.registry.foods / foodsByName / foodsArray, in place, with this pack's food values
  * (mineflayer-auto-eat and bot.registry readers then see them). See src/foods.js. It bans nothing and
