@@ -513,20 +513,22 @@ test('#291 nit: the pile the reserve asks for keeps its recipe variant (meta); o
 // the reserve is still due from the freeze on.
 test('CX23 soak: at the morning freeze the reserve says the minutes left with the freeze still to run, not the least certain time', (t) => {
     const items = [stack('pyrotech:rock', 0, 6)];
-    const at = (agentNow, frozenSince) => {
+    const at = (agentNow, frozenSince, expect = 'shelter_blocks') => {
         const agent = fakeAgent(t, items);
         agent.bot.time = { timeOfDay: MORNING_FREEZE };
         const clock = new NightClock({ log: () => {} });
         clock.observe(MORNING_FREEZE, frozenSince);
         agent._night = { clock };
         t.mock.timers.enable({ apis: ['Date'], now: agentNow });
-        assert.equal(agendaTick(agent, { now: agentNow }), 'shelter_blocks', 'due from the freeze on, as before');
+        assert.equal(agendaTick(agent, { now: agentNow }), expect);
         t.mock.timers.reset();
         return /Night is near: in about (\d+) min/.exec(agent.self_prompter.prompt)?.[1];
     };
     const base = (NIGHT_START - MORNING_FREEZE) / TICKS_PER_MIN; // ~7.96 min after the freeze
-    // Just frozen (the soak at 17:07): about 8 + 10 - 6 = 12 min, not 2.
-    assert.equal(at(100_000, 100_000), String(Math.round(base + FREEZE_MIN - 6)));
+    // #630 delta: due from SHELTER_BLOCKS_LEAD_MIN (16) by sunsetEstimateMin: just frozen (about 18 min) not yet; the
+    // other steps go on. Frozen for 3 min (the soak at 17:10): about 8 + 7 - 6 = 9 min, not 2.
+    at(100_000, 100_000, 'sticks');
+    assert.equal(at(500_000, 500_000 - 3 * 60_000), String(Math.round(base + FREEZE_MIN - 3 - 6)));
     // Frozen for 8 min: 2 min of the freeze left: about 4.
     assert.equal(at(1_000_000, 1_000_000 - 8 * 60_000), String(Math.round(base + 2 - 6)));
     // Frozen longer than the freeze: the least certain time again.
@@ -1786,4 +1788,25 @@ test('#630 re-review 2: waitSince is cleared when nothing runs and on a new day'
     agent.bot.time.day = 4;
     autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: later + 1 });
     assert.equal(agent._agenda_jobs.food.waitSince, later + 1, 'a new day: a fresh wait');
+});
+
+// #630 delta (the lead): on the pack's real clock. Before the morning freeze (t 2990) minutesToSunset is about 18;
+// at the freeze (t 3001, the time stands for 10 min) it reads 7.96 whatever the freeze left, and sunsetEstimateMin
+// counts the rest of the freeze. The shelter_blocks job's window (due and ready together) is real: during the freeze.
+test('#630 delta: the shelter_blocks job on the real clock: t 2990 not due; at the freeze for 0, 3 and 8 min: not due, due and ready, due but too close to dusk', (t) => {
+    const pick = stack('stone_pickaxe', 0, 1);
+    const at = (tod, frozen) => {
+        const agent = foodAgent(t, [pick], { timeOfDay: tod, finished: true });
+        const s = agendaState(agent.bot, { frozenMin: () => frozen });
+        return { s, due: SHELTER_RESERVE_STEP.due(s), ready: AUTO_JOBS.shelter_blocks.ready(agent, s), est: Math.round(s.sunsetEstimateMin() * 10) / 10, raw: Math.round(s.minutesToSunset() * 100) / 100 };
+    };
+    const before = at(2990, 0);
+    assert.deepEqual([before.raw >= 17.9, before.due], [true, false], `t 2990: ${before.raw}`);
+    const f0 = at(3001, 0), f3 = at(3001, 3), f8 = at(3001, 8);
+    assert.deepEqual([f0.raw, f3.raw, f8.raw], [7.96, 7.96, 7.96], 'minutesToSunset counts none of the freeze');
+    assert.deepEqual([f0.est, f3.est, f8.est], [18, 15, 10]);
+    assert.equal(f0.due, false, '18 min: not due yet');
+    assert.deepEqual([f3.due, f3.ready], [true, null], '15 min: due and ready (a run ends before the night routine)');
+    assert.equal(f8.due, true);
+    assert.match(f8.ready, /^too close to dusk \(10 min to sunset; the night routine starts at 6\)$/);
 });

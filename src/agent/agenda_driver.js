@@ -249,7 +249,8 @@ AUTO_JOBS.shelter_blocks = {
         if (!state.hasPickaxe?.()) return 'no pickaxe (a dirt shelter: the model gathers dirt piles)';
         // #630 review 7, re-review 3 (the lead): a run must end before the night routine starts (SHELTER_LEAD_MIN before
         // sunset): it needs its maxMs + 1 min more than that (6 + 4 + 1 = 11 min before sunset).
-        const m = state.minutesToSunset?.() ?? Infinity;
+        // #630 delta: the minutes the bot really has (sunsetEstimateMin: the rest of the morning freeze counted).
+        const m = state.sunsetEstimateMin?.() ?? state.minutesToSunset?.() ?? Infinity;
         if ((m - SHELTER_LEAD_MIN) * 60_000 < AUTO_JOBS.shelter_blocks.maxMs + 60_000) return `too close to dusk (${Math.round(m * 10) / 10} min to sunset; the night routine starts at ${SHELTER_LEAD_MIN})`;
         return null;
     },
