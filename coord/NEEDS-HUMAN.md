@@ -22,7 +22,7 @@ Agents add items here when they need something only the human can do. The human 
   **What changed for the bot:**
   - **No more digging into holes (#630):**
     - the rock collect takes loose rocks first, then stone open to the air;
-    - it never breaks a block that would leave no walkable way out;
+    - the rock collect never breaks a block that would leave no walkable way out;
     - the shelter blocks are now a scripted job in the morning;
     - the agenda no longer tells the model to mine stone for rocks.
   - **Getting out (#624):** one escape is used everywhere:
@@ -32,12 +32,12 @@ Agents add items here when they need something only the human can do. The human 
     - on a respawn that could not walk away.
 
     It spends dirt and planks first and keeps the 14-block shelter reserve by day.
-  - **The pickaxe (#619):** the off-hand pickaxe is taken back around every action and before any dig (the soak 15 cause). The 2x2 crafting grid is emptied after a failed craft. `!inventory` shows what is in the grid, on the cursor and in the off hand. `!newAction` is no longer offered while code is off.
-  - **Inventory sync (#618, #633):** the bot uses the server's real stack sizes (StackUp), so its window clicks match the server. This was the cause of soak 15's rejected clicks and stuck crafts.
-  - **Food (#627):**
-    - a daytime food reserve (the night's need + 4) is filled by a scripted forage/hunt job; the model is only asked where to go when nothing is in sight;
-    - hogs are always huntable (they cannot fight back);
-    - the herd rule counts same-breed cows (bulls never start fights) and is re-checked during the chase (the soak 15 cow).
+  - **The pickaxe (#619):** the off-hand pickaxe is taken back around every action and before any dig (the probable soak 15 cause). The 2x2 crafting grid is emptied after a failed craft. `!inventory` shows what is in the grid, on the cursor and in the off hand. `!newAction` is no longer offered while code is off.
+  - **Inventory sync (#618, #633):** the bot now uses the server's real stack sizes. StackUp, a pack mod, changes how many items fit in a slot (256 dirt piles or rocks, for example), and the bot assumed 64. So the bot's inventory clicks now match what the server does. This was the cause of soak 15's rejected clicks; the failed crafts are covered by #619's grid return.
+  - **Food (#627, with rotn-data's weapon sweep data #621):**
+    - a daytime food reserve (the night's need + 4) is filled by a scripted forage/hunt job; the model is only asked where to go when nothing is in sight (or after the job's 4 runs in a day);
+    - hogs are now huntable: they have no attack (the ownership check still applies);
+    - the herd rule counts same-breed cows nearby; a bull counts only if the weapon's sweep could reach it (the club does not sweep); the rule is re-checked during the chase (the soak 15 cow).
   - **Truthful lines (#632):** "Broke" only when the server shows the block gone, the walk's own digs reported apart, "4 rocks make 1 cobble" named.
   - **Diagnostics (#618, #625):** one line per rejected click and per refused dig, naming where every pickaxe is.
 
@@ -48,13 +48,13 @@ Agents add items here when they need something only the human can do. The human 
 
   **Steps (as before):**
   1. Your GO here.
-  2. harness-ops creates one CPX42 (TTL 4 h) and reports its IP.
+  2. The lead resets FRCFLD's state through the gate; harness-ops creates one CPX42 (TTL 4 h) and reports its IP.
   3. You run the host check on the CX23 and paste the output.
-  4. The 2-hour run.
+  4. The 2-hour run (the runner starts the bot through the gate, without enable).
   5. The server is deleted.
   6. The evidence PR.
 
-  **Cost:** like soak 15 (USD 0.04-0.05/h of LLM; the CPX42 for about 2.5 h).
+  **Cost:** EUR 0.40-0.55 for the server (soak 15 was billed about 3 h, EUR 0.41 plus the IPv4); LLM about USD 0.09 (soak 15: 0.088), allow up to USD 0.30.
 
   **Watch items:**
   - no trap underground;
