@@ -1,12 +1,17 @@
 # Status: rotn-data
 
-Updated: 2026-11-25T03:24Z (from `date -u`)
+Updated: 2026-11-25T21:24Z (from `date -u`)
 
-Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/status-621` (#622). Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/recipe-collisions` (#639). Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
 ## Now (2026-11-25)
 
-- **Open PRs:** only this STATUS PR (#622). Nothing else of mine is open or in review.
+- **Open PRs:** #639 (recipe collisions) and this STATUS PR. Nothing else of mine is open or in review.
+- **Open: #639 `agent/rotn-data/recipe-collisions`** (soak 16 recipe report item B; `/home/rv/soak16-net-forge-recipe.md` sections 4-5).
+  - It drops `dungeontactics:misc/convenience/planks_from_sticks` (the server's `ancientbeasts:stick_wall` always wins).
+  - New `3.3.4/recipe-collisions.json` (207 recipes another may shadow, from net-forge's scan). `installRecipes` puts the variants a shadowing recipe also accepts after every other variant of the result.
+  - On the dump, 687 variants move last and 4 results change their first variant.
+  - Full `npm test` 2954 pass, 0 fail, 2 skipped (after `npm ci`); lint 248.
 - **Merged: #621 `agent/rotn-data/bc-sweep`** (`f681b3ee`, approved on re-review of `db0f1b1c`; lead task for skills-rotn's herd rule; soak 15 bull, soak 16 plan F5).
   - `3.3.4/weapon-sweep.json`, plus `weaponSweep(item, { path, enchantment, potion })` and `sweepRadius(level)`: Better Combat's per-weapon Sweep from `config/bettercombat.cfg`, read from its bytecode.
   - The first entry whose substring is in the registry path wins, for Better Combat weapons only.
@@ -30,9 +35,9 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
   - #621's extracts are in `/home/rv/bcsweep/`.
 - **Requests, re-checked 2026-11-25:**
   - **Request 2 (`bot.registry` properties for net-forge): closed.** #618 already writes the dump's `stackSize` into `bot.registry` (`applyStackSizes` through `applyProperties`). forge-bridge's Forge dig rule (#595) reads block hardness and harvest tools from the dump directly. Nobody has asked for the rest (`maxDurability`, bounding boxes, materials); I'll reopen it if someone does.
-  - **Request 9 (the prismarine-recipe `outShape` patch): re-asked.** It was deferred until after G3. Do you still want it, or should I close it?
+  - **Request 9 (the prismarine-recipe `outShape` patch): closed** (lead, 2026-11-25). No soak has crafted a recipe with remaining items, and #619 returns 2x2 grid leftovers to the inventory. The lead reopens it if a soak shows such a craft.
 - **Follow-ups (not started; only on a lead task):**
-  - The dump's `drops` field is wrong for Underground Biomes igneous and metamorphic stone. It says "itself"; the code drops cobble.
+  - The dump's `drops` field is wrong for Underground Biomes stone. It says "itself". Without a level-1+ pickaxe, Dropt gives 4 rocks of the stone's type (`dropt_loose_materials.zs` 153-545); with one, igneous and metamorphic stone drop their cobble and sedimentary stone the pack's `contenttweaker:*_cobble`. My soak 15 report carries this correction.
   - 16 late-game items have a tool class but no speed.
   - Whether a hit Animania ram or buck butts a player back is unverified.
 - **Running:** nothing (no jobs, subagents or Hetzner servers).
@@ -51,7 +56,7 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
     - `trunk-shell.test.js` 6/6. It works out `coreOffsets` from the `Surround` bytecode, and checks `thickTrunks` against the dump.
     - rotn-data 162/162; skills-rotn's `fell_tree`, `collect_sticks`, `collect_rotn`, `fall_safety`, `axe_chop` and `agenda` 103/103; ESLint clean on the touched JS.
   - **Unverified:** what the server does after mineflayer finishes a shell dig early. My understanding of vanilla 1.12 is that it finishes the break itself once the real dig time has passed, but I haven't read that server code, and no run has broken a shell.
-- **(2) Digging mobs (Epic Siege Mod 13.169 + ESM-Tweaks): next PR, `agent/rotn-data/mob-digging`.** Findings so far are below and in my reply to the lead.
+- **(2) Digging mobs (Epic Siege Mod 13.169 + ESM-Tweaks): first findings, before #339 (merged, `38743638`).**
   - **ESM-Tweaks is not in the pinned zip.** Mod Director (`mods/!mod-director-launchwrapper-1.9.1.jar`, `config/mod-director/requisites.remote.json`) downloads it at server start, from a list on the RotN repo's moving `stable` branch, with no hash pinned. The dump manifest and the server ping both show `esmtweaks 0.4.5`. I disassembled the release jar `esmtweaks-1.12.2-0.4.5.jar` (SHA-256 `b57590bf...f933`) in my scratchpad; nothing went into the repo.
 - **(2) Digging mobs, #339 merged (`38743638`).** New `3.3.4/mob-digging.json`, and `mobDigging(entity)` and `canMobDig(entity, block, { meta, held })` in `src/digging.js`.
   - **Who digs:** the 56 `config/esm/entity_ai.json` entries with `Digging: true`. ESM-Tweaks swaps ESM's own digger for its own at server start (`useTweakedAI=true`).
@@ -363,7 +368,11 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- **falling-blocks.json dump stamp (lead task, 2026-11-07; branch `agent/rotn-data/falling-blocks-stamp`; #303 merged, `9ba1b2be`).**
+- **For the next dump run (lead, 2026-11-25; no dump now):** the dumper should record each crafting recipe's `CraftingManager.REGISTRY` id (`getIDForObject`, registration order).
+  - With it, `installRecipes` can drop a variant whenever a different recipe with a lower id matches the grid mineflayer lays out. That is net-forge's scan, done with the server's own order.
+  - It would replace #639's "put it last" ordering with a firm answer.
+
+- **Done, kept for the record: falling-blocks.json dump stamp** (lead task, 2026-11-07; branch `agent/rotn-data/falling-blocks-stamp`; #303 merged, `9ba1b2be`).
   - `source.dump` was `2026-11-02T02:37:07Z`. It is now `2026-11-06T12:22:37Z`, the `dumpedAt` of the current `manifest.json` from #269's fourth dump.
   - Rebuilt with `node packages/rotn-data/tools/build-falling-blocks.mjs --pack "/home/RotN 3.3.4 Server Pack.zip"` on the CX33.
   - The diff is that one line. I compared the files as parsed JSON, with `source.dump` left out: the new file is identical to develop's, with 215 falling blocks, 16 that override a fall method, 889 ruled out, 0 unreviewed and 0 unresolved.
@@ -498,7 +507,7 @@ Findings for skills-rotn (via the lead): see Request 8.
    - `getDetailedCraftingPlan` does not know whether a crafting table is available. In RotN the first plank comes from debarking a placed log with the crude axe (not a recipe), and log -> 3 planks needs a table. PR 2's `howToGet` gives the non-recipe steps.
    - Tell me the shape you want for PR 2 (`howToGet`) and PR 3 (first-night threats) before I fix it.
    - **From skills-rotn Request 9 (PR `agent/rotn-data/huntable-baby`):** on 1.12.2 the baby flag is entity metadata index **12** (EntityAgeable, Boolean) and a villager's profession is index **13** (VarInt). Source: wiki.vg "Entity metadata", revision of 18 May 2018 (`https://minecraft.wiki/w/Java_Edition_protocol/Entity_metadata?oldid=2768639`). `mcdata.isHuntable` is fixed; `mcdata.isBaby(entity)` and `mcdata.BABY_METADATA_INDEX` are exported. Still on the 1.21 indices in `src/agent/` (yours): `commands/queries.js:181`, `library/skills.js:1692` and `:1713` (`metadata[16] === 1` for baby villagers; use `mc.isBaby`), and `library/world.js:238-248` (`metadata[18]` for the villager profession; 13 on 1.12).
-9. **RE-ASKED 2026-11-25 (deferred until after G3; still wanted, or close?).** **Lead: a prismarine-recipe patch?** (from PR #112). `node_modules/prismarine-recipe/lib/recipe.js` `computeDelta` > `applyShape` reads `recipe.inShape[y]` where it should read `shape[y]`, so any `outShape` adds back every input. A one-line patch would let rotn-data emit `outShape` from the dump's `remaining` (1,116 recipes: buckets, knives), which mineflayer's `craft.js` `updateOutShape` then handles correctly. Not needed for G3 (no G3 recipe has remaining items). `patches/` for prismarine-recipe is not on net-forge's list, so it's your call: patch it (who?), or leave `outShape` out.
+9. **CLOSED 2026-11-25 (lead: no soak crafted a recipe with remaining items; #619 returns 2x2 leftovers; reopened if a soak shows one).** **Lead: a prismarine-recipe patch?** (from PR #112). `node_modules/prismarine-recipe/lib/recipe.js` `computeDelta` > `applyShape` reads `recipe.inShape[y]` where it should read `shape[y]`, so any `outShape` adds back every input. A one-line patch would let rotn-data emit `outShape` from the dump's `remaining` (1,116 recipes: buckets, knives), which mineflayer's `craft.js` `updateOutShape` then handles correctly. Not needed for G3 (no G3 recipe has remaining items). `patches/` for prismarine-recipe is not on net-forge's list, so it's your call: patch it (who?), or leave `outShape` out.
 11. **CLOSED (lead confirmed 2026-11-05: covered by #206; skills-rotn's `src/agent/library/food.js` calls `foodValues`/`avoidFood` directly, auto-eat off).** **Lead or net-forge: a call site for `installFoods(bot.registry)`** (food-values PR). mineflayer-auto-eat reads `bot.registry.foodsByName`, which has minecraft-data's vanilla 1.12.2 values (bread 5) until this runs. It must run once per login after forge-bridge's `extendRegistry`, next to `installRotnRecipesOnce` in `initBot` (net-forge's part of `src/utils/mcdata.js`). One line, like Request 7's. The same place (or skills-rotn's eating) must set auto-eat's `bannedFood` from `avoidFood` and check `avoidFood(name, meta)` on the stack before eating: `installFoods` bans nothing, and a pufferfish (`fish` meta 3) shares the cod's entry (#209 review).
 12. **skills-rotn (FYI, no change required by me): the player zombie never burns or despawns** (#243). No `src/agent/` code assumes it burns by day (checked on develop: `library/threats.js` 143-148, `library/death_report.js` 33-43 and 170-187). But `death_report.js`'s rule "no walking within DEATH_SPOT_RADIUS while a player zombie is loaded there" then never ends by itself: the zombie stays until something kills it, and Corpse Complex's drops despawn after 600 s (`config/corpsecomplex.cfg` line 195). If you want the bot to get its items back, the way is to kill it (your `canFightHard` path) within those 10 minutes, not to wait for day; otherwise the drops are lost and the spot stays blocked while the zombie is loaded.
 13. **skills-rotn (answer to the lead's round 4 batch B question, 2026-11-06): where sticks come from.** Sources: the pinned pack zip (SHA-256 `90642fd5...f5205`). Bytecode was read with javap (no mod code run) from `mods/DramaticTrees-1.12.2-0.13.4.jar` (SHA-256 `b86dae76...7ffe`, which holds the `com.ferreusveritas.dynamictrees` classes; there is no separate Dynamic Trees jar). Recipes come from our `recipes.json.br` dump.
