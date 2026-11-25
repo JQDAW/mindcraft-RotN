@@ -39,6 +39,7 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     // network meta 11) and a block_change to an upper half sent as meta 11.
     const registries = syntheticRegistries();
     registries[0].ids.push(['minecraft:double_plant', 175]);
+    registries[1].ids.push(['betterwithmods:dirt_pile', 5100]); // soak 15 (N1): a StackUp-256 item
     const section = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'rotn-3.3.4', 'chunk-m3-m4-section4.json'), 'utf8'));
     const onJoin = (client) => {
         joinFakeWorld(client);
@@ -71,7 +72,7 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     const soak14Lines = []; // soak 14: the respawn-effects and attack-count lines
     console.log = (...a) => {
         if (typeof a[0] === 'string' && a[0].includes('state-id remap')) remapLines.push(a[0]);
-        if (typeof a[0] === 'string' && /\[forge-bridge\] (respawn: dropped|attacks \()/.test(a[0])) soak14Lines.push(a[0]);
+        if (typeof a[0] === 'string' && /\[forge-bridge\] (respawn: dropped|attacks \(|attack counts: on|stack sizes: |dig refused: )/.test(a[0])) soak14Lines.push(a[0]);
         realLog(...a);
     };
     after(() => { delete catalog.stateMetaRemap; console.log = realLog; });
@@ -143,10 +144,24 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     const stoneBelow = bot.blockAt(bot.entity.position.offset(0, -1, 0));
     assert.equal(bot.digTime(stoneBelow), Infinity, 'stone by hand: Tool Progression, the server never breaks it (was 7500)');
     assert.equal(stoneBelow.digTime(5003, false, false, false, [], {}), Infinity, 'the crude axe has no pickaxe level');
+    // Soak 15: the refusal names the block, the held item and where each pickaxe-class tool is (none here).
+    await assert.rejects(bot.dig(stoneBelow, true), /dig time for stone is Infinity/);
+    const refused = soak14Lines.filter(l => l.includes('dig refused: '));
+    assert.equal(refused.length, 1, soak14Lines.join('\n'));
+    assert.match(refused[0], /^\[forge-bridge\] dig refused: stone:0 at -?\d+, \d+, -?\d+ \(pickaxe level 0, hardness 1\.5\); held stone \(no pickaxe level\); pickaxe tools: none carried; rule: held Infinity$/);
     const rockState = pickState(catalog.getBlock('pyrotech:rock'), moddedBlock.metadata);
     assert.equal(moddedBlock.digTime(null, false, false, false, [], {}), forgeDigTime(rockState, null), 'a modded block by the dump\'s state for its metadata');
     assert.ok(Number.isFinite(moddedBlock.digTime(null, false, false, false, [], {})));
-    assert.deepEqual(bot.forge.registryReport.added, { blocks: 2, items: 2, entities: 1, biomes: 1 });
+    assert.deepEqual(bot.forge.registryReport.added, { blocks: 2, items: 3, entities: 1, biomes: 1 });
+    // Soak 15 (N1): initBot gives bot.registry the server's stack sizes (StackUp, from the dump) before the
+    // first window, so the inventory's items and mineflayer's click predictions use them.
+    assert.equal(bot.registry.itemsByName['betterwithmods:dirt_pile'].stackSize, 256);
+    assert.equal(bot.registry.itemsByName.stick.stackSize, 256);
+    assert.equal(bot.registry.itemsByName.dirt.stackSize, 128);
+    assert.equal(bot.registry.itemsByName['pyrotech:crude_axe'].stackSize, 1);
+    assert.equal(bot.forge.stackSizes.modded, 3, 'pyrotech:rock 256, pyrotech:crude_axe 1, the dirt pile 256');
+    assert.ok(soak14Lines.includes('[forge-bridge] attack counts: on (attack packets written and the wrapper\'s calls; a line a minute when they change, at every death and at the end)'), '#610 review 3: the status line at spawn');
+    assert.ok(soak14Lines.some(l => l.startsWith('[forge-bridge] stack sizes: ')), 'the stack-size line');
     // rotn-data request 4: Mindcraft's name helpers read bot.registry, so they know modded names.
     assert.equal(getBlockId('pyrotech:rock'), 4001);
     assert.equal(getBlockName(4001), 'pyrotech:rock');
@@ -158,6 +173,8 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.equal(bot.inventory.slots[37].name, 'stick');
     assert.equal(bot.inventory.slots[38].type, 5003);
     assert.equal(bot.inventory.slots[38].name, 'pyrotech:crude_axe');
+    assert.equal(bot.inventory.slots[37].stackSize, 256, 'soak 15 (N1): the window\'s stick stacks as the server\'s');
+    assert.equal(bot.inventory.slots[38].stackSize, 1, 'soak 15 (N1): a modded tool stacks to 1');
     assert.equal(bot.inventory.slots[39].type, 40000);
     assert.equal(bot.inventory.slots[39].count, 2);
     assert.equal(bot.entity.effects[300]?.amplifier, 1, 'REID effect id from the VarInt tail');
@@ -266,7 +283,7 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     bot.quit();
     await sleep(300);
     // Soak 14: the end of the connection prints the attack counts, numbers only.
-    assert.ok(soak14Lines.includes('[forge-bridge] attacks (end): packets bettercombat 0, use_entity 1; calls bettercombat 0, vanilla 1, waits 0, replaced 0, gone 0, cancelled 0, reach 0, sight 0, misses 0'), soak14Lines.join('\n'));
+    assert.ok(soak14Lines.includes('[forge-bridge] attacks (end): written bettercombat 0, use_entity 1; calls bettercombat 0, vanilla 1, waits 0, replaced 0, gone 0, cancelled 0, reach 0, sight 0, misses 0'), soak14Lines.join('\n'));
     const cap = readCapture(captureFile);
     const kinds = new Set(cap.map(l => l.kind));
     for (const k of ['event', 'payload', 'packet']) assert.ok(kinds.has(k), `capture has ${k}`);

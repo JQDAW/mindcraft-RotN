@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import { EventEmitter } from 'node:events';
-import { attachAttackCounts, attackCountsLine } from '../src/attack-counts.js';
+import { attachAttackCounts, attackCountsLine, ATTACK_COUNTS_STATUS } from '../src/attack-counts.js';
 import { installBetterCombatAttack } from '../src/bettercombat.js';
 
 function fakeBot() {
@@ -52,18 +52,18 @@ test('the minute line only when the numbers changed; death and end always (zeros
     t.tick();
     assert.deepEqual(logs, [], 'nothing sent yet: no minute line');
     bot.emit('death');
-    assert.deepEqual(logs, [`attacks (death): packets bettercombat 0, use_entity 0; ${ZERO_CALLS}`], 'a death prints the zeros');
+    assert.deepEqual(logs, [`attacks (death): written bettercombat 0, use_entity 0; ${ZERO_CALLS}`], 'a death prints the zeros');
     bot._client.write('custom_payload', { channel: 'bettercombat', data: Buffer.from([5]) });
     calls = { bettercombat: 1 };
     t.tick();
     t.tick();
     assert.equal(logs.length, 2, 'one minute line for the change, none for the unchanged minute');
-    assert.equal(logs[1], 'attacks (minute): packets bettercombat 1, use_entity 0; calls bettercombat 1, vanilla 0, waits 0, replaced 0, gone 0, cancelled 0, reach 0, sight 0, misses 0');
+    assert.equal(logs[1], 'attacks (minute): written bettercombat 1, use_entity 0; calls bettercombat 1, vanilla 0, waits 0, replaced 0, gone 0, cancelled 0, reach 0, sight 0, misses 0');
     calls = { bettercombat: 1, reach: 2 }; // calls that sent nothing count as a change too
     t.tick();
     assert.match(logs[2], /^attacks \(minute\): .* reach 2,/);
     bot.emit('end');
-    assert.match(logs[3], /^attacks \(end\): packets bettercombat 1, use_entity 0;/);
+    assert.match(logs[3], /^attacks \(end\): written bettercombat 1, use_entity 0;/);
     assert.equal(t.cleared, true);
 });
 
@@ -85,5 +85,16 @@ test('with the real Better Combat wrapper (bc_attack off): bot.attack is counted
     attachAttackCounts(bot, { stats: () => bc.stats, log: (m) => logs.push(m), setTimer: t.setTimer, clearTimer: t.clearTimer });
     await bot.attack({ id: 9 });
     bot.emit('end');
-    assert.deepEqual(logs, ['attacks (end): packets bettercombat 0, use_entity 1; calls bettercombat 0, vanilla 1, waits 0, replaced 0, gone 0, cancelled 0, reach 0, sight 0, misses 0']);
+    assert.deepEqual(logs, ['attacks (end): written bettercombat 0, use_entity 1; calls bettercombat 0, vanilla 1, waits 0, replaced 0, gone 0, cancelled 0, reach 0, sight 0, misses 0']);
+});
+
+test('#610 review 3: one status line at the first spawn says the counter is on', () => {
+    const bot = fakeBot();
+    const t = fakeInterval();
+    const logs = [];
+    attachAttackCounts(bot, { log: (m) => logs.push(m), setTimer: t.setTimer, clearTimer: t.clearTimer });
+    bot.emit('spawn');
+    bot.emit('spawn'); // a respawn
+    assert.deepEqual(logs, [ATTACK_COUNTS_STATUS]);
+    assert.match(ATTACK_COUNTS_STATUS, /^attack counts: on/);
 });
