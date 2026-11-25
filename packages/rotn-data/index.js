@@ -50,6 +50,8 @@ export { UNKNOWN_MELEE } from './src/melee.js';
 // mob in full (Better Combat keeps the target invulnerable); Better Combat's own packet hits in full every time.
 export const combatOf = (entityName) => pack().combatOf(entityName);
 export const weaponStats = (item) => pack().weaponStats(item);
+export const weaponSweep = (item, opts) => pack().weaponSweep(item, opts);
+export { sweepRadius } from './src/sweep.js';
 export const meleeHitDamage = (hit) => pack().meleeHitDamage(hit);
 export const hitsToKill = (fight) => pack().hitsToKill(fight);
 export { ATTACK_PATHS, afterArmor } from './src/combat.js';
