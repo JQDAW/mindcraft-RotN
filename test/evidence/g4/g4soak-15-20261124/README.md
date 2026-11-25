@@ -6,12 +6,18 @@
   - the S-run reason from #436;
   - the step-7 runner's reasons: there is no `ROTN_G4_ACCEPT` marker, so conditions (a) and (d) fail. Conditions (b), (c) and (e) hold.
 - **The first soak on rotn-v0.1.21.** It ran 22:36:41 to 00:37:16 UTC, across midnight. The server log rolled over, and the runner read both files (`the marker was rolled over; saved from 2026-11-24-1.log.gz, latest.log`).
-- **No death and no fight.** Two hurt lines came from a cow the model attacked (00:03:50, 00:03:52; health 20 → 12).
+- **No death and no fight.** Two hurt lines came from a cow that the hunting reflex hunted (00:03:50, 00:03:52; health 20 → 12), 35 s after the reflex had refused that cow because a bull was near.
 - **Food:** lowest food 7 (00:02:20). 8 `low` lines and 8 eats, each with a food change. The sunset lines now give points held and points needed. Sunset 3 started a food run, which ended `+0 points`.
 - **Agenda:** done at 00:06:56 (`server.log:746`), 90 min after the join. The `stone_axe` step was stuck from 22:43 to 00:06.
-- **Night-1 shelter:** the bot spent day 2 and night 2 in it, at -58, 57, -50, a hole under rock. Both morning dig-outs failed after 3 tries (`no free cell within 3 blocks` / `no firm floor`, `no way up within 4 steps`).
-  - The model dug its own way out at 00:01:15–00:01:25 (`Boxed in with rock right overhead`).
-  - Meanwhile 3 crafts of `metamorphic_cobble:6` failed with `missing ingredient`, and 18 `Server rejected transaction` lines went by. The model blamed a bundle.
+- **Trapped underground from 22:42 to 00:01.**
+  - **How it started:** two rock collects on day 1 (22:41:47 and 22:42:33) took the bot from the surface (y 64) down to y 56 (`driver.log:934`).
+  - **From then on it could not dig or path out.** From 22:41:56 to 22:47:14 there were 6 `Path not found …` lines and 7 `Unable to reach …` lines (one more pair at 23:19), a `needs a better tool` refusal on `!digDown` (22:44:24), and 3 `!newAction` calls refused because code writing is off.
+  - **Probable cause, not proven:** the stone pickaxe was not in `items()` or the main hand when the digs were chosen. It sat on the cursor after a rejected click at 22:41:56, and after each collect #614's weapon re-arm put it in the off hand.
+    - The stone isn't too hard: every Underground Biomes stone is pickaxe level 0, so the stone pickaxe breaks it.
+    - Sources: rotn-data's, net-forge's and the lead's soak 15 notes, relayed by the lead.
+  - **The bot sheltered in the pocket at -58, 57, -50 on nights 1 and 2.** Both morning dig-outs failed after 3 tries (`no free cell within 3 blocks` / `no firm floor`, `no way up within 4 steps`).
+  - **The model dug its own way out** at 00:01:15–00:01:25 (`Boxed in with rock right overhead`).
+  - **Meanwhile:** 3 crafts of `metamorphic_cobble:6` failed with `missing ingredient`, and 18 `Server rejected transaction` lines (9 rejected clicks) came. The model blamed a bundle.
 - **The Scroll of New Life was never used.**
   - Sunsets 1 and 2 at -58, 57, -50: refused, every side `open` or `a step down`, `but no walk to 8 blocks from there`.
   - Sunset 3 at -17, 89, -127: refused, `57 blocks from the spawn (it needs 100)`.
@@ -94,12 +100,20 @@ The reply lengths in characters, in order:
   - the stone pickaxe (22:41:33);
   - cobblestone from metamorphic rocks (13 `metamorphic_cobble:6` by 22:43:01).
 - **`stone_axe` stuck:** the step started at 22:43:02, and at 22:48:03 it was `stuck: 5 min of self-prompting; retry 1 of 3 in 20 min or at the next full day`.
-- **Two rock collects were refused for their tool** (with `the tool you have`):
-  - `Failed to collect pyrotech:rock: undergroundbiomes:metamorphic_stone needs a better tool (Tool Progression) …` (22:41:56, `driver.log:749`);
-  - `Cannot break the block at x:-58.0, y:55.0, z:-50.0: undergroundbiomes:metamorphic_stone needs a better tool …` (22:44:24, `driver.log:1045`).
+- **The trap (22:41–22:51):**
+  - **The collects:** `!collectBlocks("pyrotech:rock", 8)` (22:41:47) got 8 rocks. One break during it was refused: `Failed to collect pyrotech:rock: undergroundbiomes:metamorphic_stone needs a better tool (Tool Progression) …` (22:41:56, `driver.log:749`). Then `!collectBlocks("pyrotech:rock", 44)` (22:42:33) got 48 rocks. They took the bot from the surface (y 64) down to y 56 (`position … y: 56.00` at 22:43:59, `driver.log:934`).
+  - **No path out:** from 22:41:56 to 22:47:14 (`driver.log:748`–`1085`), 6 `Path not found, but attempting to navigate anyway using destructive movements` lines and 7 `Unable to reach …` lines. The first, at 22:41:56, was `Unable to reach -58, 60, -49, you are 3 blocks away`, during the collect. The rest were to the table at -58, 64, -51 (8 blocks away) and to the surface at y 72 (16 blocks). One more came at 23:19:00 (`driver.log:1533`).
+  - **`!digDown(4)`** (22:44:24) was refused: `Cannot break the block at x:-58.0, y:55.0, z:-50.0: undergroundbiomes:metamorphic_stone needs a better tool …` (`driver.log:1045`).
+  - **`!newAction` was refused 3 times** (`newAction not allowed! Code writing is disabled in settings`, as it should be): 22:44:22 (`Dig straight up to the surface …`), 22:50:33 (`Dig straight up out of this burial pit …`) and 23:23:21 (unbundling rocks).
+  - **Probable cause of the refusals (not proven):** the stone pickaxe was not in `bot.inventory.items()` (slots 9–44) or the main hand when the dig was chosen.
+    - At 22:41:56 it was on the cursor after a rejected click (`resync: … cursor: stone_pickaxe`, `driver.log:742`–`744`).
+    - After each collect, #614's weapon re-arm puts it in the off hand (slot 45). The 6 `moved stone_pickaxe from the off hand back into the inventory to dig out` lines show it there at the dig-outs.
+    - The `needs a better tool (Tool Progression)` wording is misleading here: every Underground Biomes stone and cobble is pickaxe level 0, so the stone pickaxe breaks it.
+    - The sources are rotn-data's, net-forge's and the lead's soak 15 notes, relayed by the lead.
+  - **Pillaring:** the model said `Up to y=60 with 16 piles` (22:50:59, `driver.log:1294`). That is its own claim; the shelter at sunset was at y 57.
 - **Inventory clicks:**
   - 22:41:56: an equip was rejected (`Server rejected transaction for clicking on slot 39`), resynced, and the stone pickaxe on the cursor put back in slot 39.
-  - 22:48 to 22:51: the model pillared up out of the hole with dirt (`Up to y=60 with 16 piles`).
+  - 22:48 to 22:51: the model tried to pillar up with dirt.
     - Its dirt crafts from piles (`!craftRecipe("dirt", …)`) were rejected 3 times on slots 11 and 4, each `the second try failed too` (22:50:16, 22:50:56, 22:51:00).
     - `betterwithmods:dirt_slab` then failed with `missing ingredient` (22:51:10).
 
@@ -142,9 +156,11 @@ The reply lengths in characters, in order:
   - Foraging got food 3 times (`shadedgarden` 00:02:07 and 00:03:47; `soggygarden` 00:08:06).
 - **The cow:**
   - The hunting reflex left a `cow_holstein` alone: `it may belong to a player … a animania:bull_holstein within 16 blocks` (00:02:41).
-  - The model then sent `!attack("cow")` (00:03:20) and `!attack("animania:cow_holstein")` (00:03:42), and the cow hit back (below).
-  - The reflex logged `hunting animania:cow_holstein: stuck (left alone for 5 min)` (00:03:39). A pig hunt was also `stuck` (00:04:25).
-- **The agenda:** `food` was stuck at 00:05:03, and `stone_axe` was done at 00:06:56 at the remembered table. `agenda done` came at 00:06:56; the standing goal started at 00:07:0x.
+  - **The hunting reflex then hunted that cow:** `weapon spartanweaponry:club_wood (hunt)` (00:03:16, `driver.log:2564`), then `hunting animania:cow_holstein: stuck (left alone for 5 min)` and `Mode hunting finished executing` (00:03:39, `driver.log:2572`–`2573`; again at 00:03:47, `driver.log:2588`). The cow hit back at 00:03:50 and 00:03:52 (below).
+  - **The model's cow `!attack` replies never ran.** At 00:02:46, 00:03:20 and 00:03:42 (`driver.log:2496`, `2569`, `2585`) there is no `parsed command` or `Agent executed` after them, because a mode was running.
+  - **The model's own `!attack` applies the bull rule:** `!attack("animania:hog_old_spot")` at 00:10:51 was refused with `a animania:bull_holstein within 16 blocks … Find a lone one, away from bulls.` (`driver.log:3357`).
+  - A pig hunt was also `stuck` (00:04:25).
+- **The agenda:** `food` was stuck at 00:05:03, and `stone_axe` was done at 00:06:56 at the remembered table. `agenda done` came at 00:06:56; the standing goal started at 00:07:00 (`server.log:747`).
 - **Cobble:** `Successfully crafted undergroundbiomes:metamorphic_cobble, you now have 17 …` (00:07:20). The earlier failures had used the `:6` id.
 
 ### Night 3 (00:12–00:37)
@@ -217,12 +233,19 @@ The new rule shows in the run: after each eat back to 9, the next fall to 8 logg
 
 ### `[dig]` diagnosis lines and refused collects
 - **`[dig]` lines:** 0.
-- **Refused for the tool:** 2 (22:41:56 and 22:44:24, above). Both are `undergroundbiomes:metamorphic_stone`, which needs a better tool than the stone pickaxe (Tool Progression).
+- **Refused for the tool:** 2 (22:41:56 during a collect, and 22:44:24 on `!digDown`, above). Both are `undergroundbiomes:metamorphic_stone`, which is pickaxe level 0, so the stone pickaxe can break it. The probable cause is the pickaxe outside `items()` and the main hand (above), not Tool Progression.
+- **Refused collects:** red mushrooms, twice. `!collectBlocks("red_mushroom", 1)` broke one each time (`Broke red_mushroom: no red_mushroom yet`) and ended `Collected 0 red_mushroom.` (00:09:58, 00:10:04; `driver.log:3227`–`3228`, `3266`–`3267`).
 - **`missing ingredient`:** 4 failed crafts, 9 lines.
   - `betterwithmods:dirt_slab` (22:51:10).
   - `undergroundbiomes:metamorphic_cobble:6` 3 times (23:20:22, 23:21:10, 23:24:22).
   - At 00:07:20 the craft as `undergroundbiomes:metamorphic_cobble` worked.
-- **`Server rejected transaction` lines:** 18, from crafts and equips. The `[inventory]` lines resynced, and 3 times `the second try failed too` (all on day 1's dirt crafts).
+- **`Server rejected transaction`:** 18 lines, which are **9 rejected clicks** (each click logs two lines):
+  - 3 equips on slot 39: 22:41:56, 23:21:08, 23:23:44;
+  - 6 craft clicks: 22:50:16, 22:50:56 and 22:50:59–22:51:00, two each (slot 11, then slot 4).
+
+  The `[inventory]` lines resynced, and 3 times `the second try failed too` (all on day 1's dirt crafts).
+  - **The click rejections:** net-forge's soak 15 click note (relayed by the lead) ties them to StackUp's real stack sizes (dirt piles and rocks stack to 256), which mineflayer's registry does not know. Not proven here.
+  - **The 3 `:6` `missing ingredient` failures:** the lead's note has them as rocks probably left in the 2×2 crafting grid (slots 1–4) after a resync. `!inventory` counts those slots and the crafter does not. Open.
 
 ### Shelter after a death, the off-hand pickaxe, inventory swaps
 - **Shelter after a death:** none; there was no death.
@@ -230,12 +253,12 @@ The new rule shows in the run: after each eat back to 9, the next fall to 8 logg
 - **Inventory swaps:** 27 `[inventory]` lines. They are the rejected-click resyncs and `before equip|craft|moveSlotItem: put the … on the cursor into slot N` (dirt piles or the stone pickaxe).
 
 ### Hurt lines
-2 lines, both naming the mob and how recently the bot swung (`swung-0s`):
+2 lines, both naming the mob. `swung-0s` is the mob's own arm swing, 0 s before the hit (`survival_log.js`):
 
 - `hurt 4 health 20->16 (by animania:cow_holstein)`, with the detail `drops 2@+0s=animania:cow_holstein,2@+1.7s=animania:cow_holstein at -1.5,85,-110.2 … near animania:cow_holstein@0.9m/swung-0s` (00:03:50, `driver.log:2611`–`2612`).
 - `hurt 4 health 16->12 (by animania:cow_holstein)` (00:03:52).
 
-The model's `!attack` provoked the cow. There was no fatal hit (no death).
+The hunting reflex provoked the cow (Day 3 above); the model's cow `!attack` replies never ran. There was no fatal hit (no death).
 
 ### Deaths
 0.
@@ -269,13 +292,22 @@ The model's `!attack` provoked the cow. There was no fatal hit (no death).
 - **`test-server.sh starts`:** 1 after `up` and 1 after the run (2 files, from the rollover).
 
 ## For the owners (not judged here)
-- **skills-rotn, the night-1 shelter:** the hole at -58, 57, -50 (rock overhead, a drop to the south) could not be left by the morning dig-out, twice. The bot spent day 2 and night 2 there, and the model dug out by hand on day 3. The scroll check had already said `no walk to 8 blocks` from every side at sunset 1.
+- **skills-rotn, the trap:** the two rock collects at 22:41–22:42 went 8 blocks below the surface.
+  - After them, every path and `!digDown` failed, and so did both morning dig-outs of the pocket shelter at -58, 57, -50 (`no way up within 4 steps`).
+  - The bot spent day 2 and night 2 there, and the model dug out by hand on day 3.
+  - The probable cause is the stone pickaxe outside `items()` and the main hand (the cursor, then the off hand after #614's re-arm).
+  - The scroll check had already said `no walk to 8 blocks` from every side at sunset 1.
+- **skills-rotn, false `Broke …` lines:**
+  - `Broke undergroundbiomes:metamorphic_stone: no pyrotech:rock yet (it gave 4 betterwithmods:dirt_pile)` (22:41:56, `driver.log:753`). It came in the same second as the refusal of that stone, so it is not clear that the block was broken.
+  - `Broke undergroundbiomes:metamorphic_cobble: no undergroundbiomes:metamorphic_cobble yet (it gave 16 pyrotech_compat:rock_metamorphic:6)`, then `Collected 0 undergroundbiomes:metamorphic_cobble.` (00:01:20, `driver.log:2235`–`2236`). The block dropped rocks, so the collect counted 0 although the dig worked.
 - **skills-rotn / rotn-data, `metamorphic_cobble:6`:** the craft from `pyrotech_compat:rock_metamorphic:6` worked twice on day 1 (22:42:15, 22:43:01), then failed 3 times with `missing ingredient` (23:20:22 to 23:24:22) while the bot held 19 to 43 of those rocks. At 00:07:20 the craft as `undergroundbiomes:metamorphic_cobble` worked. The model blamed a bundle; the lines don't say why.
-- **skills-rotn, the cow:** the hunting reflex refused a `cow_holstein` near a bull. The model's `!attack("animania:cow_holstein")` went ahead, and the cow hit back twice (health 20 → 12).
+- **skills-rotn, the cow:** the hunting reflex refused a `cow_holstein` at 00:02:41 because a bull was within 16 blocks. Yet it hunted one 35 s later (00:03:16 to 00:03:39), and the cow hit back twice (health 20 → 12). Why?
+- **skills-rotn, the sunset-3 food run:** it ended `+0 points (no ripe wild food and no animal to hunt within 32 blocks)` (00:11:32). Yet a hog and a bull were near from 00:10:45 to 00:11:20 (`driver.log:3344`–`3423`). Was that the bull rule or the 32-block cap?
+- **rotn-data, red mushrooms:** two breaks of `red_mushroom` gave no drop (00:09:58, 00:10:04). Is that a pack drop rule?
 - **skills-rotn, memory summaries:** the largest reasoning cost was on day 3. One summary used 31,458 reasoning tokens for 499 characters.
 
 ## Soak 14 corrections (the #608 re-review)
-- The soak 14 README's open question now says nothing hurt the sprite first **from the join (14:43:08) to the first hit (14:46:58)**. A check of the journal found no `!attack`, hunting, swing or fight line in that time.
+- The soak 14 README's open question now says nothing hurt the sprite first **from the join (14:43:08, `server.log:10`) to the first hit (14:46:58)**, without repeating the list. A check of the journal found no `!attack`, hunting, swing or fight line in that time.
 - The soak 14 owner line on the memory attribution now says the model **most likely** took the player zombie for the killer.
 
 ## Files
