@@ -1,12 +1,45 @@
 # Status: rotn-data
 
-Updated: 2026-11-07T14:20Z (from `date -u`)
+Updated: 2026-11-25T03:24Z (from `date -u`)
 
-Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/trunk-shell`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/status-621` (#622). Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
-## Now: trunk shells and digging mobs, from G3 round 9 B (lead task, 2026-11-07)
+## Now (2026-11-25)
 
-- **(1) Trunk shell, this PR (`agent/rotn-data/trunk-shell`).** Breaking a `dynamictrees:trunkshell` **fells the tree like a branch**, and the shell itself **drops nothing**. Cited from `DramaticTrees-1.12.2-0.13.4.jar` with javap only:
+- **Open PRs:** only this STATUS PR (#622). Nothing else of mine is open or in review.
+- **Merged: #621 `agent/rotn-data/bc-sweep`** (`f681b3ee`, approved on re-review of `db0f1b1c`; lead task for skills-rotn's herd rule; soak 15 bull, soak 16 plan F5).
+  - `3.3.4/weapon-sweep.json`, plus `weaponSweep(item, { path, enchantment, potion })` and `sweepRadius(level)`: Better Combat's per-weapon Sweep from `config/bettercombat.cfg`, read from its bytecode.
+  - The first entry whose substring is in the registry path wins, for Better Combat weapons only.
+  - The radius around the struck mob is 1 + 0.6 (the attacker's width) + 0.25 × (level − 1), so 1.6 at level 1.
+  - Also covered: the vanilla ItemSword fallback, which needs a charged swing on the ground, with no crit and no sprint hit.
+  - Clubs, axes and pickaxes don't sweep; swords do.
+  - An item weapons.json doesn't list is answered as unknown (null), never "does not sweep".
+  - Tests: full `npm test` 2815 pass, 0 fail, 2 skipped, after a clean `npm ci` (the old install predated #610's mineflayer patch). The review-nit round: rotn-data 270/270. Lint 249.
+  - **Hand-off for skills-rotn:**
+    - The caller supplies `enchantment` (the Sweeping level from the held stack's NBT) and `potion` (the attacker's `wards:effect_sweeping` level, amplifier + 1). `weaponSweep` can't see either.
+    - A `null` answer (a held block or other unlisted item) means "may sweep".
+    - Call `weaponSweep` on the weapon the bot will attack with, after equipping it, not on whatever it holds now: food, sticks and blocks answer `sweeps: null`.
+    - Use `radius` (1.6 for a sword, 2.1 for a greatsword: the 3D distance between the two mobs' positions) plus your margin.
+- **Merged: #611 `hunger-effects.json`** (`78378e9b`, soak 14 item D): Hunger Overhaul's low-food effects by food and difficulty, starvation, the constant drain (235 s per point at rest) and the regeneration floor.
+- **Merged since #319, one line:** #332, #339, #350, #368, #423, #426, #448, #496, #511, #513, #518, #528, #534, #542, #551, #611, #621.
+- **Research reports for the lead, no code.** Each is in `/home/rv/`, with its extracts beside it under `/home/rv/`:
+  - `soak13-rotn-data.md` (extracts `/home/rv/soak13-rd/`): dirt piles → dirt, hand-breakable wall blocks, dig times through a dirt door.
+  - `soak13-rotn-data-2.md` (also `/home/rv/soak13-rd/`): entity tracking ranges.
+  - `soak14-rotn-data.md` (`/home/rv/soak14-rd/`): the Grove Sprite (provoked only), starvation and drain, night food.
+  - `soak15-rotn-data.md` and `soak15-rotn-data-food.md` (`/home/rv/soak15-rd/`): Underground Biomes stone harvest and drops, rocks, the first level-1 pickaxe; mushrooms, Animania herds and bulls, giant tree taiga food.
+  - #621's extracts are in `/home/rv/bcsweep/`.
+- **Requests, re-checked 2026-11-25:**
+  - **Request 2 (`bot.registry` properties for net-forge): closed.** #618 already writes the dump's `stackSize` into `bot.registry` (`applyStackSizes` through `applyProperties`). forge-bridge's Forge dig rule (#595) reads block hardness and harvest tools from the dump directly. Nobody has asked for the rest (`maxDurability`, bounding boxes, materials); I'll reopen it if someone does.
+  - **Request 9 (the prismarine-recipe `outShape` patch): re-asked.** It was deferred until after G3. Do you still want it, or should I close it?
+- **Follow-ups (not started; only on a lead task):**
+  - The dump's `drops` field is wrong for Underground Biomes igneous and metamorphic stone. It says "itself"; the code drops cobble.
+  - 16 late-game items have a tool class but no speed.
+  - Whether a hit Animania ram or buck butts a player back is unverified.
+- **Running:** nothing (no jobs, subagents or Hetzner servers).
+
+## Earlier: trunk shells and digging mobs (2026-11-07)
+
+- **(1) Trunk shell, #332 merged (`c6c0a126`).** Breaking a `dynamictrees:trunkshell` **fells the tree like a branch**, and the shell itself **drops nothing**. Cited from `DramaticTrees-1.12.2-0.13.4.jar` with javap only:
   - **The break.** `BlockTrunkShell.removedByPlayer` passes the break to the thick trunk block next to it, at that block's position. The shell's meta (coredir n, nw, w, sw, s, se, e, ne) points to that block, on the same y. The trunk block's `BlockBranch.removedByPlayer` queues a `FutureBreak`, which runs `futureBreak` on the next world tick. That is the normal felling, so the drops are `fell-tree`'s.
   - **The shell's own drop:** null, with a drop count of 0.
   - **Where shells appear:** only around a trunk of radius 9 or more. Those are oak, spruce, jungle and dark oak `branch` metas 8-15 and the `branchx` blocks. Birch and acacia stop at radius 8.
@@ -20,7 +53,7 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
   - **Unverified:** what the server does after mineflayer finishes a shell dig early. My understanding of vanilla 1.12 is that it finishes the break itself once the real dig time has passed, but I haven't read that server code, and no run has broken a shell.
 - **(2) Digging mobs (Epic Siege Mod 13.169 + ESM-Tweaks): next PR, `agent/rotn-data/mob-digging`.** Findings so far are below and in my reply to the lead.
   - **ESM-Tweaks is not in the pinned zip.** Mod Director (`mods/!mod-director-launchwrapper-1.9.1.jar`, `config/mod-director/requisites.remote.json`) downloads it at server start, from a list on the RotN repo's moving `stable` branch, with no hash pinned. The dump manifest and the server ping both show `esmtweaks 0.4.5`. I disassembled the release jar `esmtweaks-1.12.2-0.4.5.jar` (SHA-256 `b57590bf...f933`) in my scratchpad; nothing went into the repo.
-- **(2) Digging mobs, this PR (`agent/rotn-data/mob-digging`).** New `3.3.4/mob-digging.json`, and `mobDigging(entity)` and `canMobDig(entity, block, { meta, held })` in `src/digging.js`.
+- **(2) Digging mobs, #339 merged (`38743638`).** New `3.3.4/mob-digging.json`, and `mobDigging(entity)` and `canMobDig(entity, block, { meta, held })` in `src/digging.js`.
   - **Who digs:** the 56 `config/esm/entity_ai.json` entries with `Digging: true`. ESM-Tweaks swaps ESM's own digger for its own at server start (`useTweakedAI=true`).
   - **Whether a mob needs a tool depends on its own entry.** ESM never merges an entry with the `default` block, and a missing boolean reads as false. `EsmJsonConfig.readJson` stores each entry as written; `CfgPropBoolean` reads keys with `JsonHelper.getBoolean(json, key, false)`.
     - 40 diggers set `Requires Tools: true`. Zombies are among them. They dig only blocks that need no tool (dirt, grass, sand, gravel, wood, glass), or the rest while holding the block's tool at its level in either hand. Stone and cobblestone need a pickaxe, and stone brick a level 1 pickaxe.
@@ -30,7 +63,7 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
   - **When:** only when the mob has a target and no path to it, and has stood still. It digs the first block within 2 blocks of its body on a line toward the target, or straight up or down, and keeps digging a block up to 4 blocks away.
   - **ToolProgression:** `block_overwrites.cfg` changes the by-hand answer for 75 block states, none of them vanilla shelter blocks. The test recomputes that list. `tool_progression/blocks.cfg` is a record ToolProgression writes on every launch, not an input; it agrees with the rule, and the data cites it as such.
   - **ESM-Tweaks is not in the pinned zip.** Mod Director downloads it at server start from a list on a moving branch, with no hash pinned. Its source URL and SHA-256s are in `sources.esmTweaks`.
-  - **#332 nits folded in.** I merged `agent/rotn-data/trunk-shell` in (no rebase), so this PR's diff includes #332's changes until #332 merges.
+  - **#332 nits folded in.** I merged `agent/rotn-data/trunk-shell` in (no rebase), so #339's diff included #332's changes (both merged).
     - (a) The `trunkShell` summary says a leftover shell counts as air on the server (`isAir`).
     - (b) The `getMuse` wording now says that with radius 8 or less the break still goes to the trunk before the clearing tick, so the tree is felled.
     - (c) The early-shell-dig server behaviour stays unverified until a run breaks a shell.
@@ -56,7 +89,7 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
   - `build-food-values.mjs --pack "/home/RotN 3.3.4 Server Pack.zip" --check`: up to date (20 s, about 1.0 GB peak). The pack-reading tools work with the Linux zip path.
   - `build-falling-blocks.mjs --pack ... --check` reports "differs". I rebuilt it into my scratchpad and diffed it. **The only difference is the `dump` timestamp** (`2026-11-02T02:37:07Z` committed, `2026-11-06T12:22:37Z` rebuilt). The tool copies that stamp from `manifest.json`, which #269's fourth dump replaced. The falling-block content is identical. A one-line data refresh fixes it; I have not touched it. It is a follow-up for whenever you want it, and it does not affect G3.
 - **Nothing lost in the move:** every `agent/rotn-data/*` branch is on origin. The one local-only commit from the old PC (`b4eaf1da`, on `cite-paths-readme`) was already on develop. The old Windows scratchpads (jars, javap helpers, the cobblestone list) are gone. Anything I need comes again from the pinned zip at `/home/RotN 3.3.4 Server Pack.zip` (SHA-256 checked by you).
-- **Open PRs:** none of mine, apart from this STATUS-only one. **Running:** nothing (no jobs, no subagents, no Hetzner servers).
+- **Open PRs at the time:** none of mine, apart from that STATUS-only one. **Running:** nothing (no jobs, no subagents, no Hetzner servers).
 - **Still open, unchanged:** Request 2 (`bot.registry` properties for net-forge, on its request) and Request 9 (the prismarine-recipe `outShape` patch, your call). Low-priority follow-ups are listed under "Follow-ups" below. The cobblestone and stone variant list for skills-rotn is rebuilt only if they ask.
 - **Rules I follow here:** no new work without your task; no paid batch or Hetzner server without your written GO; reviewers at medium effort; no keys, tokens, `.env*` or token cache; targeted tests only while a paid batch over 20 min runs (the memory rule); never force-push.
 - **Waiting for a task.**
@@ -330,7 +363,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- **falling-blocks.json dump stamp (lead task, 2026-11-07; branch `agent/rotn-data/falling-blocks-stamp`, PR in review).**
+- **falling-blocks.json dump stamp (lead task, 2026-11-07; branch `agent/rotn-data/falling-blocks-stamp`; #303 merged, `9ba1b2be`).**
   - `source.dump` was `2026-11-02T02:37:07Z`. It is now `2026-11-06T12:22:37Z`, the `dumpedAt` of the current `manifest.json` from #269's fourth dump.
   - Rebuilt with `node packages/rotn-data/tools/build-falling-blocks.mjs --pack "/home/RotN 3.3.4 Server Pack.zip"` on the CX33.
   - The diff is that one line. I compared the files as parsed JSON, with `source.dump` left out: the new file is identical to develop's, with 215 falling blocks, 16 that override a fall method, 889 ruled out, 0 unreviewed and 0 unresolved.
@@ -420,8 +453,8 @@ Earlier Phase 3 plan (done):
 
 **Phase 3 (G3), from 2026-11-02 ~17:10 UTC** (lead: G2 passed on batch 8, #97/#98). Team: skills-rotn, rotn-data, harness-ops; net-forge paused. My part: data and helpers for G3 ("rocks to stone tools on a fresh spawn; survives the first night"). Plan, one small test-backed PR each:
 
-1. **RotN recipes in `bot.registry`** (this PR, `agent/rotn-data/g3-progression`). Finding: `bot.registry.recipes` is minecraft-data's vanilla 1.12.2 table, so mineflayer's `bot.recipesFor`/`bot.craft` and `getItemCraftingRecipes`/`getDetailedCraftingPlan` planned vanilla crafts that RotN removed (a stone pickaxe from cobblestone, wooden tools). `rotn-data.installRecipes(registry)` / `mcdata.installRotnRecipes()` refill that object in place from the dump (prismarine-recipe keeps a reference to it), keyed by the server's item ids. Ore dictionary slots become variants (likeliest first, capped at 256 per recipe, built lazily per result). `getDetailedCraftingPlan` gets a general cycle guard (rocks <-> cobblestone), since upstream's `loopingItems` lists only 1.21 names. Result: `stone_pickaxe` plans as 3 rocks + log -> planks -> sticks; the crafting table as crude axe -> Crafting Tools -> table. **Needs a call site** (Request 7). Review (#102): APPROVE WITH NITS; fixed: results carry `meta` so `Recipe.find(id, meta)` filters (spruce vs oak planks, tested), and the cycle guard has no depth limit (iterative, `seen` ends it; a 12-step cycle is tested).
-2. **"How do I get X"** (`howToGet(item)`; this PR, `agent/rotn-data/g3-howtoget`): dump crafting + furnace smelting + a cited table of non-recipe sources (rock piles, stone mined with a pickaxe below Sturdy gives 4 rocks, sticks from leaves, logs need an axe, the first plank from debarking, raw iron from iron ore). Each row is sourced from `rotn-progression.md` or the pinned zip, and marked verified or not. Done in this PR as `3.3.4/world-sources.json` (10 rules, each with evidence, `confidence` documented/inferred and an `unverified` list) plus `howToGet`, `formatHowToGet` and `rockRecipes` (the 35 "4 identical rocks -> block" recipes, for harness-ops' G3 cobblestone check: on the G3 spawn the stone is Underground Biomes stone and its rocks make UB cobble). Stone -> rock pairs come from dumped names; only `minecraft:stone:0` is documented, the rest `inferred`. Review (#107): APPROVE WITH NITS; fixed: flint dropped from the rocks rule (flint pickaxes are level 1, Sturdy), raw iron `inferred`, per-pair confidence for trees, debarking and planks (only the oak pairs are documented), and a bare `pyrotech:rock` means the rock ore dictionary metas.
+1. **RotN recipes in `bot.registry`** (#102 merged, `b5a21fac`; `agent/rotn-data/g3-progression`). Finding: `bot.registry.recipes` is minecraft-data's vanilla 1.12.2 table, so mineflayer's `bot.recipesFor`/`bot.craft` and `getItemCraftingRecipes`/`getDetailedCraftingPlan` planned vanilla crafts that RotN removed (a stone pickaxe from cobblestone, wooden tools). `rotn-data.installRecipes(registry)` / `mcdata.installRotnRecipes()` refill that object in place from the dump (prismarine-recipe keeps a reference to it), keyed by the server's item ids. Ore dictionary slots become variants (likeliest first, capped at 256 per recipe, built lazily per result). `getDetailedCraftingPlan` gets a general cycle guard (rocks <-> cobblestone), since upstream's `loopingItems` lists only 1.21 names. Result: `stone_pickaxe` plans as 3 rocks + log -> planks -> sticks; the crafting table as crude axe -> Crafting Tools -> table. **Needs a call site** (Request 7). Review (#102): APPROVE WITH NITS; fixed: results carry `meta` so `Recipe.find(id, meta)` filters (spruce vs oak planks, tested), and the cycle guard has no depth limit (iterative, `seen` ends it; a 12-step cycle is tested).
+2. **"How do I get X"** (`howToGet(item)`; #107 merged, `84a87cfa`; `agent/rotn-data/g3-howtoget`): dump crafting + furnace smelting + a cited table of non-recipe sources (rock piles, stone mined with a pickaxe below Sturdy gives 4 rocks, sticks from leaves, logs need an axe, the first plank from debarking, raw iron from iron ore). Each row is sourced from `rotn-progression.md` or the pinned zip, and marked verified or not. Done in this PR as `3.3.4/world-sources.json` (10 rules, each with evidence, `confidence` documented/inferred and an `unverified` list) plus `howToGet`, `formatHowToGet` and `rockRecipes` (the 35 "4 identical rocks -> block" recipes, for harness-ops' G3 cobblestone check: on the G3 spawn the stone is Underground Biomes stone and its rocks make UB cobble). Stone -> rock pairs come from dumped names; only `minecraft:stone:0` is documented, the rest `inferred`. Review (#107): APPROVE WITH NITS; fixed: flint dropped from the rocks rule (flint pickaxes are level 1, Sturdy), raw iron `inferred`, per-pair confidence for trees, debarking and planks (only the oak pairs are documented), and a bare `pyrotech:rock` means the rock ore dictionary metas.
 3. **First-night threats** (merged: #111 and follow-ups #115, #118, #120): a threat level per mob (none, hostile = fight or avoid, dangerous = avoid) with a reaction hint (creepers explode: back off), and night spawns per biome from `spawns.json`. Done as `threatOf(entity)` (level, reaction, summary, evidence; `3.3.4/threat-reactions.json`: zombie, skeleton, spider, creeper documented from the research's hazard table, enderman `vanilla`, others a default from the level) and `nightThreats({biome})` (the `monster` spawn list only; MultiMob's lists have no biome filter). The overworld biome rule moved to `src/biomes.js`, shared with `build-common-mobs.mjs` (its `--check` is unchanged). `isHostile`/`isHuntable` for 1.12 (Animania animals, the 1.12 baby flag) is a later PR. Review (#111): REQUEST CHANGES; fixed: Fire Creeper documented, class rules (every creeper class in the dump keeps distance and counts as exploding; skeleton variants take cover; wither skeletons excluded), dangerous mobs report source `override`, `NIGHT_THREATS_NOT_REFLECTED` (Special Mobs variants, light, Mob Stages, invasions, MultiMob), and the custom-name gap ("Killer" rabbit) documented. Follow-up PR (`agent/rotn-data/threats-followup`, lead's #111 follow-up, needed before the first-night G3 batch): stray (class rule `Skeleton|Stray`), witch and illusion illager (`vanilla`, take cover), Ice and Fire dread lich (take cover) and troll (avoid), both `inferred` from the lead's review and not checked against the mod's code. 33 more overworld night threats still default to `fight` (slime, spectre, Quark ashen/dweller, Ancient Beasts, Defiled Lands, ...); listed in the PR, not guessed. #114 and #115 merged. Cited follow-up (`agent/rotn-data/threats-cited`): 19 entries `verified` from bytecode (javap on the pinned pack's jars, SHA-256 checked; SRG names checked against MCP stable-39 fields.csv) or `vanilla`: dread lich and troll now cited (the troll is 18 attack / 200 health on this pack, `config/ice_and_fire.cfg`), Quark ashen (blinding arrows) and dweller (invisible zombie), guardian, vindicator, Iceologer (Frozen-Fiend jar; falling ice blocks), naga, illager piper (summons rats), ten Ancient Beasts mobs. 16 overworld night threats still default to `fight` (slime and spectre about 10.5% each; the rest under 1.5% each). #118 merged (reviewer re-ran 9 citations). Second cited follow-up (`agent/rotn-data/threats-cited-2`): dread lich (always holds a lich staff so it fights from range; summons up to 5 minions), sandy (two ranged attacks; players only while untamed), ghost (buffs mobs; on a player: Possessed 20 s and 4 damage, found in the bytecode beyond the review), JSDoc `verified`, slime (`vanilla`) and Charm's spectre (`verified`: 0.5 health, but its touch curses items on this pack; spawns only at depth 24 or below). Remaining defaults are each under 1.5%.
 4. **Pyrotech machine recipes** (kiln, pit kiln for charcoal, drying rack for tinder, chopping block, campfire): not in the dump. Needs a new dumper part and a paid batch: **only with the lead's written GO**.
 
@@ -433,13 +466,13 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 - **#102 review follow-ups:** the crafting table test (no planks-only variant) and the sticks test are in PR #112. `outShape` from the dump's `remaining` is **blocked** (Request 9): prismarine-recipe 1.5.0's `computeDelta` applies `outShape` with inShape's items, so those recipes would look free to `bot.recipesFor`. No G3 recipe has remaining items.
 
-- ~~Importer: sort order-unstable lists~~: done in this PR (`canonicalize`).
+- ~~Importer: sort order-unstable lists~~: done (`canonicalize`, #59).
 - **Dumper:**
-  - ~~record `maxTickMs` per part~~: done in this PR (needs a batch to show);
+  - ~~record `maxTickMs` per part~~: done (#55 and #59; needs a batch to show);
   - default-state fallback for the 9 blocks without a metadata-consistent state;
   - item-based hardness for the 30 null-hardness tile-entity states (5 blocks).
 - **#34 review follow-up 3:** expand the wildcard meta 32767 in recipe stacks at import.
-- **net-forge:** the `extendRegistry`/`applyProperties` properties from the dump (Request 2).
+- ~~**net-forge:** the `extendRegistry`/`applyProperties` properties from the dump (Request 2)~~: closed 2026-11-25 (see "Now").
 - **skills-rotn:** Mindcraft's `'grass'` in `skills.js:706` means the plant (`tallgrass` in 1.12). `resolveName(name, kind, { prefer: 'new' })` is for names the LLM wrote.
 
 ## Blocked
@@ -449,7 +482,7 @@ Findings for skills-rotn (via the lead): see Request 8.
 ## Requests to other agents or the lead
 
 1. ~~harness-ops: dumper-build workflow~~: done (#40).
-2. **net-forge: properties for `bot.registry`.** The dump exists. I can build `properties` for your `applyProperties` (#46), keyed by full registry name:
+2. **CLOSED 2026-11-25** (#618 covers `stackSize`; forge-bridge's dig rule reads hardness and harvest tools from the dump; the rest was never asked for). **net-forge: properties for `bot.registry`.** The dump exists. I can build `properties` for your `applyProperties` (#46), keyed by full registry name:
    - blocks: `hardness`, `resistance`, `material` mapped to prismarine strings, `diggable`, `boundingBox`, `harvestTools`;
    - items: `stackSize`, `maxDurability`;
    - entities: `type`.
@@ -465,7 +498,7 @@ Findings for skills-rotn (via the lead): see Request 8.
    - `getDetailedCraftingPlan` does not know whether a crafting table is available. In RotN the first plank comes from debarking a placed log with the crude axe (not a recipe), and log -> 3 planks needs a table. PR 2's `howToGet` gives the non-recipe steps.
    - Tell me the shape you want for PR 2 (`howToGet`) and PR 3 (first-night threats) before I fix it.
    - **From skills-rotn Request 9 (PR `agent/rotn-data/huntable-baby`):** on 1.12.2 the baby flag is entity metadata index **12** (EntityAgeable, Boolean) and a villager's profession is index **13** (VarInt). Source: wiki.vg "Entity metadata", revision of 18 May 2018 (`https://minecraft.wiki/w/Java_Edition_protocol/Entity_metadata?oldid=2768639`). `mcdata.isHuntable` is fixed; `mcdata.isBaby(entity)` and `mcdata.BABY_METADATA_INDEX` are exported. Still on the 1.21 indices in `src/agent/` (yours): `commands/queries.js:181`, `library/skills.js:1692` and `:1713` (`metadata[16] === 1` for baby villagers; use `mc.isBaby`), and `library/world.js:238-248` (`metadata[18]` for the villager profession; 13 on 1.12).
-9. **Lead: a prismarine-recipe patch?** (from PR #112). `node_modules/prismarine-recipe/lib/recipe.js` `computeDelta` > `applyShape` reads `recipe.inShape[y]` where it should read `shape[y]`, so any `outShape` adds back every input. A one-line patch would let rotn-data emit `outShape` from the dump's `remaining` (1,116 recipes: buckets, knives), which mineflayer's `craft.js` `updateOutShape` then handles correctly. Not needed for G3 (no G3 recipe has remaining items). `patches/` for prismarine-recipe is not on net-forge's list, so it's your call: patch it (who?), or leave `outShape` out.
+9. **RE-ASKED 2026-11-25 (deferred until after G3; still wanted, or close?).** **Lead: a prismarine-recipe patch?** (from PR #112). `node_modules/prismarine-recipe/lib/recipe.js` `computeDelta` > `applyShape` reads `recipe.inShape[y]` where it should read `shape[y]`, so any `outShape` adds back every input. A one-line patch would let rotn-data emit `outShape` from the dump's `remaining` (1,116 recipes: buckets, knives), which mineflayer's `craft.js` `updateOutShape` then handles correctly. Not needed for G3 (no G3 recipe has remaining items). `patches/` for prismarine-recipe is not on net-forge's list, so it's your call: patch it (who?), or leave `outShape` out.
 11. **CLOSED (lead confirmed 2026-11-05: covered by #206; skills-rotn's `src/agent/library/food.js` calls `foodValues`/`avoidFood` directly, auto-eat off).** **Lead or net-forge: a call site for `installFoods(bot.registry)`** (food-values PR). mineflayer-auto-eat reads `bot.registry.foodsByName`, which has minecraft-data's vanilla 1.12.2 values (bread 5) until this runs. It must run once per login after forge-bridge's `extendRegistry`, next to `installRotnRecipesOnce` in `initBot` (net-forge's part of `src/utils/mcdata.js`). One line, like Request 7's. The same place (or skills-rotn's eating) must set auto-eat's `bannedFood` from `avoidFood` and check `avoidFood(name, meta)` on the stack before eating: `installFoods` bans nothing, and a pufferfish (`fish` meta 3) shares the cod's entry (#209 review).
 12. **skills-rotn (FYI, no change required by me): the player zombie never burns or despawns** (#243). No `src/agent/` code assumes it burns by day (checked on develop: `library/threats.js` 143-148, `library/death_report.js` 33-43 and 170-187). But `death_report.js`'s rule "no walking within DEATH_SPOT_RADIUS while a player zombie is loaded there" then never ends by itself: the zombie stays until something kills it, and Corpse Complex's drops despawn after 600 s (`config/corpsecomplex.cfg` line 195). If you want the bot to get its items back, the way is to kill it (your `canFightHard` path) within those 10 minutes, not to wait for day; otherwise the drops are lost and the spot stays blocked while the zombie is loaded.
 13. **skills-rotn (answer to the lead's round 4 batch B question, 2026-11-06): where sticks come from.** Sources: the pinned pack zip (SHA-256 `90642fd5...f5205`). Bytecode was read with javap (no mod code run) from `mods/DramaticTrees-1.12.2-0.13.4.jar` (SHA-256 `b86dae76...7ffe`, which holds the `com.ferreusveritas.dynamictrees` classes; there is no separate Dynamic Trees jar). Recipes come from our `recipes.json.br` dump.
@@ -586,5 +619,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/trunk-shell` (`fell-tree.trunkShell`, from G3 round 9 B), opened 2026-11-07. #319, #312, #303 and #300 are merged.
-- `agent/rotn-data/mob-digging` (digging mobs, plus the #332 nits), opened 2026-11-07.
+- Only #622 (this STATUS PR). The current list is in "Now" at the top.

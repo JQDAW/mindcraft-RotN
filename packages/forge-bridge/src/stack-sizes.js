@@ -13,6 +13,13 @@
 // into bot.registry with applyProperties (entries are swapped in every map, never changed in
 // minecraft-data's shared objects), once the registry is extended and before any window arrives:
 // prismarine-item reads registry.items[type].stackSize when it makes each Item.
+//
+// #618 review 5, a known limit: the size is per item, not per stack. Forge's
+// Item.getItemStackLimit(ItemStack) can depend on a stack's meta or NBT, but rotn-data's dump records
+// one stackSize per item (its 9,710 variant entries carry none of their own), and prismarine-item
+// takes stackSize from the item type alone. An item whose limit varies by stack keeps its item value
+// (the dump cannot show whether any item on this pack does). Covering one would need a per-stack size
+// in the dump and a prismarine-item patch.
 
 import { applyProperties } from './registry-extension.js';
 
