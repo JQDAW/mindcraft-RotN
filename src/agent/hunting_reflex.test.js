@@ -80,7 +80,8 @@ test('G4 #5 forage: ripe wild food comes before a hunt; a bare bush, an unripe h
     assert.deepEqual(await hunt(bare), [], 'nothing ripe, no animal: nothing');
     const yard = withCrops(huntAgent({ animals: [] }), { '6,64,0': ['harvestcraft:aridgarden', 0], '9,64,0': ['oak_fence', 0] });
     assert.deepEqual(await hunt(yard), [], 'a garden by a fence may be a player\'s');
-    assert.deepEqual(await hunt(withCrops(huntAgent({ food: 18, animals: [] }), { '6,64,0': ['rustic:wildberry_bush', 1] })), [], 'food not due: no foraging either');
+    // Soak 16 (F1): "not due" is the day reserve held (food 18: 8.2 at sunset, need 6.6, + 4 = 10.6; 3 bread 12.6).
+    assert.deepEqual(await hunt(withCrops(huntAgent({ food: 18, animals: [], items: [{ name: 'bread', metadata: 0, count: 3 }] }), { '6,64,0': ['rustic:wildberry_bush', 1] })), [], 'food not due: no foraging either');
 });
 
 test('#427 review: a forage run that got nothing (bushes out of reach) does not hold food up: the next tick hunts', async (t) => {
@@ -240,8 +241,10 @@ test('#453 review 2 and 3: the model never !attacks a never-fight animal, hurt o
 
 test('G4 #5: the hunting reflex does nothing when food is not due, at dusk or night, with a threat near, when busy, or sheltered', async (t) => {
     t.mock.method(console, 'log', () => {});
-    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16 })), [], 'food 16: not due');
-    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], items: [{ name: 'bread', metadata: 0, count: 2 }] })), [], 'food held: the eating reflex eats it');
+    // Soak 16 (F1): due is below the day reserve (food 16: 6.2 at sunset, need 8.6, + 4 = 12.6; food 12: 16.6).
+    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16, items: [{ name: 'bread', metadata: 0, count: 3 }] })), [], 'food 16, 12.6 points held: not due');
+    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], items: [{ name: 'bread', metadata: 0, count: 4 }] })), [], 'food 12, 16.8 points held: not due');
+    assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16 })), ['mode:hunting'], 'food 16, nothing held: the day reserve is short');
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], timeOfDay: NIGHT_START + 100 })), [], 'night');
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], timeOfDay: NIGHT_START - 1000 })), [], 'dusk: the night routine');
     const zombie = { id: 9, name: 'zombie', type: 'mob', metadata: {}, position: new Vec3(4.5, 64, 0.5), height: 1.95 };
