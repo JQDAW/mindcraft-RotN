@@ -366,6 +366,8 @@ const dayKeyOf = (s, now) => { const d = s.day?.(); return Number.isFinite(d) ? 
 // Soak 14 (F1): held is in points (hunger + saturation, heldFoodPoints), and the saturation counts for the night's need.
 const foodShort = (s, ctx = {}) => foodShortfall({ food: s.food?.(), held: s.foodHeld?.() ?? 0, saturation: s.saturation?.() ?? 0,
     minutesToSunset: s.minutesToSunset?.() ?? Infinity, finished: !!ctx.finished, reserveLeadMin: RESERVE_LEAD_MIN });
+/** Soak 16 (F2): the food target now (points held), for the scripted food job; null when not short. */
+export const foodTargetNow = (s, ctx = {}) => foodShort(s, ctx);
 
 /**
  * G4 #5 (CX23 soak m1: food fell to 1; after the deaths nothing to eat, and once the agenda was
@@ -379,7 +381,11 @@ const foodShort = (s, ctx = {}) => foodShortfall({ food: s.food?.(), held: s.foo
  */
 export const FOOD_RESERVE_STEP = {
     id: 'food', short: 'hold food items for the day and the night (not the hunger bar)', reserve: true, when: 'food',
-    due: (s, ctx) => foodShort(s, ctx) !== null,
+    // Soak 16 (F2): a scripted body (agenda_driver AUTO_JOBS.food: forage within 48, then hunt within 64, 4 min a run,
+    // 4 runs a day, 3 min apart); not due between its runs (the other steps go on); the model only when a run found
+    // nothing in reach (it picks a direction), the day's runs are spent, or in the before-night window.
+    autoJob: 'food',
+    due: (s, ctx) => foodShort(s, ctx) !== null && !s.jobWaiting?.('food'),
     done: () => false, // done when no longer due (enough held)
     goal: `Food: on this pack food falls about 1 point every 4 minutes at rest (a sealed night costs about 7) and about 1 every 1.5 minutes while walking or hunting, and starving kills: food 0 kills you at once, at any health. Long walks cost hunger. Keep enough food held for the night: you should end the night at food 7 or more (hunger plus saturation, your food bar and what you hold together). Gather ripe wild food first with !forage (wildberry bushes, wild herbs, HarvestCraft gardens); only while you hold a weapon, else hunt a wild pig, cow or sheep near you (2 to 8 meat each; a rabbit drops 0 to 2, a young animal nothing) and pick up the meat (raw meat is safe: 1 hunger each, a rabbit 2, never raw chicken; eat it raw when hungry); with no weapon, do not hunt: make a weapon first. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh unless your food is ${EMERGENCY_FOOD} or lower, and then only these, in this order: ${emergencyFoodText()}; never ${NEVER_EAT_TEXT}. Bread and cooked meat are good night food: you eat by yourself at food ${EAT_AT} or lower, the least valuable food first.`,
     goalNow: (s, ctx) => {
@@ -414,7 +420,14 @@ export const FOOD_RESERVE_STEP = {
         // beyond your bar"; by day the target is food held, and the bar does not count.
         const m = s.minutesToSunset?.() ?? Infinity;
         const night = m > 0 && m <= RESERVE_LEAD_MIN && foodShort(s, ctx) !== null;
-        return `Food: you hold food worth ${held} points in your inventory; `
+        // Soak 16 (F2): the scripted food job found nothing in reach here: the model only picks a direction.
+        const kind = s.jobFoundNone?.('food');
+        const none = kind === 'noWeapon'
+            ? 'The food job found no ripe wild food within 48 blocks, and you hold no weapon to hunt the animals in sight: make a weapon first (a wooden club from 2 logs), or look for ripe wild food elsewhere; the food job runs again by itself once you hold one. '
+            : kind
+            ? 'The food job (ripe wild food within 48 blocks, animals within 64) found nothing here. Choose a direction you have not been, walk about 100 blocks there with !goToCoordinates, and the food job runs again there by itself. '
+            : '';
+        return none + `Food: you hold food worth ${held} points in your inventory; `
             + (night ? `for the night you need food worth at least ${target} points held beyond your hunger bar${Number.isFinite(food) ? ` (${food} of 20)` : ''}.`
                 : `this step wants food worth at least ${target} points held${Number.isFinite(food) ? ` (your hunger bar, ${food} of 20, does not count toward it)` : ''}.`)
             + ` On this pack food falls about 1 point every 4 minutes at rest (a sealed night costs about 7) and about 1 every 1.5 minutes while walking or hunting, and starving kills. Food 0 kills you at once on this pack, at any health, and long walks cost hunger: stay near. You eat by yourself at food ${EAT_AT} or lower, the least valuable food first: keep the rest. `
