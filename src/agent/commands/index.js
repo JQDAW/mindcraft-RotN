@@ -18,6 +18,11 @@ export function getCommand(name) {
     return commandMap[name];
 }
 
+/** The commands as the docs and the parser see them (round 17 P: a test checks a blocked one is gone). */
+export function listCommands() {
+    return commandList;
+}
+
 export function blacklistCommands(commands) {
     const unblockable = ['!stop', '!stats', '!inventory', '!goal'];
     for (let command_name of commands) {
@@ -26,7 +31,10 @@ export function blacklistCommands(commands) {
             continue;
         }
         delete commandMap[command_name];
-        delete commandList.find(command => command.name === command_name);
+        // Round 17 P (#636 review nit): upstream's `delete commandList.find(...)` removed nothing, so a blocked
+        // command stayed in commandList (and in every reader of it).
+        const i = commandList.findIndex(command => command.name === command_name);
+        if (i >= 0) commandList.splice(i, 1);
     }
 }
 
@@ -251,6 +259,16 @@ export async function executeCommand(agent, message, context = {}) {
     }
 }
 
+/** Round 17 P: the profile's docs_hidden list (profiles/rotn-bot.json), as a set. */
+export function docsHidden(agent) {
+    const list = agent?.prompter?.profile?.docs_hidden;
+    return new Set(Array.isArray(list) ? list : []);
+}
+const TASK_COMMANDS = new Set(['!taskDone', '!taskFailed']);
+function taskActive(agent) {
+    try { return !!agent?.tasks?.current?.(); } catch { return false; }
+}
+
 export function getCommandDocs(agent) {
     const typeTranslations = {
         //This was added to keep the prompt the same as before type checks were implemented.
@@ -274,6 +292,10 @@ export function getCommandDocs(agent) {
         if (command.name === '!newAction' && !settings.allow_insecure_coding) continue;
         // Round 17 M: notes are kept only with the code-built memory.
         if (command.name === '!note' && memoryMode(agent) !== 'code') continue;
+        // Round 17 P (the lead's decision 3): commands the bot never needs, hidden from the docs only (a task giver may
+        // still type them): the profile's docs_hidden. !taskDone and !taskFailed are shown while a player task runs
+        // (its goal tells the model to use them, priority.js).
+        if (docsHidden(agent).has(command.name) && !(TASK_COMMANDS.has(command.name) && taskActive(agent))) continue;
         docs += command.name + ': ' + command.description + '\n';
         if (command.params) {
             docs += 'Params:\n';

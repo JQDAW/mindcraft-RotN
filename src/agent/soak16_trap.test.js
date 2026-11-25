@@ -367,3 +367,63 @@ test('soak 16 trap: the post-agenda pickaxe reserve: the stone_pickaxe step done
     const early = idleAgent(fakeWorld({ at: V(0, 64, 0), slots: BAG }).bot, { agenda: { done_at: {} } });
     assert.equal(trappedTick(early, { now: 1e6, craft }), null);
 });
+
+test('#642 nit (a): slow escapes (6 min apart, outside ESCAPE_HOLD.windowMs) still give up after ESCAPE_HOLD.fails at a place; nit (b): leaving the place forgets it', async (t) => {
+    quiet(t);
+    const w = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] } });
+    useRegistry(t, w.bot);
+    w.bot.time = { day: 1 };
+    const agent = idleAgent(w.bot);
+    let now = 1_000_000;
+    let escapes = 0;
+    const run = () => { escapes++; return Promise.resolve({ out: false, why: TRAP_WHY, dug: 0, placed: 0, at: V(0, 56, 0), ms: 5000 }); };
+    const tick = () => trappedTick(agent, { now, run, clock: () => now });
+    for (let k = 0; k < ESCAPE_HOLD.fails; k++) {
+        assert.equal(tick(), 'escape', `escape ${k + 1}`);
+        await new Promise(setImmediate);
+        now += 6 * 60_000; // past the hold and, after two, past windowMs too
+    }
+    assert.equal(escapes, ESCAPE_HOLD.fails);
+    assert.equal(tick(), 'gave-up');
+    // (b) The bot leaves (more than ESCAPE_HOLD.cells away, not trapped there), then comes back the same day.
+    w.world.set(V(6, 56, 0), 'air');
+    w.world.set(V(6, 57, 0), 'air');
+    w.bot.entity.position = V(6.5, 56, 0.5);
+    w.bot.rotnTrapped = null;
+    now += TRAP_JOB.checkMs;
+    tick();
+    assert.equal(agent._trapJob.places.some(p => p.at.distanceTo(V(0, 56, 0)) <= ESCAPE_HOLD.cells), false, 'the old place is forgotten');
+    w.bot.entity.position = V(0.5, 56, 0.5);
+    w.bot.rotnTrapped = null;
+    now += TRAP_JOB.idleTrapMs;
+    assert.equal(tick(), 'escape', 'back there: the job starts over');
+});
+
+test('#642 nit (c): the real craftRecipe in a tunnel end: rocks from cobble, sticks, then the pickaxe at the table placed in the pocket, which is broken again', async (t) => {
+    quiet(t);
+    const { installRecipes } = await import('../../packages/rotn-data/index.js');
+    const skills = await import('./library/skills.js');
+    const w = pocketUnderRock({ slots: { 36: ['stone_axe', 1], 9: ['undergroundbiomes:metamorphic_cobble', 8], 11: ['planks', 4], 12: ['crafting_table', 1] }, set: { '0,56,0': 'air', '0,57,0': 'air', '1,56,0': 'air' } });
+    w.registry.ensureItem('pyrotech_compat:rock_metamorphic'); // the rock the cobble breaks into (the live registry has it)
+    installRecipes(w.registry);
+    useRegistry(t, w.bot);
+    const crafts = [];
+    w.bot.recipesFor = () => []; // craftRecipe fills rotn-data's recipes itself
+    w.bot.craft = (recipe, count, table) => {
+        const out = recipe.result;
+        const name = w.registry.items[out.id].name;
+        crafts.push([name, table?.position?.toString() ?? null]);
+        w.give(name, out.count * (count ?? 1), out.metadata ?? 0);
+        return Promise.resolve();
+    };
+    const r = await makePickaxe(w.bot, { craft: skills.craftRecipe });
+    assert.equal(r.made, true, w.bot.output);
+    assert.deepEqual(crafts, [['pyrotech_compat:rock_metamorphic', null], ['stick', null], ['stone_pickaxe', '(1, 56, 0)']], 'the pickaxe at the placed table; the 2x2 crafts without one');
+    assert.equal(w.bot.blockAt(V(1, 56, 0)).name, 'air', 'the table broken again');
+    assert.ok(bestPickaxe(w.bot));
+    // A step that fails stops before the table is placed (nothing left behind).
+    const w2 = pocketUnderRock({ slots: { 9: ['undergroundbiomes:metamorphic_cobble', 8], 11: ['planks', 4], 12: ['crafting_table', 1] }, set: { '0,56,0': 'air', '0,57,0': 'air', '1,56,0': 'air' } });
+    const r2 = await makePickaxe(w2.bot, { craft: () => Promise.resolve(false) });
+    assert.deepEqual([r2.made, r2.why], [false, 'crafting pyrotech_compat:rock_metamorphic for the stone pickaxe failed']);
+    assert.equal(w2.bot.blockAt(V(1, 56, 0)).name, 'air');
+});

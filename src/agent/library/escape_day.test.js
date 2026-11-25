@@ -122,7 +122,7 @@ test('soak 16 (E4): gravel over the pocket: the escape stops with a why that nam
     assert.match(step.why, /a falling gravel above at -?\d+, \d+, -?\d+/);
     const r = await escape(bot, { budget: 'day', moveTo: teleport, say: () => {} });
     assert.equal(r.out, false);
-    assert.match(escapeText(r), /^You are trapped at 0, 56, 0: no walkable way to open ground within 8 blocks\. The escape stopped after \d+ s \(dug 0, placed 0\): no stair step.*falling gravel.*\. Start sideways, away from the falling block/);
+    assert.match(escapeText(r), /^You are trapped at 0, 56, 0: no walkable way to open ground within 8 blocks\. The escape stopped after \d+ s \(dug 0, placed 0\): no stair step.*falling gravel.*\. Get out from under the falling block first: !moveAway\(3\) walks about 3 blocks in any direction/); // #645 review 4
 });
 
 test('soak 16 (E, the lead\'s order): dirt, then planks, then cobblestone only beyond the shelter\'s 14; the pathfinder places in that order', () => {
