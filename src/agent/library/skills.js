@@ -1405,6 +1405,12 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     const canGiveNone = (block) => mayGiveNone.some(matches => matches(block));
     const tierOf = (block) => (isHand(block) ? (isLeafBlock(block) ? 3 : 0) : fellsTree(block) && emptySpecies.has(block.name) ? 2 : 1);
     const tiered = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0;
+    // Soak 16 (R): by-hand blocks and blocks mined with a tool (rocks: loose piles, and stone with a pickaxe).
+    const mines = !tiered && handMatchers.length > 0 && ruleTools.length > 0;
+    const esc = mines ? await import('./escape.js') : null;
+    const noWayOut = [];
+    let noWayOutSaid = 0;
+    let exposeCapped = false;
     let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at CL.freeMisses)
     let leafMisses = 0; // leaves out of reach after the walk (capped at CL.unreachableLeaves, then no leaves)
     let walkMisses = 0; // other targets the walk did not reach (capped at CL.unreachableTargets)
@@ -1457,6 +1463,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     let lastWalkFailed = false;
     let keptMisses = 0; // #632 review 3: blocks the server kept (no attempt used), at most CL.unreachableTargets
     const allStart = allHeld(); // #632 review 1: what came in over the whole collect, for the final line
+    let endReason = null; // #630 review 6: 'none' (nothing left in range), 'time' (the time limit), else null
     // CX23 soak: no target within DEATH_SPOT_RADIUS of a recent death spot for deathSpotMs: a
     // player zombie rose there and never leaves (the agenda dug dirt among them, death after death).
     // #416 review 2: not for a crafting table the bot placed and picks up again (pickUpTable).
@@ -1530,6 +1537,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         // and the process was killed ("Code execution refused stop after 10 seconds").
         if (run.aborted || bot.interrupt_code) break;
         if (Date.now() - runStart >= CL.totalMs) {
+            endReason = 'time';
             log(bot, `Stopped collecting ${blockType}: time limit of ${secsText(CL.totalMs)} reached.`);
             break;
         }
@@ -1575,7 +1583,42 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         };
         const nearestOf = (tier, radius = range) => world.getNearestBlocksWhere(bot, block => tierOf(block) === tier && wanted(block), Math.min(radius, range), 1);
         let blocks = [];
-        if (!tiered) blocks = world.getNearestBlocksWhere(bot, wanted, range, 1);
+        if (mines) {
+            // Soak 16 (R, the lead): loose ones by hand first, within CL.mineHandRadius (soak 15: the nearest stone, under
+            // the bot, beat the loose rocks); then a mined block that is exposed and keeps a walkable way out once
+            // broken (escape.keepsWayOut), nearest first among CL.mineCandidates; then any mined block with a way out;
+            // then loose ones farther out. A mined block with no way out is skipped (said once per collect).
+            const loose = (radius) => world.getNearestBlocksWhere(bot, b => isHand(b) && wanted(b), Math.min(radius, range), 1);
+            // #630 review 5: one column memo for the pick; the exposure check is bounded (CL.exposeChecks a pick: past it
+            // the search ends with what it found). A block with no air face never has a walkable way out once
+            // broken (its six sides are solid), so there is no second pass over unexposed ones.
+            const mined = () => {
+                const top = esc.topMemo(bot);
+                let checks = 0;
+                // #630 re-review 1: past the cap the search ends with what it found, and says it was cut short ('capped').
+                const exposed = (b) => {
+                    if (!b.position) return true;
+                    if (++checks > CL.exposeChecks) { exposeCapped = true; return false; }
+                    return esc.exposedBlock(bot, b);
+                };
+                const cands = world.getNearestBlocksWhere(bot, b => !isHand(b) && !!ruleToolFor(b) && wanted(b) && exposed(b), range, CL.mineCandidates);
+                for (const b of cands) {
+                    if (esc.keepsWayOut(bot, b, top)) return [b];
+                    noWayOut.push(b);
+                    if (b.position) givenUp.push(b.position.clone ? b.position.clone() : b.position);
+                }
+                return [];
+            };
+            blocks = loose(CL.mineHandRadius);
+            if (blocks.length === 0) blocks = mined();
+            if (blocks.length === 0) blocks = loose(range);
+            if (noWayOut.length > noWayOutSaid) {
+                const b = noWayOut[noWayOut.length - 1];
+                log(bot, `Skipped ${noWayOut.length} ${noWayOut.length === 1 ? 'block' : 'blocks'} to mine (${b.name} at ${b.position.x}, ${b.position.y}, ${b.position.z}${noWayOut.length > 1 ? ' and others' : ''}): breaking ${noWayOut.length === 1 ? 'it' : 'them'} would leave no walkable way out.`);
+                noWayOutSaid = noWayOut.length;
+            }
+        }
+        else if (!tiered) blocks = world.getNearestBlocksWhere(bot, wanted, range, 1);
         else {
             blocks = nearestOf(0, CL.handFirstRadius);
             if (blocks.length === 0) blocks = nearestOf(3, CL.handFirstRadius);
@@ -1589,6 +1632,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         }
 
         if (blocks.length === 0) {
+            endReason = exposeCapped ? 'capped' : 'none';
             if (collected === 0)
                 log(bot, `No ${blockType} nearby to collect.`);
             else
@@ -1908,7 +1952,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         if (hints.length) craftNote = ` What came in crafts into it: ${hints.join('; ')}.`;
     }
     log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.${craftNote}`);
-    bot.rotnCollectEnd = { at: Date.now(), short: collected < num, lastWalkFailed };
+    bot.rotnCollectEnd = { at: Date.now(), short: collected < num, lastWalkFailed, reason: endReason };
     return collected > 0;
 }
 
@@ -4772,8 +4816,10 @@ const STOP_SETTLE_MS = 5000;
 // the pathfinder's Timeout or NoPath) uses no attempt, at most this many per collect; each is not
 // tried again for unreachableMs. deathSpotMs: CX23 soak, no target within DEATH_SPOT_RADIUS of a
 // death spot this recent (a player zombie rose there).
+// mineHandRadius, mineCandidates (soak 16 R): for an item with by-hand and mined blocks (rocks), the loose ones are
+// searched this far before any is mined; at most this many mined candidates are checked for a way out per target.
 export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
-    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000 };
+    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000, mineHandRadius: 48, mineCandidates: 8, exposeChecks: 262_144 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit

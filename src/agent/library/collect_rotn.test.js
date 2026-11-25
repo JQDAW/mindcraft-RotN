@@ -45,7 +45,8 @@ function drops(b, held) {
     return []; // leaves: an unlucky roll, no stick
 }
 
-function fakeBot({ blocks = [], items = [], dropsOf = drops } = {}) {
+// world (soak 16 R): the blocks around the listed ones (for the way-out check); null: unloaded, as before.
+function fakeBot({ blocks = [], items = [], dropsOf = drops, world = null, palettePass = false } = {}) {
     const calls = { equip: [], collected: [], dug: [], walks: [] };
     const remaining = [...blocks];
     const bot = {
@@ -61,12 +62,20 @@ function fakeBot({ blocks = [], items = [], dropsOf = drops } = {}) {
         modes: { isOn: () => false, pause() {}, unpause() {} },
         inventory: { items: () => items.filter(i => i.count > 0), slots: [] },
         findBlocks({ matching, maxDistance = 16, count = 1 }) {
+            // #630 review 1: as mineflayer, the matcher first runs on each block type of the "palette" with no position
+            // (a section is skipped when none matches), then on each positioned block.
+            if (typeof matching === 'function' && palettePass) {
+                const types = [...new Map(remaining.map(b => [b.name, { name: b.name, type: b.type, metadata: b.metadata, position: null }])).values()];
+                if (!types.some(b => matching(b))) return [];
+            }
             return remaining.filter(b => (typeof matching === 'function' ? matching(b) : [].concat(matching).includes(b.type)))
                 .filter(b => b.position.distanceTo(bot.entity.position) <= maxDistance)
                 .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))
                 .slice(0, count).map(b => b.position);
         },
-        blockAt: (pos) => remaining.find(b => b.position.equals(pos)) ?? null,
+        blockAt: (pos) => remaining.find(b => b.position.equals(pos)) ?? (world ? world(pos.floored ? pos.floored() : pos) : null),
+        // #630 re-review 1: the state-id view of the same world (air 0, unloaded undefined), as prismarine-world's.
+        world: world ? { getBlockStateId: (pos) => { const b = bot.blockAt(pos); return b == null ? undefined : b.name === 'air' ? 0 : (b.type || 1); } } : undefined,
         equip: (item) => { calls.equip.push(item.name); bot.heldItem = item; return Promise.resolve(); },
         // Like mineflayer-tool: the fastest pickaxe.
         tool: {
@@ -212,7 +221,8 @@ test('a pickaxe that breaks mid-run: no throw; stone is skipped and hand sources
     const items = [pickaxe];
     const bot = fakeBot({
         items,
-        blocks: [block('stone', 0, at(2)), block('stone', 0, at(3)), block('pyrotech_compat:rock_igneous', 0, at(9))],
+        // Soak 16 (R): loose rocks within 48 come before any stone: this one is beyond, so the stone is tried first.
+        blocks: [block('stone', 0, at(2)), block('stone', 0, at(3)), block('pyrotech_compat:rock_igneous', 0, at(55))],
     });
     const dig = bot.dig;
     bot.dig = async (b) => {
@@ -245,7 +255,7 @@ test('nit 3: an explicit "pyrotech:rock:0" takes only stone-rock piles, not the 
 test('nit 4: finding the tool gone does not use up an attempt', async (t) => {
     t.mock.method(console, 'log', () => {});
     const items = [tool('stone_pickaxe')];
-    const bot = fakeBot({ items, blocks: [block('stone', 0, at(2)), block('pyrotech:rock', 0, at(5))] });
+    const bot = fakeBot({ items, blocks: [block('stone', 0, at(2)), block('pyrotech:rock', 0, at(55))] }); // soak 16 (R): the pile beyond 48
     // The pickaxe is there when the sources are chosen, gone (it broke earlier) by the first equip.
     const listItems = bot.inventory.items;
     let calls = 0;
@@ -386,4 +396,88 @@ test('#632 review 3 and 5: after a block the server kept, the next target is tri
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), true, bot.output);
     assert.match(bot.output, /pyrotech:rock:0 at 2, 64, 0 was not broken: the server kept it; skipping it\./);
     assert.deepEqual([...bot.calls.dug, ...bot.calls.collected], [kept, next], 'the next one, with the one attempt asked for');
+});
+
+// Soak 16 (R, the lead): the rock collect stays out of holes. Soak 15: the nearest stone in 3-D, under the bot, block
+// after block, 9 down, while loose rocks lay farther off. Now: loose rocks within 48 first; then stone open to the
+// air that leaves a walkable way out once broken; a stone with no way out is skipped and said.
+const ground = (pos) => {
+    const name = pos.y <= 63 ? 'stone' : 'air';
+    return { name, metadata: 0, type: reg.blocksByName[name].id, position: pos, boundingBox: name === 'air' ? 'empty' : 'block', shapes: name === 'air' ? [] : [[0, 0, 0, 1, 1, 1]], transparent: name === 'air' };
+};
+test('soak 16 (R): loose rocks within 48 come before nearer stone; then stone open to the air, never the buried one under the bot', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    const buried = block('stone', 0, at(0, 60)), surface = block('stone', 0, at(3, 63)), loose = block('pyrotech_compat:rock_igneous', 0, at(40));
+    const bot = fakeBot({ items, blocks: [buried, surface, loose], world: ground });
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 2), true);
+    const taken = [...bot.calls.collected, ...bot.calls.dug];
+    assert.equal(taken[0], loose, 'the loose rock at 40 first, not the stone 3 away');
+    assert.equal(taken[1], surface, 'then the stone open to the air');
+    assert.ok(!taken.includes(buried), 'never the buried stone under the bot');
+});
+
+test('soak 16 (R): a stone whose break leaves no walkable way out (the bottom of a shaft) is skipped and said; a loose rock beyond 48 is taken instead', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    // A 1-wide shaft from the surface down to the stone at 0, 59, 0: open to the sky, but no room to walk out once in it.
+    const shaft = (pos) => (pos.x === 0 && pos.z === 0 && pos.y >= 60 && pos.y <= 63 ? { name: 'air', metadata: 0, type: 0, position: pos, boundingBox: 'empty', shapes: [], transparent: true } : ground(pos));
+    const deep = block('stone', 0, at(0, 59)), far = block('pyrotech:rock', 0, at(55));
+    const bot = fakeBot({ items, blocks: [deep, far], world: shaft });
+    bot.entity.position = new Vec3(1.5, 64, 0.5);
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), true);
+    assert.ok(![...bot.calls.collected, ...bot.calls.dug].includes(deep));
+    assert.match(bot.output, /Skipped 1 block to mine \(stone at 0, 59, 0\): breaking it would leave no walkable way out\./);
+    assert.equal(skills.COLLECT_LIMITS.mineHandRadius, 48);
+});
+
+// #630 review 1: with mineflayer's palette pre-pass (the matcher on position-less blocks first), exposed stone is found.
+test('#630 review 1: findBlocks\' palette pass (no position) does not hide exposed stone', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    // A buried stone nearer than the exposed one: with the palette pass hiding exposed stone, the buried one was tried
+    // (and skipped as "no way out"), which this checks is not said.
+    const surface = block('stone', 0, at(3, 63)), buried = block('stone', 0, at(0, 61));
+    const bot = fakeBot({ items, blocks: [buried, surface], world: ground, palettePass: true });
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), true, bot.output);
+    assert.deepEqual([...bot.calls.collected, ...bot.calls.dug], [surface]);
+    assert.doesNotMatch(bot.output, /Skipped/);
+});
+
+// #630 re-review 1: the exposure check uses the state-id fast path; bare stone 40 blocks away on dirt over stone is found
+// past 1,500 buried stones nearer (the old 16,384 cap missed stone 2+ sections away); a search that hits the cap says
+// "capped", not "none". The time is measured (the old check took 1.7-3 s of CPU per pick).
+const dirtOverStone = (pos) => {
+    const name = pos.y <= 59 ? 'stone' : pos.y <= 63 ? 'dirt' : 'air';
+    return { name, metadata: 0, type: reg.blocksByName[name].id, position: pos, boundingBox: name === 'air' ? 'empty' : 'block', shapes: name === 'air' ? [] : [[0, 0, 0, 1, 1, 1]], transparent: name === 'air' };
+};
+const buriedField = () => {
+    const out = [];
+    for (let x = -10; x <= 10 && out.length < 1500; x++) for (let z = -10; z <= 10 && out.length < 1500; z++) for (let y = 55; y <= 59 && out.length < 1500; y++) out.push(block('stone', 0, at(x, y, z)));
+    return out;
+};
+test('#630 re-review 1: bare stone 40 blocks away on dirt over stone is found past 1,500 buried stones (state ids), and fast', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    const boulder = block('stone', 0, at(40, 64));
+    const bot = fakeBot({ items, blocks: [...buriedField(), boulder], world: dirtOverStone, palettePass: true });
+    let reads = 0;
+    const sid = bot.world.getBlockStateId;
+    bot.world.getBlockStateId = (p) => { reads++; return sid(p); };
+    const t0 = Date.now();
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), true, bot.output);
+    const ms = Date.now() - t0;
+    assert.deepEqual([...bot.calls.collected, ...bot.calls.dug], [boulder]);
+    assert.ok(reads > 0, 'the state-id path ran');
+    assert.ok(ms < 5000, `${ms} ms`);
+    assert.equal(skills.COLLECT_LIMITS.exposeChecks, 262_144);
+});
+
+test('#630 re-review 1: a stone search that hits the exposure cap ends "capped", not "none"', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    const boulder = block('stone', 0, at(40, 64));
+    const bot = fakeBot({ items, blocks: [...buriedField(), boulder], world: dirtOverStone, palettePass: true });
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1, null, 64, { ...skills.COLLECT_LIMITS, exposeChecks: 100 }), false);
+    assert.equal(bot.rotnCollectEnd.reason, 'capped');
 });
