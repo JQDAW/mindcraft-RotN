@@ -157,15 +157,25 @@ test('soak 15 clicks through real mineflayer: cases A, B and C with and without 
     assert.ok(st.swaps.length >= 2);
 });
 
-test('known gap: mineflayer builds prismarine-windows from bot.version, so a stack it splits off itself has the plain 1.12.2 size', { todo: 'mineflayer inventory.js: prismarine-windows(bot.version) instead of bot.registry (a one-line patch, not in this PR)', timeout: 30000 }, async () => {
+test('stacks prismarine-windows makes itself have the server\'s size: a split, and the one-by-one right-clicks of deposit/withdraw (patches/mineflayer: prismarine-windows(bot.registry))', { timeout: 30000 }, async () => {
+    // Before the patch mineflayer built prismarine-windows from bot.version, so these stacks were made
+    // with a fresh 1.12.2 registry: a modded item was 'unknown' with stack size 1 (#629's todo test).
     const { bot, ids } = world;
     const c = world.containers();
     const P = ids[PILE];
     c.setInventory({ 11: { id: P, count: 40 } });
     for (let w = 0; bot.inventory.slots[11]?.count !== 40 && w < 2000; w += 20) await sleep(20);
     await within(5000, bot.clickWindow(11, 1, 0), 'split'); // right-click: half onto the cursor, made by prismarine-windows
+    assert.equal(bot.inventory.selectedItem?.stackSize, 256, 'the split stack has the dump\'s size');
     await within(5000, bot.clickWindow(12, 0, 0), 'put down');
     await within(5000, bot.clickWindow(11, 0, 0), 'pick up the rest');
     await within(5000, bot.clickWindow(12, 0, 0), 'merge onto the split stack');
     assert.deepEqual(inventoryDiff(bot.inventory, c.state), [], 'the split stack merges as the server does');
+    assert.equal(bot.inventory.slots[12]?.count, 40);
+    // mineflayer's transfer (a chest deposit or withdraw of part of a stack) right-clicks one at a time
+    // into the destination (inventory.js clickDest); the first click makes the stack there.
+    await within(5000, bot.clickWindow(12, 0, 0), 'pick up 40');
+    for (let i = 0; i < 3; i++) await within(5000, bot.clickWindow(20, 1, 0), 'one more');
+    assert.deepEqual([bot.inventory.slots[20]?.count, bot.inventory.selectedItem?.count], [3, 37]);
+    assert.deepEqual(inventoryDiff(bot.inventory, c.state), [], 'three placed on both sides');
 });
