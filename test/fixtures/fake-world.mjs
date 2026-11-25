@@ -26,8 +26,13 @@
 // - findBlocks / findBlock as mineflayer 4.33 (lib/plugins/blocks.js:116-130): per 16-cube section the matcher runs on
 //   the section's palette first (blocks with no position, as Block.fromStateId(stateId, 0)), then on positioned blocks;
 //   so a matcher that needs a position skips every section, as live (the #630 review's "exposed first" bug).
-// - A minimal mineflayer-collectblock (bot.collectBlock.collect: walk into reach through the pathfinder, mineflayer-tool's
-//   choice from items(), dig), so skills.collectBlock runs on a scenario (soak 15's refused collect in the pocket).
+// - A minimal mineflayer-collectblock (bot.collectBlock.collect: out of reach, the pathfinder's goto with a look-at-block
+//   goal, `{x, y, z, lookAtBlock: true}`, which 'teleport' meets by standing NEXT to the block, never on it, as
+//   GoalLookAtBlock; then mineflayer-tool's choice from items() and the dig), so skills.collectBlock runs on a scenario
+//   (soak 15's refused collect in the pocket). Not modelled from the real plugin (#631 review 1): its safeToBreak and
+//   canHarvest skips (with requireHarvest), drops as item entities and the pickup walk (drops go straight to the
+//   inventory through onDig), the nearest-first queue over several targets (targets are taken in the order given),
+//   and its events (collectBlock_finished, the errors it emits).
 // Not here (yet): the real mineflayer-pathfinder (stubs: 'noPath', 'teleport', or a test's own), crafting and other
 // windows (net-forge's fake-containers.js models the server side), moving mobs.
 //
@@ -65,6 +70,8 @@ const fullOf = (n) => { try { return registryName(n); } catch { return n.include
  * minecraft-data object is never changed.
  */
 let stackProps = null;
+/** How often the dump's stack sizes were computed in this process (#631 review 3: cached, so 1 at most). */
+export const fixtureStats = { stackSizeComputations: 0 };
 
 export function makeRegistry() {
     const base = minecraftData('1.12.2');
@@ -75,7 +82,7 @@ export function makeRegistry() {
     reg.items = { ...base.items };
     // The dump's stack sizes (StackUp) over copies of the entries that differ (vanilla too, as live; #628 review 2).
     // Computed once per process (#628 re-review: a world per test should not redo 9,710 items).
-    stackProps ??= dumpStackSizes(loadRotnData(PACK_VERSION).dump?.items?.items, base).properties;
+    if (!stackProps) { fixtureStats.stackSizeComputations++; stackProps = dumpStackSizes(loadRotnData(PACK_VERSION).dump?.items?.items, base).properties; }
     const properties = stackProps;
     for (const [name, { stackSize }] of Object.entries(properties.items)) {
         const short = liveName(name);
@@ -138,7 +145,9 @@ function blockTemplate(reg, name, metadata) {
         toolRequired: !!st?.toolRequired, liquid, state: st ?? null, harvestTools: e.harvestTools,
         // prismarine-block's collision boxes ([x0, y0, z0, x1, y1, z1] per box) from the dump; none for a liquid or air.
         shapes: liquid ? [] : st ? (st.collision ?? []).map(b => [...b]) : (boundingBox === 'block' ? [[0, 0, 0, 1, 1, 1]] : []),
-        diggable: (st?.hardness ?? e.hardness ?? 0) >= 0, transparent: st ? !st.opaque : boundingBox !== 'block',
+        // prismarine-block copies minecraft-data's diggable (index.js:152): 1.12.2 has air true, water and lava false, as live
+        // (#631 review 5); a block with no minecraft-data value (modded): not air or a liquid, and a hardness >= 0.
+        diggable: typeof e.diggable === 'boolean' ? e.diggable : (live !== 'air' && !liquid && (st?.hardness ?? 0) >= 0), transparent: st ? !st.opaque : boundingBox !== 'block',
         /** forge-bridge's rule for the item held (an item object, or null for the hand); args as Block.digTime. */
         digTimeWith(item, { inWater = false, notOnGround = false, effects = {} } = {}) {
             if (!st) return live === 'air' ? 0 : Infinity;
@@ -412,7 +421,9 @@ export function fakeWorld({ ground = DEFAULT_GROUND, set = {}, at = new Vec3(0, 
     // findBlocks as mineflayer 4.33 (lib/plugins/blocks.js): per 16-cube section, the matcher first runs on the
     // section's palette, blocks with no position (Block.fromStateId(stateId, 0)); a section whose palette has no match
     // is skipped. Then on each block in reach, positioned (with useExtraInfo a function: matcher and it). The whole
-    // reach is searched (mineflayer stops after a layer of sections with enough found): the nearest `count`, by distance.
+    // reach is searched in effect: the nearest `count`, by distance. Mineflayer instead stops after the first octahedron
+    // layer of sections that has enough, so live it can return a farther block than this does (#631 review 2): a test
+    // here never sees that miss.
     const paletteOf = (sx, sy, sz) => {
         const names = new Set();
         const y0 = sy * 16;
@@ -474,7 +485,7 @@ export function fakeWorld({ ground = DEFAULT_GROUND, set = {}, at = new Vec3(0, 
         collect: async (target) => {
             for (const block of [].concat(target)) {
                 const eye = bot.entity.position.offset(0, 1.62, 0);
-                if (eye.distanceTo(block.position.offset(0.5, 0.5, 0.5)) > 4.5) await bot.pathfinder.goto({ x: block.position.x, y: block.position.y + 1, z: block.position.z });
+                if (eye.distanceTo(block.position.offset(0.5, 0.5, 0.5)) > 4.5) await bot.pathfinder.goto({ x: block.position.x, y: block.position.y, z: block.position.z, lookAtBlock: true });
                 await bot.tool.equipForBlock(block);
                 await bot.dig(blockAt(block.position));
             }
@@ -490,12 +501,33 @@ export function noPath() {
     return { movements: null, setMovements(m) { this.movements = m; }, setGoal() {}, stop() {}, isMoving: () => false, getPathTo: () => ({ status: 'noPath', path: [] }), goto: () => Promise.reject(new Error('No path to the goal!')) };
 }
 
-/** A pathfinder whose goto puts the bot on the goal's cell (goals with x, y, z), and records it. */
+/**
+ * Where a bot can stand to reach and see block `b`, as GoalLookAtBlock (#631 review 1): a free cell (feet and head
+ * passable, a solid floor) beside it, at its level, one up (on the ground next to it) or one down; never on top of it.
+ * The nearest to the bot; null if none.
+ */
+function standNextTo(bot, b) {
+    const free = (q) => { const x = bot.blockAt(q); return x.boundingBox === 'empty' && !x.liquid; };
+    const solidQ = (q) => bot.blockAt(q).boundingBox === 'block';
+    const from = bot.entity.position.floored();
+    const cands = [];
+    for (const d of [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)]) for (const dy of [0, 1, -1]) cands.push(b.plus(d).offset(0, dy, 0));
+    return cands.filter(q => free(q) && free(q.offset(0, 1, 0)) && solidQ(q.offset(0, -1, 0))).sort((a, c) => a.distanceTo(from) - c.distanceTo(from))[0] ?? null;
+}
+
+/** A pathfinder whose goto puts the bot on the goal's cell (goals with x, y, z), or next to the block for a look-at-block goal; recorded. */
 export function teleport(bot, calls = { gotos: [] }) {
     return {
         movements: null, setMovements(m) { this.movements = m; }, setGoal() {}, stop() {}, isMoving: () => false,
         getPathTo: () => ({ status: 'success', path: [] }),
-        goto: (goal) => { calls.gotos.push(goal); if (goal?.x !== undefined) bot.entity.position = new Vec3(goal.x + 0.5, goal.y, goal.z + 0.5); return Promise.resolve(); },
+        goto: (goal) => {
+            calls.gotos.push(goal);
+            if (goal?.x === undefined) return Promise.resolve();
+            const at = goal.lookAtBlock ? standNextTo(bot, new Vec3(goal.x, goal.y, goal.z)) : new Vec3(goal.x, goal.y, goal.z);
+            if (!at) return Promise.reject(new Error('No path to the goal!'));
+            bot.entity.position = at.offset(0.5, 0, 0.5);
+            return Promise.resolve();
+        },
     };
 }
 

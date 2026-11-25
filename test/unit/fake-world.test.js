@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
-import { fakeWorld, pocketUnderRock, holeAtSpawn, openShaft, noPath, teleport, makeRegistry, SLOT, DEFAULT_GROUND, liveName } from '../fixtures/fake-world.mjs';
+import { fakeWorld, pocketUnderRock, holeAtSpawn, openShaft, noPath, teleport, makeRegistry, fixtureStats, SLOT, DEFAULT_GROUND, liveName } from '../fixtures/fake-world.mjs';
 import { __setRegistryForTest } from '../../src/utils/mcdata.js';
 import { isTrapped, isOut, surfaceTarget } from '../../src/agent/library/escape.js';
 import { goToSurface, collectBlock } from '../../src/agent/library/skills.js';
@@ -361,8 +361,27 @@ test('#628 re-review nits: fill clears metadata; equip of the cursor stack says 
     await assert.rejects(bot.equip(bot.inventory.selectedItem, 'hand'), /stick is on the cursor \(selectedItem\), not in a window slot/);
     const p = pocketUnderRock();
     assert.ok(p.bot.registry.blocksByName['undergroundbiomes:metamorphic_stone'], 'before any blockAt');
-    const t0 = Date.now();
-    for (let i = 0; i < 20; i++) makeRegistry();
-    assert.ok(Date.now() - t0 < 2000, `${Date.now() - t0} ms for 20 registries`);
+    // Cached: computed once in the process, however many worlds (#631 review 3: a counter, not a clock).
+    for (let i = 0; i < 5; i++) makeRegistry();
+    assert.equal(fixtureStats.stackSizeComputations, 1);
     assert.equal(makeRegistry().itemsByName.stick.stackSize, 256);
+});
+
+test('#631 review 1, 5: the fake collect stands next to the block (a look-at-block goal), never on it; diggable as prismarine-block on 1.12.2', async () => {
+    const { bot, calls } = fakeWorld({ at: V(0, 64, 0), pathfinder: 'teleport', slots: { 36: ['stone_pickaxe', 1] } });
+    const target = bot.blockAt(V(10, 63, 0)); // dirt in the ground, 10 away
+    await bot.collectBlock.collect(target);
+    const goal = calls.gotos[0];
+    assert.deepEqual([goal.x, goal.y, goal.z, goal.lookAtBlock], [10, 63, 0, true]);
+    const stand = bot.entity.position.floored();
+    assert.notDeepEqual([stand.x, stand.z], [10, 0], 'not on the block it digs');
+    assert.ok(stand.distanceTo(V(10, 63, 0)) <= 1.5, `next to it: ${stand}`);
+    assert.equal(bot.blockAt(V(10, 63, 0)).name, 'air');
+    // prismarine-block copies minecraft-data's diggable: on 1.12.2 air is true (as the live bot sees it), water false.
+    assert.equal(minecraftData('1.12.2').blocksByName.air.diggable, true);
+    const water = fakeWorld({ set: { '0,64,0': 'water', '1,64,0': 'undergroundbiomes:metamorphic_stone' } }).bot;
+    assert.deepEqual([bot.blockAt(V(0, 70, 0)).diggable, bot.blockAt(V(0, 60, 0)).diggable, water.blockAt(V(0, 64, 0)).diggable, water.blockAt(V(1, 64, 0)).diggable], [true, true, false, true]);
+    // No free cell beside it (a block inside stone): the stub finds no path, as the real plugin would fail.
+    const deep = fakeWorld({ at: V(0, 64, 0), pathfinder: 'teleport' });
+    await assert.rejects(deep.bot.collectBlock.collect(deep.bot.blockAt(V(10, 40, 0))), /No path/);
 });
