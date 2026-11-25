@@ -172,12 +172,13 @@ export async function withinLimit(agent, name, fn, ms) {
  * out first (escape.escapeIfTrapped, the day budget): 'down-or-failed' (#624 review 2, the lead: a cave is "trapped"
  * too, and a collect in one is no reason) only when the collect took the bot 3 or more blocks below where it started,
  * or a walk of it failed (no path, out of reach); 'deep' (!digDown: a hole dug on purpose) only deeper than 2 below
- * where it started; 'failed' (the walks) only when the walk itself failed (a walk that got where the model asked,
- * underground included, is left there). Model commands only: never a reflex or a night job. (!breakBlockAt is no
+ * where it started; 'walk' (soak 16 trap, the lead's go; was 'failed') when the walk itself failed (no path, the time
+ * limit, or "Unable to reach": it ended short), or ended 3 or more blocks below where it started ('failed', kept for
+ * other callers: only a failed walk). Model commands only: never a reflex or a night job. (!breakBlockAt is no
  * command: a skill only.)
  */
 export const POST_ESCAPE = { collectBlocks: 'down-or-failed', digDown: 'deep',
-    goToCoordinates: 'failed', searchForBlock: 'failed', goToRememberedPlace: 'failed', goToBed: 'failed', goToPlayer: 'failed' };
+    goToCoordinates: 'walk', searchForBlock: 'walk', goToRememberedPlace: 'walk', goToBed: 'walk', goToPlayer: 'walk' };
 /** The escape's own minutes, added to a command's limit when its post-condition may run. */
 const POST_ESCAPE_MIN = 6;
 export async function postEscape(agent, label, start, { escapeIfTrapped = null } = {}) {
@@ -186,11 +187,17 @@ export async function postEscape(agent, label, start, { escapeIfTrapped = null }
     const bot = agent.bot;
     const walkFailed = (bot.rotnWalkFailedAt ?? 0) >= start.t;
     if (kind === 'failed' && !walkFailed) return null;
+    // Soak 16 trap (the lead's go): a walk that dug is checked when it failed (no path, the time limit, "Unable to
+    // reach": a walk that ended short), or when it ended 3 or more blocks below where it started.
     // #624 re-review nit 1 (the lead): the collect only when its last walk failed or it got fewer than asked
     // (bot.rotnCollectEnd), never for one target out of reach on the way.
     const end = bot.rotnCollectEnd;
     const collectShort = kind === 'down-or-failed' && (end?.at ?? 0) >= start.t && (end.lastWalkFailed || end.short);
-    const minDepth = kind === 'deep' ? 3 : kind === 'down-or-failed' && !collectShort ? 3 : 0;
+    // #642 review 7: a walk that reached a goal whose own y is 3 or more below its start went down on purpose (a bed or a
+    // saved place underground): no check.
+    const reached = bot.rotnWalkReached;
+    if (kind === 'walk' && !walkFailed && start.at && (reached?.at ?? 0) >= start.t && reached.y <= start.at.y - 3) return null;
+    const minDepth = kind === 'deep' ? 3 : kind === 'down-or-failed' && !collectShort ? 3 : kind === 'walk' && !walkFailed ? 3 : 0;
     const run = escapeIfTrapped ?? (await import('../library/escape.js')).escapeIfTrapped;
     const line = await run(bot, { digsBefore: start.digs, from: start.at, minDepth });
     if (line) skills.log(bot, line);
