@@ -388,3 +388,27 @@ test('#581 re-review nit 4: full asked but no full target: the short walk instea
     const open = agentAt(new Vec3(-52, 63, -63), { deaths: SOAK3_DEATHS(), now });
     assert.equal(nightRelocationPlan(open, now, { night: true, armed: false, full: true }).mode, 'full', 'a full target: the full walk');
 });
+
+// Soak 16 (E3, #624 review 3): no place 64 blocks away (soak 14 respawn 2) and trapped where it stands: the escape
+// first, as the walk away runs (the agenda's self-prompting stops); a failed one leaves bot.rotnTrapped for the prompt.
+test('soak 16 (E3): no place within 160 and trapped: the escape runs as an action with the agenda paused; failed, the bot is marked trapped; not trapped: the line as before', async () => {
+    const now = 1_000_000;
+    const water = () => ({ name: 'water', boundingBox: 'empty' });
+    const mk = () => { const a = agentAt(SPAWN.offset(2, 0, 3), { deaths: [[-80, 66, -38, 60_000]], now }); a.bot.blockAt = water; return a; };
+    const logs = [];
+    const stuck = mk();
+    const climbs = [];
+    const climb = (bot) => { climbs.push(1); return Promise.resolve({ out: false, why: 'no stair step, and no block to pillar up with', at: new Vec3(-43, 80, -61) }); };
+    assert.equal(relocateTick(stuck, { now, log: (l) => logs.push(l), trapped: () => true, climb }), 'relocating');
+    assert.deepEqual([stuck.stops, stuck._agenda_paused], [['stop'], true], 'the agenda waits, as for the walk away');
+    await flush(); await flush();
+    assert.deepEqual(stuck.actions.runs, ['action:escape']);
+    assert.equal(climbs.length, 1);
+    assert.ok(stuck.bot.rotnTrapped?.at.equals(new Vec3(-43, 80, -61)), 'marked trapped');
+    assert.ok(logs.some(l => /no place 64 blocks from .* within 160, and trapped at .*: getting out first$/.test(l)), logs.join('\n'));
+    assert.ok(logs.some(l => /^\[respawn\] still trapped after the escape \(no stair step, and no block to pillar up with\)/.test(l)), logs.join('\n'));
+    const free = mk();
+    assert.equal(relocateTick(free, { now, log: (l) => logs.push(l), trapped: () => false, climb }), null);
+    assert.ok(logs.at(-1).endsWith('within 160; the agenda resumes here'));
+    assert.equal(climbs.length, 1, 'no escape when not trapped');
+});

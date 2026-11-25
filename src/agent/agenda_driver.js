@@ -22,6 +22,7 @@ import { safeError } from './safe_error.js';
 import { heldFoodPoints } from './library/food.js';
 import { nearbyHuntable } from './library/hunting.js';
 import { nearbyForage } from './library/foraging.js';
+import { stillTrapped } from './library/escape.js';
 import { hasWeapon, WEAPON } from './library/threats.js';
 import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT } from './agenda.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
@@ -116,6 +117,8 @@ export function agendaState(bot, clock = null) {
         huntable: () => { try { return [...new Set(nearbyHuntable(bot, { bases: bot.rotnBases?.() ?? [] }))]; } catch { return []; } },
         // the ripe wild food blocks near that the bot may take (foraging.js; full block names)
         forageable: () => { try { return nearbyForage(bot, { bases: bot.rotnBases?.() ?? [] }); } catch { return []; } },
+        // Soak 16 (E4): where a failed escape left the bot trapped (escape.stillTrapped), or null.
+        trapped: () => { try { return stillTrapped(bot); } catch { return null; } },
     };
 }
 
@@ -128,6 +131,10 @@ export function agendaGoal(agenda, step, state = null) {
     }
     let when = step.when ?? 'before night';
     if (state && typeof step.whenNow === 'function') { try { when = step.whenNow(state) || when; } catch { /* the plain label */ } }
+    // Soak 16 (E4): trapped after a failed escape: the way out first, whatever the step.
+    let trap = null;
+    try { trap = state?.trapped?.() ?? null; } catch { trap = null; }
+    if (trap) text = `You are trapped at ${trap.x}, ${trap.y}, ${trap.z} (no walkable way to open ground): get out first with !goToSurface (it goes on from where you are). Then: ${text}`;
     if (step.reserve) return `RotN agenda, step ${step.id} (${when}): ${text} When you hold enough, the agenda moves on by itself.`;
     return `RotN agenda, step ${n} of ${agenda.steps.length} (${step.id}): ${text} `
         + 'When this step is done, the agenda moves on by itself.';

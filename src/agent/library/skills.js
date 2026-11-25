@@ -1441,6 +1441,10 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     };
 
     let collected = 0;
+    // Soak 16 (E, #624 re-review nit 1): whether the collect's last walk failed (no path, out of reach): with the
+    // count short, the end of the collect says so (bot.rotnCollectEnd) for its post-condition; one target out of
+    // reach on the way (a cave collect that skipped one ore) is not.
+    let lastWalkFailed = false;
     // CX23 soak: no target within DEATH_SPOT_RADIUS of a recent death spot for deathSpotMs: a
     // player zombie rose there and never leaves (the agenda dug dirt among them, death after death).
     // #416 review 2: not for a crafting table the bot placed and picks up again (pickUpTable).
@@ -1712,6 +1716,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                         givenUp.push(block.position.clone ? block.position.clone() : block.position);
                         outOfReach.set(leafKey(block.position), Date.now());
                         missed = true;
+                        lastWalkFailed = true;
                         return false;
                     }
                     if (!await handOff(avoid)) { log(bot, cannotLetGo(block)); return false; } // still not after the walk
@@ -1751,6 +1756,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                     log(bot, `${leafMisses} leaves were out of reach from the ground; no more leaves in this collect.`);
             }
             if (success) {
+                lastWalkFailed = false;
                 let gained = 1; // a block with no item (water): one per success
                 if (countsItems) {
                     gained = 0;
@@ -1810,6 +1816,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 // up for this collect and CL.unreachableMs, and uses no attempt, at most
                 // CL.unreachableTargets times: the next target is tried, not the same one again.
                 if (['Timeout', 'NoPath'].includes(err?.name) && block?.position) {
+                    lastWalkFailed = true;
                     givenUp.push(block.position.clone ? block.position.clone() : block.position);
                     outOfReach.set(leafKey(block.position), Date.now());
                     if (walkMisses < CL.unreachableTargets) { walkMisses++; i--; }
@@ -1852,6 +1859,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
     sayDeathSkips(); // #416 nit: also when the collect ended otherwise (a time limit, its attempts)
     log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.`);
+    bot.rotnCollectEnd = { at: Date.now(), short: collected < num, lastWalkFailed };
     return collected > 0;
 }
 
@@ -3488,6 +3496,9 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
             log(bot, 'Walk stopped (interrupted).');
             return false;
         }
+        // Soak 16 (E): a walk that failed (no path, the time limit): the post-condition of a !goTo-type command
+        // escapes only after such a walk (actions.js POST_ESCAPE 'failed').
+        bot.rotnWalkFailedAt = Date.now();
         // we need to catch so we can clean up the door check interval, then rethrow the error
         throw err;
     }
@@ -4669,23 +4680,23 @@ export async function digDown(bot, distance = 10) {
     return true;
 }
 
-export async function goToSurface(bot) {
+export async function goToSurface(bot, { run = null } = {}) {
     /**
-     * Navigate to the surface (highest non-air block at current x,z).
-     * @param {MinecraftBot} bot, reference to the minecraft bot.
-     * @returns {Promise<boolean>} true if the surface was reached, false otherwise.
+     * Soak 16 (E, the lead): to the first open ground up the bot's column (escape.surfaceTarget: the ground under a
+     * canopy, never the leaves), by the one escape (library/escape.js: the pathfinder with digging and pack scaffolding,
+     * then stairs and pillars by hand; the day budget). Says what happened (escape.escapeText), never "Going to the
+     * surface" after a failure (soak 15). Returns whether the bot is out.
      **/
-    const pos = bot.entity.position;
-    for (let y = names112.WORLD_MAX_Y; y >= names112.WORLD_MIN_Y; y--) { // 1.12 height (B1); probably not the best way to find the surface but it works
-        const block = bot.blockAt(new Vec3(pos.x, y, pos.z));
-        if (!block || block.name === 'air') { // 1.12 has no cave_air (B1b)
-            continue;
-        }
-        await goToPosition(bot, block.position.x, block.position.y + 1, block.position.z, 0); // this will probably work most of the time but a custom mining and towering up implementation could be added if needed
-        log(bot, `Going to the surface at y=${y+1}.`);``
-        return true;
-    }
-    return false;
+    const esc = await import('./escape.js');
+    // #624 review 5: on a tree (its leaves or branches under the feet) the ground is below: the canopy descent first
+    // (#415), never a pillar on the leaves.
+    if (standsOnTree(bot)) { try { await descendFromTree(bot); } catch { /* the escape says where it is */ } }
+    if (esc.isOut(bot, null, true)) { log(bot, esc.escapeText({ out: true, how: 'already', at: bot.entity.position.floored(), ms: 0 })); return true; }
+    const r = await (run ?? esc.escape)(bot, { budget: 'day', target: esc.surfaceTarget(bot) });
+    log(bot, esc.escapeText(r));
+    if (r?.out) bot.rotnTrapped = null;
+    else if (!r?.interrupted) bot.rotnTrapped = { at: r?.at ?? bot.entity.position.floored(), since: bot.rotnTrapped?.since ?? Date.now(), checkedAt: Date.now() };
+    return !!r?.out;
 }
 
 /**
