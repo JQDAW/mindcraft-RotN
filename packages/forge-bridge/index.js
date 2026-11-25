@@ -35,3 +35,4 @@ export { attachRespawnEffectsLog, effectList } from './src/respawn-effects.js';
 export { applyStackSizes, dumpStackSizes } from './src/stack-sizes.js';
 export { attachClickDiagnostics, rejectedClickLine, describeItem, CLICK_DIAG } from './src/click-diagnostics.js';
 export { attachDigRefusedLog, digRefusedLine, digRefusedCapLine, slotPlace, DIG_REFUSED } from './src/dig-refused.js';
+export { attachCraftRefusedLog, craftRefusedLine, craftRefusedCapLine, CRAFT_REFUSED } from './src/craft-refused.js';

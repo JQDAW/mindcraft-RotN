@@ -27,6 +27,8 @@
 // limit), else getFirstEmptyStack (aec.k: 0-35, the hotbar first), else it is dropped; each placed
 // part is sent as set_slot window -2 (an inventory index, which mineflayer ignores). The next tick's
 // detectAndSendChanges sends the changed window-0 slots (not after a click, so not quantity-only).
+// Closing the table does the same with its 3x3 grid (ContainerWorkbench.onContainerClosed): the cursor
+// dropped, the grid put back, then window 0's changed slots.
 // This is a model, not a server: the live probe batch is still the proof.
 
 import { encodeOpenGui } from '../src/channels.js';
@@ -297,10 +299,7 @@ export function attachFakeContainers(client, opts) {
     client.on('close_window', (p) => {
         state.closed.push(p.windowId);
         if (state.tableWindow) { // closeContainer closes the open container, whatever the packet's id
-            // Not modelled (#629 review 4): the table's own close (Container.onContainerClosed drops the cursor;
-            // FastWorkbench returns its grid). Only the grid's count is recorded.
-            state.closedTableGrid = state.tableWindow.grid.slice(1).filter(Boolean).length;
-            state.tableWindow = null;
+            closeTableWindow();
             return;
         }
         closePlayerWindow();
@@ -344,6 +343,23 @@ export function attachFakeContainers(client, opts) {
         const grid = [1, 2, 3, 4].map((k) => inv[k]).filter(Boolean);
         for (const k of [1, 2, 3, 4]) inv[k] = null;
         for (const g of grid) placeBack(g);
+        sendChangedNextTick(before);
+    }
+    // The table (soak 16 craft guard; was #629 review 4's "not modelled"): ContainerFastBench.onContainerClosed
+    // (its position is not ORIGIN) runs ContainerWorkbench.onContainerClosed: Container.onContainerClosed
+    // drops the cursor (no packet), then clearContainer gives each grid stack to placeItemBackInInventory,
+    // as for window 0. Window 0 is the open container again, and its next detectAndSendChanges sends the
+    // slots that changed since it was last in step (when the table opened).
+    function closeTableWindow() {
+        const { grid: tableGrid, invAtOpen } = state.tableWindow;
+        const stacks = tableGrid.slice(1).filter(Boolean);
+        state.closedTableGrid = stacks.length;
+        state.tableWindow = null;
+        if (state.cursor) { state.dropped.push({ ...state.cursor, why: 'cursor' }); state.cursor = null; }
+        for (const g of stacks) placeBack(g);
+        sendChangedNextTick(invAtOpen);
+    }
+    function sendChangedNextTick(before) {
         setTimeout(() => {
             for (let s = 1; s < 46; s++) if (!same(before[s], inv[s])) client.write('set_slot', { windowId: 0, slot: s, item: toWire(inv[s]) });
         }, TICK_MS);
@@ -354,7 +370,7 @@ export function attachFakeContainers(client, opts) {
         const table = state.table;
         if (table && at.x === table.x && at.y === table.y && at.z === table.z) { // BlockFastBench.onBlockActivated
             nextWindowId = (nextWindowId % 100) + 1;
-            state.tableWindow = { id: nextWindowId, grid: Array(10).fill(null) };
+            state.tableWindow = { id: nextWindowId, grid: Array(10).fill(null), invAtOpen: inv.map(copy) };
             client.write('custom_payload', { channel: 'FML', data: encodeOpenGui({ windowId: nextWindowId, modId: 'fastbench', modGuiId: 0, ...table }) });
             client.write('window_items', { windowId: nextWindowId, items: windowItems(nextWindowId) });
             client.write('set_slot', { windowId: -1, slot: -1, item: toWire(state.cursor) });
