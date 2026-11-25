@@ -1,10 +1,32 @@
 # Status: rotn-data
 
-Updated: 2026-11-07T14:20Z (from `date -u`)
+Updated: 2026-11-25T02:34Z (from `date -u`)
 
-Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/trunk-shell`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/bc-sweep` (#621). Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
-## Now: trunk shells and digging mobs, from G3 round 9 B (lead task, 2026-11-07)
+## Now (2026-11-25)
+
+- **Open: #621 `agent/rotn-data/bc-sweep`** (lead task for skills-rotn's herd rule; soak 15 bull, soak 16 plan F5).
+  - `3.3.4/weapon-sweep.json`, plus `weaponSweep(item, { path, enchantment, potion })` and `sweepRadius(level)`: Better Combat's per-weapon Sweep from `config/bettercombat.cfg`, read from its bytecode.
+  - The first entry whose substring is in the registry path wins, for Better Combat weapons only.
+  - The radius around the struck mob is 1 + 0.6 + 0.25 × (level − 1), so 1.6 at level 1.
+  - Also covered: the vanilla ItemSword fallback.
+  - Clubs, axes and pickaxes don't sweep; swords do.
+  - Full `npm test` 2815/0 (after a clean `npm ci`: the old install predated #610's mineflayer patch), lint 249.
+- **Merged: #611 `hunger-effects.json`** (soak 14 item D): Hunger Overhaul's low-food effects by food and difficulty, starvation, the constant drain (235 s per point at rest) and the regeneration floor.
+- **Research reports for the lead, no code.** Each is in `/home/rv/`, with extracts under `/home/rv/`.
+  - `soak13-rotn-data.md`: dirt piles → dirt, hand-breakable wall blocks, dig times through a dirt door.
+  - `soak13-rotn-data-2.md`: entity tracking ranges.
+  - `soak14-rotn-data.md`: the Grove Sprite (provoked only), starvation and drain, night food.
+  - `soak15-rotn-data.md`: Underground Biomes stone harvest and drops, rocks, the first level-1 pickaxe.
+  - `soak15-rotn-data-food.md`: mushrooms, Animania herds and bulls, giant tree taiga food.
+- **Follow-ups (not started; only on a lead task):**
+  - The dump's `drops` field is wrong for Underground Biomes igneous and metamorphic stone. It says "itself"; the code drops cobble.
+  - 16 late-game items have a tool class but no speed.
+  - Whether a hit Animania ram or buck butts a player back is unverified.
+- **Running:** nothing (no jobs, subagents or Hetzner servers).
+
+## Earlier: trunk shells and digging mobs (2026-11-07)
 
 - **(1) Trunk shell, this PR (`agent/rotn-data/trunk-shell`).** Breaking a `dynamictrees:trunkshell` **fells the tree like a branch**, and the shell itself **drops nothing**. Cited from `DramaticTrees-1.12.2-0.13.4.jar` with javap only:
   - **The break.** `BlockTrunkShell.removedByPlayer` passes the break to the thick trunk block next to it, at that block's position. The shell's meta (coredir n, nw, w, sw, s, se, e, ne) points to that block, on the same y. The trunk block's `BlockBranch.removedByPlayer` queues a `FutureBreak`, which runs `futureBreak` on the next world tick. That is the normal felling, so the drops are `fell-tree`'s.
