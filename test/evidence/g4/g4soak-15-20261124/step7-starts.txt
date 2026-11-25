@@ -1,0 +1,2 @@
+## test-server.sh starts, run right after test-server.sh up (22:34:39 UTC on 2026-11-24, mcr-test-20261124-222937)
+starts=1 files=1
