@@ -1712,6 +1712,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                         givenUp.push(block.position.clone ? block.position.clone() : block.position);
                         outOfReach.set(leafKey(block.position), Date.now());
                         missed = true;
+                        bot.rotnWalkFailedAt = Date.now(); // soak 16 (E, #624 review 2)
                         return false;
                     }
                     if (!await handOff(avoid)) { log(bot, cannotLetGo(block)); return false; } // still not after the walk
@@ -1810,6 +1811,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 // up for this collect and CL.unreachableMs, and uses no attempt, at most
                 // CL.unreachableTargets times: the next target is tried, not the same one again.
                 if (['Timeout', 'NoPath'].includes(err?.name) && block?.position) {
+                    bot.rotnWalkFailedAt = Date.now(); // soak 16 (E, #624 review 2): the collect's post-condition reads it
                     givenUp.push(block.position.clone ? block.position.clone() : block.position);
                     outOfReach.set(leafKey(block.position), Date.now());
                     if (walkMisses < CL.unreachableTargets) { walkMisses++; i--; }
@@ -4680,6 +4682,9 @@ export async function goToSurface(bot, { run = null } = {}) {
      * surface" after a failure (soak 15). Returns whether the bot is out.
      **/
     const esc = await import('./escape.js');
+    // #624 review 5: on a tree (its leaves or branches under the feet) the ground is below: the canopy descent first
+    // (#415), never a pillar on the leaves.
+    if (standsOnTree(bot)) { try { await descendFromTree(bot); } catch { /* the escape says where it is */ } }
     if (esc.isOut(bot, null, true)) { log(bot, esc.escapeText({ out: true, how: 'already', at: bot.entity.position.floored(), ms: 0 })); return true; }
     const r = await (run ?? esc.escape)(bot, { budget: 'day', target: esc.surfaceTarget(bot) });
     log(bot, esc.escapeText(r));

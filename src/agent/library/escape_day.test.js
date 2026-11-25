@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { escape, isTrapped, surfaceTarget, skyY, escapeText, escapeIfTrapped, escapeMovements, nextStep, ESCAPE, ESCAPE_DAY, ESCAPE_HOLD } from './escape.js';
+import { escape, isTrapped, isOut, surfaceTarget, groundTarget, skyY, escapeText, escapeIfTrapped, escapeMovements, nextStep, ESCAPE, ESCAPE_DAY, ESCAPE_HOLD } from './escape.js';
 import { goToSurface } from './skills.js';
 import { SHELTER_HOLD } from '../agenda.js';
 
@@ -127,11 +127,15 @@ test('soak 16 (E4): gravel over the pocket: the escape stops with a why that nam
 
 test('soak 16 (E, the lead\'s order): dirt, then planks, then cobblestone only beyond the shelter\'s 14; the pathfinder places in that order', () => {
     const { bot } = fakeBot({ items: [['cobblestone', 16], ['planks', 3], ['dirt', 2]] });
-    const m = escapeMovements(bot, { placed: 0, budget: { maxPlaced: 32 } });
+    const m = escapeMovements(bot, { placed: 0, budget: { maxPlaced: 32, reserve: ESCAPE.reserve } });
     assert.deepEqual(m.scafoldingBlocks, [reg.itemsByName.dirt.id, reg.itemsByName.planks.id, reg.itemsByName.cobblestone.id]);
-    assert.equal(m.countScaffoldingItems(), 2 + 3 + 2);
+    assert.equal(m.countScaffoldingItems(), 2 + 3 + 2, 'the day budget keeps 14');
+    // #624 review 4 (the lead): the morning and the unstuck reflex may spend the reserve (dirt and planks first).
+    const morning = escapeMovements(bot, { placed: 0, budget: { maxPlaced: 32, reserve: 0 } });
+    assert.equal(morning.countScaffoldingItems(), 2 + 3 + 16);
     const kept = fakeBot({ world: (q) => (q.y === 70 ? 'stone' : q.x === 0 && q.z === 0 && q.y >= 64 ? 'air' : q.y >= 64 ? 'stone' : 'stone'), at: new Vec3(0, 64, 0), items: [['cobblestone', 10]] });
-    assert.match(nextStep(kept.bot, null, { placed: 0 }).why ?? '', /no block to pillar up with \(the 10 sturdy blocks kept for the night's shelter are not used\)/);
+    assert.match(nextStep(kept.bot, null, { placed: 0, budget: { maxPlaced: 32, reserve: ESCAPE.reserve } }).why ?? '', /no block to pillar up with \(the 10 sturdy blocks kept for the night's shelter are not used\)/);
+    assert.equal(nextStep(kept.bot, null, { placed: 0 }).kind, 'pillar', 'no day budget: the reserve may be spent');
 });
 
 test('soak 16 (E): no dirt or planks, but dirt piles: dirt is crafted from them for the climb (day budget)', async (t) => {
@@ -179,7 +183,7 @@ test('soak 16 (E3, E4): the post-condition: a command that dug and left the bot 
 test('soak 16 (E3): the commands with the post-condition, and how', async () => {
     await import('../agent.js'); // the real import order (commands/index.js first)
     const { POST_ESCAPE } = await import('../commands/actions.js');
-    assert.deepEqual(POST_ESCAPE, { collectBlocks: 'always', digDown: 'deep', goToCoordinates: 'failed', searchForBlock: 'failed', goToRememberedPlace: 'failed', goToBed: 'failed', goToPlayer: 'failed' });
+    assert.deepEqual(POST_ESCAPE, { collectBlocks: 'down-or-failed', digDown: 'deep', goToCoordinates: 'failed', searchForBlock: 'failed', goToRememberedPlace: 'failed', goToBed: 'failed', goToPlayer: 'failed' });
 });
 
 test('soak 16 (E4): the lines for the model: out, interrupted, and a next step for each why', () => {
@@ -233,4 +237,135 @@ test('soak 16 (E4): after a failed escape the agenda\'s prompt says to get out f
     bot.rotnTrapped.checkedAt = 0;
     assert.equal(stillTrapped(bot), null);
     assert.doesNotMatch(agendaGoal(agenda, step, { trapped: () => stillTrapped(bot) }), /trapped/);
+});
+
+// #624 review 1 (the blocker): a shaft open to the sky, deeper than 8: the bot's own cell is never the target (it was
+// "Reached open ground" at once, 12 deep); the target is the rim, the depth from the real surface.
+const shaft = (q) => (q.x === 0 && q.z === 0 && q.y >= 52 ? 'air' : q.y >= 64 ? 'air' : q.y >= 60 ? 'dirt' : 'stone');
+test('#624 review 1: an open shaft 12 deep: not out at the bottom; the rim is the target, 20 steps (12 + 8); !goToSurface climbs to it', async (t) => {
+    quiet(t);
+    const { bot } = fakeBot({ world: shaft, at: new Vec3(0, 52, 0), pathfinder: noPath(), items: [['stone_pickaxe', 1]] });
+    assert.equal(isTrapped(bot).trapped, true);
+    const target = surfaceTarget(bot);
+    assert.equal(target.y, 64, `the rim: ${target}`);
+    assert.ok(!target.equals(new Vec3(0, 52, 0)));
+    const said = [];
+    const out = await goToSurface(bot, { run: (b, opts) => escape(b, { ...opts, moveTo: teleport, say: (l) => said.push(l) }) });
+    assert.ok(said.some(l => /\(up to 20 steps, 5 min\)$/.test(l)), said.join('\n'));
+    assert.equal(out, true, bot.output);
+    assert.ok(bot.entity.position.y >= 63, `${bot.entity.position}`);
+    assert.equal(isTrapped(bot).trapped, false);
+});
+
+// #624 review 4 (the lead): the morning and the unstuck reflex may spend the shelter's reserve: soak 8's flooded
+// pit (the well: water to 65 in a stone column to 70) with 10 cobblestone and no dirt pillars out.
+test('#624 review 4: soak 8\'s flooded pit with 10 cobblestone and no dirt: the morning escape pillars out with the cobble', async (t) => {
+    quiet(t);
+    const well = (q) => (q.x === 0 && q.z === 0 ? (q.y < 64 ? 'stone' : q.y <= 65 ? 'water' : 'air') : q.y > 70 ? 'air' : 'stone');
+    const { bot, calls } = fakeBot({ world: well, at: new Vec3(0, 64, 0), pathfinder: noPath(), items: [['cobblestone', 10]] });
+    const r = await escape(bot, { moveTo: teleport, say: () => {} });
+    assert.equal(r.out, true, r.why);
+    assert.ok(calls.placed.length >= 2, 'pillared with cobble');
+    assert.ok(count(bot, 'cobblestone') < 10);
+    // The day budget keeps it: no block to pillar up with.
+    const day = fakeBot({ world: well, at: new Vec3(0, 64, 0), pathfinder: noPath(), items: [['cobblestone', 10]] }).bot;
+    const d = await escape(day, { budget: 'day', moveTo: teleport, say: () => {} });
+    assert.equal(d.out, false);
+    assert.match(d.why, /kept for the night's shelter/);
+});
+
+// #624 review 5: never "out" standing on or next to leaves only: the ground below is the target, and stairs and
+// pillars (which only go up) say so.
+test('#624 review 5: on a canopy (on the leaves at y 73): not open ground, the target is the ground below, and the climb says to go down', async (t) => {
+    quiet(t);
+    const trees = (q) => (q.y >= 70 && q.y <= 72 ? 'leaves' : q.y >= 64 ? 'air' : 'dirt');
+    const { bot, set } = fakeBot({ world: trees, at: new Vec3(5, 73, 5), pathfinder: noPath(), items: [['dirt', 4]] });
+    assert.equal(isOut(bot, null, true), false, 'on the leaves');
+    set.set('5,73,5', 'dirt'); bot.entity.position = new Vec3(5.5, 74, 5.5); // a pillar on the leaves
+    assert.equal(isOut(bot, null, true), false, 'a block on the leaves: steps onto leaves are no room');
+    bot.entity.position = new Vec3(5.5, 73, 5.5); set.delete('5,73,5');
+    assert.equal(groundTarget(bot).y, 64, 'the ground under the canopy');
+    const r = await escape(bot, { budget: 'day', moveTo: teleport, say: () => {} });
+    assert.equal(r.out, false);
+    assert.match(r.why, /^the ground is below you \(open ground at -?\d+, 64, -?\d+\): climb down to it$/);
+});
+
+// #624 review 6: the cost on a big cave (61 x 61, 5 high): no walkable sky anywhere, the search is bounded.
+test('#624 review 6: isTrapped in a 61 x 61 cave: at most 400 cells and under 12,000 block reads', (t) => {
+    quiet(t);
+    const cave = (q) => (Math.abs(q.x) <= 30 && Math.abs(q.z) <= 30 && q.y >= 40 && q.y <= 44 ? 'air' : 'stone');
+    const c = fakeBot({ world: cave, at: new Vec3(0, 40, 0) });
+    const r = isTrapped(c.bot);
+    assert.equal(r.trapped, true);
+    assert.ok(r.nodes <= 401, `${r.nodes} cells`);
+    assert.ok(c.reads() < 12_000, `${c.reads()} block reads`);
+});
+
+// #624 review 2 (the lead): a collect in a cave is no reason (a cave is "trapped" too); a collect that took the bot 3
+// or more below where it started, or one with a failed walk, is.
+test('#624 review 2: the collect\'s post-condition: not after a collect in a cave at its own level; after one 3 down, or with a failed walk', async (t) => {
+    quiet(t);
+    await import('../agent.js'); // the real import order (commands/index.js first)
+    const { postEscape } = await import('../commands/actions.js');
+    const runs = [];
+    const fake = (bot, opts) => { runs.push(opts.minDepth); return Promise.resolve(opts.minDepth > 0 && opts.from && opts.from.y - bot.entity.position.y < opts.minDepth ? null : 'escaped'); };
+    const agent = (y) => ({ bot: { entity: { position: new Vec3(0.5, y, 0.5) }, rotnDigs: { count: 5 } } });
+    const start = (y) => ({ t: Date.now(), digs: 1, at: new Vec3(0, y, 0) });
+    assert.equal(await postEscape(agent(40), 'collectBlocks', start(40), { escapeIfTrapped: fake }), null, 'a cave collect at its own level');
+    assert.equal(await postEscape(agent(36), 'collectBlocks', start(40), { escapeIfTrapped: fake }), 'escaped', '4 below where it started');
+    const failed = agent(40);
+    const s = start(40);
+    failed.bot.rotnWalkFailedAt = s.t + 1;
+    assert.equal(await postEscape(failed, 'collectBlocks', s, { escapeIfTrapped: fake }), 'escaped', 'a failed walk');
+    assert.deepEqual(runs, [3, 3, 0]);
+    assert.equal(await postEscape(agent(40), 'goToCoordinates', start(40), { escapeIfTrapped: fake }), null, 'a walk that did not fail');
+    assert.equal(await postEscape(agent(40), 'craftRecipe', start(40), { escapeIfTrapped: fake }), null, 'no post-condition');
+    // The real check: a cave collect (dug, trapped by the cave, at its own level) runs no escape.
+    const c = fakeBot({ world: (q) => (Math.abs(q.x) <= 20 && Math.abs(q.z) <= 20 && q.y >= 40 && q.y <= 43 ? 'air' : 'stone'), at: new Vec3(0, 40, 0) });
+    c.bot.rotnDigs = { count: 3 };
+    let escaped = 0;
+    await postEscape({ bot: c.bot }, 'collectBlocks', { t: Date.now(), digs: 1, at: new Vec3(0, 40, 0) }, { escapeIfTrapped: (b, o) => escapeIfTrapped(b, { ...o, run: () => { escaped++; return Promise.resolve({ out: true, how: 'pathfinder', dug: 0, placed: 0, at: new Vec3(0, 64, 0), ms: 1 }); } }) });
+    assert.equal(escaped, 0);
+});
+
+// #624 review 7: the wiring with a real command: !goToCoordinates whose walk digs and then fails (no path) leaves the
+// bot trapped in soak 15's pocket: runAsAction's post-condition runs the escape and the model reads where it got to.
+test('#624 review 7: a real !goToCoordinates that dug and failed (goToGoal marks the failed walk): the escape runs in the same action', async (t) => {
+    quiet(t);
+    await import('../agent.js');
+    const { executeCommand } = await import('../commands/index.js');
+    const { installDigHands } = await import('./hands.js');
+    const { bot } = fakeBot({ items: [['stone_pickaxe', 1]] });
+    // The walk digs the block over the head, then finds no path; the escape's own pathfinder finds none either.
+    let walks = 0;
+    bot.pathfinder = { ...noPath(), getPathTo: () => ({ status: 'success', path: [] }), goto: async () => { if (walks++ === 0) await bot.dig(bot.blockAt(new Vec3(0, 58, 0))); throw Object.assign(new Error('No path to the goal!'), { name: 'NoPath' }); } };
+    installDigHands(bot);
+    bot.modes = { isOn: () => false, pause() {}, unpause() {}, behavior_log: '' };
+    const labels = [];
+    const agent = { bot, shut_up: true, openChat() {}, isIdle: () => true, agenda: { finished: false },
+        actions: { currentActionLabel: '', resume_func: null, runAction(label, fn) { labels.push(label); return Promise.resolve(fn()).then(() => ({ message: bot.output, interrupted: false })); } } };
+    const { ESCAPE: E } = await import('./escape.js');
+    const saved = E.moveMs; E.moveMs = 50; t.after(() => { E.moveMs = saved; });
+    const msg = await executeCommand(agent, '!goToCoordinates(10, 64, 10, 1)');
+    assert.deepEqual(labels, ['action:goToCoordinates'], 'one action: the walk, then the post-condition');
+    assert.ok(bot.rotnWalkFailedAt > 0, 'goToGoal marked the failed walk');
+    assert.ok(bot.rotnDigs.count >= 1);
+    assert.match(String(msg ?? bot.output), /You are trapped at|Reached open ground/);
+});
+
+// #624 review 7: a reflex (mode:) or a night job that digs never runs the post-condition: it hangs off model commands only.
+test('#624 review 7: a mode: action that digs and leaves the bot trapped runs no escape', async (t) => {
+    quiet(t);
+    const { ActionManager } = await import('../action_manager.js');
+    const { bot } = fakeBot({ pathfinder: noPath() });
+    const agent = { bot, isIdle: () => true, self_prompter: { isActive: () => false }, clearBotLogs() {}, cleanKill() {}, requestInterrupt() {} };
+    bot.emit = () => {};
+    agent.actions = new ActionManager(agent);
+    agent.actions.stop = async () => {};
+    bot.rotnDigs = { count: 0 };
+    await agent.actions.runAction('mode:unstuck', async () => { await bot.dig(bot.blockAt(new Vec3(1, 56, 0))); bot.rotnDigs.count++; });
+    await agent.actions.runAction('action:digPit', () => { bot.rotnDigs.count++; });
+    assert.equal(isTrapped(bot).trapped, true);
+    assert.doesNotMatch(bot.output, /trapped|Reached open ground/);
+    assert.equal(bot.rotnTrapped ?? null, null);
 });

@@ -383,7 +383,7 @@ export async function breakLoop(bot, { burrow = burrowAway, fight = defendInPlac
 }
 
 export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, log = (l) => console.log(l), walkable = walkableExit, dig = stairOut, breaker = breakLoop, arm = preArm,
-    climb = (bot) => escape(bot, { budget: 'day' }) } = {}) {
+    climb = (bot, opts = {}) => escape(bot, { budget: 'day', ...opts }) } = {}) {
     const r = agent._escape ??= { forDeath: null, tries: 0, job: null, endedAt: null };
     if (r.job) return 'escaping';
     try { noteRespawn(agent, now); } catch { /* the escape still runs */ }
@@ -453,7 +453,8 @@ export function respawnEscapeTick(agent, { now = Date.now(), run = escapeRun, lo
                 else {
                     // Soak 16 (E3): no quick dig-out: the one escape (the day budget) before giving up.
                     log(`[respawn] no quick dig-out of the enclosed respawn spot at ${at(from)} (${out?.why ?? 'no result'}): climbing out with the escape`);
-                    const e = await climb(bot);
+                    // #624 nit: at night away from the hostiles, as stairOut.
+                    const e = await climb(bot, { hostiles: hostilesNear(bot, ESCAPE_RUN.nightHostile) });
                     if (!e?.out) { result = { arrived: false, ms: 0, stopped: 'enclosed', why: `${out?.why ?? 'no result'}; the escape: ${e?.why ?? 'no result'}` }; return; }
                     log(`[respawn] climbed out of the enclosed respawn spot at ${at(from)}: now at ${at(e.at)} (the escape: ${e.how}; dug ${e.dug}, placed ${e.placed})`);
                 }

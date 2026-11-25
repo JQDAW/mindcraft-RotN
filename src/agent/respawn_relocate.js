@@ -148,10 +148,20 @@ export function relocateTick(agent, { now = Date.now(), clock = Date.now, walk =
         try { shut = !!trapped(bot); } catch { shut = false; }
         if (!shut) { log(`[respawn] no place ${RELOCATE.away} blocks from ${what} within ${RELOCATE.maxTarget}; the agenda resumes here`); return null; }
         log(`[respawn] no place ${RELOCATE.away} blocks from ${what} within ${RELOCATE.maxTarget}, and trapped at ${at(bot.entity.position.floored())} (no walkable way to open ground): getting out first`);
+        // #624 review 3: as the walk away below: the agenda's self-prompting waits (its commands would stop the escape).
+        if (agent.self_prompter?.isActive?.()) agent.self_prompter.stop(false);
+        agent._agenda_paused = true;
+        let out = null;
         r.job = Promise.resolve()
-            .then(() => agent.actions.runAction('action:escape', () => climb(bot), { keepReplan: true }))
+            .then(() => agent.actions.runAction('action:escape', async () => { out = await climb(bot); }, { keepReplan: true }))
             .catch(err => { log(`[respawn] the escape failed: ${safeError(err)}`); return null; })
-            .then(() => { r.job = null; });
+            .then(() => {
+                r.job = null;
+                if (out?.out) { log(`[respawn] out at ${at(out.at)} (the escape: ${out.how}); the agenda resumes`); return; }
+                // A failed escape leaves the bot trapped: the agenda's prompt says so (escape.stillTrapped).
+                if (out && !out.interrupted) bot.rotnTrapped = { at: out.at ?? bot.entity.position.floored(), since: Date.now(), checkedAt: Date.now() };
+                log(`[respawn] still trapped after the escape (${out?.why ?? 'no result'}); the agenda resumes with "get out first"`);
+            });
         return 'relocating';
     }
     log(`[respawn] ${why.kind === 'death' ? 'after a death' : 'a player zombie is at the spawn'}: moving at least ${RELOCATE.away} blocks from ${what}, towards ${target.x}, ${target.z}, before the agenda resumes`);

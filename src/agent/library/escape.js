@@ -46,11 +46,16 @@ export const ESCAPE = { planMs: 5000, walkMs: 60_000, totalMs: 90_000, maxPlaced
  * maxPlaced). Soak 15's pocket was 8 below the surface: 24 steps and 90 s were too few once the walk had failed.
  */
 export const ESCAPE_DAY = { totalMs: 5 * 60_000, walkMs: 120_000, extraSteps: 8, maxPlaced: 32 };
+// #624 review 4 (the lead): only the day budget keeps the shelter's reserve; the morning and the unstuck reflex are
+// emergencies (a whole day to gather blocks again) and may spend it, dirt and planks first.
 function budgetOf(bot, kind, target) {
-    if (kind !== 'day') return { kind: 'morning', totalMs: ESCAPE.totalMs, walkMs: ESCAPE.walkMs, maxSteps: ESCAPE.maxSteps, maxPlaced: ESCAPE.maxPlaced };
-    const depth = Math.max(0, (target ? target.y : skyY(bot)) - feetOf(bot).y);
-    return { kind: 'day', totalMs: ESCAPE_DAY.totalMs, walkMs: ESCAPE_DAY.walkMs, maxSteps: depth + ESCAPE_DAY.extraSteps, maxPlaced: ESCAPE_DAY.maxPlaced };
+    if (kind !== 'day') return { kind: 'morning', totalMs: ESCAPE.totalMs, walkMs: ESCAPE.walkMs, maxSteps: ESCAPE.maxSteps, maxPlaced: ESCAPE.maxPlaced, reserve: 0 };
+    // #624 review 1: the depth from the real surface (the ground around the bot), not the bot's own column, which is
+    // open to the sky in a shaft (skyY gave 0 there).
+    const depth = Math.max(0, (target ? target.y : surfaceAround(bot)) - feetOf(bot).y);
+    return { kind: 'day', totalMs: ESCAPE_DAY.totalMs, walkMs: ESCAPE_DAY.walkMs, maxSteps: depth + ESCAPE_DAY.extraSteps, maxPlaced: ESCAPE_DAY.maxPlaced, reserve: ESCAPE.reserve };
 }
+const reserveOf = (state) => state?.budget?.reserve ?? 0;
 
 const UP = new Vec3(0, 1, 0);
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -77,18 +82,35 @@ export function openSky(bot, p) {
  * no sky. `top`: a column memo (x,z -> the highest block above that is neither empty nor a tree part), for searches.
  */
 export function skyAbove(bot, p, top = null) {
-    const k = `${p.x},${p.z}`;
+    return topOf(bot, p.x, p.z, top, p.y) < p.y + 2;
+}
+/**
+ * The highest block of column x,z that is neither empty nor a tree part, or -Infinity. With a memo (`top`, its .base
+ * the search's start y): the column is scanned once, from base + skyCheck + 12 down to base - 12 (#624 review 6:
+ * the range a search can reach: its cells are within a few blocks of base), so every cell of that column reads it
+ * once. Without: from y + skyCheck down to y + 2 (the sky over one cell).
+ */
+function topOf(bot, x, z, top = null, y = 0) {
+    const k = `${x},${z}`;
     let y0 = top?.get(k);
-    if (y0 === undefined) {
-        y0 = -Infinity;
-        const from = top ? (top.base ?? p.y) : p.y;
-        for (let y = from + ESCAPE.skyCheck + (top ? 12 : 0); y >= (top ? from - 12 : p.y + 2); y--) {
-            const b = bot.blockAt(new Vec3(p.x, y, p.z));
-            if (b && !isEmpty(b) && !isTreePart(b)) { y0 = y; break; }
-        }
-        top?.set(k, y0);
+    if (y0 !== undefined) return y0;
+    y0 = -Infinity;
+    const from = top ? (top.base ?? y) : y;
+    for (let yy = from + ESCAPE.skyCheck + (top ? 12 : 0); yy >= (top ? from - 12 : y + 2); yy--) {
+        const b = bot.blockAt(new Vec3(x, yy, z));
+        if (b && !isEmpty(b) && !isTreePart(b)) { y0 = yy; break; }
     }
-    return y0 < p.y + 2;
+    top?.set(k, y0);
+    return y0;
+}
+/** #624 review 1: the ground's height around the bot: one above the highest top (topOf) of its column and the 8 around it. */
+function surfaceAround(bot) {
+    const p = feetOf(bot);
+    const top = new Map();
+    top.base = p.y;
+    let best = -Infinity;
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) best = Math.max(best, topOf(bot, p.x + dx, p.z + dz, top) + 1);
+    return Number.isFinite(best) ? best : skyY(bot);
 }
 
 /**
@@ -96,7 +118,8 @@ export function skyAbove(bot, p, top = null) {
  * down). The bottom of a hole open to the sky has 0 or 1 (the stairs it came down): sky over it is no way out.
  */
 const passCell = (b) => !!b && b.boundingBox !== 'block' && !isLiquid(b);
-const standCell = (bot, c) => passCell(bot.blockAt(c)) && passCell(bot.blockAt(c.offset(0, 1, 0))) && solid(bot.blockAt(c.offset(0, -1, 0)));
+// #624 review 5: a step onto leaves (a tree part) is no room: never "out" standing next to leaves only.
+const standCell = (bot, c) => { const f = bot.blockAt(c.offset(0, -1, 0)); return passCell(bot.blockAt(c)) && passCell(bot.blockAt(c.offset(0, 1, 0))) && solid(f) && !isTreePart(f); };
 export function roomAround(bot, p) {
     let n = 0;
     for (const d of HORIZONTAL) {
@@ -107,7 +130,29 @@ export function roomAround(bot, p) {
 }
 /** Soak 16 (E): open ground: a good floor that is no tree part, the sky above (skyAbove), and room to walk (2 sides or more). */
 export function openGround(bot, p, top = null) {
-    return goodFloor(bot, p) && !isTreePart(bot.blockAt(p.offset(0, -1, 0))) && skyAbove(bot, p, top) && roomAround(bot, p) >= 2;
+    return passCell(bot.blockAt(p)) && passCell(bot.blockAt(p.offset(0, 1, 0))) && goodFloor(bot, p) && !isTreePart(bot.blockAt(p.offset(0, -1, 0))) && skyAbove(bot, p, top) && roomAround(bot, p) >= 2;
+}
+
+/**
+ * #624 review 1 and 5: the day escape's target: the nearest open ground (openGround) at the ground of a column within
+ * targetRadius (one above its topOf: the ground under a canopy, the rim of a shaft), never the start cell; nearest
+ * horizontally, then the smallest climb. null: none in reach (the escape goes up toward the sky).
+ */
+export function groundTarget(bot) {
+    const p = feetOf(bot);
+    const top = new Map();
+    top.base = p.y;
+    const r = ESCAPE.targetRadius;
+    let best = null;
+    for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+        const y0 = topOf(bot, p.x + dx, p.z + dz, top);
+        if (!Number.isFinite(y0)) continue;
+        const c = new Vec3(p.x + dx, y0 + 1, p.z + dz);
+        if (c.equals(p) || !openGround(bot, c, top)) continue;
+        const d = Math.hypot(dx, dz) + Math.abs(c.y - p.y) * 0.01;
+        if (!best || d < best.d) best = { c, d };
+    }
+    return best?.c ?? null;
 }
 
 /**
@@ -117,8 +162,10 @@ export function openGround(bot, p, top = null) {
 export function isOut(bot, target = null, strict = false) {
     const p = feetOf(bot);
     if (inWater(bot) || !goodFloor(bot, p)) return false;
+    // #624 review 1: strict (the day budget) is open ground only: a target next to the start cell never counts.
+    if (strict) return openGround(bot, p);
     const at = !!target && Math.abs(p.x - target.x) <= 1 && Math.abs(p.y - target.y) <= 1 && Math.abs(p.z - target.z) <= 1;
-    return (strict ? openGround(bot, p) : skyAbove(bot, p)) || at;
+    return skyAbove(bot, p) || at;
 }
 
 /** Where to get out to: the nearest dry cell (free, no liquid, good floor) under open sky within targetRadius (and 4 up, 2 down), or null (then: up toward the sky). */
@@ -172,7 +219,7 @@ export function isTrapped(bot) {
 const isPlanks = (i) => /(^|:)planks$|_planks$/.test(i?.name ?? '');
 const plankStacks = (bot) => bot.inventory.items().filter(isPlanks).sort((a, b) => b.count - a.count);
 const buildStacks = (bot) => [...softItems(bot), ...plankStacks(bot), ...shelterItems(bot)];
-const buildCount = (bot) => countOf(softItems(bot)) + countOf(plankStacks(bot)) + Math.max(0, countOf(shelterItems(bot)) - ESCAPE.reserve);
+const buildCount = (bot, reserve = 0) => countOf(softItems(bot)) + countOf(plankStacks(bot)) + Math.max(0, countOf(shelterItems(bot)) - reserve);
 
 /**
  * The pathfinder's movements for the escape: fall-safe; digging and 1x1 towers with the held blocks;
@@ -182,7 +229,7 @@ const buildCount = (bot) => countOf(softItems(bot)) + countOf(plankStacks(bot)) 
 export function escapeMovements(bot, state = { placed: 0 }) {
     const m = fallSafe(new pf.Movements(bot));
     const held = typeof m.countScaffoldingItems === 'function' ? m.countScaffoldingItems.bind(m) : () => buildCount(bot);
-    m.countScaffoldingItems = () => Math.max(0, Math.min(held(), buildCount(bot), (state.budget?.maxPlaced ?? ESCAPE.maxPlaced) - state.placed));
+    m.countScaffoldingItems = () => Math.max(0, Math.min(held(), buildCount(bot, reserveOf(state)), (state.budget?.maxPlaced ?? ESCAPE.maxPlaced) - state.placed));
     m.canDig = true;
     m.allow1by1towers = true;
     m.allowParkour = false;
@@ -233,8 +280,10 @@ export function nextStep(bot, target, state) {
     const p = feetOf(bot);
     const head2 = p.offset(0, 2, 0);
     const toward = (d) => (target ? -(d.x * (target.x - p.x) + d.z * (target.z - p.z)) : 0);
+    // #624 nit (the respawn escape at night): with hostiles given, the side away from them first.
+    const near = (d) => (state.away?.length ? -Math.min(...state.away.map(h => Math.hypot(p.x + d.x + 0.5 - h.x, p.z + d.z + 0.5 - h.z))) : 0);
     const stairs = [];
-    for (const d of [...HORIZONTAL].sort((a, b) => toward(a) - toward(b))) {
+    for (const d of [...HORIZONTAL].sort((a, b) => (state.away?.length ? (near(a) - near(b)) || (toward(a) - toward(b)) : toward(a) - toward(b)))) {
         const to = p.plus(d).offset(0, 1, 0);
         const cells = [head2, to, to.offset(0, 1, 0)];
         const ours = new Set([key(p), key(p.offset(0, 1, 0)), ...cells.map(key)]);
@@ -250,7 +299,8 @@ export function nextStep(bot, target, state) {
     if (!solid(bot.blockAt(p.offset(0, -1, 0)))) return { why: `nothing solid under the feet at ${at(p)} to pillar up from` };
     const maxPlaced = state.budget?.maxPlaced ?? ESCAPE.maxPlaced;
     if (state.placed >= maxPlaced) return { why: `no stair step, and the ${maxPlaced} blocks for pillars are spent` };
-    if (buildCount(bot) < 1) return { why: `no stair step, and no block to pillar up with${countOf(shelterItems(bot)) > 0 ? ` (the ${Math.min(countOf(shelterItems(bot)), ESCAPE.reserve)} sturdy blocks kept for the night's shelter are not used)` : ''}` };
+    const reserve = reserveOf(state);
+    if (buildCount(bot, reserve) < 1) return { why: `no stair step, and no block to pillar up with${reserve > 0 && countOf(shelterItems(bot)) > 0 ? ` (the ${Math.min(countOf(shelterItems(bot)), reserve)} sturdy blocks kept for the night's shelter are not used)` : ''}` };
     const ours = new Set([key(p), key(p.offset(0, 1, 0)), key(head2)]);
     if (!safeToDig(bot, head2, ours) || !safeToDig(bot, head2.offset(0, 1, 0), new Set([...ours, key(head2.offset(0, 1, 0))])))
         return { why: `no stair step, and no room to pillar up above ${at(p)}${fallingNear(bot, p)}` };
@@ -395,6 +445,8 @@ async function byPathfinder(bot, target, state, deadline, say) {
 /** Stage 2: steps by hand (nextStep), at most maxSteps, until out. */
 async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
     const { maxSteps = ESCAPE.maxSteps, totalMs = ESCAPE.totalMs } = state.budget ?? {};
+    // #624 review 5: stairs and pillars only go up: a target below the feet (the ground under a canopy) is no climb.
+    if (target && target.y < feetOf(bot).y) return { why: `the ground is below you (open ground at ${at(target)}): climb down to it` };
     for (let i = 0; i < maxSteps; i++) {
         if (isOut(bot, target, state.budget?.kind === 'day')) return { out: true };
         if (bot.interrupt_code) return { why: 'interrupted' };
@@ -428,19 +480,19 @@ async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
  * 'by hand'|null, dug, placed, stairs, pillars, at, why, interrupted, ms}. Never throws.
  * moveTo, pillar, say: the tests' own.
  */
-export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = (l) => console.log(l), target: given = null, budget = 'morning', craft = craftRecipe } = {}) {
+export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = (l) => console.log(l), target: given = null, budget = 'morning', craft = craftRecipe, hostiles = [] } = {}) {
     const t0 = Date.now();
-    const state = { dug: 0, placed: 0, stairs: 0, pillars: 0, crafted: 0 };
+    const state = { dug: 0, placed: 0, stairs: 0, pillars: 0, crafted: 0, away: hostiles.map(h => h?.position ?? h).filter(Boolean) };
     let deadline = t0 + ESCAPE.totalMs;
     // Soak 16 (E3): an escape run inside another one (the respawn escape) gives the flag back as it found it.
     const wasEscaping = bot.rotnEscaping;
     // #562 review 5: interrupted: stopped by something else (a reflex, a command), not a failure.
-    const done = (out, how, why = null) => { const { budget: b, ...counts } = state; return { out, how, why, interrupted: !out && (why === 'interrupted' || !!bot.interrupt_code), ...counts, budget: b?.kind ?? null, at: feetOf(bot), ms: Date.now() - t0 }; };
+    const done = (out, how, why = null) => { const { budget: b, away: _away, ...counts } = state; return { out, how, why, interrupted: !out && (why === 'interrupted' || !!bot.interrupt_code), ...counts, budget: b?.kind ?? null, at: feetOf(bot), ms: Date.now() - t0 }; };
     try {
         if (isOut(bot, null, budget === 'day')) return done(true, 'already');
         // Soak 16 (E): a target given (!goToSurface: the ground under the sky in the bot's column), else the nearest dry
         // cell under the sky, else up toward the sky.
-        const target = given ?? escapeTarget(bot);
+        const target = given ?? (budget === 'day' ? groundTarget(bot) : escapeTarget(bot));
         state.budget = budgetOf(bot, budget, target);
         deadline = t0 + state.budget.totalMs;
         const from = feetOf(bot);
@@ -449,8 +501,8 @@ export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = 
         bot.rotnEscaping = true;
         // Soak 16 (E, the lead's order): no dirt or planks to climb with, but dirt piles: dirt crafted from them first
         // (4 piles each), as many as the climb may need (the depth, at most pileCraftMax).
-        if (state.budget.kind === 'day' && buildCount(bot) < state.budget.maxSteps && placeableDirt(bot.inventory.items()) > countOf(softItems(bot))) {
-            const want = Math.min(ESCAPE.pileCraftMax, state.budget.maxSteps - buildCount(bot));
+        if (state.budget.kind === 'day' && buildCount(bot, reserveOf(state)) < state.budget.maxSteps && placeableDirt(bot.inventory.items()) > countOf(softItems(bot))) {
+            const want = Math.min(ESCAPE.pileCraftMax, state.budget.maxSteps - buildCount(bot, reserveOf(state)));
             const before = countOf(softItems(bot));
             await craftMore(bot, 'dirt', want, craft, { why: `Climbing out of here needs blocks to stand on` });
             state.crafted = Math.max(0, countOf(softItems(bot)) - before);
@@ -476,20 +528,13 @@ function report(r, say) {
 }
 
 /**
- * Soak 16 (E): !goToSurface's target: up the bot's own column, the first cell it can stand in (feet and head free,
- * a good floor that is no tree part) with the sky above (tree parts count as sky). Soak 15: the old target was the
- * column's highest block, a giant tree's leaves at y 72 over the ground at 64. None in the column: the nearest dry
- * cell under the sky (escapeTarget), else null (the escape goes up toward the sky).
+ * Soak 16 (E): !goToSurface's target: the nearest open ground at the ground of a column within reach (groundTarget:
+ * the bot's own column first when its ground is open, as over soak 15's pocket; the ground under a canopy, never the
+ * leaves (soak 15: y 72 over the ground at 64); the rim of a shaft, never the shaft's own bottom, #624 review 1).
+ * null: none in reach (the escape goes up toward the sky).
  */
 export function surfaceTarget(bot) {
-    const p = feetOf(bot);
-    for (let y = p.y + 1; y <= p.y + ESCAPE.skyCheck; y++) {
-        const c = new Vec3(p.x, y, p.z);
-        const floor = bot.blockAt(c.offset(0, -1, 0));
-        if (!isEmpty(bot.blockAt(c)) || !isEmpty(bot.blockAt(c.offset(0, 1, 0))) || isTreePart(floor) || !goodFloor(bot, c)) continue;
-        if (skyAbove(bot, c)) return c; // the ground over the column (its room is the stairs' own once dug)
-    }
-    return escapeTarget(bot);
+    return groundTarget(bot);
 }
 
 /**

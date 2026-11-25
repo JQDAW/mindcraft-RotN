@@ -169,22 +169,28 @@ export async function withinLimit(agent, name, fn, ms) {
 
 /**
  * Soak 16 (E3, the lead): the commands after which a bot that dug and is now trapped (no walkable way to the sky) gets
- * out first (escape.escapeIfTrapped, the day budget): 'always' after a dig; 'deep' (!digDown: a hole dug on purpose)
- * only deeper than 2 below where it started; 'failed' (the walks) only when the walk itself failed (a walk that got
- * where the model asked, underground included, is left there). Model commands only: never a reflex or a night job.
+ * out first (escape.escapeIfTrapped, the day budget): 'down-or-failed' (#624 review 2, the lead: a cave is "trapped"
+ * too, and a collect in one is no reason) only when the collect took the bot 3 or more blocks below where it started,
+ * or a walk of it failed (no path, out of reach); 'deep' (!digDown: a hole dug on purpose) only deeper than 2 below
+ * where it started; 'failed' (the walks) only when the walk itself failed (a walk that got where the model asked,
+ * underground included, is left there). Model commands only: never a reflex or a night job. (!breakBlockAt is no
+ * command: a skill only.)
  */
-export const POST_ESCAPE = { collectBlocks: 'always', digDown: 'deep',
+export const POST_ESCAPE = { collectBlocks: 'down-or-failed', digDown: 'deep',
     goToCoordinates: 'failed', searchForBlock: 'failed', goToRememberedPlace: 'failed', goToBed: 'failed', goToPlayer: 'failed' };
 /** The escape's own minutes, added to a command's limit when its post-condition may run. */
 const POST_ESCAPE_MIN = 6;
-async function postEscape(agent, label, start) {
+export async function postEscape(agent, label, start, { escapeIfTrapped = null } = {}) {
     const kind = POST_ESCAPE[label];
-    if (!kind) return;
+    if (!kind) return null;
     const bot = agent.bot;
-    if (kind === 'failed' && !((bot.rotnWalkFailedAt ?? 0) >= start.t)) return;
-    const { escapeIfTrapped } = await import('../library/escape.js');
-    const line = await escapeIfTrapped(bot, { digsBefore: start.digs, from: start.at, minDepth: kind === 'deep' ? 3 : 0 });
+    const walkFailed = (bot.rotnWalkFailedAt ?? 0) >= start.t;
+    if (kind === 'failed' && !walkFailed) return null;
+    const minDepth = kind === 'deep' ? 3 : kind === 'down-or-failed' && !walkFailed ? 3 : 0;
+    const run = escapeIfTrapped ?? (await import('../library/escape.js')).escapeIfTrapped;
+    const line = await run(bot, { digsBefore: start.digs, from: start.at, minDepth });
     if (line) skills.log(bot, line);
+    return line;
 }
 
 function runAsAction (actionFn, resume = false, timeout = -1, label = null) {
