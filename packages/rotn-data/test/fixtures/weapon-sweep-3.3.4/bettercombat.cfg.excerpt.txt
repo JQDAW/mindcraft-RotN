@@ -1,0 +1,47 @@
+# config/bettercombat.cfg of the pinned RotN 3.3.4 server pack zip (SHA-256 90642fd5...f5205); file SHA-256 5f25c1b46b9872086a097c3ad176ea3f0d74674b1a7c2e2b73ea82347486b43a.
+# Lines 315-353 (Custom Weapon Tweaker) and 866-871 (Item Class Whitelist), each prefixed with its line number and a tab.
+315	    S:"Custom Weapon Tweaker" <
+316	        [Weapon Substring=troll_weapon]		[Sound Type=BLUNT]		[Animation=CHOP]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=1.0]	[Knockback=2]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+317	        [Weapon Substring=celeste]			[Sound Type=AXE]		[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+318	        [Weapon Substring=amber_sword]		[Sound Type=BLUNT]		[Animation=STAB]	[Property=VERSATILE]	[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.5] 	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+319	        [Weapon Substring=gladiolus]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+320	        [Weapon Substring=dawn_star]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+321	        [Weapon Substring=wither_bane]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+322	        [Weapon Substring=blade]			[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+323	        [Weapon Substring=aethers_guard]	[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+324	        [Weapon Substring=_infinity]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+325	        [Weapon Substring=pike_]			[Sound Type=POLEARM]	[Animation=STAB]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=2.0]	[Knockback=0.25]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=true]
+326	        [Weapon Substring=glaive_]			[Sound Type=POLEARM]	[Animation=STAB]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=1.0]	[Knockback=0.75]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=true]
+327	        [Weapon Substring=spear_]			[Sound Type=POLEARM]	[Animation=STAB]	[Property=MAINHAND]		[Sweep=0]	[Additional Reach=1.0]	[Knockback=0.25]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=true]
+328	        [Weapon Substring=lance_]			[Sound Type=POLEARM]	[Animation=STAB]	[Property=MAINHAND]		[Sweep=0]	[Additional Reach=1.0]	[Knockback=2.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+329	        [Weapon Substring=halberd_]			[Sound Type=POLEARM]	[Animation=CHOP]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=1.0]	[Knockback=1.0]		[Crit Chance=0.25]	[Additional Crit Damage=0.0]	[Parry=true]
+330	        [Weapon Substring=staff]			[Sound Type=POLEARM]	[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=1.0]	[Knockback=2.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.5]	[Parry=true]
+331	        [Weapon Substring=golden_club]		[Sound Type=POLEARM]	[Animation=STAB]	[Property=MAINHAND]		[Sweep=0]	[Additional Reach=0.5]	[Knockback=1.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+332	        [Weapon Substring=warhammer_]		[Sound Type=BLUNT]		[Animation=CHOP]	[Property=MAINHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.75]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+333	        [Weapon Substring=hammer_]			[Sound Type=BLUNT]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=3.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+334	        [Weapon Substring=mace_]			[Sound Type=BLUNT]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+335	        [Weapon Substring=club_]			[Sound Type=BLUNT]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+336	        [Weapon Substring=caestus]			[Sound Type=BLUNT]		[Animation=STAB]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]	[Potion Effect=minecraft:slowness,1,10,1.0]
+337	        [Weapon Substring=tough_glove]		[Sound Type=BLUNT]		[Animation=STAB]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+338	        [Weapon Substring=greatsword_]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=3]	[Additional Reach=1.0]	[Knockback=0.75]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=true]
+339	        [Weapon Substring=katana_]			[Sound Type=BLADE]		[Animation=CHOP]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.75]	[Crit Chance=0.1]	[Additional Crit Damage=0.5]	[Parry=false]
+340	        [Weapon Substring=longsword_]		[Sound Type=BLADE]		[Animation=SWEEP]	[Property=MAINHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.75]	[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=true]
+341	        [Weapon Substring=saber_]			[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+342	        [Weapon Substring=rapier_]			[Sound Type=BLADE]		[Animation=STAB]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.0]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+343	        [Weapon Substring=_sword]			[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+344	        [Weapon Substring=_cutlass]			[Sound Type=BLADE]		[Animation=SWEEP]	[Property=ONEHAND]		[Sweep=1]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+345	        [Weapon Substring=battleaxe_]		[Sound Type=AXE]		[Animation=CHOP]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.0]		[Crit Chance=0.25]	[Additional Crit Damage=0.0]	[Parry=false]
+346	        [Weapon Substring=_shovel]			[Sound Type=AXE]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+347	        [Weapon Substring=_scythe]			[Sound Type=AXE]		[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+348	        [Weapon Substring=nyx:scythe]		[Sound Type=AXE]		[Animation=SWEEP]	[Property=TWOHAND]		[Sweep=2]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+349	        [Weapon Substring=_pickaxe]			[Sound Type=AXE]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+350	        [Weapon Substring=_axe]				[Sound Type=AXE]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=1.5]		[Crit Chance=0.25]	[Additional Crit Damage=0.0]	[Parry=false]
+351	        [Weapon Substring=_hoe]				[Sound Type=AXE]		[Animation=CHOP]	[Property=ONEHAND]		[Sweep=0]	[Additional Reach=0.0]	[Knockback=0.5]		[Crit Chance=0.1]	[Additional Crit Damage=0.0]	[Parry=false]
+352			[Weapon Substring=spartanweaponry:pike_invar] [Sound Type=POLEARM]	[Animation=STAB]	[Property=TWOHAND]		[Sweep=0]	[Additional Reach=2.0]	[Knockback=0.25]	[Crit Chance=0.1]	[Additional Crit Damage=0.5]	[Parry=true]	[Potion Effect=CRIT,AFFLICT,betterwithaddons:electrified,3,0,true,true]
+353	     >
+866	    S:"Item Class Whitelist" <
+867	        net.minecraft.item.ItemSword
+868	        net.minecraft.item.ItemTool
+869	        net.minecraft.item.ItemHoe
+870	        com.oblivioussp.spartanweaponry.item.ItemThrowingWeapon
+871	     >
