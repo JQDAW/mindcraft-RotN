@@ -63,6 +63,9 @@ export function trappedTick(agent, { now = Date.now(), clock = Date.now, run = n
     const j = agent._trapJob ??= { checkedAt: 0, trapAt: 0, digs: -1, replans: [], pickaxeDay: null, pickaxeTries: 0 };
     if (now - j.checkedAt < TRAP_JOB.checkMs) return null;
     j.checkedAt = now;
+    // #642 nit (b): a place the bot has left (more than ESCAPE_HOLD.cells away) is forgotten: back there later, the job
+    // starts over (its give-up and its re-plans).
+    if (j.places?.length) { const p = feet(bot); j.places = j.places.filter(q => q.at.distanceTo(p) <= ESCAPE_HOLD.cells); }
     const digs = bot.rotnDigs?.count ?? 0;
     let trapped = null;
     try {
@@ -80,7 +83,7 @@ export function trappedTick(agent, { now = Date.now(), clock = Date.now, run = n
 function placeOf(j, here, day, now) {
     j.places = (j.places ?? []).filter(p => p.day === day);
     let p = j.places.find(q => q.at.distanceTo(here) <= ESCAPE_HOLD.cells);
-    if (!p) { p = { at: here, day, since: now, replans: [], gaveUp: false }; j.places.push(p); }
+    if (!p) { p = { at: here, day, since: now, fails: 0, replans: [], gaveUp: false }; j.places.push(p); }
     return p;
 }
 
@@ -89,10 +92,12 @@ function trappedJob(agent, j, here, { now, clock, run, craft }) {
     const place = placeOf(j, here, bot.time?.day ?? null, now);
     if (place.gaveUp) return 'gave-up';
     // The fails at this place since it was first seen (a new day or a move of more than ESCAPE_HOLD.cells starts over).
-    const fails = failsNear(bot, here, now).filter(f => f.t >= place.since);
-    if (fails.length >= ESCAPE_HOLD.fails) {
+    // #642 nit (a): the job's own failed escapes at this place since it was first seen, however slow (a day budget's
+    // escape takes up to 5 min: three never fit in ESCAPE_HOLD.windowMs).
+    const fails = failsNear(bot, here, now);
+    if (place.fails >= ESCAPE_HOLD.fails) {
         place.gaveUp = true;
-        console.log(`[trapped] at ${at(here)}: the escape failed ${fails.length} times here within ${ESCAPE_HOLD.windowMs / 60_000} min: no more scripted escapes or re-plans here until the bot is more than ${ESCAPE_HOLD.cells} blocks away or the next day`);
+        console.log(`[trapped] at ${at(here)}: the escape failed ${place.fails} times here today: no more scripted escapes or re-plans here until the bot is more than ${ESCAPE_HOLD.cells} blocks away or the next day`);
         return 'gave-up';
     }
     const last = fails.at(-1);
@@ -116,7 +121,10 @@ function trappedJob(agent, j, here, { now, clock, run, craft }) {
         const r = await go(bot);
         const t = clock();
         if (r?.out) { bot.rotnTrapped = null; console.log(`[trapped] out: ${escapeText(r)}`); return r; }
-        if (!r?.interrupted) bot.rotnEscapeFails = [...(bot.rotnEscapeFails ?? []).filter(f => t - f.t < ESCAPE_HOLD.windowMs), { at: r?.at ?? here, t, why: r?.why ?? 'no result' }].slice(-8);
+        if (!r?.interrupted) {
+            bot.rotnEscapeFails = [...(bot.rotnEscapeFails ?? []).filter(f => t - f.t < ESCAPE_HOLD.windowMs), { at: r?.at ?? here, t, why: r?.why ?? 'no result' }].slice(-8);
+            place.fails++;
+        }
         console.log(`[trapped] still trapped: ${escapeText(r)}`);
         return r;
     };
