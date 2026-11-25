@@ -46,7 +46,7 @@ const settings = {
 
     "allow_insecure_coding": false, // allows newAction command and model can write/run code on your computer. enable at own risk
     "allow_vision": false, // allows vision model to interpret screenshots as inputs
-    "blocked_actions" : ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel", "!searchWiki"] , // commands to disable and remove from docs. Ex: ["!setMode"]. RotN: !searchWiki returns vanilla 1.21 facts (skills-rotn Request 1)
+    "blocked_actions" : ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel", "!searchWiki", "!attackPlayer"] , // commands to disable and remove from docs. Ex: ["!setMode"]. RotN: !searchWiki returns vanilla 1.21 facts (skills-rotn Request 1); !attackPlayer: the bot never attacks a player on the human's server (round 17 P, lead)
     "code_timeout_mins": -1, // minutes code is allowed to run. -1 for no timeout
     "relevant_docs_count": 5, // number of relevant code function docs to select for prompting. -1 for all
 
