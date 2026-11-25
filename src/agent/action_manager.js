@@ -1,5 +1,6 @@
 import { safeStack } from './safe_error.js';
 import { clearReplan } from './replan.js';
+import { handsBefore, handsAfter } from './library/hands.js';
 
 export class ActionManager {
     constructor(agent) {
@@ -114,7 +115,14 @@ export class ActionManager {
             }
 
             // start the action
-            await actionFn();
+            // Soak 15 (the hands rule at the action boundary): the off-hand pickaxe where the tool choosers look, a
+            // clear cursor and an empty 2x2 grid before it; the pickaxe back in the off hand and the weapon in the
+            // main hand after it (rearmWeapon), however it ends.
+            const bot = this.agent.bot;
+            const before = handsBefore(bot, actionLabel); // null: nothing to move (no await)
+            if (before) await before;
+            try { await actionFn(); }
+            finally { await handsAfter(bot, actionLabel); }
 
             // mark action as finished + cleanup
             this.executing = false;

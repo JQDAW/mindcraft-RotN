@@ -5,6 +5,7 @@ import { Prompter } from '../models/prompter.js';
 import { initModes } from './modes.js';
 import { initBot } from '../utils/mcdata.js';
 import { guardInventory } from './library/inventory_sync.js';
+import { installDigHands, idleHands } from './library/hands.js';
 import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands } from './commands/index.js';
 import { ActionManager } from './action_manager.js';
 import { NPCContoller } from './npc/controller.js';
@@ -100,6 +101,7 @@ export class Agent {
         // G3 round 7 B: the cursor follows the server, and every equip, craft or toss starts with a
         // clear cursor and survives one rejected click (resync and one more try).
         guardInventory(this.bot);
+        installDigHands(this.bot); // soak 15: a dig with the off-hand pickaxe takes it in hand (library/hands.js)
         // G4 #5: the blocks the bot places itself never make an animal look like a player's (hunting.js).
         trackBotPlaced(this.bot);
         // Soak 2: blocks the bot breaks or places count as progress for the unstuck reflex.
@@ -616,6 +618,8 @@ export class Agent {
 
     async update(delta) {
         await this.bot.modes.update();
+        // Soak 15: between actions, a stack left on the cursor or in the 2x2 grid is put back (said once).
+        if (!this.actions?.executing) await idleHands(this);
         autonomyTick(this); // control holds > tasks > agenda; no LLM call (E2, E3)
         this.self_prompter.update(delta);
         await this.checkTaskDone();

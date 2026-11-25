@@ -6,7 +6,7 @@ import { checkLevelBlueprint, checkBlueprint } from '../tasks/construction_tasks
 import { load } from 'cheerio';
 import { safeError } from '../safe_error.js';
 import * as names112 from '../library/names112.js';
-import { canonicalName, parseName } from '../library/rotn_names.js';
+import { canonicalName, parseName, inventoryKey } from '../library/rotn_names.js';
 import { listTasks } from '../task_queue.js';
 import { describeAgenda } from '../agenda.js';
 import { agendaState } from '../agenda_driver.js';
@@ -74,7 +74,18 @@ export const queryList = [
         description: "Get your bot's inventory.",
         perform: function (agent) {
             let bot = agent.bot;
-            let inventory = world.getInventoryCounts(bot);
+            // Soak 15 (the lead): the list counted every slot (world.getInventoryCounts), so rocks a failed craft left
+            // in the 2x2 grid showed as held while crafting (inventory.items(), slots 9-44) found none, and the model
+            // blamed its bundle. The main list is the inventory as crafting and the tools see it; the 2x2 grid, the
+            // cursor and the off hand are named apart (armour stays under WEARING).
+            const slots = bot.inventory?.slots ?? [];
+            const tally = (stacks) => {
+                const out = {};
+                for (const st of stacks) if (st?.name) { const key = inventoryKey(st) ?? st.name; out[key] = (out[key] ?? 0) + st.count; }
+                return out;
+            };
+            const listOf = (counts) => Object.entries(counts).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${k}`).join(', ');
+            let inventory = tally(slots.slice(9, 45));
             let res = 'INVENTORY';
             for (const item in inventory) {
                 if (inventory[item] && inventory[item] > 0)
@@ -83,6 +94,12 @@ export const queryList = [
             if (res === 'INVENTORY') {
                 res += ': Nothing';
             }
+            const grid = listOf(tally(slots.slice(1, 5)));
+            if (grid) res += `\nIN THE 2x2 CRAFTING GRID (not usable until moved back; the next craft returns them first): ${grid}`;
+            const cursor = bot.inventory?.selectedItem;
+            if (cursor?.name) res += `\nON THE CURSOR: ${cursor.count} ${inventoryKey(cursor) ?? cursor.name}`;
+            const off = slots[45];
+            if (off?.name) res += `\nIN THE OFF HAND: ${off.count} ${inventoryKey(off) ?? off.name}${/_pickaxe$/.test(off.name) ? ' (kept at a death; taken back for every dig)' : ''}`;
             else if (agent.bot.game.gameMode === 'creative') {
                 res += '\n(You have infinite items in creative mode. You do not need to gather resources!!)';
             }

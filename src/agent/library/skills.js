@@ -17,6 +17,7 @@ import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
 import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath, isWeaponItem } from "./threats.js";
 import { logAte, fightJournal, swingLine, logWeapon, mobName } from "./survival_log.js";
 import { waitText } from './wait_text.js';
+import { returnGrid } from './inventory_sync.js';
 import { digBudget, digLine, effectsText, DIG_STALL } from './pit.js';
 import { foodKey, foodValue } from "./food.js";
 import { getItem as rotnItem, registryName as rotnRegistryName } from "../../../packages/rotn-data/index.js";
@@ -250,6 +251,10 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
      * await skills.craftRecipe(bot, "stick");
      **/
     // ops: how a table is placed and picked up (tests pass their own; CRAFT_TABLE_OPS below).
+    // Soak 15 (N3): stacks a failed craft left in the 2x2 grid go back first, so the counts below see them (soak 15:
+    // "you have no such rocks" while 19-43 rocks sat in the grid).
+    const grid = await returnGrid(bot, 'before a craft').catch(() => null);
+    if (grid?.moved?.length) log(bot, `${grid.moved.map(g => `${g.count} ${g.name}`).join(', ')} that were left in the crafting grid are back in your inventory.`);
     // "cobblestone": the kind the bot's rocks make (G3 round 3 A: sedimentary rocks make chalk cobble).
     if (isGenericCobble(itemName)) return await craftCobbleFromRocks(bot, num, ops);
     const run = currentRun(bot); // checked after each await (#225 review)
@@ -643,6 +648,9 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
                 crafted = await craftPausingAutoEat(bot, recipe, 1, table);
             } catch (err) {
                 why = `the craft failed (${safeError(err)})`;
+                // Soak 15 (N3): what the guard returned from the 2x2 grid after the failure, for the model.
+                const back = bot.rotnGridReturned;
+                if (back && Date.now() - back.at < 5000 && back.moved?.length) why += `; ${back.moved.map(g => `${g.count} ${g.name}`).join(', ')} left in the crafting grid are back in your inventory: try again`;
                 break;
             }
             if (crafted.ended !== 'crafted') { // soak 9: timed out or stopped (said)
@@ -1621,10 +1629,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             const preferred = preferredTools.find(([matches]) => matches(block))?.[1];
             const prefItem = preferred ? allowedTool(bot, preferred) : null;
             if (prefItem) await bot.equip(prefItem, 'hand');
-            else {
-                await offHandToolBack(bot); // #614 re-review nit 3: equipForBlock reads inventory.items() only
-                await bot.tool.equipForBlock(block);
-            }
+            else await bot.tool.equipForBlock(block); // (the off-hand pickaxe: the action boundary, library/hands.js)
         }
         if (run.aborted) break;
         if (isLiquid) {
