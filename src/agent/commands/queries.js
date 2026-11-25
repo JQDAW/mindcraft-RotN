@@ -303,7 +303,7 @@ export const queryList = [
             const before = agent.history.notes ?? '';
             agent.history.notes = addNote(before, text);
             console.log(`[memory] note ${String(text ?? '').trim().length} chars; notes ${agent.history.notes.length} chars`);
-            try { agent.history.save?.(); } catch (err) { console.warn(`[memory] notes not saved: ${err?.message ?? err}`); }
+            Promise.resolve().then(() => agent.history.save?.()).catch(err => console.warn(`[memory] notes not saved: ${err?.message ?? err}`)); // #645 review 3
             return `Noted. Your notes now: ${agent.history.notes}`;
         }
     },

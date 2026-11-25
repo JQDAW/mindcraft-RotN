@@ -97,9 +97,11 @@ export { isFullDay };
 export function rememberScroll(agent, n, pos) {
     const p = pos ? { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) } : null;
     n.respawnSet = { pos, at: Date.now() };
+    if (agent?.bot) agent.bot.rotnScrollUsed = { pos: p, at: Date.now(), by: 'the night routine' };
     if (agent?.history) {
         agent.history.scrollUsed = { pos: p, at: Date.now() };
-        try { agent.history.save?.(); } catch (err) { console.warn(`[night] the scroll's use was not saved: ${err?.message ?? err}`); }
+        // #645 review 3: save is async: its rejection is caught here, not by a try.
+        Promise.resolve().then(() => agent.history.save?.()).catch(err => console.warn(`[night] the scroll's use was not saved: ${err?.message ?? err}`));
     }
 }
 

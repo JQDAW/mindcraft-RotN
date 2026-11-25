@@ -95,7 +95,15 @@
             },
             {
                 "role": "assistant",
-                "content": "Cows of one breed join in when one is hit, so I leave those cows alone; hogs and sheep never fight back. !attack(\"animania:hog_old_spot\")"
+                "content": "Cows of one breed join in when one is hit, so I leave those cows alone; hogs and sheep never fight back. To the hog first: !searchForEntity(\"animania:hog_old_spot\", 64)"
+            },
+            {
+                "role": "system",
+                "content": "Action output:\nFound animania:hog_old_spot 41.7 blocks away.\nYou have reached at -12.5, 64, 40.5."
+            },
+            {
+                "role": "assistant",
+                "content": "!attack(\"animania:hog_old_spot\")"
             }
         ],
         [

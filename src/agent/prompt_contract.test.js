@@ -8,7 +8,7 @@ import { readFileSync, readdirSync, statSync, mkdtempSync, rmSync } from 'node:f
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
-import * as acorn from 'acorn';
+import * as espree from 'espree';
 import settings from './settings.js';
 import { Vec3 } from 'vec3';
 import committed from '../../settings.js';
@@ -67,10 +67,19 @@ test('round 17 P: the RotN examples: few and short, no !newAction, every command
     }
 });
 
-// The model-facing texts: string literals in src/agent (parsed, so regex literals and negations are not read as text).
-// Excluded: the command definitions (their own docs), the bot-to-bot conversation, the coder (newAction), and the giver
-// replies of the task queue. A command named in a text must exist, and be in the docs unless only a giver may type it.
-const EXCLUDED = /^(commands\/|conversation\.js$|coder\.js$|agent\.js$|task_queue\.js$|npc\/|tasks\/|vision\/)/;
+// The model-facing texts: string literals in src/agent, parsed with espree (ESLint's parser), so negations and regex
+// literals are not read as text. The command definitions (commands/: their own docs) are left out; elsewhere only these
+// exact strings may name a command the docs do not offer (#645 review 5: per string, not per file).
+const ALLOWED = [
+    { file: 'agent.js', text: '!newAction' }, // a task giver's typed !newAction (refused at run time), not a text to the model
+    { file: 'coder.js', text: '!newAction' }, // the coder: only with allow_insecure_coding
+    { file: 'conversation.js', text: '!endConversation' }, // bot-to-bot messages, not the model's prompt
+    { file: 'conversation.js', text: /^I'm talking to someone else, try again later\. !endConversation\("$/ },
+    { file: 'conversation.js', text: '!endConversation("' },
+    { file: 'self_prompter.js', text: /with this syntax: !commandName\. Respond:$/ }, // a syntax placeholder
+    { file: 'tasks/tasks.js', text: /^!(endGoal|endConversation|goal\("|startConversation\(")$/ }, // upstream's benchmark tasks
+];
+const allowed = (file, text) => ALLOWED.some(a => a.file === file && (typeof a.text === 'string' ? a.text === text : a.text.test(text)));
 function namedCommands() {
     const root = new URL('.', import.meta.url).pathname;
     const files = [];
@@ -79,8 +88,8 @@ function namedCommands() {
     const found = new Map();
     for (const f of files) {
         const rel = relative(root, f);
-        if (EXCLUDED.test(rel)) continue;
-        const ast = acorn.parse(readFileSync(f, 'utf8'), { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true });
+        if (rel.startsWith('commands/')) continue;
+        const ast = espree.parse(readFileSync(f, 'utf8'), { ecmaVersion: 'latest', sourceType: 'module' });
         const texts = [];
         const visit = (n) => {
             if (!n || typeof n.type !== 'string') return;
@@ -92,10 +101,13 @@ function namedCommands() {
             }
         };
         visit(ast);
-        for (const s of texts) for (const m of s.matchAll(/(?:^|[\s("'`])!([a-z][A-Za-z]{2,})\b/g)) {
-            const k = `!${m[1]}`;
-            if (!found.has(k)) found.set(k, new Set());
-            found.get(k).add(rel);
+        for (const s of texts) {
+            if (allowed(rel, s)) continue;
+            for (const m of s.matchAll(/(?:^|[\s("'`])!([a-z][A-Za-z]{2,})\b/g)) {
+                const k = `!${m[1]}`;
+                if (!found.has(k)) found.set(k, new Set());
+                found.get(k).add(rel);
+            }
         }
     }
     return found;
@@ -109,7 +121,6 @@ test('round 17 P: every command a model-facing text names exists and is in the d
     const named = namedCommands();
     assert.ok(named.has('!goToSurface') && named.has('!craftRecipe'), 'the scan reads the texts');
     for (const [name, files] of named) {
-        if (name === '!commandName') continue; // the self-prompter's syntax placeholder ("a command with this syntax: !commandName")
         const cmd = getCommand(name);
         if (!cmd) bad.push(`${name} is no command (${[...files].join(', ')})`);
         else if (!docs.has(name) && !cmd.forcedOnly) bad.push(`${name} is not in the docs (${[...files].join(', ')})`);
@@ -117,23 +128,43 @@ test('round 17 P: every command a model-facing text names exists and is in the d
     assert.deepEqual(bad, []);
 });
 
-test('round 17 P (rotn-data, the lead\'s addendum): !goToBed refuses once the Scroll of New Life is used (this session or saved); runs otherwise', async (t) => {
+const SCROLL = { name: 'lifescroll:spawnscroll', count: 1, metadata: 0 };
+const botWith = (items) => ({ entity: { position: new Vec3(0, 64, 0) }, inventory: { items: () => items, slots: [], selectedItem: null }, output: '' });
+
+test('round 17 P (rotn-data, the lead\'s addendum): !goToBed and !useOn on a bed refuse once the Scroll of New Life is used (this session, saved, or none held); run otherwise', async (t) => {
     t.mock.method(console, 'log', () => {});
+    await commands();
     const { actionsList, scrollUsed } = await import('./commands/actions.js');
-    const perform = actionsList.find(a => a.name === '!goToBed').perform;
+    const bed = actionsList.find(a => a.name === '!goToBed').perform;
+    const useOn = actionsList.find(a => a.name === '!useOn').perform;
     const ran = [];
-    const agent = (extra) => ({ bot: { entity: { position: new Vec3(0, 64, 0) } }, actions: { runAction: (label) => { ran.push(label); return Promise.resolve({ message: 'ok' }); } }, ...extra });
-    const a1 = agent({ _night: { respawnSet: { pos: new Vec3(3, 64, -2), at: 1 } } });
-    assert.match(await perform(a1), /^Not going to bed: the Scroll of New Life set your respawn point at 3, 64, -2, and sleeping in a bed would end it for good/);
-    const a2 = agent({ history: { scrollUsed: { pos: { x: 1, y: 70, z: 1 }, at: 2 } } });
-    assert.match(await perform(a2), /respawn point at 1, 70, 1/);
-    assert.deepEqual(ran, [], 'no walk to a bed');
+    const agent = (extra, items = [SCROLL]) => ({ bot: botWith(items), actions: { runAction: (label) => { ran.push(label); return Promise.resolve({ message: 'ok' }); } }, ...extra });
+    assert.match(await bed(agent({ _night: { respawnSet: { pos: new Vec3(3, 64, -2), at: 1 } } })), /^Not using a bed: the Scroll of New Life is used \(your respawn point is at 3, 64, -2\), and sleeping in a bed would end its respawn point for good/);
+    assert.match(await bed(agent({ history: { scrollUsed: { pos: { x: 1, y: 70, z: 1 }, at: 2 } } })), /respawn point is at 1, 70, 1/);
+    // #645 review 1: a fresh start on the CX23 (load_memory false: no saved record read) with no scroll held: used.
+    assert.match(await bed(agent({}, [])), /^Not using a bed: the Scroll of New Life is used \(no Scroll of New Life held\)/);
+    assert.match(await useOn(agent({}, []), 'hand', 'bed'), /^Not using a bed/);
+    assert.match(await useOn(agent({}, []), 'hand', 'quark:white_bed') ?? '', /^Not using a bed/);
+    assert.deepEqual(ran, [], 'no walk to a bed, no right-click');
+    // The scroll still held and no record: a bed is fine.
     assert.equal(scrollUsed(agent({})), null);
-    await perform(agent({}));
-    assert.deepEqual(ran, ['action:goToBed']);
+    await bed(agent({}));
+    await useOn(agent({}), 'hand', 'bed');
+    assert.deepEqual(ran, ['action:goToBed', 'action:useOn']);
 });
 
-test('round 17 P: the scroll\'s use is saved with the history in both memory modes, and the night routine records it', async (t) => {
+test('#645 review 6: skills.goToBed itself refuses (npc/controller.js calls it directly)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const skills = await import('./library/skills.js');
+    const bot = { ...botWith([]), findBlocks: () => { throw new Error('no search for a bed'); } };
+    assert.equal(await skills.goToBed(bot), false);
+    assert.match(bot.output, /Not using a bed: the Scroll of New Life is used/);
+    const marked = { ...botWith([SCROLL]), rotnScrollUsed: { pos: { x: 5, y: 60, z: 5 }, at: 1 }, findBlocks: () => { throw new Error('no search'); } };
+    assert.equal(await skills.goToBed(marked), false);
+    assert.match(marked.output, /respawn point is at 5, 60, 5/);
+});
+
+test('round 17 P: the scroll\'s use is saved with the history in both memory modes, the night routine records it, and a save never writes null over it (#645 review 1: load_memory false)', async (t) => {
     t.mock.method(console, 'log', () => {});
     const before = { ...settings };
     t.after(() => { for (const k of Object.keys(settings)) delete settings[k]; Object.assign(settings, before); });
@@ -143,14 +174,24 @@ test('round 17 P: the scroll\'s use is saved with the history in both memory mod
     process.chdir(dir);
     const { History } = await import('./history.js');
     const { rememberScroll } = await import('./night_routine.js');
+    const settle = () => new Promise(r => setTimeout(r, 20));
     for (const memory of ['code', 'summary']) {
-        const agent = { name: `S${memory}`, prompter: { profile: { memory } }, self_prompter: { state: 0, isStopped: () => true, prompt: '' }, task: { taskStartTime: 0 } };
+        const agent = { name: `S${memory}`, bot: {}, prompter: { profile: { memory } }, self_prompter: { state: 0, isStopped: () => true, prompt: '' }, task: { taskStartTime: 0 } };
         agent.history = new History(agent);
         const n = {};
         rememberScroll(agent, n, new Vec3(4.5, 66, -7.2));
+        await settle();
         assert.deepEqual(n.respawnSet.pos, new Vec3(4.5, 66, -7.2));
+        assert.deepEqual(agent.bot.rotnScrollUsed.pos, { x: 4, y: 66, z: -8 });
         const h2 = new History(agent);
         h2.load();
         assert.deepEqual(h2.scrollUsed.pos, { x: 4, y: 66, z: -8 }, memory);
+        // A restart that never loads memory.json (load_memory false): its first save keeps the record.
+        const fresh = new History(agent);
+        assert.equal(fresh.scrollUsed, null);
+        await fresh.save();
+        const h3 = new History(agent);
+        h3.load();
+        assert.deepEqual(h3.scrollUsed?.pos, { x: 4, y: 66, z: -8 }, `${memory}: not overwritten with null`);
     }
 });

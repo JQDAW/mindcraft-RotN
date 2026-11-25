@@ -245,6 +245,9 @@ function runAsAction (actionFn, resume = false, timeout = -1, label = null) {
     return wrappedAction;
 }
 
+const useOnAction = runAsAction(async (agent, tool_name, target) => {
+    await skills.useToolOn(agent.bot, tool_name, target);
+}, false, -1, 'useOn');
 const goToBedAction = runAsAction(async (agent) => { await skills.goToBed(agent.bot); }, false, -1, 'goToBed');
 
 /**
@@ -255,7 +258,9 @@ export function scrollUsed(agent) {
     const n = agent?._night?.respawnSet;
     if (n) return n;
     const h = agent?.history?.scrollUsed;
-    return h && typeof h === 'object' ? h : null;
+    if (h && typeof h === 'object') return h;
+    // #645 review 1: no scroll held means used (memory.json is not reloaded on the CX23: load_memory is false).
+    return skills.scrollUsedOn(agent?.bot);
 }
 
 export const actionsList = [
@@ -785,7 +790,7 @@ export const actionsList = [
             // bed sets the spawn when you wake) ends the scroll's respawn point and its 32-block Zombie Player guard
             // for good. Once the scroll is used, never a bed.
             const used = scrollUsed(agent);
-            if (used) return `Not going to bed: the Scroll of New Life set your respawn point${used.pos ? ` at ${used.pos.x}, ${used.pos.y}, ${used.pos.z}` : ''}, and sleeping in a bed would end it for good (no respawn there, and a Zombie Player at every death again). Shelter for the night instead.`;
+            if (used) return skills.bedRefusalText(used);
             return goToBedAction(agent, ...rest);
         }
     },
@@ -1027,8 +1032,10 @@ export const actionsList = [
             'target': { type: 'string', description: 'The target as an entity type, block type, or "nothing" for no target.' }
         },
         // Bounded inside useToolOn (60 s); ACTION_LIMITS_MIN (2 min) is the backstop (G3 batch A: it hung).
-        perform: runAsAction(async (agent, tool_name, target) => {
-            await skills.useToolOn(agent.bot, tool_name, target);
-        })
+        perform: function (agent, tool_name, target, ...rest) {
+            // #645 review 6: right-clicking a bed sets the spawn too: refused once the Scroll of New Life is used.
+            if (/(^|:|_)bed$/.test(String(target ?? '')) && scrollUsed(agent)) return skills.bedRefusalText(scrollUsed(agent));
+            return useOnAction(agent, tool_name, target, ...rest);
+        }
     },
 ];

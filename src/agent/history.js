@@ -50,6 +50,18 @@ export function hasPlayerTurn(turns) {
     return turns.some(t => t?.role === 'user' && !isUntrustedTurn(t));
 }
 
+/**
+ * #645 review 1: the scroll's use saved before (memory.json), so a save never writes null over it: on the CX23
+ * load_memory is false, so a History after a restart starts with scrollUsed null without reading the file.
+ */
+function savedScrollUsed(fp) {
+    try {
+        if (!existsSync(fp)) return null;
+        const v = JSON.parse(readFileSync(fp, 'utf8'))?.scrollUsed;
+        return v && typeof v === 'object' ? v : null;
+    } catch { return null; }
+}
+
 export class History {
     constructor(agent) {
         this.agent = agent;
@@ -211,7 +223,7 @@ export class History {
                 // Code mode keeps the notes and the fact records; the summary mode its summary.
                 memory: code ? '' : this.memory,
                 ...(code ? { notes: this.notes, facts: this.facts } : {}),
-                scrollUsed: this.scrollUsed,
+                scrollUsed: this.scrollUsed ?? savedScrollUsed(this.memory_fp),
                 turns: this.turns,
                 self_prompting_state: this.agent.self_prompter.state,
                 self_prompt: this.agent.self_prompter.isStopped() ? null : this.agent.self_prompter.prompt,
