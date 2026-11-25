@@ -275,10 +275,12 @@ function digState(bot) {
  * Dig one block by hand within ms: true, false (it cannot be dug), or 'timeout' (the dig is
  * stopped). #431 review 6: the equip and the dig are this function's own, and no dig starts once
  * the time is up (a breakBlockAt still equipping could start one after digPit returned).
- * `equip` (#435 review 2): the caller's own equip, which also decides whether the block can be
- * broken (false: it cannot); used in place of equipForBlock and the registry's canHarvest, which do
- * not know modded rock (forge-bridge leaves harvestTools unset, and with no material every tool
- * digs it alike, so equipForBlock keeps what is held).
+ * `equip` (#435 review 2): the caller's own equip (burrow.digEquip: rotn-data's rule), which also decides whether
+ * the block can be broken (false: it cannot). Soak 15 (net-forge): since #595 mineflayer-tool's equipForBlock and the
+ * pathfinder's bestHarvestTool and safeOrBreak use forge-bridge's Forge dig rule (per state, Tool Progression), so they
+ * pick the right tool for modded rock; only block.canHarvest stays permissive (true for any item, harvestTools unset).
+ * They read inventory.items() and the main hand only: an off-hand pickaxe is taken back at the action boundary
+ * and by the bot.dig wrapper (library/hands.js).
  */
 export async function digWithin(bot, block, ms, { equip = null } = {}) {
     // Soak 14 (F2, net-forge (C)): the budget is taken after the equip, from the tool that will dig (before it,
@@ -293,8 +295,10 @@ export async function digWithin(bot, block, ms, { equip = null } = {}) {
         : p);
     if (bot.game?.gameMode !== 'creative') {
         const ok = await race((async () => {
-            await offHandToolBack(bot); // soak 14 (F2): a pickaxe kept in the off hand, where the tool lookups see it
             if (equip) return !!(await equip());
+            // #619 review 5: a mode action keeps the pickaxe in the off hand (library/hands.js), and equipForBlock reads
+            // inventory.items() and the main hand only: the pickaxe back first (nothing moves when none is there).
+            try { await offHandToolBack(bot); } catch { /* equipForBlock picks from what is there */ }
             try { await bot.tool?.equipForBlock?.(block); } catch { /* digs with what is in hand */ }
             return !(block.canHarvest && !block.canHarvest(bot.heldItem ? bot.heldItem.type : null));
         })(), Math.min(left(), DIG_STALL.equipMs)); // #614 review 7: the equip (and the off-hand move) has its own cap

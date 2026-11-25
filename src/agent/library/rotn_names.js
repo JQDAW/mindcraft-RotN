@@ -114,10 +114,13 @@ export function carriedItems(bot) {
     return off && typeof off.name === 'string' && !items.includes(off) ? [...items, off] : items;
 }
 
-/** How many of the named item the bot holds (the off hand too); a bare name counts every variant. */
-export function countItem(bot, name) {
+/**
+ * How many of the named item the bot holds (the off hand too); a bare name counts every variant. #614 re-review nit
+ * 2: { offHand: false } counts the inventory only (bot.craft uses no off-hand stack: a recipe's ingredients).
+ */
+export function countItem(bot, name, { offHand = true } = {}) {
     let n = 0;
-    for (const item of carriedItems(bot)) {
+    for (const item of (offHand ? carriedItems(bot) : (bot?.inventory?.items?.() ?? []))) {
         if (itemMatches(item, name)) n += item.count;
     }
     return n;
