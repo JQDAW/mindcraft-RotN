@@ -501,3 +501,16 @@ test('#632 re-review 2: with the real dig wrapper, the walk\'s dirt and its pile
     assert.match(bot.output, /Broke stone at 3, 64, 0: no pyrotech:rock yet\. The walk dug 1 dirt on the way \(4 betterwithmods:dirt_pile\)\./);
     assert.doesNotMatch(bot.output, /it gave 4 betterwithmods:dirt_pile/);
 });
+
+test('round 17 M: a collect leaves its record for the memory (item, got, wanted, why it ended, from, to, range)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    const bot = fakeBot({ items, blocks: [block('stone', 0, at(2)), block('stone', 0, at(3))] });
+    await skills.collectBlock(bot, 'pyrotech:rock', 8);
+    const c = bot.rotnCollects.at(-1);
+    assert.deepEqual({ item: c.item, got: c.got, wanted: c.wanted, range: c.range, reason: c.reason }, { item: 'pyrotech:rock', got: 8, wanted: 8, range: 64, reason: null });
+    assert.ok(c.from && c.to && Number.isFinite(c.at), JSON.stringify(c));
+    await skills.collectBlock(bot, 'pyrotech:rock', 8); // nothing left
+    assert.equal(bot.rotnCollects.length, 2);
+    assert.deepEqual([bot.rotnCollects[1].got, bot.rotnCollects[1].reason], [0, 'none']);
+});

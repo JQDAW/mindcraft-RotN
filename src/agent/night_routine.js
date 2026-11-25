@@ -1734,7 +1734,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             else {
                 line(agent, `[night] setting the respawn point here at ${at(n.site)} with the Scroll of New Life (once): far from the spawn and every death spot, no hostile near`);
                 startJob(agent, n, SCROLL_LABEL, () => ops.useSpawnScroll(bot), (r) => {
-                    if (r?.used) n.scrollUsed = true; // soak 13 (S2'): no second use here in the morning
+                    if (r?.used) { n.scrollUsed = true; n.respawnSet = { pos: n.site, at: Date.now() }; } // soak 13 (S2'): no second use here in the morning; round 17 M: the memory's Places
                     line(agent, r?.used ? `[night] the respawn point is now ${at(n.site)}: a death within 32 blocks of it raises no player zombie (seen by ${r.by ?? 'the stack'}${r.tries > 1 ? `, on try ${r.tries}` : ''})`
                         : `[night] the Scroll of New Life was not used (${r?.why ?? 'no result'})`);
                 });
@@ -1784,6 +1784,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     const r = await ops.useSpawnScroll(bot);
                     // The lead: the roof comes down, so a zombie in the cell by day burns (unroofSpawn).
                     if (r?.used) {
+                        n.respawnSet = { pos: site, at: Date.now() }; // round 17 M: the memory's Places
                         r.roof = await (ops.unroofSpawn ?? unroofSpawn)(bot, site, { hostile: () => ops.hostileNear?.(bot, SCROLL.quiet) ?? null });
                         // #604 review 2 (soak 11 A3): the dig may leave a pickaxe in the main hand: the weapon back.
                         try { await (ops.rearmWeapon ?? rearmWeapon)(bot); } catch { /* best effort */ }

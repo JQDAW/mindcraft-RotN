@@ -1465,6 +1465,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     let lastWalkFailed = false;
     let keptMisses = 0; // #632 review 3: blocks the server kept (no attempt used), at most CL.unreachableTargets
     const allStart = allHeld(); // #632 review 1: what came in over the whole collect, for the final line
+    const collectFrom = bot.entity?.position?.floored?.() ?? null; // round 17 M: where the collect started (the memory's Collects)
     let endReason = null; // #630 review 6: 'none' (nothing left in range), 'time' (the time limit), else null
     // CX23 soak: no target within DEATH_SPOT_RADIUS of a recent death spot for deathSpotMs: a
     // player zombie rose there and never leaves (the agenda dug dirt among them, death after death).
@@ -1955,6 +1956,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     }
     log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.${craftNote}`);
     bot.rotnCollectEnd = { at: Date.now(), short: collected < num, lastWalkFailed, reason: endReason };
+    // Round 17 M: the memory's Collects line (memory_facts.pullCollects): what, how many, from where, why it ended.
+    const collectTo = bot.entity?.position?.floored?.() ?? null;
+    bot.rotnCollects = [...(bot.rotnCollects ?? []), { item: blockType, got: collected, wanted: num, reason: endReason, range, from: collectFrom, to: collectTo, at: bot.rotnCollectEnd.at }].slice(-8);
     return collected > 0;
 }
 

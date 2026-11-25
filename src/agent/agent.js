@@ -455,7 +455,8 @@ export class Agent {
                         this.routeResponse(source, pre_message);
                 }
 
-                let execute_res = await executeCommand(this, res);
+                // Round 17 M: a reply to a non-giver may not write the bot's notes (!note refuses with { untrusted }).
+                let execute_res = await executeCommand(this, res, untrusted_sender ? { untrusted: true } : {});
 
                 console.log('Agent executed:', command_name, 'and got:', execute_res);
                 used_command = true;
