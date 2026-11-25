@@ -1947,7 +1947,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     let craftNote = '';
     if (collected < num) {
         const hints = Object.entries(allHeld()).map(([key, n]) => [key, n - (allStart[key] ?? 0)]).filter(([, d]) => d > 0)
-            .map(([key, d]) => { const c = lines.craftsInto(key, targets); return c && d >= c.per ? `${d} ${key} (${lines.craftsIntoText(c)}: !craftRecipe("${c.name}", ${Math.floor(d / c.per) * c.count}))` : null; })
+            .map(([key, d]) => { const c = lines.craftsInto(key, targets); return c && d >= c.per ? `${d} ${key} (${lines.craftsIntoText(c)}: !craftRecipe("${c.name}", ${Math.floor(d / c.per)}))` : null; }) // #632 re-review 1: num is the crafts
             .filter(Boolean);
         if (hints.length) craftNote = ` What came in crafts into it: ${hints.join('; ')}.`;
     }

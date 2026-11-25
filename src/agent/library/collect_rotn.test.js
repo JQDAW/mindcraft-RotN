@@ -15,7 +15,7 @@ import * as skills from './skills.js';
 
 const vanilla = minecraftData('1.12.2');
 // The modded rocks the server's registry has (net-forge's registry extension); ids are made up.
-const MODDED = ['pyrotech:rock', 'pyrotech_compat:rock_igneous', 'pyrotech_compat:rock_metamorphic', 'pyrotech_compat:rock_sedimentary', 'undergroundbiomes:metamorphic_cobble'];
+const MODDED = ['pyrotech:rock', 'pyrotech_compat:rock_igneous', 'pyrotech_compat:rock_metamorphic', 'pyrotech_compat:rock_sedimentary', 'undergroundbiomes:metamorphic_cobble', 'betterwithmods:dirt_pile'];
 const reg = { ...vanilla, items: { ...vanilla.items }, itemsByName: { ...vanilla.itemsByName }, blocks: { ...vanilla.blocks }, blocksByName: { ...vanilla.blocksByName } };
 MODDED.forEach((name, i) => {
     const item = { id: 5000 + i, name, stackSize: 64 };
@@ -362,6 +362,8 @@ test('soak 16 (C3): a drop that crafts into the item asked for says so (cobblest
     const bot = fakeBot({ items, blocks: [block('stone', 0, at(2))], dropsOf: () => [['cobblestone', 0, 1]] });
     await skills.collectBlock(bot, 'pyrotech:rock', 1);
     assert.match(bot.output, /Broke stone at 2, 64, 0: no pyrotech:rock yet \(it gave 1 cobblestone \(crafts into 4 pyrotech:rock each\)\)\./);
+    // #632 re-review 1: !craftRecipe's count is the crafts, not the items: 1 cobblestone is 1 craft (of 4 rocks).
+    assert.match(bot.output, /What came in crafts into it: 1 cobblestone \(crafts into 4 pyrotech:rock each: !craftRecipe\("pyrotech:rock", 1\)\)\./);
 });
 
 // #632 review 1 (soak 15, 00:01:20): !collectBlocks("undergroundbiomes:metamorphic_cobble", 1) broke a cobble block that
@@ -480,4 +482,22 @@ test('#630 re-review 1: a stone search that hits the exposure cap ends "capped",
     const bot = fakeBot({ items, blocks: [...buriedField(), boulder], world: dirtOverStone, palettePass: true });
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1, null, 64, { ...skills.COLLECT_LIMITS, exposeChecks: 100 }), false);
     assert.equal(bot.rotnCollectEnd.reason, 'capped');
+});
+
+// #632 re-review 2: C2 with the real bot.dig wrapper (library/hands.js installDigHands) on the fake: the walk digs a dirt
+// block (through the wrapper, which logs it), then the target's own dig starts "it gave".
+test('#632 re-review 2: with the real dig wrapper, the walk\'s dirt and its piles are the walk\'s, not the stone\'s', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { installDigHands } = await import('./hands.js');
+    const items = [tool('stone_pickaxe')];
+    const dirt = block('dirt', 0, at(1)), target = block('stone', 0, at(3));
+    const bot = fakeBot({ items, blocks: [dirt, target], dropsOf: (b) => (b.name === 'dirt' ? [['betterwithmods:dirt_pile', 0, 4]] : []) });
+    installDigHands(bot);
+    const goto = bot.pathfinder.goto;
+    let walkDug = false;
+    bot.pathfinder.goto = async (goal) => { if (!walkDug) { walkDug = true; await bot.dig(dirt); } return goto(goal); }; // the walk digs the dirt in its way
+    await skills.collectBlock(bot, 'pyrotech:rock', 1);
+    assert.equal(bot.rotnDigs.log.length, 2, 'both digs went through the wrapper');
+    assert.match(bot.output, /Broke stone at 3, 64, 0: no pyrotech:rock yet\. The walk dug 1 dirt on the way \(4 betterwithmods:dirt_pile\)\./);
+    assert.doesNotMatch(bot.output, /it gave 4 betterwithmods:dirt_pile/);
 });
