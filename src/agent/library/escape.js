@@ -488,7 +488,7 @@ async function byPathfinder(bot, target, state, deadline, say) {
         count();
         if (before) { try { bot.pathfinder.setMovements(before); } catch { /* best effort */ } }
     }
-    return isOut(bot, target, state.budget?.kind === 'day') ? { out: true } : { why: r.stopped === 'blocks' ? `the pathfinder used the ${state.budget?.maxPlaced ?? ESCAPE.maxPlaced} blocks` : r.stopped ? `the pathfinder's walk stopped (${r.stopped})` : `the pathfinder's walk did not get out${r.why ? ` (${r.why})` : ''}` };
+    return isOut(bot, target, state.budget?.kind === 'day' || !!state.budget?.strict) ? { out: true } : { why: r.stopped === 'blocks' ? `the pathfinder used the ${state.budget?.maxPlaced ?? ESCAPE.maxPlaced} blocks` : r.stopped ? `the pathfinder's walk stopped (${r.stopped})` : `the pathfinder's walk did not get out${r.why ? ` (${r.why})` : ''}` };
 }
 
 /** Stage 2: steps by hand (nextStep), at most maxSteps, until out. */
@@ -502,7 +502,7 @@ async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
         target = null;
     }
     for (let i = 0; i < maxSteps; i++) {
-        if (isOut(bot, target, state.budget?.kind === 'day')) return { out: true };
+        if (isOut(bot, target, state.budget?.kind === 'day' || !!state.budget?.strict)) return { out: true };
         if (bot.interrupt_code) return { why: 'interrupted' };
         if (Date.now() >= deadline) return { why: `the ${totalMs / 1000} s ran out` };
         const step = nextStep(bot, target, state);
@@ -529,7 +529,7 @@ async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
             state.pillars++;
         }
     }
-    return isOut(bot, target, state.budget?.kind === 'day') ? { out: true } : { why: `${maxSteps} steps were not enough` };
+    return isOut(bot, target, state.budget?.kind === 'day' || !!state.budget?.strict) ? { out: true } : { why: `${maxSteps} steps were not enough` };
 }
 
 /**
@@ -537,7 +537,7 @@ async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
  * 'by hand'|null, dug, placed, stairs, pillars, at, why, interrupted, ms}. Never throws.
  * moveTo, pillar, say: the tests' own.
  */
-export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = (l) => console.log(l), target: given = null, budget = 'morning', craft = craftRecipe, hostiles = [] } = {}) {
+export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = (l) => console.log(l), target: given = null, budget = 'morning', craft = craftRecipe, hostiles = [], strict = false } = {}) {
     const t0 = Date.now();
     const state = { dug: 0, placed: 0, stairs: 0, pillars: 0, crafted: 0, away: hostiles.map(h => h?.position ?? h).filter(Boolean) };
     let deadline = t0 + ESCAPE.totalMs;
@@ -546,11 +546,13 @@ export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = 
     // #562 review 5: interrupted: stopped by something else (a reflex, a command), not a failure.
     const done = (out, how, why = null) => { const { budget: b, away: _away, ...counts } = state; return { out, how, why, interrupted: !out && (why === 'interrupted' || !!bot.interrupt_code), ...counts, budget: b?.kind ?? null, at: feetOf(bot), ms: Date.now() - t0 }; };
     try {
-        if (isOut(bot, null, budget === 'day')) return done(true, 'already');
+        if (isOut(bot, null, budget === 'day' || strict)) return done(true, 'already');
         // Soak 16 (E): a target given (!goToSurface: the ground under the sky in the bot's column), else the nearest dry
         // cell under the sky, else up toward the sky.
-        const target = given ?? (budget === 'day' ? groundTarget(bot) : escapeTarget(bot));
+        const target = given ?? (budget === 'day' || strict ? groundTarget(bot) : escapeTarget(bot)); // strict: never the start cell
         state.budget = budgetOf(bot, budget, target);
+        // Soak 16 night 3: a strict out (open ground with a walkable way on) in any budget.
+        if (strict) state.budget.strict = true;
         deadline = t0 + state.budget.totalMs;
         const from = feetOf(bot);
         say(`[escape] stuck at ${at(from)}${inWater(bot) ? ' in water' : ''}: getting out ${target ? `to ${at(target)} (dry ground under open sky)` : `upward (the sky starts at y ${skyY(bot)})`}`

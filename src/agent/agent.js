@@ -5,7 +5,8 @@ import { Prompter } from '../models/prompter.js';
 import { initModes } from './modes.js';
 import { initBot } from '../utils/mcdata.js';
 import { guardInventory } from './library/inventory_sync.js';
-import { installDigHands, idleHands } from './library/hands.js';
+import { installDigHands, idleHands, installAttackGuard } from './library/hands.js';
+import { threatFor } from './library/threats.js';
 import { trappedTick } from './trapped_job.js';
 import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands } from './commands/index.js';
 import { ActionManager } from './action_manager.js';
@@ -103,6 +104,7 @@ export class Agent {
         // clear cursor and survives one rejected click (resync and one more try).
         guardInventory(this.bot);
         installDigHands(this.bot); // soak 15: a dig with the off-hand pickaxe takes it in hand (library/hands.js)
+        installAttackGuard(this.bot, { threatFor }); // soak 16 death 2: no hit on a passive animal the skill did not name
         // G4 #5: the blocks the bot places itself never make an animal look like a player's (hunting.js).
         trackBotPlaced(this.bot);
         // Soak 2: blocks the bot breaks or places count as progress for the unstuck reflex.

@@ -370,14 +370,22 @@ test('#448: a provoked animal reacts only to its own hit (its damage, or within 
 
 test('#448: two cows of one herd within reach at a hit: back off from the herd; one cow (the hunt\'s) is no reason', () => {
     const now = 100_000;
-    const cow = (x, name = 'animania:cow_holstein') => mob(name, x);
-    const hit = (entities) => threatPlan(fakeBot(entities, { lastDamageTime: now - 500, lastDamageTaken: 2 }), { now });
+    const cow = (x, name = 'animania:cow_holstein') => ({ ...mob(name, x), metadata: { 7: 8 } }); // readable data: wild
+    // An empty world around (no fence, farmland or chest): no animal here may be a player's (ownership.js).
+    const world = { blockAt: () => null, findBlocks: () => [], findBlock: () => null, players: {} };
+    const hit = (entities) => threatPlan(fakeBot(entities, { lastDamageTime: now - 500, lastDamageTaken: 2, ...world }), { now });
     const a = cow(1.5), b = cow(-2);
     const herd = hit([a, b]);
     assert.deepEqual([herd.action, herd.why, herd.away], ['flee', 'a herd fights back', RANGES.fight.away]);
     assert.equal(herd.isEnemy(b), true);
-    assert.equal(hit([cow(1.5)]), null, 'one cow hitting back during its hunt');
-    assert.equal(hit([cow(1.5), cow(-2, 'animania:cow_angus')]), null, 'two breeds do not answer each other');
+    // During its own hunt (the hunt's target) one cow hitting back is no new plan: the hunt fights it already.
+    const hunted = cow(1.5);
+    const huntBot = fakeBot([hunted], { lastDamageTime: now - 500, lastDamageTaken: 2 });
+    huntBot.pvp = { target: hunted };
+    assert.equal(threatPlan(huntBot, { now }), null, 'one cow hitting back during its hunt');
+    // Soak 16 death 2: one cow that hit the bot (not its hunt) is fought back (fleeing does not shake it).
+    assert.deepEqual([hit([cow(1.5)])?.action, hit([cow(1.5)])?.why], ['fight', 'provoked'], 'one cow, no hunt');
+    assert.equal(hit([cow(1.5), cow(-2, 'animania:cow_angus')]).action, 'fight', 'two breeds do not answer each other: the one that hit is fought');
     assert.equal(threatPlan(fakeBot([a, b]), { now }), null, 'no hit');
 });
 
@@ -536,7 +544,11 @@ test('PR 5: in the open a melee mob is fled from with no weapon or at a health i
     assert.deepEqual([maxHitOf(rooster), maxHitOf(mob('wolf', 2)), maxHitOf(mob('llama', 2))], [2, 2, 1]);
     assert.equal(peck([sword], 15).action, 'fight', 'a rooster at health 15: fought back');
     assert.equal(peck([sword], 2).action, 'flee', 'at 2: one peck may take it');
-    assert.deepEqual([peck([]).action, peck([]).why], ['flee', 'provoked, and no weapon']);
+    // Soak 16 death 2 (the lead's rule, WEAK_PROVOKED): a provoked animal that hits for at most 2 cannot be fled from;
+    // with no weapon it is fought while health is above 6, fled from at 6 or less.
+    assert.equal(peck([]).action, 'fight', 'no weapon, health 20: fought back');
+    assert.equal(peck([], 7).action, 'fight');
+    assert.deepEqual([peck([], 6).action, peck([], 6).why], ['flee', 'provoked, and no weapon, and health 6, at most 6']);
 });
 
 test('soak 5: modes: unarmed, a lone zombie makes cowardice back off, not self_defense fight', async (t) => {

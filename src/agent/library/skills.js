@@ -17,7 +17,7 @@ import { DEATH_SPOT_RADIUS, sameDimension } from "./death_report.js";
 import { shelterEnemy, threatPlan, markUnreachable, isUnreachable, UNREACHABLE, noteFightEnd, fightable, hurtingInReach, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS, weaponRank, weaponOrder, attackPath, isWeaponItem } from "./threats.js";
 import { logAte, fightJournal, swingLine, logWeapon, mobName } from "./survival_log.js";
 import { waitText } from './wait_text.js';
-import { returnGrid } from './inventory_sync.js';
+import { returnGrid, clearCursor } from './inventory_sync.js';
 import * as lines from './collect_lines.js';
 import { digBudget, digLine, effectsText, DIG_STALL } from './pit.js';
 import { foodKey, foodValue } from "./food.js";
@@ -993,6 +993,11 @@ async function attackEntityOnce(bot, entity, kill=true, { approach = true, still
      **/
 
     let pos = entity.position;
+    // Soak 16 (the hog, 22:00:27): its pork was picked up at once (the bot stood over it), before the drop watch saw an
+    // item, and the line said "no drop seen". What came in since the attack began counts too.
+    const sinceStart = killCounts(bot);
+    // Soak 16 death 2: the target this skill names, for the guard on bot.attack (hands.installAttackGuard).
+    bot.rotnAttackTarget = { id: entity?.id, by: kill ? 'attack (pvp)' : 'attack (one hit)', at: Date.now() };
     await equipHighestAttack(bot)
     logWeapon(bot, 'attack'); // soak 7 (c)
 
@@ -1061,7 +1066,7 @@ async function attackEntityOnce(bot, entity, kill=true, { approach = true, still
         // Soak 12 (E, 14:51:18): !attack killed the ewe and said "Picked up 0 items." at once, before the
         // drop fell (it comes after the death animation). The hunt's kill pickup (soak 11 H1): wait for
         // the drop where it died, pick it up, and say what.
-        const drops = !bot.interrupt_code ? await pickupKillDrops(bot, lastAt) : null;
+        const drops = !bot.interrupt_code ? await pickupKillDrops(bot, lastAt, { since: sinceStart }) : null;
         log(bot, `Its drop: ${killDropsText(drops)}.`);
         return true;
     }
@@ -1140,6 +1145,7 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
             journal.start(enemy); // #384 nit 1: at the first attack, not before the equip and the walk
             journal.weapon(); // soak 7 (c): what it holds
             fought = enemy;
+            bot.rotnAttackTarget = { id: enemy.id, by: 'defendSelf', at: Date.now() }; // soak 16 death 2: the guard
             bot.pvp.attack(enemy);
             attacked = true;
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -2459,12 +2465,20 @@ export async function pickupNearbyItems(bot, { allow = null } = {}) {
  */
 // pickup: null for pickupNearbyItems (the tests set their own, as they set HUNT).
 export const KILL_DROPS = { radius: 4, maxMs: 3000, settleMs: 300, step: 100, pickup: null };
-export async function pickupKillDrops(bot, at, { radius = KILL_DROPS.radius, maxMs = KILL_DROPS.maxMs, settleMs = KILL_DROPS.settleMs, step = KILL_DROPS.step, pickup = KILL_DROPS.pickup ?? pickupNearbyItems } = {}) {
+/** The inventory by name (items(): what a pickup lands in), for a kill's gain. */
+export function killCounts(bot) {
+    const m = new Map();
+    for (const i of bot?.inventory?.items?.() ?? []) m.set(i.name, (m.get(i.name) ?? 0) + i.count);
+    return m;
+}
+const gainSince = (before, after) => [...after].filter(([name, n]) => n > (before.get(name) ?? 0)).map(([name, n]) => ({ name, count: n - (before.get(name) ?? 0) }));
+export async function pickupKillDrops(bot, at, { radius = KILL_DROPS.radius, maxMs = KILL_DROPS.maxMs, settleMs = KILL_DROPS.settleMs, step = KILL_DROPS.step, pickup = KILL_DROPS.pickup ?? pickupNearbyItems, since = null } = {}) {
     const near = (e) => e?.name === 'item' && !!e.position && !!at && e.position.distanceTo(at) <= radius;
     const drops = () => Object.values(bot.entities ?? {}).filter(near);
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     for (let waited = 0; waited < maxMs && !drops().length && !bot.interrupt_code; waited += step) await sleep(step);
-    if (!drops().length) return { picked: [], seen: 0, refused: null };
+    // Soak 16 (the hog): no drop left to see, but it came in already (picked up at once, standing over it).
+    if (!drops().length) return { picked: since ? gainSince(since, killCounts(bot)) : [], seen: 0, refused: null };
     await sleep(settleMs); // the rest of the drop
     const seen = drops().length;
     let refused = null;
@@ -2474,15 +2488,9 @@ export async function pickupKillDrops(bot, at, { radius = KILL_DROPS.radius, max
         if (why) refused ??= why;
         return !why;
     };
-    const counts = () => {
-        const m = new Map();
-        for (const i of bot.inventory?.items?.() ?? []) m.set(i.name, (m.get(i.name) ?? 0) + i.count);
-        return m;
-    };
-    const before = counts();
+    const before = since ?? killCounts(bot);
     try { await pickup(bot, { allow }); } catch { /* the line says what came in */ }
-    const after = counts();
-    const picked = [...after].filter(([name, n]) => n > (before.get(name) ?? 0)).map(([name, n]) => ({ name, count: n - (before.get(name) ?? 0) }));
+    const picked = gainSince(before, killCounts(bot));
     return { picked, seen, refused };
 }
 /** H1: the hunt's line after a kill: what was picked up, or why nothing was. */
@@ -3414,15 +3422,32 @@ export async function consume(bot, itemName="") {
      * @example
      * await skills.eat(bot, "apple");
      **/
-    let item, name;
+    let item, name, where = '';
     if (itemName) {
         item = findItem(bot, itemName);
         name = itemName;
+    }
+    // Soak 16 (22:01:16): "You do not have any animania:raw_prime_pork to eat" with 3 held: not in slots 9-44 (the
+    // hen's pecks had cut a craft short). The off hand, then the 2x2 grid and the cursor (put back first).
+    if (!item && itemName) {
+        const off = bot.inventory?.slots?.[45];
+        if (off && itemMatches(off, itemName)) { item = off; where = ' (from the off hand)'; }
+    }
+    if (!item && itemName) {
+        const inv = bot.inventory;
+        const inGrid = [1, 2, 3, 4].some(k => inv?.slots?.[k] && itemMatches(inv.slots[k], itemName));
+        const onCursor = !!inv?.selectedItem && itemMatches(inv.selectedItem, itemName);
+        if (inGrid || onCursor) {
+            try { if (onCursor) await clearCursor(bot); if (inGrid) await returnGrid(bot, 'consume'); } catch { /* looked for again below */ }
+            item = findItem(bot, itemName);
+            if (item) where = ` (it was ${onCursor ? 'on the cursor' : 'in the 2x2 crafting grid'}; put back first)`;
+        }
     }
     if (!item) {
         log(bot, `You do not have any ${name} to eat.`);
         return false;
     }
+    if (where) log(bot, `Eating ${name}${where}.`);
     if (spawnScrollRefused(bot, item)) return false;
     // Soak 14 (F1): !consume("wheat") at food 2 ended in "Promise timed out" 3 s later. An item that is no food
     // on this pack (rotn-data's food values) and no drink is said at once.

@@ -25,7 +25,7 @@ import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_
 import { escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll, isSpawnScroll, SCROLL } from './respawn_escape.js';
 import { stairOut, DIG_OUT, WALK_EXIT } from './library/walk_exit.js';
 import { groundPlan, walkToGround, stepToDry, planText, inWater, GROUND } from './library/shelter_ground.js';
-import { escape } from './library/escape.js';
+import { escape, digWhy } from './library/escape.js';
 import { mobInShelterCells, hasWeapon, shelterEnemy, shelterTarget, threatFor, isPlayerZombie, canFightHard, maxHitOf, inMeleeReach, meleeReach, fightNumbers, fightOdds, hurtingInReach } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
@@ -1008,7 +1008,7 @@ function closeQuarters(agent, n, ops, { when = 'morning: ' } = {}) {
 /** What the routine does in the world (tests pass their own). */
 export const NIGHT_OPS = { foodRun, buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, onTree: standsOnTree, descend: (bot) => descendFromTree(bot),
     groundPlan, walkToGround, stepToDry, // soak 8: better ground when there is no place
-    escape: (bot) => escape(bot), // soak 8: out of a flooded pit first
+    escape: (bot, opts = {}) => escape(bot, opts), // soak 8: out of a flooded pit first
     nightRelocation: nightRelocationPlan, walkAwayAtNight, morningChoice, openToward,
     escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll, // soak 10 (R2, R6)
     stairOut: (bot, feet, opts) => stairOut(bot, feet, opts), // soak 12 (D3)
@@ -1047,7 +1047,7 @@ function restoreCowardice(agent, n) {
  * A hole shelter (round 9 B, fix h): dig the hole, then roof it with the shelter's own repair at
  * the hole (which crafts the roof's dirt from the dug piles).
  */
-async function pitShelter(bot, ops, progress) {
+export async function pitShelter(bot, ops, progress, n = progress) {
     progress.why = null;
     progress.noPlace = false;
     // Soak 14 (net-forge (D)): at food DIG_WEAK_FOOD or lower the hole cannot be dug in time (Mining Fatigue II+;
@@ -1056,7 +1056,57 @@ async function pitShelter(bot, ops, progress) {
     const feet = await ops.digPit(bot, { progress });
     // #431 review 4: a dig that timed out says so (not "no place"). Soak 8: noPlace, no cell for a hole.
     if (!feet) return { closed: false, feet: null, line: progress.why ?? 'found no place to dig a hole shelter', noPlace: !!progress.noPlace };
-    return ops.buildShelter(bot, { site: feet, keepSoft: true, floodCheck: true }); // #586 review 2: a fresh hole only
+    const r = await ops.buildShelter(bot, { site: feet, keepSoft: true, floodCheck: true }); // #586 review 2: a fresh hole only
+    // Soak 16 night 3 (the lead's answer 3): the roof two above the feet did not stay (refused on every face): once a
+    // night, one deeper, and the roof one lower (the old head cell, walled by the hole's own sides), so 2 cells stay.
+    const roof = feet.offset(0, 2, 0);
+    if (!r?.closed && !r?.flooded && (r?.stuck ?? []).some(c => c.equals?.(roof)) && !n.deeperTried) {
+        n.deeperTried = true; // once a night (the night state: buildAgain resets the hole's progress)
+        let why;
+        try { why = deeperRefusal(bot, ops, feet); } catch (err) { why = `the cells cannot be read (${err?.message ?? err})`; }
+        if (why) { console.log(`[night] the hole's roof did not stay; not one deeper: ${why}`); return r; }
+        const below = feet.offset(0, -1, 0);
+        console.log(`[night] the hole's roof at ${at(roof)} did not stay: one deeper (${at(below)}), the roof one lower`);
+        const ms = Math.max(PIT_DEEPER.minDigMs, PIT_DEEPER.digMs);
+        const dug = await (ops.digDeeper ?? digDeeper)(bot, below, ms);
+        if (!dug) return { ...r, line: `${r.line} The hole could not be dug one deeper at ${at(below)}.` };
+        const r2 = await ops.buildShelter(bot, { site: below, keepSoft: true, floodCheck: true });
+        return r2?.closed ? r2 : { ...r2, stuck: [...(r.stuck ?? []), ...(r2?.stuck ?? [])] };
+    }
+    return r;
+}
+
+/** Soak 16 night 3: the one dig deeper's bounds (its own dig time, the fall into the cell). */
+export const PIT_DEEPER = { digMs: 8000, minDigMs: 2000, fallMs: 1500, hostileRange: 8 };
+
+/**
+ * Why the hole must not go one deeper now, or null (the lead's answer 3): a hostile within PIT_DEEPER.hostileRange, or
+ * a cell below that is not safe to dig (escape.digWhy: diggable with what the bot holds, no liquid next to it), or a
+ * falling block over the new roof cell (the bot's head cell now), or nothing solid under the cell below to stand on.
+ */
+export function deeperRefusal(bot, ops, feet) {
+    if (typeof bot?.blockAt !== 'function') return 'the cells cannot be read';
+    const mob = ops.hostileNear?.(bot, PIT_DEEPER.hostileRange);
+    if (mob) return `${mob.name ? `a ${mob.name}` : 'a hostile mob'} within ${PIT_DEEPER.hostileRange} blocks`;
+    const below = feet.offset(0, -1, 0);
+    const ours = new Set([feet, feet.offset(0, 1, 0), below].map(key3));
+    const w = digWhy(bot, below, ours);
+    if (w) return w;
+    if (isFalling(bot.blockAt(feet.offset(0, 2, 0)))) return `a falling ${bot.blockAt(feet.offset(0, 2, 0)).name} over the roof cell`;
+    const floor = bot.blockAt(below.offset(0, -1, 0));
+    if (!floor || isEmpty(floor) || isLiquid(floor) || floor.boundingBox !== 'block') return `nothing solid under ${at(below)} to stand on`;
+    return null;
+}
+
+/** Dig the cell under the feet (the dump's tool, digWithin's budget) and wait to land in it. */
+async function digDeeper(bot, below, ms) {
+    const block = bot.blockAt(below);
+    if (!block) return false;
+    if (!isEmpty(block)) {
+        try { if (!await digWithin(bot, block, ms, { equip: digEquip(bot, block) })) return false; } catch { return false; }
+    }
+    for (let t = 0; t < PIT_DEEPER.fallMs && bot.entity.position.floored().y > below.y; t += 100) await new Promise(r => setTimeout(r, 100));
+    return bot.entity.position.floored().y === below.y;
 }
 
 /** The bot is at (or next to) cell c. */
@@ -1154,7 +1204,9 @@ function tryEscape(agent, n, ops, why, then) {
     n.escapes = (n.escapes ?? 0) + 1;
     const bot = agent.bot;
     line(agent, `[night] ${why}: getting out first (escape ${n.escapes} of ${NIGHT_ESCAPES})`);
-    startJob(agent, n, ESCAPE_LABEL, () => ops.escape(bot), (r) => {
+    // Soak 16 night 3: strict: out means open ground with a walkable way on (escape.isOut strict), not the sky over the
+    // bottom of an open hole (the night's escape "got out at -7, 65, 30" without a step, and the bot stayed in it).
+    startJob(agent, n, ESCAPE_LABEL, () => ops.escape(bot, { strict: true }), (r) => {
         console.log(`[night] the escape ${r?.out ? `got out at ${at(r.at)}` : `failed (${r?.why ?? 'no result'})`}`);
         then(r);
     });
@@ -1619,7 +1671,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         const label = pit ? 'action:digPit' : 'action:buildShelter';
         // Soak 11 (B3): never again a site that needs a cell whose block did not stay this night.
         const avoid = n.badCells?.size ? { avoid: n.badCells } : {};
-        startJob(agent, n, label, () => (pit ? pitShelter(bot, ops, n.pitProgress) : ops.buildShelter(bot, avoid)), (r, ret) => {
+        startJob(agent, n, label, () => (pit ? pitShelter(bot, ops, n.pitProgress, n) : ops.buildShelter(bot, avoid)), (r, ret) => {
             // Soak 11 (B3, Q3): cells whose block did not stay (or held the bot's own body), or a flooded
             // shelter: remembered for the night; a hole there is not dug again (pitProgress.bad).
             if (!r?.closed && (r?.stuck?.length || r?.flooded)) {
@@ -1753,7 +1805,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.state = 'day';
                 n.site = null;
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
-                    burrowSteps: 0, burrowNoneAt: null, digOutTried: false, climbTried: false, ...MORNING_CLEAR });
+                    burrowSteps: 0, burrowNoneAt: null, digOutTried: false, climbTried: false, deeperTried: false, ...MORNING_CLEAR });
                 line(agent, text);
             };
             // Soak 13 (S2', the lead): out of the shelter in the morning, its side now open, the Scroll of New Life

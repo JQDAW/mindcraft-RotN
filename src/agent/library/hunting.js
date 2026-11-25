@@ -225,6 +225,7 @@ export async function huntAnimal(bot, entity, { keepGoing = () => true, maxMs = 
     try { await equip?.(bot); } catch { /* fights with what is in hand */ }
     logWeapon(bot, 'hunt'); // soak 7 (c)
     const start = Date.now();
+    if (entity?.id != null) bot.rotnAttackTarget = { id: entity.id, by: 'hunt', at: Date.now() }; // soak 16 death 2: the guard
     bot.pvp?.attack?.(entity);
     const health = () => (Number.isFinite(entity.metadata?.[7]) ? entity.metadata[7] : null); // 1.12 EntityLivingBase health
     // #431 review 5: horizontal distances only (an animal up a slope, or the bot bobbing up and
