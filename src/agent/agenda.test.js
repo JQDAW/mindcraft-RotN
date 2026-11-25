@@ -1693,7 +1693,11 @@ test('soak 16 (R5): the shelter_blocks job crafts from the rocks held, collects 
     // Nothing in reach: no rocks held, the collect gets nothing.
     held = 0;
     state.cobble = () => [];
-    r = await AUTO_JOBS.shelter_blocks.run(agent, state, { craft, collect: () => Promise.resolve(false) });
+    // #630 review 6: "none found" only when the collect ended for lack of blocks, not on its time limit.
+    const ended = (reason) => (bot) => { bot.rotnCollectEnd = { at: Date.now(), short: true, lastWalkFailed: false, reason }; return Promise.resolve(false); };
+    r = await AUTO_JOBS.shelter_blocks.run(agent, state, { craft, collect: ended('time') });
+    assert.deepEqual([r.none, r.why], [null, 'the collect\'s time limit']);
+    r = await AUTO_JOBS.shelter_blocks.run(agent, state, { craft, collect: ended('none') });
     assert.equal(r.none, 'none');
     assert.equal(r.why, 'no loose rocks within 48 and no stone open to the air with a way out');
     // The step's text then says so; with no pickaxe the job does not run (a dirt shelter: the model).
@@ -1702,6 +1706,9 @@ test('soak 16 (R5): the shelter_blocks job crafts from the rocks held, collects 
     s.hasPickaxe = () => true;
     assert.match(SHELTER_RESERVE_STEP.goalNow(s), /The block job found no loose rocks within 48 blocks and no stone open to the air with a way out here\./);
     assert.match(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => false }), /^no pickaxe/);
+    // #630 review 7: at least its maxMs (4 min) and a minute before sunset.
+    assert.match(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => true, minutesToSunset: () => 4.5 }), /^too close to sunset \(4\.5 min\)$/);
+    assert.equal(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => true, minutesToSunset: () => 6 }), null);
     assert.doesNotMatch(SHELTER_RESERVE_STEP.goal, /mine stone with the pickaxe for more rocks/);
     assert.match(SHELTER_RESERVE_STEP.goal, /takes the loose rock piles on the ground within 48 blocks first, then stone open to the air that leaves you a walkable way out/);
 });
@@ -1718,11 +1725,38 @@ test('soak 16 (R): the job watchdog: a job running past maxMs + 60 s is stale; a
     assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, agendaState(agent.bot), { jobs, now: t0 }), 'food');
     assert.equal(runningJob(agent, t0 + AUTO_JOBS.food.maxMs), 'food', 'still within its time');
     assert.equal(runningJob(agent, t0 + AUTO_JOBS.food.maxMs + JOB_WATCHDOG.marginMs + 1), null, 'stale');
-    assert.ok(agent.said.some(l => /^agenda step food: the scripted job is stale \(running over 360 s\): the agenda goes on without it$/.test(l)), agent.said.join('\n'));
+    assert.ok(agent.said.some(l => /^agenda step food: the scripted job is stale \(running over 360 s\): stopping it; the agenda goes on without it$/.test(l)), agent.said.join('\n'));
     const j = agent._agenda_jobs.food;
     assert.deepEqual([j.running, j.lastEnd], [false, 'stale']);
     release();
     await flushJobs(); await flushJobs();
     assert.equal(j.lastEnd, 'stale', 'the hung run\'s late end is ignored');
     assert.equal(j.noneAt, null);
+});
+
+// #630 review 2: the stale job's hung action is stopped too; the tick after the gap finds no action running and starts
+// the job again (it waited forever on the hung one before). An action that never ends is waited on no longer than the
+// job's maxMs + the margin.
+test('#630 review 2: the watchdog stops the hung action; after the gap the job starts again; a never-ending other action is waited on only so long', async (t) => {
+    const { JOB_WATCHDOG, runningJob } = await import('./agenda_driver.js');
+    const { agent, runs } = jobAgent(t, []);
+    let stops = 0;
+    agent.actions.currentActionLabel = '';
+    agent.actions.stop = () => { stops++; agent.actions.executing = false; agent.actions.currentActionLabel = ''; return Promise.resolve(); };
+    agent.actions.runAction = (label, fn) => { runs.push(label); agent.actions.executing = true; agent.actions.currentActionLabel = label; return new Promise(() => {}); }; // hangs
+    const jobs = { food: { ...AUTO_JOBS.food, run: () => Promise.resolve({ why: 'x', none: null, text: 'x' }) } };
+    const state = agendaState(agent.bot);
+    const t0 = 1_000_000;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: t0 }), 'food');
+    const stale = t0 + AUTO_JOBS.food.maxMs + JOB_WATCHDOG.marginMs + 1;
+    assert.equal(runningJob(agent, stale), null);
+    assert.equal(stops, 1, 'the hung action is stopped');
+    assert.equal(agent.actions.executing, false);
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: stale + AUTO_JOBS.food.gapMs + 1 }), 'food', 'after the gap: the job again');
+    assert.deepEqual(runs, ['action:foodJob', 'action:foodJob']);
+    // Another action that never ends: waited on for at most maxMs + the margin, then the model.
+    const other = jobAgent(t, []);
+    other.agent.actions.executing = true;
+    assert.equal(autoJobTick(other.agent, FOOD_RESERVE_STEP, agendaState(other.agent.bot), { jobs, now: t0 }), 'food', 'waits');
+    assert.equal(autoJobTick(other.agent, FOOD_RESERVE_STEP, agendaState(other.agent.bot), { jobs, now: t0 + AUTO_JOBS.food.maxMs + JOB_WATCHDOG.marginMs + 1 }), null, 'no longer');
 });

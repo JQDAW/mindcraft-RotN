@@ -46,7 +46,7 @@ function drops(b, held) {
 }
 
 // world (soak 16 R): the blocks around the listed ones (for the way-out check); null: unloaded, as before.
-function fakeBot({ blocks = [], items = [], dropsOf = drops, world = null } = {}) {
+function fakeBot({ blocks = [], items = [], dropsOf = drops, world = null, palettePass = false } = {}) {
     const calls = { equip: [], collected: [], dug: [], walks: [] };
     const remaining = [...blocks];
     const bot = {
@@ -62,6 +62,12 @@ function fakeBot({ blocks = [], items = [], dropsOf = drops, world = null } = {}
         modes: { isOn: () => false, pause() {}, unpause() {} },
         inventory: { items: () => items.filter(i => i.count > 0), slots: [] },
         findBlocks({ matching, maxDistance = 16, count = 1 }) {
+            // #630 review 1: as mineflayer, the matcher first runs on each block type of the "palette" with no position
+            // (a section is skipped when none matches), then on each positioned block.
+            if (typeof matching === 'function' && palettePass) {
+                const types = [...new Map(remaining.map(b => [b.name, { name: b.name, type: b.type, metadata: b.metadata, position: null }])).values()];
+                if (!types.some(b => matching(b))) return [];
+            }
             return remaining.filter(b => (typeof matching === 'function' ? matching(b) : [].concat(matching).includes(b.type)))
                 .filter(b => b.position.distanceTo(bot.entity.position) <= maxDistance)
                 .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))
@@ -342,4 +348,17 @@ test('soak 16 (R): a stone whose break leaves no walkable way out (the bottom of
     assert.ok(![...bot.calls.collected, ...bot.calls.dug].includes(deep));
     assert.match(bot.output, /Skipped 1 block to mine \(stone at 0, 59, 0\): breaking it would leave no walkable way out\./);
     assert.equal(skills.COLLECT_LIMITS.mineHandRadius, 48);
+});
+
+// #630 review 1: with mineflayer's palette pre-pass (the matcher on position-less blocks first), exposed stone is found.
+test('#630 review 1: findBlocks\' palette pass (no position) does not hide exposed stone', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    // A buried stone nearer than the exposed one: with the palette pass hiding exposed stone, the buried one was tried
+    // (and skipped as "no way out"), which this checks is not said.
+    const surface = block('stone', 0, at(3, 63)), buried = block('stone', 0, at(0, 61));
+    const bot = fakeBot({ items, blocks: [buried, surface], world: ground, palettePass: true });
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), true, bot.output);
+    assert.deepEqual([...bot.calls.collected, ...bot.calls.dug], [surface]);
+    assert.doesNotMatch(bot.output, /Skipped/);
 });

@@ -394,3 +394,25 @@ test('#624 nit 3: a target below the feet, not on a tree: the hand climb goes up
     assert.doesNotMatch(r.why ?? '', /ground is below/);
     assert.equal(isTrapped(bot).trapped, false);
 });
+
+// #630 review 3: a climb toward the sky never steps onto a tree part (up a trunk into the canopy).
+test('#630 review 3: no stair step onto a log beside the pocket', (t) => {
+    quiet(t);
+    const trunk = (q) => (q.x === 1 && q.z === 0 && q.y >= 56 && q.y <= 70 ? 'log' : pocket(q));
+    const { bot } = fakeBot({ world: trunk, items: [['stone_pickaxe', 1]] });
+    const step = nextStep(bot, null, { placed: 0 });
+    assert.ok(step.kind === 'pillar' || (step.kind === 'stair' && !(step.d.x === 1 && step.d.z === 0)), JSON.stringify(step));
+});
+
+// #630 review 4: keepsWayOut never drops the bot through a liquid.
+test('#630 review 4: a stone over water: no way out (the drop would go through the water)', async (t) => {
+    quiet(t);
+    const { keepsWayOut } = await import('./escape.js');
+    // A boulder on a surface pond: broken, the bot would drop into the water (and out of it onto the surface).
+    const wet = (q) => (q.x === 2 && q.z === 0 && q.y === 64 ? 'stone' : q.x === 2 && q.z === 0 && q.y === 63 ? 'water' : q.y <= 63 ? 'stone' : 'air');
+    const { bot } = fakeBot({ world: wet, at: new Vec3(0, 64, 0) });
+    assert.equal(keepsWayOut(bot, bot.blockAt(new Vec3(2, 64, 0))), false);
+    // The same boulder on dry ground keeps a way out.
+    const dry = fakeBot({ world: (q) => (q.x === 2 && q.z === 0 && q.y === 64 ? 'stone' : q.y <= 63 ? 'stone' : 'air'), at: new Vec3(0, 64, 0) }).bot;
+    assert.equal(keepsWayOut(dry, dry.blockAt(new Vec3(2, 64, 0))), true);
+});

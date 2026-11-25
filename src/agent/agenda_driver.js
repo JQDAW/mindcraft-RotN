@@ -244,13 +244,21 @@ export const AUTO_JOBS = {
  */
 AUTO_JOBS.shelter_blocks = {
     label: 'action:shelterBlocks', perDay: 2, gapMs: 60_000, moveOn: 32, shortMs: 30_000, maxMs: 4 * 60_000, collectMs: 3 * 60_000,
-    ready: (agent, state) => (state.hasPickaxe?.() ? null : 'no pickaxe (a dirt shelter: the model gathers dirt piles)'),
+    ready: (agent, state) => {
+        if (!state.hasPickaxe?.()) return 'no pickaxe (a dirt shelter: the model gathers dirt piles)';
+        // #630 review 7: a run needs its maxMs and a minute before sunset (the night routine takes over at dusk).
+        const m = state.minutesToSunset?.() ?? Infinity;
+        if (m * 60_000 < AUTO_JOBS.shelter_blocks.maxMs + 60_000) return `too close to sunset (${Math.round(m * 10) / 10} min)`;
+        return null;
+    },
     run: async (agent, state, { craft = null, collect = null } = {}) => {
         const bot = agent.bot;
         const skills = await import('./library/skills.js');
         const have = () => state.shelterBlocks?.() ?? 0;
         const need = () => Math.max(0, SHELTER_HOLD - have());
         const doCraft = craft ?? ((b, n) => skills.craftRecipe(b, 'cobblestone', n));
+        // #630 review 8: the job's collect is no model command, so E's post-condition (actions.js POST_ESCAPE) does not
+        // run after it; its own rule (loose rocks first, only stone that keeps a walkable way out) keeps it out of holes.
         const doCollect = collect ?? ((b, n) => skills.collectBlock(b, 'pyrotech:rock', n, null, 64, { ...skills.COLLECT_LIMITS, totalMs: AUTO_JOBS.shelter_blocks.collectMs }));
         const craftNow = async () => {
             const c = state.cobble?.()?.[0];
@@ -260,13 +268,19 @@ AUTO_JOBS.shelter_blocks = {
         };
         const start = have();
         let collected = null;
+        const t0 = Date.now();
         if (need() > 0) await craftNow();
         if (need() > 0 && !bot.interrupt_code) {
             collected = !!(await doCollect(bot, need() * 4));
             if (need() > 0 && !bot.interrupt_code) await craftNow();
         }
         const gained = have() - start;
-        const why = need() <= 0 ? 'enough' : bot.interrupt_code ? 'stopped' : collected === false && gained <= 0 ? 'no loose rocks within 48 and no stone open to the air with a way out' : 'short';
+        // #630 review 6: "none found" only when the collect ended for lack of blocks (bot.rotnCollectEnd.reason
+        // 'none'), not on its time limit or a target out of reach.
+        const end = (bot.rotnCollectEnd?.at ?? 0) >= t0 ? bot.rotnCollectEnd : null;
+        const why = need() <= 0 ? 'enough' : bot.interrupt_code ? 'stopped'
+            : collected === false && gained <= 0 && end?.reason === 'none' ? 'no loose rocks within 48 and no stone open to the air with a way out'
+            : end?.reason === 'time' ? 'the collect\'s time limit' : end?.lastWalkFailed ? 'a target out of reach' : 'short';
         return { why, none: why.startsWith('no loose rocks') ? 'none' : null, text: `+${gained} shelter blocks (${have()} of ${SHELTER_HOLD}; ${why})` };
     },
 };
@@ -279,7 +293,11 @@ function staleCheck(agent, id, j, now = Date.now()) {
     const limit = (spec?.maxMs ?? Infinity) + JOB_WATCHDOG.marginMs;
     if (!(now - (j.startedAt ?? now) > limit)) return false;
     Object.assign(j, { running: false, token: (j.token ?? 0) + 1, lastAt: now, lastEnd: 'stale', lastNone: false, noneKind: null, noneAt: null });
-    say(agent, `agenda step ${id}: the scripted job is stale (running over ${Math.round(limit / 1000)} s): the agenda goes on without it`);
+    say(agent, `agenda step ${id}: the scripted job is stale (running over ${Math.round(limit / 1000)} s): stopping it; the agenda goes on without it`);
+    // #630 review 2: the hung action is stopped too (else the next run waits on it while it "executes").
+    if (agent.actions?.executing && agent.actions.currentActionLabel === spec?.label) {
+        try { Promise.resolve(agent.actions.stop?.()).catch(() => {}); } catch { /* best effort */ }
+    }
     return true;
 }
 const jobOf = (agent, id) => (agent?._agenda_jobs ?? {})[id] ?? null;
@@ -320,8 +338,14 @@ export function autoJobTick(agent, step, state, { jobs = AUTO_JOBS, now = Date.n
     try { notReady = spec.ready?.(agent, state) ?? null; } catch (err) { notReady = safeError(err); }
     if (notReady) return null;
     // #627 review 1: the job would run but another action is running: wait for it (the step id: no model run is started
-    // for food, and none is counted against FOOD_DAY_RUNS); the next tick starts the job.
-    if (agent.actions.executing) return step.id;
+    // for food, and none is counted against FOOD_DAY_RUNS); the next tick starts the job. #630 review 2: never longer
+    // than the job's own maxMs + the watchdog's margin (an action that never ends): then the model, as before the job.
+    if (agent.actions.executing) {
+        j.waitSince ??= now;
+        if (now - j.waitSince <= (spec.maxMs ?? Infinity) + JOB_WATCHDOG.marginMs) return step.id;
+        return null;
+    }
+    j.waitSince = null;
     j.runs++;
     j.running = true;
     j.lastAt = now;

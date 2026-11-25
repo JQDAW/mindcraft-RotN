@@ -1459,6 +1459,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     // count short, the end of the collect says so (bot.rotnCollectEnd) for its post-condition; one target out of
     // reach on the way (a cave collect that skipped one ore) is not.
     let lastWalkFailed = false;
+    let endReason = null; // #630 review 6: 'none' (nothing left in range), 'time' (the time limit), else null
     // CX23 soak: no target within DEATH_SPOT_RADIUS of a recent death spot for deathSpotMs: a
     // player zombie rose there and never leaves (the agenda dug dirt among them, death after death).
     // #416 review 2: not for a crafting table the bot placed and picks up again (pickUpTable).
@@ -1532,6 +1533,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         // and the process was killed ("Code execution refused stop after 10 seconds").
         if (run.aborted || bot.interrupt_code) break;
         if (Date.now() - runStart >= CL.totalMs) {
+            endReason = 'time';
             log(bot, `Stopped collecting ${blockType}: time limit of ${secsText(CL.totalMs)} reached.`);
             break;
         }
@@ -1583,18 +1585,23 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             // broken (escape.keepsWayOut), nearest first among CL.mineCandidates; then any mined block with a way out;
             // then loose ones farther out. A mined block with no way out is skipped (said once per collect).
             const loose = (radius) => world.getNearestBlocksWhere(bot, b => isHand(b) && wanted(b), Math.min(radius, range), 1);
-            const mined = (exposedOnly) => {
-                const cands = world.getNearestBlocksWhere(bot, b => !isHand(b) && !!ruleToolFor(b) && wanted(b) && (!exposedOnly || esc.exposedBlock(bot, b)), range, CL.mineCandidates);
+            // #630 review 5: one column memo for the pick; the exposure check is bounded (CL.exposeChecks a pick: past it
+            // the search ends with what it found). A block with no air face never has a walkable way out once
+            // broken (its six sides are solid), so there is no second pass over unexposed ones.
+            const mined = () => {
+                const top = esc.topMemo(bot);
+                let checks = 0;
+                const exposed = (b) => !b.position || (++checks <= CL.exposeChecks && esc.exposedBlock(bot, b));
+                const cands = world.getNearestBlocksWhere(bot, b => !isHand(b) && !!ruleToolFor(b) && wanted(b) && exposed(b), range, CL.mineCandidates);
                 for (const b of cands) {
-                    if (esc.keepsWayOut(bot, b)) return [b];
+                    if (esc.keepsWayOut(bot, b, top)) return [b];
                     noWayOut.push(b);
                     if (b.position) givenUp.push(b.position.clone ? b.position.clone() : b.position);
                 }
                 return [];
             };
             blocks = loose(CL.mineHandRadius);
-            if (blocks.length === 0) blocks = mined(true);
-            if (blocks.length === 0) blocks = mined(false);
+            if (blocks.length === 0) blocks = mined();
             if (blocks.length === 0) blocks = loose(range);
             if (noWayOut.length > noWayOutSaid) {
                 const b = noWayOut[noWayOut.length - 1];
@@ -1616,6 +1623,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         }
 
         if (blocks.length === 0) {
+            endReason = 'none';
             if (collected === 0)
                 log(bot, `No ${blockType} nearby to collect.`);
             else
@@ -1898,7 +1906,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
     sayDeathSkips(); // #416 nit: also when the collect ended otherwise (a time limit, its attempts)
     log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.`);
-    bot.rotnCollectEnd = { at: Date.now(), short: collected < num, lastWalkFailed };
+    bot.rotnCollectEnd = { at: Date.now(), short: collected < num, lastWalkFailed, reason: endReason };
     return collected > 0;
 }
 
@@ -4765,7 +4773,7 @@ const STOP_SETTLE_MS = 5000;
 // mineHandRadius, mineCandidates (soak 16 R): for an item with by-hand and mined blocks (rocks), the loose ones are
 // searched this far before any is mined; at most this many mined candidates are checked for a way out per target.
 export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
-    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000, mineHandRadius: 48, mineCandidates: 8 };
+    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000, mineHandRadius: 48, mineCandidates: 8, exposeChecks: 16_384 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit
