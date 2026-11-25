@@ -204,11 +204,16 @@ test('G4 #5, soak 14 (F1): foodShortfall: never at night; before night the night
     assert.equal(f({ minutesToSunset: 8, food: 12, saturation: 2, held: 0.5 }), 0.8);
     assert.equal(f({ minutesToSunset: 8, held: 0 }), null, 'food 15: the bar covers the night');
     assert.equal(f({ minutesToSunset: 8, food: 20, saturation: 5, held: 0 }), null, 'a full bar: no need');
-    assert.equal(f({ finished: true, held: 11 }), 12, 'agenda done, by day: 12');
-    assert.equal(f({ finished: true, held: 12 }), null);
-    assert.equal(f({ held: 3 }), null, 'during the agenda by day: only when urgent');
-    assert.equal(f({ food: 12, held: 0 }), 12, 'food 12, nothing held: now');
-    assert.equal(f({ food: 12, held: 3 }), null, 'something held: the eating reflex eats it');
+    // Soak 16 (F1): by day the day reserve at any time: the night's need at the bar projected to sunset (0.5 a
+    // minute), + 4. Food 15, 14 min to sunset: 8 at sunset, need 7 + 7.8 - 8 = 6.8, reserve 10.8.
+    const day = (o) => f({ minutesToSunset: 14, ...o });
+    assert.equal(day({ held: 10 }), 10.8, 'during the agenda by day: the day reserve');
+    assert.equal(day({ held: 10.8 }), null);
+    assert.equal(day({ food: 20, held: 3 }), 5.8, 'a full bar at noon: 13 at sunset, need 1.8, + 4');
+    assert.equal(day({ food: 20, held: 11, finished: true }), 12, 'agenda done: 12 when more than the reserve');
+    assert.equal(day({ food: 20, held: 12, finished: true }), null);
+    assert.equal(day({ food: 12, held: 0 }), 13.8, 'food 12: 5 at sunset, need 9.8, + 4 (more than the urgent 12)');
+    assert.equal(f({ minutesToSunset: Infinity, food: 15, held: 3 }), 4, 'time unknown: the need at the bar now (0), + 4');
     assert.equal(f({ food: undefined }), null, 'food unknown: never');
 });
 

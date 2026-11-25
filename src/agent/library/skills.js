@@ -977,7 +977,7 @@ export async function attackEntity(bot, entity, kill=true, opts = {}) {
     try { return await attackEntityOnce(bot, entity, kill, opts); } finally { if (opts.rearm !== false) { try { await rearmWeapon(bot); } catch { /* best effort */ } } }
 }
 
-async function attackEntityOnce(bot, entity, kill=true, { approach = true } = {}) {
+async function attackEntityOnce(bot, entity, kill=true, { approach = true, stillAllowed = null } = {}) {
     /**
      * Attack mob of the given type.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -1030,6 +1030,15 @@ async function attackEntityOnce(bot, entity, kill=true, { approach = true } = {}
             await new Promise(resolve => setTimeout(resolve, ATTACK_PROGRESS.tickMs));
             if (bot.interrupt_code) {
                 bot.pvp.stop();
+                return false;
+            }
+            // Soak 16 (F5): !attack on an animal re-checks the herd rule during the chase (a herd that gathered).
+            let risk = null;
+            try { risk = stillAllowed?.(bot, entity) ?? null; } catch { risk = null; }
+            if (risk) {
+                bot.pvp.stop();
+                markUnreachable(bot, entity);
+                log(bot, `Stopped attacking the ${entity.name}: ${risk}. Find a lone one, away from others of its breed.`);
                 return false;
             }
             const d = bot.entity.position.distanceTo(entity.position);

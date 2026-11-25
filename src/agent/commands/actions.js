@@ -690,12 +690,15 @@ export const actionsList = [
                     if (ofType.some(e => skills.isUnreachable(agent.bot, e))) why.push(`the ones it could not reach in the last ${skills.ATTACK_PROGRESS.skipMs / 60_000} min are left alone`);
                     if (skipped.length) why.push(`it may belong to a player (${[...new Set(skipped)].join('; ')})`);
                     if (risky.length) why.push([...new Set(risky)].join('; '));
-                    const hint = skipped.length && risky.length ? 'Find a lone, wild one away from bulls, fences, farms and houses.'
-                        : skipped.length ? 'Find a wild one away from fences, farms and houses.' : risky.length ? 'Find a lone one, away from bulls.' : 'Try another one, another place, or !forage.';
+                    // Soak 16 (F5): the herd is others of its breed; a bull counts only within a sweeping weapon's reach.
+                    const hint = skipped.length && risky.length ? 'Find a lone, wild one away from others of its breed, fences, farms and houses.'
+                        : skipped.length ? 'Find a wild one away from fences, farms and houses.' : risky.length ? 'Find a lone one, away from others of its breed (with a sword, also away from bulls).' : 'Try another one, another place, or !forage.';
                     skills.log(agent.bot, `Not attacking ${type}: ${why.join('; and ')}. ${hint}`);
                     return;
                 }
-                await skills.attackEntity(agent.bot, free, true);
+                // Soak 16 (F5): the herd rule again during the chase (not after a giver's override).
+                const overridden = free === riskyOne && !!giver;
+                await skills.attackEntity(agent.bot, free, true, overridden ? {} : { stillAllowed: (b, e) => retaliationRisk(b, e, { weapon: b.heldItem ?? null }) });
                 return;
             }
             await skills.attackNearest(agent.bot, type, true);

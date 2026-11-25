@@ -785,7 +785,8 @@ const modes_list = [
             const skipped = [];
             const target = huntTarget(bot, { bases, skipped });
             const said = skipped.join('; ');
-            if (said && said !== this.skipped_said) console.log(`[reflex] hunting: left alone, it may belong to a player: ${said}`);
+            // Soak 16 (F5): each reason says its kind (hunting.huntTarget): "may belong to a player", a herd, a sweep.
+            if (said && said !== this.skipped_said) console.log(`[reflex] hunting: left alone: ${said}`);
             this.skipped_said = said;
             if (!target || !await world.isClearPath(bot, target)) return;
             execute(this, agent, async () => {

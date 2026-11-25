@@ -23,7 +23,7 @@ import { heldFoodPoints } from './library/food.js';
 import { nearbyHuntable } from './library/hunting.js';
 import { nearbyForage } from './library/foraging.js';
 import { hasWeapon, WEAPON } from './library/threats.js';
-import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT } from './agenda.js';
+import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT, foodTargetNow } from './agenda.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
 export const TICK_MS = 2_000;
@@ -181,7 +181,97 @@ function tickState(agent) {
     const state = agendaState(agent.bot, agent._night?.clock);
     state.foodRunning = () => agent._agenda_step != null && agent._agenda_step === agent.agenda?.food?.id && !!agent.self_prompter?.isActive?.();
     state.foodStartMs = () => foodStartMs(); // #588 nit 1: H3's wait for its run, from this budget
+    // Soak 16 (F2): a step's scripted job between its runs (the step is not due meanwhile), and where its last run
+    // found nothing in reach (the model then picks a direction).
+    state.jobWaiting = (id) => jobWaiting(agent, id);
+    state.jobFoundNone = (id) => jobFoundNone(agent, id);
     return state;
+}
+
+/**
+ * Soak 16 (F2, Fable S3, the lead): a step whose solution is known gets a scripted body, and the model is the
+ * fallback. step.autoJob names a job in AUTO_JOBS: {label, perDay, gapMs, moveOn, ready(agent, state) -> why not
+ * or null, run(agent, state) -> {why, none, text}}. The job runs as an action (the hands rule around it); between
+ * runs (gapMs) the step is not due (state.jobWaiting), so the other steps go on; a run that found nothing in reach
+ * (none) hands the step to the model until the bot is moveOn blocks from there (state.jobFoundNone); after perDay runs
+ * in an in-game day, the model as before. agent._agenda_jobs[stepId]: {day, runs, lastAt, lastEnd, noneAt, running}.
+ * R (soak 16) adds the shelter_blocks job here.
+ */
+export const AUTO_JOBS = {
+    food: {
+        label: 'action:foodJob', perDay: 4, gapMs: 3 * 60_000, moveOn: 32,
+        ready: (agent, state) => {
+            const m = state.minutesToSunset?.() ?? Infinity;
+            if (!(m > RESERVE_LEAD_MIN)) return 'not in full daylight (the night routine has food from the before-night window on)';
+            return null;
+        },
+        run: async (agent, state, { foodRun: runFood = null } = {}) => {
+            const bot = agent.bot;
+            const [{ foodRun: realRun, FOOD_RUN }, { DAY_FOOD }, threats] = await Promise.all([import('./library/food_run.js'), import('./library/food.js'), import('./library/threats.js')]);
+            const foodRun = runFood ?? realRun;
+            const target = foodTargetNow(state, { finished: !!agent.agenda?.finished });
+            const held = state.foodHeld?.() ?? 0;
+            const need = Math.max(1, (target ?? held) + DAY_FOOD.fill - held);
+            const stop = () => {
+                const m = state.minutesToSunset?.() ?? Infinity;
+                if (!(m > RESERVE_LEAD_MIN)) return 'the before-night window';
+                try { return threats.threatPlan(bot) ? 'a threat came near' : null; } catch { return null; }
+            };
+            const r = await foodRun(bot, { ...FOOD_RUN.day, need, stop });
+            const none = /^no ripe wild food(,| and) (no animal to hunt|and no weapon)/.test(r?.why ?? '');
+            return { why: r?.why ?? 'no result', none, text: `+${r?.points ?? 0} food points in ${Math.round((r?.ms ?? 0) / 1000)} s (${r?.why ?? 'no result'})` };
+        },
+    },
+};
+const jobOf = (agent, id) => (agent?._agenda_jobs ?? {})[id] ?? null;
+function jobWaiting(agent, id, now = Date.now()) {
+    const j = jobOf(agent, id);
+    return !!j && !j.running && j.lastEnd != null && !j.lastNone && now - j.lastAt < (AUTO_JOBS[agent.agenda?.steps?.find?.(s => s.id === id)?.autoJob ?? id]?.gapMs ?? 0);
+}
+function jobFoundNone(agent, id) {
+    const j = jobOf(agent, id);
+    const here = agent?.bot?.entity?.position;
+    const spec = AUTO_JOBS[id];
+    return !!j?.noneAt && !!here && here.distanceTo(j.noneAt) < (spec?.moveOn ?? 32);
+}
+
+/**
+ * The step's scripted job (AUTO_JOBS[step.autoJob]): the step id while it runs (no model call), else null (the model
+ * gets the step's goal: nothing in reach here, the day's runs spent, or not ready). `jobs` and `now` are for tests.
+ */
+export function autoJobTick(agent, step, state, { jobs = AUTO_JOBS, now = Date.now() } = {}) {
+    const spec = step?.autoJob ? jobs[step.autoJob] : null;
+    if (!spec || typeof agent.actions?.runAction !== 'function') return null;
+    const all = agent._agenda_jobs ??= {};
+    const j = all[step.id] ??= { day: null, runs: 0, lastAt: -Infinity, lastEnd: null, lastNone: false, noneAt: null, running: false };
+    if (j.running) return step.id;
+    const day = state.day?.() ?? Math.floor(now / (20 * 60_000));
+    if (j.day !== day) Object.assign(j, { day, runs: 0 });
+    if (agent.actions.executing) return null; // never over another action (the next tick tries)
+    if (j.runs >= spec.perDay) return null; // the model, as before the job
+    if (j.noneAt && agent.bot?.entity?.position?.distanceTo(j.noneAt) < spec.moveOn) return null; // the model picks a direction
+    if (now - j.lastAt < spec.gapMs) return null;
+    let notReady = null;
+    try { notReady = spec.ready?.(agent, state) ?? null; } catch (err) { notReady = safeError(err); }
+    if (notReady) return null;
+    j.runs++;
+    j.running = true;
+    j.lastAt = now;
+    const sp = agent.self_prompter;
+    if (sp?.isActive?.() && ownsPrompt(agent)) { sp.stop(false); agent._agenda_paused = true; }
+    say(agent, `agenda step ${step.id}: the scripted job (run ${j.runs} of ${spec.perDay} today)`);
+    let result = null;
+    Promise.resolve(agent.actions.runAction(spec.label, async () => { result = await spec.run(agent, state); }))
+        .catch(err => { result = { why: safeError(err), none: false, text: `failed: ${safeError(err)}` }; })
+        .finally(() => {
+            j.running = false;
+            j.lastAt = Date.now();
+            j.lastEnd = result?.why ?? 'no result';
+            j.lastNone = !!result?.none;
+            j.noneAt = result?.none ? (agent.bot?.entity?.position?.clone?.() ?? null) : null;
+            say(agent, `agenda step ${step.id}: the scripted job ended: ${result?.text ?? j.lastEnd}${result?.none ? '; the model picks a direction' : ''}`);
+        });
+    return step.id;
 }
 
 /**
@@ -289,7 +379,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
 
     // Soak 10 (W2): a step that can craft what it asks for now (the weapon reserve's club from 2 logs)
     // crafts it as a skill: no model call. A craft that did not end the step leaves it to the model.
-    const auto = autoCraftTick(agent, step, state);
+    const auto = autoCraftTick(agent, step, state) ?? autoJobTick(agent, step, state, { now });
     if (auto) return auto;
 
     const goal = agendaGoal(agenda, step, state);

@@ -15,7 +15,7 @@ import { FOOD_BEFORE_NIGHT, foodRunsOutBeforeNight, Agenda, ROTN_EARLY_GAME, des
 import { Vec3 } from 'vec3';
 import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
-import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS, autoCraftTick, AUTO_CRAFT } from './agenda_driver.js';
+import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS, autoCraftTick, AUTO_CRAFT, autoJobTick, AUTO_JOBS } from './agenda_driver.js';
 import { Agent } from './agent.js';
 import { parseCommandMessage } from './commands/index.js';
 import { TaskQueue } from './task_queue.js';
@@ -581,22 +581,25 @@ test('G4 #5: the soak\'s case (agenda done, nothing held, food 12, by day): the 
     const p = agent.self_prompter.prompt;
     // Soak 13 (C3a): the step wants food held; the bar does not count (the model read "food 13 ... at least 12" as met).
     // Soak 14 (F1): in food points (hunger + saturation), the drain rotn-data measured, and the eat rule.
-    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 points in your inventory; this step wants food worth at least 12 points held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack food falls about 1 point every 4 minutes at rest \(a sealed night costs about 7\) and about 1 every 1\.5 minutes while walking or hunting, and starving kills\. .*You eat by yourself at food 8 or lower, the least valuable food first: keep the rest\. /);
+    // Soak 16 (F1): by day the day reserve: food 12 with 19.6 min to sunset is 2.2 at sunset, need 12.6, + 4 = 16.6.
+    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 points in your inventory; this step wants food worth at least 16\.6 points held \(your hunger bar, 12 of 20, does not count toward it\)\. On this pack food falls about 1 point every 4 minutes at rest \(a sealed night costs about 7\) and about 1 every 1\.5 minutes while walking or hunting, and starving kills\. .*You eat by yourself at food 8 or lower, the least valuable food first: keep the rest\. /);
     assert.doesNotMatch(p, /get to at least/);
     assert.match(p, /Near you: animania:cow_holstein: kill one with !attack\("animania:cow_holstein"\)/);
     assert.doesNotMatch(p, /sow_old_spot/, 'a named animal is never offered');
     assert.match(p, /Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses/);
     assert.equal(foodDue(agent), true, 'the hunting reflex agrees');
-    // Food worth 12 held: done; the agenda is idle again.
+    // Food worth 16.8 held (4 bread): done; the agenda is idle again.
     agent.bot.inventory = { items: () => [stack('bread', 0, 4)], slots: [] };
     assert.equal(agendaTick(agent, { now: TICK_MS }), null);
     assert.equal(foodDue(agent), false);
 });
 
-test('G4 #5: during the agenda only an urgent need; before night the night\'s need (soak 14: points), after the shelter blocks; at night never', (t) => {
-    // Running agenda, by day, bread held, food 15: the steps go on.
-    const busy = foodAgent(t, [stack('bread', 0, 1)], { food: 15, finished: false });
+test('G4 #5, soak 16 (F1): during the agenda by day the day reserve; before night the night\'s need (soak 14: points), after the shelter blocks; at night never', (t) => {
+    // Running agenda, by day, food 15: the day reserve is 13.6 (5.2 at sunset, need 9.6, + 4). 4 bread (16.8): the steps go on.
+    const busy = foodAgent(t, [stack('bread', 0, 4)], { food: 15, finished: false });
     assert.equal(agendaTick(busy, { now: 0 }), 'rocks');
+    // One bread (4.2): food first (soak 16: it was "only when urgent").
+    assert.equal(agendaTick(foodAgent(t, [stack('bread', 0, 1)], { food: 15, finished: false }), { now: 0 }), 'food');
     // Food 12 and nothing held: food first.
     const hungry = foodAgent(t, [], { food: 12, finished: false });
     assert.equal(agendaTick(hungry, { now: 0 }), 'food');
@@ -789,12 +792,14 @@ test('#468 review 2: after 3 retries the step is never given up: one retry at ea
 test('#468 review 1: every step left waits on the stuck one: food first (a standing duty); fed: agendaTick returns null with the open goal (which step, what failed, when retried), never "agenda done"', (t) => {
     const clock = { now: 1_000_000 };
     // rocks stuck: everything but sticks needs it; sticks done.
-    const agent = doneAgent(t, ['sticks'], [stack('iron_sword', 0, 1)], { clock, food: 14 }); // armed (a sword no step needs): food, not the weapon (Fix H)
+    // Soak 16 (F1): 4 bread held at first (16.8 points over the day reserve, 14.6 at food 14): rocks first.
+    const agent = doneAgent(t, ['sticks'], [stack('bread', 0, 4), stack('iron_sword', 0, 1)], { clock, food: 14 }); // armed (a sword no step needs): food, not the weapon (Fix H)
     let now = 0;
     const tick = () => { now += TICK_MS; return agendaTick(agent, { now }); };
     assert.equal(tick(), 'rocks');
     agent.agenda.spent.rocks = { attempts: 1, llm_ms: STEP_LLM_MS };
     assert.equal(tick(), 'stuck');
+    agent.bot.inventory = { items: () => [stack('iron_sword', 0, 1)], slots: [] }; // the bread eaten
     assert.equal(tick(), 'food', 'food 14, none held: the day\'s target as a standing duty');
     assert.equal(agent._agenda_open_goal, null);
     agent.bot.inventory = { items: () => [stack('bread', 0, 4), stack('iron_sword', 0, 1)], slots: [] };
@@ -938,8 +943,9 @@ test('soak 5 (Fix H): unarmed and short of food by day, the weapon comes before 
     // Running agenda too (not only once it is done).
     const running = hFixAgent(t, [], { finished: false });
     assert.equal(agendaTick(running, { now: 0 }), 'weapon');
-    // Not short of food: no weapon asked by day (the steps go on), as before.
-    const fed = hFixAgent(t, [], { food: 18, finished: false });
+    // Not short of food: no weapon asked by day (the steps go on), as before. Soak 16 (F1): held food over the day
+    // reserve (food 18: 8.2 at sunset, need 6.6, + 4 = 10.6; 3 bread 12.6).
+    const fed = hFixAgent(t, [stack('bread', 0, 3)], { food: 18, finished: false });
     assert.equal(agendaTick(fed, { now: 0 }), 'rocks');
 });
 
@@ -1098,7 +1104,8 @@ test('#552 nit (rotn-data #551): the crude axe text says when it breaks, from it
 // due at any time once the logs for it are held, and the driver crafts it itself (no model call).
 test('soak 10 (W2): with no weapon and 2 logs held the weapon reserve is due by day too; 1 log is not; a club worn to its last hits does not end it', (t) => {
     assert.deepEqual(CLUB, { item: 'spartanweaponry:club_wood', logs: 2 });
-    const items = [stack('pyrotech:rock', 0, 6), stack('stick', 0, 4), stack('pyrotech:crude_axe', 0, 1), stack('log', 1, 1)];
+    // Soak 16 (F1): 3 bread (12.6 points) over the day reserve at food 20 (8.6), so the food rule does not ask for a weapon.
+    const items = [stack('pyrotech:rock', 0, 6), stack('stick', 0, 4), stack('pyrotech:crude_axe', 0, 1), stack('log', 1, 1), stack('bread', 0, 3)];
     const agent = fakeAgent(t, items, { weapon: WEAPON_RESERVE_STEP });
     agent.bot.time = { timeOfDay: 1000 }; // full day, not near night
     agent.bot.food = 20;
@@ -1506,4 +1513,89 @@ test('#612 review 6: the food goal before night asks for points beyond the hunge
     assert.match(agent.self_prompter.prompt, /Food: you hold food worth 4\.2 points in your inventory; for the night you need food worth at least 6\.8 points held beyond your hunger bar \(8 of 20\)\./);
     assert.doesNotMatch(FOOD_RESERVE_STEP.goal, /the bot should|Keep the bread for last/);
     assert.match(FOOD_RESERVE_STEP.goal, /you should end the night at food 7 or more/);
+});
+
+// Soak 16 (F2, Fable S3, the lead): the food step's scripted body: forage within 48, then hunt within 64, 4 min a
+// run, 4 runs an in-game day, 3 min apart (the step is not due between runs: the other steps go on); the model only
+// when a run found nothing in reach (it picks a direction), the day's runs are spent, or before night.
+function jobAgent(t, items, opts = {}) {
+    const agent = foodAgent(t, items, { finished: false, ...opts });
+    agent.bot.time.day = 3;
+    const runs = [];
+    agent.actions = { executing: false, runAction: (label, fn) => { runs.push(label); agent.actions.executing = true; return Promise.resolve(fn()).finally(() => { agent.actions.executing = false; }); } };
+    return { agent, runs };
+}
+const flushJobs = () => new Promise(r => setTimeout(r, 0));
+
+test('soak 16 (F2): the food step runs its scripted job (no model call), and is not due for 3 min after a run that did not find enough', async (t) => {
+    const { agent, runs } = jobAgent(t, []);
+    const jobs = { food: { ...AUTO_JOBS.food, run: () => Promise.resolve({ why: 'time', none: false, text: '+4.2 food points in 240 s (time)' }) } };
+    assert.deepEqual([AUTO_JOBS.food.label, AUTO_JOBS.food.perDay, AUTO_JOBS.food.gapMs, AUTO_JOBS.food.moveOn], ['action:foodJob', 4, 180_000, 32]);
+    const state = agendaState(agent.bot);
+    state.jobWaiting = () => false;
+    const now = 1_000_000;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now }), 'food');
+    await flushJobs(); await flushJobs();
+    assert.deepEqual(runs, ['action:foodJob']);
+    assert.ok(!agent.self_prompter.prompt, 'no model call');
+    assert.ok(agent.said.includes('agenda step food: the scripted job (run 1 of 4 today)'), agent.said.join('\n'));
+    assert.ok(agent.said.includes('agenda step food: the scripted job ended: +4.2 food points in 240 s (time)'), agent.said.join('\n'));
+    // Between runs: the job does not start, and the step is not due (the other steps go on).
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: now + 60_000 }), null);
+    const real = agendaState(agent.bot);
+    real.jobWaiting = (id) => id === 'food';
+    assert.equal(FOOD_RESERVE_STEP.due(real, {}), false, 'waiting between runs');
+    real.jobWaiting = () => false;
+    assert.equal(FOOD_RESERVE_STEP.due(real, {}), true);
+    // After the gap: the next run; after 4 runs in a day: the model, as before the job.
+    let at = Date.now() + AUTO_JOBS.food.gapMs + 1;
+    for (let k = 2; k <= 4; k++) { assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: at }), 'food', `run ${k}`); await flushJobs(); await flushJobs(); at = Date.now() + AUTO_JOBS.food.gapMs + 1; }
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: at }), null, 'the day\'s 4 runs spent');
+    agent.bot.time.day = 4;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: at }), 'food', 'a new day');
+});
+
+test('soak 16 (F2): a run that found nothing within reach hands the step to the model, which is asked for a direction; 32 blocks on, the job runs again', async (t) => {
+    const { agent, runs } = jobAgent(t, []);
+    const jobs = { food: { ...AUTO_JOBS.food, run: () => Promise.resolve({ why: 'no ripe wild food and no animal to hunt within 64 blocks', none: true, text: '+0 food points in 12 s (none)' }) } };
+    const state = agendaState(agent.bot);
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: 1_000_000 }), 'food');
+    await flushJobs(); await flushJobs();
+    assert.ok(agent.said.at(-1).endsWith('; the model picks a direction'));
+    const later = Date.now() + AUTO_JOBS.food.gapMs + 1;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: later }), null, 'still here: the model');
+    // The driver's state says so, and the step is due (not waiting) with the direction text.
+    const { agendaTick: tick } = await import('./agenda_driver.js');
+    assert.equal(tick(agent, { now: 10 * TICK_MS }), 'food');
+    assert.match(agent.self_prompter.prompt, /The food job \(ripe wild food within 48 blocks, animals within 64\) found nothing here\. Choose a direction you have not been, walk about 100 blocks there with !goToCoordinates, and the food job runs again there by itself\./);
+    agent.bot.entity.position = new Vec3(40.5, 64, 0.5);
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, state, { jobs, now: later }), 'food', '40 blocks on: the job again');
+    assert.equal(runs.length, 2);
+});
+
+test('soak 16 (F2): no job run in the before-night window (the night routine has food from there), or over another action', (t) => {
+    const { agent, runs } = jobAgent(t, [], { timeOfDay: dayAt(7) });
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, agendaState(agent.bot), { now: 1 }), null);
+    const busy = jobAgent(t, []);
+    busy.agent.actions.executing = true;
+    assert.equal(autoJobTick(busy.agent, FOOD_RESERVE_STEP, agendaState(busy.agent.bot), { now: 1 }), null);
+    assert.deepEqual([...runs, ...busy.runs], []);
+});
+
+test('soak 16 (F2): the food job\'s run: foodRun with the day profile (forage 48, hunt 64, 4 min) and the need to the reserve + 2; "nothing in reach" ends are told apart', async (t) => {
+    const { agent } = jobAgent(t, [stack('bread', 0, 1)], { food: 15 });
+    const calls = [];
+    const state = agendaState(agent.bot);
+    const fake = (why) => (bot, opts) => { calls.push(opts); return Promise.resolve({ points: 2.8, ms: 30_000, why }); };
+    let r = await AUTO_JOBS.food.run(agent, state, { foodRun: fake('enough') });
+    assert.deepEqual([calls[0].forage, calls[0].hunt, calls[0].maxMs], [48, 64, 240_000]);
+    // Food 15 at 19.6 min to sunset: 5.2 at sunset, need 9.6, reserve 13.6; 4.2 held: need 13.6 + 2 - 4.2 = 11.4.
+    assert.equal(Math.round(calls[0].need * 10) / 10, 11.4);
+    assert.equal(r.none, false);
+    assert.equal(r.text, '+2.8 food points in 30 s (enough)');
+    r = await AUTO_JOBS.food.run(agent, state, { foodRun: fake('no ripe wild food and no animal to hunt within 64 blocks') });
+    assert.equal(r.none, true);
+    r = await AUTO_JOBS.food.run(agent, state, { foodRun: fake('no ripe wild food, and no weapon to hunt with') });
+    assert.equal(r.none, true, 'no weapon: the model (the weapon reserve) decides');
+    assert.equal(calls[0].stop(), null, 'nothing near: no stop');
 });
