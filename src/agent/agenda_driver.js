@@ -24,7 +24,7 @@ import { nearbyHuntable } from './library/hunting.js';
 import { nearbyForage } from './library/foraging.js';
 import { stillTrapped } from './library/escape.js';
 import { hasWeapon, WEAPON } from './library/threats.js';
-import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT, foodTargetNow } from './agenda.js';
+import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT, foodTargetNow, SHELTER_HOLD } from './agenda.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
 export const TICK_MS = 2_000;
@@ -207,7 +207,8 @@ function tickState(agent) {
 export const AUTO_JOBS = {
     food: {
         // shortMs (#627 review 7): a run stopped (a reflex, a command) within this does not count toward perDay.
-        label: 'action:foodJob', perDay: 4, gapMs: 3 * 60_000, moveOn: 32, shortMs: 30_000,
+        // maxMs (soak 16 R, the lead's watchdog): FOOD_RUN.day's 4 min and the pickup and re-arm after it.
+        label: 'action:foodJob', perDay: 4, gapMs: 3 * 60_000, moveOn: 32, shortMs: 30_000, maxMs: 5 * 60_000,
         ready: (agent, state) => {
             const m = state.minutesToSunset?.() ?? Infinity;
             if (!(m > RESERVE_LEAD_MIN)) return 'not in full daylight (the night routine has food from the before-night window on)';
@@ -235,6 +236,52 @@ export const AUTO_JOBS = {
         },
     },
 };
+/**
+ * Soak 16 (R5, Fable S3): the shelter reserve's scripted body, with a pickaxe (sturdy blocks): cobblestone from the
+ * rocks held (4 of one kind each), then, still short, a rock collect bounded to collectMs (skills.collectBlock: loose
+ * piles within 48 first, then stone open to the air with a way out, never into a hole), then cobblestone again.
+ * Nothing gained and nothing collected: nothing in reach here (the model). Without a pickaxe (a dirt shelter): the model.
+ */
+AUTO_JOBS.shelter_blocks = {
+    label: 'action:shelterBlocks', perDay: 2, gapMs: 60_000, moveOn: 32, shortMs: 30_000, maxMs: 4 * 60_000, collectMs: 3 * 60_000,
+    ready: (agent, state) => (state.hasPickaxe?.() ? null : 'no pickaxe (a dirt shelter: the model gathers dirt piles)'),
+    run: async (agent, state, { craft = null, collect = null } = {}) => {
+        const bot = agent.bot;
+        const skills = await import('./library/skills.js');
+        const have = () => state.shelterBlocks?.() ?? 0;
+        const need = () => Math.max(0, SHELTER_HOLD - have());
+        const doCraft = craft ?? ((b, n) => skills.craftRecipe(b, 'cobblestone', n));
+        const doCollect = collect ?? ((b, n) => skills.collectBlock(b, 'pyrotech:rock', n, null, 64, { ...skills.COLLECT_LIMITS, totalMs: AUTO_JOBS.shelter_blocks.collectMs }));
+        const craftNow = async () => {
+            const c = state.cobble?.()?.[0];
+            const n = c ? Math.min(Math.floor(c.have / 4), need()) : 0;
+            if (n > 0) { try { await doCraft(bot, n); } catch (err) { console.warn(`[agenda] shelter blocks: the cobblestone craft failed: ${safeError(err)}`); } }
+            return n;
+        };
+        const start = have();
+        let collected = null;
+        if (need() > 0) await craftNow();
+        if (need() > 0 && !bot.interrupt_code) {
+            collected = !!(await doCollect(bot, need() * 4));
+            if (need() > 0 && !bot.interrupt_code) await craftNow();
+        }
+        const gained = have() - start;
+        const why = need() <= 0 ? 'enough' : bot.interrupt_code ? 'stopped' : collected === false && gained <= 0 ? 'no loose rocks within 48 and no stone open to the air with a way out' : 'short';
+        return { why, none: why.startsWith('no loose rocks') ? 'none' : null, text: `+${gained} shelter blocks (${have()} of ${SHELTER_HOLD}; ${why})` };
+    },
+};
+
+/** Soak 16 (R, the lead): a job running past its maxMs + marginMs is stale (a hung action): it frees the agenda. */
+export const JOB_WATCHDOG = { marginMs: 60_000 };
+function staleCheck(agent, id, j, now = Date.now()) {
+    if (!j?.running) return false;
+    const spec = AUTO_JOBS[id];
+    const limit = (spec?.maxMs ?? Infinity) + JOB_WATCHDOG.marginMs;
+    if (!(now - (j.startedAt ?? now) > limit)) return false;
+    Object.assign(j, { running: false, token: (j.token ?? 0) + 1, lastAt: now, lastEnd: 'stale', lastNone: false, noneKind: null, noneAt: null });
+    say(agent, `agenda step ${id}: the scripted job is stale (running over ${Math.round(limit / 1000)} s): the agenda goes on without it`);
+    return true;
+}
 const jobOf = (agent, id) => (agent?._agenda_jobs ?? {})[id] ?? null;
 function jobWaiting(agent, id, now = Date.now()) {
     const j = jobOf(agent, id);
@@ -248,8 +295,8 @@ function jobFoundNone(agent, id) {
     return j?.noneAt && here && here.distanceTo(j.noneAt) < (spec?.moveOn ?? 32) ? (j.noneKind ?? 'none') : null;
 }
 /** #627 review 2: the step whose job runs now, or null: the agenda keeps it current until the job ends. */
-export function runningJob(agent) {
-    for (const [id, j] of Object.entries(agent?._agenda_jobs ?? {})) if (j?.running) return id;
+export function runningJob(agent, now = Date.now()) {
+    for (const [id, j] of Object.entries(agent?._agenda_jobs ?? {})) if (j?.running && !staleCheck(agent, id, j, now)) return id;
     return null;
 }
 
@@ -262,7 +309,7 @@ export function autoJobTick(agent, step, state, { jobs = AUTO_JOBS, now = Date.n
     if (!spec || typeof agent.actions?.runAction !== 'function') return null;
     const all = agent._agenda_jobs ??= {};
     const j = all[step.id] ??= { day: null, runs: 0, lastAt: -Infinity, lastEnd: null, lastNone: false, noneAt: null, noneKind: null, running: false };
-    if (j.running) return step.id;
+    if (j.running && !staleCheck(agent, step.id, j, now)) return step.id;
     const day = state.day?.() ?? Math.floor(now / (20 * 60_000));
     if (j.day !== day) Object.assign(j, { day, runs: 0 });
     if (j.runs >= spec.perDay) return null; // the model, as before the job
@@ -283,10 +330,13 @@ export function autoJobTick(agent, step, state, { jobs = AUTO_JOBS, now = Date.n
     say(agent, `agenda step ${step.id}: the scripted job (run ${j.runs} of ${spec.perDay} today)`);
     let result = null, stopped = false;
     const started = Date.now();
+    j.startedAt = now;
+    const token = j.token = (j.token ?? 0) + 1;
     Promise.resolve(agent.actions.runAction(spec.label, async () => { result = await spec.run(agent, state); }))
         .then((ret) => { stopped = !!ret?.interrupted || result?.why === 'stopped'; })
         .catch(err => { result = { why: safeError(err), none: null, text: `failed: ${safeError(err)}` }; })
         .finally(() => {
+            if (j.token !== token) return; // the watchdog has called it stale: a later run owns the state
             j.running = false;
             j.lastAt = Date.now();
             j.lastEnd = result?.why ?? (stopped ? 'stopped' : 'no result');
@@ -365,7 +415,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     const state = tickState(agent);
     // #627 review 2: while a step's scripted job runs, that step stays current (the model is not started on the next
     // step over the job, whose own commands would stop it; the food job fills to the reserve + 2 before it ends).
-    const busy = runningJob(agent);
+    const busy = runningJob(agent, now);
     if (busy) return busy;
     const { step, newlyDone, retried = [], waiting = false } = agenda.evaluate(state);
     // #463 decision: each retry of a stuck step, with its fresh budget, is said.

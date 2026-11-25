@@ -445,8 +445,13 @@ async function byPathfinder(bot, target, state, deadline, say) {
 /** Stage 2: steps by hand (nextStep), at most maxSteps, until out. */
 async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
     const { maxSteps = ESCAPE.maxSteps, totalMs = ESCAPE.totalMs } = state.budget ?? {};
-    // #624 review 5: stairs and pillars only go up: a target below the feet (the ground under a canopy) is no climb.
-    if (target && target.y < feetOf(bot).y) return { why: `the ground is below you (open ground at ${at(target)}): climb down to it` };
+    // #624 review 5: stairs and pillars only go up: a target below the feet is no climb. On a tree (the ground under a
+    // canopy): say so. #624 re-review nit 3 (soak 16 R): elsewhere (a pocket whose nearest open ground is downhill,
+    // walled off) the climb goes up toward the sky instead of giving up.
+    if (target && target.y < feetOf(bot).y) {
+        if (isTreePart(bot.blockAt(feetOf(bot).offset(0, -1, 0)))) return { why: `the ground is below you (open ground at ${at(target)}): climb down to it` };
+        target = null;
+    }
     for (let i = 0; i < maxSteps; i++) {
         if (isOut(bot, target, state.budget?.kind === 'day')) return { out: true };
         if (bot.interrupt_code) return { why: 'interrupted' };
@@ -610,4 +615,30 @@ export function stillTrapped(bot, now = Date.now()) {
         t.checkedAt = now;
     }
     return t.at;
+}
+
+/**
+ * Soak 16 (R, the lead): a block the bot may mine for an item (rocks from stone): exposed (a face touching air or
+ * a free cell) and, once broken, a walkable way (no digging) from its cell to open ground within targetRadius
+ * (openGround, as isTrapped). Soak 15: the collect took the nearest stone in 3-D, under the bot, block after
+ * block, 9 down. A block over open air drops the bot onto the first floor below (at most 3).
+ */
+// An unloaded neighbour (null) is not known to be enclosed (as walkable_exit): exposed, with a way out.
+const unknownAround = (bot, c) => SIX.some(d => bot.blockAt(c.plus(d)) == null);
+export function exposedBlock(bot, block) {
+    const c = block?.position;
+    if (!c) return false;
+    return unknownAround(bot, c) || SIX.some(d => passCell(bot.blockAt(c.plus(d))));
+}
+export function keepsWayOut(bot, block) {
+    const c = block?.position;
+    if (!c || typeof bot?.blockAt !== 'function' || unknownAround(bot, c)) return true;
+    let from = c.clone ? c.clone() : new Vec3(c.x, c.y, c.z);
+    for (let k = 0; k < 3 && !solid(bot.blockAt(from.offset(0, -1, 0))); k++) from = from.offset(0, -1, 0);
+    if (!solid(bot.blockAt(from.offset(0, -1, 0))) && !from.equals(c)) return false; // a drop of more than 3
+    const top = new Map();
+    top.base = c.y;
+    const free = new Set([key(c)]);
+    return !!walkableExit(bot, from, { maxNodes: WALK_EXIT.maxNodes, radius: ESCAPE.targetRadius, free,
+        until: (n) => !n.equals(c) && openGround(bot, n, top) });
 }

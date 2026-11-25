@@ -1671,3 +1671,58 @@ test('#627 review 4 and 7: the job stops for a hostile within 16 (as the sunset 
     assert.ok(s.agent.said.at(-1).endsWith('; stopped early: not counted'));
     assert.equal(autoJobTick(s.agent, FOOD_RESERVE_STEP, st, { jobs, now: Date.now() + 1000 }), null, 'the gap holds');
 });
+
+// Soak 16 (R5, Fable S3, the lead): the shelter reserve's scripted body: cobblestone from the rocks held, then a
+// bounded rock collect (it stays out of holes), then cobblestone again; the model when nothing is in reach, or with no
+// pickaxe (a dirt shelter).
+test('soak 16 (R5): the shelter_blocks job crafts from the rocks held, collects the rest, crafts again; nothing in reach hands it to the model', async (t) => {
+    const pick = stack('stone_pickaxe', 0, 1);
+    const { agent } = jobAgent(t, [pick, stack('pyrotech:rock', 0, 8)], { timeOfDay: dayAt(7) });
+    const state = agendaState(agent.bot);
+    let held = 2;
+    state.shelterBlocks = () => held;
+    state.cobble = () => [{ have: 8, rock: 'pyrotech:rock', gives: 'cobblestone' }];
+    const crafts = [], collects = [];
+    const craft = (bot, n) => { crafts.push(n); held += n; return Promise.resolve(true); };
+    const collect = (bot, n) => { collects.push(n); held += 3; return Promise.resolve(true); };
+    let r = await AUTO_JOBS.shelter_blocks.run(agent, state, { craft, collect });
+    assert.deepEqual(crafts.slice(0, 1), [2], '2 cobblestone from the 8 rocks held');
+    assert.deepEqual(collects, [(SHELTER_HOLD - 4) * 4], 'the rest as rocks (4 a block)');
+    assert.equal(r.none, null);
+    assert.match(r.text, /^\+\d+ shelter blocks \(\d+ of 14; /);
+    // Nothing in reach: no rocks held, the collect gets nothing.
+    held = 0;
+    state.cobble = () => [];
+    r = await AUTO_JOBS.shelter_blocks.run(agent, state, { craft, collect: () => Promise.resolve(false) });
+    assert.equal(r.none, 'none');
+    assert.equal(r.why, 'no loose rocks within 48 and no stone open to the air with a way out');
+    // The step's text then says so; with no pickaxe the job does not run (a dirt shelter: the model).
+    const s = agendaState(agent.bot);
+    s.jobFoundNone = (id) => (id === 'shelter_blocks' ? 'none' : null);
+    s.hasPickaxe = () => true;
+    assert.match(SHELTER_RESERVE_STEP.goalNow(s), /The block job found no loose rocks within 48 blocks and no stone open to the air with a way out here\./);
+    assert.match(AUTO_JOBS.shelter_blocks.ready(agent, { hasPickaxe: () => false }), /^no pickaxe/);
+    assert.doesNotMatch(SHELTER_RESERVE_STEP.goal, /mine stone with the pickaxe for more rocks/);
+    assert.match(SHELTER_RESERVE_STEP.goal, /takes the loose rock piles on the ground within 48 blocks first, then stone open to the air that leaves you a walkable way out/);
+});
+
+// Soak 16 (R, the lead's addendum): a hung job (its action never ends) is stale past its maxMs + a margin: the agenda
+// goes on, and the late end of the hung run changes nothing.
+test('soak 16 (R): the job watchdog: a job running past maxMs + 60 s is stale; agendaTick goes on; the hung run\'s late end is ignored', async (t) => {
+    const { JOB_WATCHDOG, runningJob } = await import('./agenda_driver.js');
+    const { agent } = jobAgent(t, []);
+    let release;
+    agent.actions.runAction = (label, fn) => new Promise(r => { release = r; }).then(fn);
+    const jobs = { food: { ...AUTO_JOBS.food, run: () => Promise.resolve({ why: 'late', none: 'none', text: 'late' }) } };
+    const t0 = 1_000_000;
+    assert.equal(autoJobTick(agent, FOOD_RESERVE_STEP, agendaState(agent.bot), { jobs, now: t0 }), 'food');
+    assert.equal(runningJob(agent, t0 + AUTO_JOBS.food.maxMs), 'food', 'still within its time');
+    assert.equal(runningJob(agent, t0 + AUTO_JOBS.food.maxMs + JOB_WATCHDOG.marginMs + 1), null, 'stale');
+    assert.ok(agent.said.some(l => /^agenda step food: the scripted job is stale \(running over 360 s\): the agenda goes on without it$/.test(l)), agent.said.join('\n'));
+    const j = agent._agenda_jobs.food;
+    assert.deepEqual([j.running, j.lastEnd], [false, 'stale']);
+    release();
+    await flushJobs(); await flushJobs();
+    assert.equal(j.lastEnd, 'stale', 'the hung run\'s late end is ignored');
+    assert.equal(j.noneAt, null);
+});

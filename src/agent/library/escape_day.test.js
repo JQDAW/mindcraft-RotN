@@ -383,3 +383,14 @@ test('#624 review 7: a mode: action that digs and leaves the bot trapped runs no
     assert.doesNotMatch(bot.output, /trapped|Reached open ground/);
     assert.equal(bot.rotnTrapped ?? null, null);
 });
+
+// #624 re-review nit 3 (soak 16 R): a target below the feet (the nearest open ground downhill) no longer stops the
+// climb unless the bot stands on a tree: it climbs up toward the sky instead.
+test('#624 nit 3: a target below the feet, not on a tree: the hand climb goes up toward the sky and gets out', async (t) => {
+    quiet(t);
+    const { bot } = fakeBot({ pathfinder: noPath(), items: [['stone_pickaxe', 1]] });
+    const r = await escape(bot, { budget: 'day', target: new Vec3(5, 50, 5), moveTo: teleport, say: () => {} });
+    assert.equal(r.out, true, r.why);
+    assert.doesNotMatch(r.why ?? '', /ground is below/);
+    assert.equal(isTrapped(bot).trapped, false);
+});

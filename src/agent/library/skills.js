@@ -1404,6 +1404,11 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     const canGiveNone = (block) => mayGiveNone.some(matches => matches(block));
     const tierOf = (block) => (isHand(block) ? (isLeafBlock(block) ? 3 : 0) : fellsTree(block) && emptySpecies.has(block.name) ? 2 : 1);
     const tiered = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0;
+    // Soak 16 (R): by-hand blocks and blocks mined with a tool (rocks: loose piles, and stone with a pickaxe).
+    const mines = !tiered && handMatchers.length > 0 && ruleTools.length > 0;
+    const esc = mines ? await import('./escape.js') : null;
+    const noWayOut = [];
+    let noWayOutSaid = 0;
     let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at CL.freeMisses)
     let leafMisses = 0; // leaves out of reach after the walk (capped at CL.unreachableLeaves, then no leaves)
     let walkMisses = 0; // other targets the walk did not reach (capped at CL.unreachableTargets)
@@ -1572,7 +1577,32 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         };
         const nearestOf = (tier, radius = range) => world.getNearestBlocksWhere(bot, block => tierOf(block) === tier && wanted(block), Math.min(radius, range), 1);
         let blocks = [];
-        if (!tiered) blocks = world.getNearestBlocksWhere(bot, wanted, range, 1);
+        if (mines) {
+            // Soak 16 (R, the lead): loose ones by hand first, within CL.mineHandRadius (soak 15: the nearest stone, under
+            // the bot, beat the loose rocks); then a mined block that is exposed and keeps a walkable way out once
+            // broken (escape.keepsWayOut), nearest first among CL.mineCandidates; then any mined block with a way out;
+            // then loose ones farther out. A mined block with no way out is skipped (said once per collect).
+            const loose = (radius) => world.getNearestBlocksWhere(bot, b => isHand(b) && wanted(b), Math.min(radius, range), 1);
+            const mined = (exposedOnly) => {
+                const cands = world.getNearestBlocksWhere(bot, b => !isHand(b) && !!ruleToolFor(b) && wanted(b) && (!exposedOnly || esc.exposedBlock(bot, b)), range, CL.mineCandidates);
+                for (const b of cands) {
+                    if (esc.keepsWayOut(bot, b)) return [b];
+                    noWayOut.push(b);
+                    if (b.position) givenUp.push(b.position.clone ? b.position.clone() : b.position);
+                }
+                return [];
+            };
+            blocks = loose(CL.mineHandRadius);
+            if (blocks.length === 0) blocks = mined(true);
+            if (blocks.length === 0) blocks = mined(false);
+            if (blocks.length === 0) blocks = loose(range);
+            if (noWayOut.length > noWayOutSaid) {
+                const b = noWayOut[noWayOut.length - 1];
+                log(bot, `Skipped ${noWayOut.length} ${noWayOut.length === 1 ? 'block' : 'blocks'} to mine (${b.name} at ${b.position.x}, ${b.position.y}, ${b.position.z}${noWayOut.length > 1 ? ' and others' : ''}): breaking ${noWayOut.length === 1 ? 'it' : 'them'} would leave no walkable way out.`);
+                noWayOutSaid = noWayOut.length;
+            }
+        }
+        else if (!tiered) blocks = world.getNearestBlocksWhere(bot, wanted, range, 1);
         else {
             blocks = nearestOf(0, CL.handFirstRadius);
             if (blocks.length === 0) blocks = nearestOf(3, CL.handFirstRadius);
@@ -4732,8 +4762,10 @@ const STOP_SETTLE_MS = 5000;
 // the pathfinder's Timeout or NoPath) uses no attempt, at most this many per collect; each is not
 // tried again for unreachableMs. deathSpotMs: CX23 soak, no target within DEATH_SPOT_RADIUS of a
 // death spot this recent (a player zombie rose there).
+// mineHandRadius, mineCandidates (soak 16 R): for an item with by-hand and mined blocks (rocks), the loose ones are
+// searched this far before any is mined; at most this many mined candidates are checked for a way out per target.
 export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
-    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000 };
+    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000, mineHandRadius: 48, mineCandidates: 8 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit

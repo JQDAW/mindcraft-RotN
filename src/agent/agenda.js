@@ -185,12 +185,16 @@ const reserveHave = (s) => (noPickaxe(s) ? (s.dirtBlocks?.() ?? 0) : (s.shelterB
 export const SHELTER_RESERVE_STEP = {
     id: 'shelter_blocks', short: `keep ${SHELTER_HOLD} blocks for the night's shelter and its repairs`,
     reserve: true,
+    // Soak 16 (R5, Fable S3, the lead): a scripted body (agenda_driver AUTO_JOBS.shelter_blocks: cobblestone from the
+    // rocks held, then a bounded rock collect that stays out of holes, then cobblestone again); the model when it found
+    // nothing in reach, or without a pickaxe (a dirt shelter). Not due between its runs.
+    autoJob: 'shelter_blocks',
     // Not at night (minutesToSunset is 0 from sunset to sunrise; #284 review 1): the night routine
     // shelters then, and nothing may send the bot out for blocks in the dark.
-    due: (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN; },
+    due: (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN && !s.jobWaiting?.('shelter_blocks'); },
     done: (s) => reserveHave(s) >= SHELTER_HOLD,
     // Only when goalNow fails: both cases, as goalNow tells them apart.
-    goal: `Night is near. At dusk the night routine builds a shelter of ${SHELTER_RESERVE} blocks on open ground, and keeps ${REPAIR_SPARE} more to repair it when a zombie digs a wall open. If you have a pickaxe, it is built from sturdy blocks (any cobblestone or stone): make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1), and mine stone with the pickaxe for more rocks. If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks("betterwithmods:dirt_pile", ${4 * SHELTER_HOLD}) (4 piles make one dirt, which the shelter crafts itself). Keep these blocks for the night: do not place them.`,
+    goal: `Night is near. At dusk the night routine builds a shelter of ${SHELTER_RESERVE} blocks on open ground, and keeps ${REPAIR_SPARE} more to repair it when a zombie digs a wall open. If you have a pickaxe, it is built from sturdy blocks (any cobblestone or stone): make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1); for more rocks, !collectBlocks("pyrotech:rock", 8) takes the loose rock piles on the ground within 48 blocks first, then stone open to the air that leaves you a walkable way out (never digging down into a hole). If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks("betterwithmods:dirt_pile", ${4 * SHELTER_HOLD}) (4 piles make one dirt, which the shelter crafts itself). Keep these blocks for the night: do not place them.`,
     goalNow: (s) => {
         const have = reserveHave(s);
         // CX23 soak: what the bot is told counts the morning freeze still to run (sunsetEstimateMin);
@@ -206,8 +210,12 @@ export const SHELTER_RESERVE_STEP = {
         const c = s.cobble?.()[0];
         const how = c
             ? `Your ${c.rock} rocks make ${c.gives}, 4 rocks each: craft it with !craftRecipe("cobblestone", ${Math.min(Math.floor(c.have / 4), SHELTER_HOLD - have)}). `
-            : 'Collect rocks with !collectBlocks("pyrotech:rock", 8) (rock piles break by hand; stone mined with a stone pickaxe gives rocks), then make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1). ';
-        return head + how + 'Keep these blocks for the night: do not place them.';
+            : 'Collect rocks with !collectBlocks("pyrotech:rock", 8): it takes the loose rock piles on the ground within 48 blocks first (they break by hand), then stone open to the air that leaves you a walkable way out, never digging down into a hole. Then make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1). ';
+        // Soak 16 (R5): the block job found nothing in reach here.
+        const none = s.jobFoundNone?.('shelter_blocks')
+            ? 'The block job found no loose rocks within 48 blocks and no stone open to the air with a way out here. Look for rock piles or bare stone elsewhere (a hillside, a riverbank), or gather dirt piles: the shelter uses dirt when it has too few sturdy blocks. '
+            : '';
+        return head + none + how + 'Keep these blocks for the night: do not place them.';
     },
 };
 
