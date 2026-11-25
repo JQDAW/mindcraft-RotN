@@ -417,7 +417,7 @@ export const actionsList = [
     },
     {
         name: '!standOnBlock',
-        description: 'Stand on top of the block at x, y, z (give the coordinates of the block itself) and check that it is the block under your feet. Use it whenever you must stand on a block; say you are on it only after it says so.',
+        description: 'Stand on the block at x, y, z (the block\'s own coordinates) and check it is under your feet. Use it whenever you must stand on a block; say you are on it only after it says so.',
         params: {
             'type': {type: 'BlockName', description: 'The block to stand on, e.g. gold_block.'},
             'x': {type: 'float', description: 'The x coordinate of the block.', domain: [-Infinity, Infinity]},
@@ -446,7 +446,7 @@ export const actionsList = [
     },
     {
         name: '!searchForEntity',
-        description: 'Find and go to the nearest entity of a given type in a given range. A pig, cow, sheep or rabbit also finds the pack\'s Animania ones; the bot sees animals only within 64 blocks, and a miss lists the animals in sight.',
+        description: 'Go to the nearest entity of a type within a range. A pig, cow, sheep or rabbit also finds the pack\'s Animania ones; animals are seen only within 64 blocks, and a miss lists the animals in sight.',
         params: {
             'type': { type: 'string', description: 'The type of entity to go to.' },
             'search_range': { type: 'float', description: 'The range to search for the entity.', domain: [32, 512] }
@@ -602,7 +602,7 @@ export const actionsList = [
     {
         // G4 #5: wild food before hunting (rotn-data forageFood; library/foraging.js).
         name: '!forage',
-        description: 'Gather ripe wild food near you: picks the berries off Rustic wildberry bushes (right-click; the bush stays and regrows), breaks ripe wild herbs and HarvestCraft gardens, and picks up the food. Never a bare bush or an unripe herb, never the hawthorn, poison ivy or thorns, never a crop near fences, farmland, chests or houses (it may be a player\'s).',
+        description: 'Gather ripe wild food near you: picks wildberry bushes (right-click; they regrow), breaks ripe wild herbs and HarvestCraft gardens, picks the food up. Never a bare bush, an unripe herb, hawthorn, poison ivy or thorns, nor a crop near fences, farmland, chests or houses (it may be a player\'s).',
         perform: runAsAction(async (agent) => {
             await skills.forageNearby(agent.bot);
         })
@@ -642,7 +642,7 @@ export const actionsList = [
     },
         {
         name: '!placeHere',
-        description: 'Place a given block in the current location. A full block (dirt, cobblestone) goes under you by a jump, so you end up standing one block higher on it (a way up out of a pit or water); a torch or the like goes where you stand. Do NOT use to build structures, only use for single blocks/torches.',
+        description: 'Place one block where you stand. A full block (dirt, cobblestone) goes under you by a jump, so you stand one higher on it (a way up out of a pit or water); a torch or the like goes where you stand. Only single blocks or torches, never structures.',
         params: {'type': { type: 'BlockOrItemName', description: 'The block type to place.' }},
         perform: runAsAction(async (agent, type) => {
             // Soak 8 (the escape plan PR 2): the bot's own cell; a full block by a jump (escape.placeHere).

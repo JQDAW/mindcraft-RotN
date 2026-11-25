@@ -328,7 +328,7 @@ export const queryList = [
     },
     {
         name: '!getCraftingPlan',
-        description: "Provides a comprehensive crafting plan for a specified item. This includes a breakdown of required ingredients, the exact quantities needed, and an analysis of missing ingredients or extra items needed based on the bot's current inventory.",
+        description: "A crafting plan for an item: the ingredients and quantities it needs, and what you are missing (or must make first) from your inventory.",
         params: {
             targetItem: { 
                 type: 'string', 
