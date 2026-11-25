@@ -2,6 +2,7 @@ import { getBlockId, getItemId, getAllBlocks, getAllItems } from "../../utils/mc
 import { suggestText } from "../library/name_suggest.js";
 import { canonicalName } from "../library/rotn_names.js";
 import { actionsList } from './actions.js';
+import settings from '../settings.js';
 import { queryList } from './queries.js';
 
 let suppressNoDomainWarning = true;
@@ -260,6 +261,9 @@ export function getCommandDocs(agent) {
         if (agent.blocked_actions.includes(command.name) || command.forcedOnly) {
             continue; // forcedOnly: only a player may type it (task commands, #146 review)
         }
+        // Soak 15 (the lead): !newAction is refused at run time with allow_insecure_coding false (3 refusals in soak
+        // 15, two with a correct pillar plan): the model is not offered it.
+        if (command.name === '!newAction' && !settings.allow_insecure_coding) continue;
         docs += command.name + ': ' + command.description + '\n';
         if (command.params) {
             docs += 'Params:\n';

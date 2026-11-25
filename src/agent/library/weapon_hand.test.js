@@ -191,3 +191,13 @@ test('#614 review 3: after an eat at night the weapon is back in the main hand; 
     assert.equal(day.food, 9);
     assert.equal(day.heldItem.name, 'bread', 'day: no re-arm');
 });
+
+// #614 re-review nit 2: countItem counts the off hand (a held pickaxe), but a recipe's ingredients are counted in the
+// inventory only (bot.craft takes no off-hand stack).
+test('#614 re-review nit 2: countItem with { offHand: false } leaves the off hand out', async () => {
+    const { countItem } = await import('./rotn_names.js');
+    const rocks = { name: 'pyrotech:rock', metadata: 0, count: 4, type: 6, slot: 45 };
+    const { bot } = handsBot({ off: rocks, items: [{ name: 'pyrotech:rock', metadata: 0, count: 2, type: 6 }] });
+    assert.equal(countItem(bot, 'pyrotech:rock'), 6);
+    assert.equal(countItem(bot, 'pyrotech:rock', { offHand: false }), 2);
+});

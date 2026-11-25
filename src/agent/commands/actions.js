@@ -542,10 +542,8 @@ export const actionsList = [
             // SHELTER_LEAD_MIN before sunset), not after its 8 min: after death 2 the dirt collect took the
             // last 8 min before sunset.
             const limits = collectLimitsBeforeDusk(agent.bot?.time?.timeOfDay, context);
-            // Soak 14 (F2): the off-hand pickaxe into the inventory for the collect's tool choice; back in the off hand after.
-            await skills.offHandToolBack(agent.bot);
-            try { await skills.collectBlock(agent.bot, type, num, null, hungryCap(agent, 'Collecting within', 64, context), limits); }
-            finally { try { await skills.rearmWeapon(agent.bot); } catch { /* best effort */ } }
+            // The off-hand pickaxe and the re-arm: the action boundary (library/hands.js; soak 15).
+            await skills.collectBlock(agent.bot, type, num, null, hungryCap(agent, 'Collecting within', 64, context), limits);
         })
     },
     {

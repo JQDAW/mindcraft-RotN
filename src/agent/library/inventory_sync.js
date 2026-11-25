@@ -196,12 +196,88 @@ export async function withCleanCursor(bot, label, op, { resyncMs = RESYNC_MS } =
         console.log(`[inventory] resync: ${came ? 'the server resent the window' : `no resend within ${resyncMs} ms`}; `
             + `cursor: ${clickedWindow(bot)?.selectedItem?.name ?? 'empty'}`);
         await tidy();
+        // Soak 15 (N3): after a rejected click, a stack the server has in the 2x2 grid goes back first.
+        try { await returnGrid(bot, `after a rejected click (${label})`); } catch (e) { console.warn(`[inventory] returning the grid failed: ${e?.message ?? e}`); }
         try {
             return await op();
         } catch (again) {
             console.warn(`[inventory] ${label}: the second try failed too: ${again?.message ?? again}`);
             throw again;
         }
+    }
+}
+
+/**
+ * Soak 15 (net-forge's N3, the lead): from 22:50 the server rejected window clicks (StackUp's stack sizes against
+ * bot.registry's 64: net-forge's N1), and the failed crafts left their rocks in the 2x2 grid (slots 1-4). Crafting
+ * reads inventory.items() (9-44), so for 10 min every cobble craft said "missing ingredient" and "you have no such
+ * rocks" while !inventory listed 19-43 rocks. Nothing emptied the grid (withCleanCursor clears only the cursor).
+ * Return the grid's stacks: the cursor first (closing window 0 drops the cursor stack), then the vanilla client's
+ * close of window 0 (close_window, windowId 0, on the client; not bot.closeWindow, which treats the inventory as a
+ * closed container), so the server puts the grid back (ContainerPlayer.onContainerClosed). No shift-clicks:
+ * prismarine-windows cannot predict them. A line names what moved. Returns {moved, left} or null (nothing to do).
+ */
+export const GRID_SLOTS = [1, 2, 3, 4];
+export const GRID_WAIT = { ms: RESYNC_MS, stepMs: 50 };
+export async function returnGrid(bot, why, { waitMs = GRID_WAIT.ms, stepMs = GRID_WAIT.stepMs } = {}) {
+    const inv = bot?.inventory;
+    const slots = inv?.slots;
+    if (!Array.isArray(slots) || (bot.currentWindow && bot.currentWindow !== inv)) return null;
+    const stacks = GRID_SLOTS.filter(k => slots[k]).map(k => ({ slot: k, name: slots[k].name, count: slots[k].count }));
+    if (!stacks.length) return null;
+    const named = stacks.map(g => `${g.count} ${g.name} (slot ${g.slot})`).join(', ');
+    let cursor = '';
+    if (inv.selectedItem) {
+        const free = inv.firstEmptyInventorySlot?.();
+        if (!(Number.isInteger(free) && free >= 0)) {
+            console.warn(`[inventory] ${why}: ${named} left in the 2x2 grid, but the ${inv.selectedItem.name} on the cursor has no free slot (closing would drop it): not closing`);
+            return { moved: [], left: stacks.map(g => g.slot) };
+        }
+        const did = await clearCursor(bot);
+        if (did) cursor = `; first ${did}`;
+        // #619 review 2: closing with a stack still on the cursor drops it: re-checked after the clear.
+        if (inv.selectedItem) {
+            console.warn(`[inventory] ${why}: ${named} left in the 2x2 grid, but the ${inv.selectedItem.name} is still on the cursor (closing would drop it): not closing`);
+            return { moved: [], left: stacks.map(g => g.slot), dropped: [] };
+        }
+    }
+    if (typeof bot._client?.write !== 'function') return { moved: [], left: stacks.map(g => g.slot), dropped: [] };
+    // #619 review 3: with no room the server drops a grid stack (placeItemBackInInventory): what came back is what the
+    // inventory gained of that item; the rest was dropped. The grid's slots are sent before the inventory's, so the
+    // wait goes on until the gain is seen or the time is up.
+    const held = (name) => slots.slice(9, 46).reduce((n, s) => n + (s?.name === name ? s.count : 0), 0);
+    const names = [...new Set(stacks.map(g => g.name))];
+    const before = Object.fromEntries(names.map(n => [n, held(n)]));
+    const want = Object.fromEntries(names.map(n => [n, stacks.filter(g => g.name === n).reduce((a, g) => a + g.count, 0)]));
+    const gained = (n) => held(n) - before[n];
+    bot._client.write('close_window', { windowId: 0 });
+    const settled = () => !GRID_SLOTS.some(k => slots[k]) && names.every(n => gained(n) >= want[n]);
+    for (let waited = 0; waited < waitMs && !settled(); waited += stepMs) await new Promise(r => setTimeout(r, stepMs));
+    const left = GRID_SLOTS.filter(k => slots[k]);
+    const gone = stacks.filter(g => !left.includes(g.slot));
+    // Per item: what left the grid and was not gained was dropped (the later stacks of a name first).
+    const back = Object.fromEntries(names.map(n => [n, Math.max(0, gained(n))]));
+    const moved = [], dropped = [];
+    for (const g of gone) {
+        const b = Math.min(g.count, back[g.name]);
+        back[g.name] -= b;
+        if (b > 0) moved.push({ ...g, count: b });
+        if (g.count - b > 0) dropped.push({ ...g, count: g.count - b });
+    }
+    console.log(`[inventory] ${why}: closed the inventory to return the 2x2 grid: ${named}${cursor}`
+        + (dropped.length ? `; no room for ${dropped.map(g => `${g.count} ${g.name}`).join(', ')}: dropped on the ground` : '')
+        + (left.length ? `; the grid is still not empty: slots ${left.join(', ')}` : ''));
+    bot.rotnGridReturned = { at: Date.now(), moved, dropped };
+    return { moved, left, dropped };
+}
+/** A craft in the 2x2 grid (no table): the grid emptied first, and again after it fails (net-forge's N3). */
+async function craftWithCleanGrid(bot, original, args) {
+    if (!args[2]) await returnGrid(bot, 'before a 2x2 craft');
+    try {
+        return await original.apply(bot, args);
+    } catch (err) {
+        try { await returnGrid(bot, `after a failed craft (${String(err?.message ?? err).slice(0, 80)})`); } catch { /* the error below matters */ }
+        throw err;
     }
 }
 
@@ -222,7 +298,10 @@ export function guardInventory(bot) {
             const original = bot[name];
             if (typeof original !== 'function' || original.rotnGuarded) continue;
             // equip: a number-key swap into the hotbar, on the item as the window has it at each try.
-            const run = name === 'equip' ? (args) => equipToHand(bot, original, args) : (args) => original.apply(bot, args);
+            // craft (soak 15, N3): the 2x2 grid emptied before it and after a failure.
+            const run = name === 'equip' ? (args) => equipToHand(bot, original, args)
+                : name === 'craft' ? (args) => craftWithCleanGrid(bot, original, args)
+                : (args) => original.apply(bot, args);
             const guarded = function (...args) {
                 if (insideGuard.getStore()) return original.apply(bot, args);
                 return insideGuard.run(true, () => withCleanCursor(bot, name, () => run(args)));

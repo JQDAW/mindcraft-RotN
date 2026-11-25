@@ -1,0 +1,457 @@
+# javap -c -p excerpts (no mod code was run), RotN 3.3.4 pinned server pack zip (SHA-256 90642fd5...f5205), 2026-11-25.
+# mods/ImmersiveCombat-12-13-25.jar (Better Combat, modid bettercombat 1.5.6) SHA-256 d19aa396cdf5e96604d4973a5a6063eeaacc66fffaff56c9e1c66626fc87e62e
+# minecraft_server.1.12.2.jar (pack root, obfuscated; names from forge-1.12.2-14.23.5.2860.jar deobfuscation_data-1.12.2.lzma):
+#   aed = EntityPlayer, aed.f(vg) = attackTargetEntityWithCurrentItem, ajy = ItemSword, rk = MathHelper (rk.a = field_180189_a = SQRT_2).
+# Better Combat names (MCP stable-39): field_70130_N width, func_174813_aQ getEntityBoundingBox, func_72314_b AxisAlignedBB.grow,
+#   func_72872_a World.getEntitiesWithinAABB, func_70068_e getDistanceSq(Entity), field_180189_a MathHelper.SQRT_2, func_110623_a ResourceLocation.getPath,
+#   Enchantments.field_191530_r SWEEPING.
+
+
+## Better Combat Helpers.playerAttackVictimWithWeapon (tweaker match, bytecode 277-530)
+  public static boolean playerAttackVictimWithWeapon(net.minecraft.entity.player.EntityPlayer, net.minecraft.entity.Entity, net.minecraft.item.ItemStack, net.minecraft.item.ItemStack, boolean);
+     277: aload         26
+     279: invokevirtual #169                // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+     282: invokestatic  #248                // Method bettercombat/mod/util/ConfigurationHandler.isConfigWeapon:(Lnet/minecraft/item/Item;)Z
+     285: ifeq          530
+     288: iconst_1
+     289: istore        29
+     291: aload         26
+     293: invokestatic  #252                // Method getRegistryNameFromItem:(Lnet/minecraft/item/ItemStack;)Ljava/lang/String;
+     296: astore        31
+     298: aload         31
+     300: invokestatic  #256                // Method isMetalRegistryName:(Ljava/lang/String;)Z
+     303: istore        28
+     305: iconst_0
+     306: istore        32
+     308: getstatic     #259                // Field bettercombat/mod/util/ConfigurationHandler.weapons:Ljava/util/ArrayList;
+     311: invokevirtual #210                // Method java/util/ArrayList.iterator:()Ljava/util/Iterator;
+     314: astore        33
+     316: aload         33
+     318: invokeinterface #215,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+     323: ifeq          441
+     326: aload         33
+     328: invokeinterface #219,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+     333: checkcast     #12                 // class bettercombat/mod/util/ConfigurationHandler$ConfigWeapon
+     336: astore        34
+     338: aload         31
+     340: aload         34
+     342: getfield      #264                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.name:Ljava/lang/String;
+     345: invokevirtual #268                // Method java/lang/String.contains:(Ljava/lang/CharSequence;)Z
+     348: ifeq          438
+     351: iconst_1
+     352: istore        32
+     354: iload         9
+     356: aload         34
+     358: getfield      #272                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.sweepMod:I
+     361: iadd
+     362: istore        9
+     364: dload         6
+     366: aload         34
+     368: getfield      #275                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.knockbackMod:D
+     371: dadd
+     372: dstore        6
+     374: dload         10
+     376: aload         34
+     378: getfield      #278                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.critChanceMod:D
+     381: aload_0
+     382: getstatic     #152                // Field bettercombat/mod/server/EventHandlers.CRIT_CHANCE:Lnet/minecraft/entity/ai/attributes/IAttribute;
+     385: invokevirtual #156                // Method net/minecraft/entity/player/EntityPlayer.func_110148_a:(Lnet/minecraft/entity/ai/attributes/IAttribute;)Lnet/minecraft/entity/ai/attributes/IAttributeInstance;
+     388: invokeinterface #281,  1          // InterfaceMethod net/minecraft/entity/ai/attributes/IAttributeInstance.func_111125_b:()D
+     393: dsub
+     394: dadd
+     395: dstore        10
+     397: dload         12
+     399: aload         34
+     401: getfield      #284                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.additionalCritDamageMod:D
+     404: dadd
+     405: dstore        12
+     407: aload         34
+     409: getfield      #287                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.additionalReachMod:D
+     412: dstore        14
+     414: aload         34
+     416: getfield      #291                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.soundType:Lbettercombat/mod/util/ConfigurationHandler$SoundType;
+     419: astore        24
+     421: aload         34
+     423: getfield      #295                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.animation:Lbettercombat/mod/util/ConfigurationHandler$Animation;
+     426: astore        25
+     428: aload         34
+     430: getfield      #299                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.configWeaponPotionEffect:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeaponPotionEffect;
+     433: astore        30
+     435: goto          441
+     438: goto          316
+     441: iload         32
+     443: ifne          527
+     446: iload         9
+     448: getstatic     #303                // Field bettercombat/mod/util/ConfigurationHandler.DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+     451: getfield      #272                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.sweepMod:I
+     454: iadd
+     455: istore        9
+     457: dload         6
+     459: getstatic     #303                // Field bettercombat/mod/util/ConfigurationHandler.DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+     462: getfield      #275                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.knockbackMod:D
+     465: dadd
+     466: dstore        6
+     468: dload         10
+     470: getstatic     #303                // Field bettercombat/mod/util/ConfigurationHandler.DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+     473: getfield      #278                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.critChanceMod:D
+     476: aload_0
+     477: getstatic     #152                // Field bettercombat/mod/server/EventHandlers.CRIT_CHANCE:Lnet/minecraft/entity/ai/attributes/IAttribute;
+     480: invokevirtual #156                // Method net/minecraft/entity/player/EntityPlayer.func_110148_a:(Lnet/minecraft/entity/ai/attributes/IAttribute;)Lnet/minecraft/entity/ai/attributes/IAttributeInstance;
+     483: invokeinterface #281,  1          // InterfaceMethod net/minecraft/entity/ai/attributes/IAttributeInstance.func_111125_b:()D
+     488: dsub
+     489: dadd
+     490: dstore        10
+     492: dload         12
+     494: getstatic     #303                // Field bettercombat/mod/util/ConfigurationHandler.DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+     497: getfield      #284                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.additionalCritDamageMod:D
+     500: dadd
+     501: dstore        12
+     503: getstatic     #303                // Field bettercombat/mod/util/ConfigurationHandler.DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+     506: getfield      #287                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.additionalReachMod:D
+     509: dstore        14
+     511: getstatic     #303                // Field bettercombat/mod/util/ConfigurationHandler.DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+     514: getfield      #291                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.soundType:Lbettercombat/mod/util/ConfigurationHandler$SoundType;
+     517: astore        24
+     519: getstatic     #303                // Field bettercombat/mod/util/ConfigurationHandler.DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+     522: getfield      #295                // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.animation:Lbettercombat/mod/util/ConfigurationHandler$Animation;
+     525: astore        25
+     527: goto          565
+     530: dload         22
+
+## Better Combat Helpers.playerAttackVictimWithWeapon (the wards:effect_sweeping potion: index 7 at bytecode 1188-1201, switch at 1223, case 7 at 1429-1439)
+    1188: aload         38
+    1190: ldc_w         #479                // String wards:effect_sweeping
+    1193: invokevirtual #465                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+    1196: ifeq          1221
+    1199: bipush        7
+    1201: istore        39
+    1223: tableswitch   { // 0 to 8
+                     0: 1272
+                     1: 1292
+                     2: 1312
+                     3: 1328
+                     4: 1352
+                     5: 1383
+                     6: 1414
+                     7: 1429
+                     8: 1444
+               default: 1492
+    1429: iload         9
+    1431: iconst_1
+    1432: aload         37
+    1434: invokevirtual #195                // Method net/minecraft/potion/PotionEffect.func_76458_c:()I
+    1437: iadd
+    1438: iadd
+    1439: istore        9
+
+## Better Combat Helpers.playerAttackVictimWithWeapon (main hit gate, bytecode 1860-1886)
+    1860: aload_0
+    1861: iconst_0
+    1862: invokevirtual #613                // Method net/minecraft/entity/player/EntityPlayer.func_70031_b:(Z)V
+    1865: aload_0
+    1866: ldc_w         #614                // float 0.1f
+    1869: invokevirtual #618                // Method net/minecraft/entity/player/EntityPlayer.func_71020_j:(F)V
+    1872: aload_0
+    1873: aload         34
+    1875: aload         35
+    1877: dload         22
+    1879: d2f
+    1880: invokestatic  #622                // Method playerAttackedVictim:(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/entity/MultiPartEntityPart;F)Z
+    1883: ifeq          3392
+    1886: iload         27
+
+## Better Combat Helpers.playerAttackVictimWithWeapon (Sweeping enchantment and the sweep, bytecode 2099-2445)
+    2100: aload_2
+    2101: invokevirtual #677                // Method net/minecraft/item/ItemStack.func_77986_q:()Lnet/minecraft/nbt/NBTTagList;
+    2104: astore        36
+    2106: iconst_0
+    2107: istore        37
+    2109: iload         37
+    2111: aload         36
+    2113: invokevirtual #682                // Method net/minecraft/nbt/NBTTagList.func_74745_c:()I
+    2116: if_icmpge     2177
+    2119: aload         36
+    2121: iload         37
+    2123: invokevirtual #686                // Method net/minecraft/nbt/NBTTagList.func_150305_b:(I)Lnet/minecraft/nbt/NBTTagCompound;
+    2126: astore        38
+    2128: aload         38
+    2130: ldc_w         #688                // String id
+    2133: invokevirtual #694                // Method net/minecraft/nbt/NBTTagCompound.func_74765_d:(Ljava/lang/String;)S
+    2136: invokestatic  #700                // Method net/minecraft/enchantment/Enchantment.func_185262_c:(I)Lnet/minecraft/enchantment/Enchantment;
+    2139: astore        39
+    2141: aload         38
+    2143: ldc_w         #702                // String lvl
+    2146: invokevirtual #694                // Method net/minecraft/nbt/NBTTagCompound.func_74765_d:(Ljava/lang/String;)S
+    2149: istore        40
+    2151: aload         39
+    2153: getstatic     #708                // Field net/minecraft/init/Enchantments.field_191530_r:Lnet/minecraft/enchantment/Enchantment;
+    2156: if_acmpne     2171
+    2159: iload         40
+    2161: ifle          2171
+    2164: iload         9
+    2166: iload         40
+    2168: iadd
+    2169: istore        9
+    2171: iinc          37, 1
+    2174: goto          2109
+    2177: iload         9
+    2179: iinc          9, -1
+    2182: ifle          2633
+    2185: iconst_0
+    2186: istore        37
+    2188: dconst_1
+    2189: aload_0
+    2190: getfield      #711                // Field net/minecraft/entity/player/EntityPlayer.field_70130_N:F
+    2193: f2d
+    2194: dadd
+    2195: iload         9
+    2197: i2d
+    2198: ldc2_w        #712                // double 0.25d
+    2201: dmul
+    2202: dadd
+    2203: dstore        38
+    2205: iload         4
+    2207: ifeq          2221
+    2210: aload_0
+    2211: dload         14
+    2213: invokestatic  #717                // Method getMainhandReach:(Lnet/minecraft/entity/player/EntityPlayer;D)D
+    2216: dstore        14
+    2218: goto          2231
+    2221: aload_0
+    2222: dload         14
+    2224: aload_3
+    2225: aload_2
+    2226: invokestatic  #721                // Method getOffhandReach:(Lnet/minecraft/entity/player/EntityPlayer;DLnet/minecraft/item/ItemStack;Lnet/minecraft/item/ItemStack;)D
+    2229: dstore        14
+    2231: aload_0
+    2232: getfield      #86                 // Field net/minecraft/entity/player/EntityPlayer.field_70170_p:Lnet/minecraft/world/World;
+    2235: ldc           #110                // class net/minecraft/entity/EntityLivingBase
+    2237: aload         34
+    2239: invokevirtual #725                // Method net/minecraft/entity/EntityLivingBase.func_174813_aQ:()Lnet/minecraft/util/math/AxisAlignedBB;
+    2242: dload         38
+    2244: getstatic     #728                // Field net/minecraft/util/math/MathHelper.field_180189_a:F
+    2247: f2d
+    2248: dmul
+    2249: dconst_1
+    2250: dload         38
+    2252: getstatic     #728                // Field net/minecraft/util/math/MathHelper.field_180189_a:F
+    2255: f2d
+    2256: dmul
+    2257: invokevirtual #734                // Method net/minecraft/util/math/AxisAlignedBB.func_72314_b:(DDD)Lnet/minecraft/util/math/AxisAlignedBB;
+    2260: invokevirtual #738                // Method net/minecraft/world/World.func_72872_a:(Ljava/lang/Class;Lnet/minecraft/util/math/AxisAlignedBB;)Ljava/util/List;
+    2263: astore        40
+    2265: aload         40
+    2267: invokeinterface #741,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+    2272: astore        41
+    2274: aload         41
+    2276: invokeinterface #215,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+    2281: ifeq          2595
+    2284: aload         41
+    2286: invokeinterface #219,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+    2291: checkcast     #110                // class net/minecraft/entity/EntityLivingBase
+    2294: astore        42
+    2296: aload         42
+    2298: aload_0
+    2299: if_acmpeq     2592
+    2302: aload         42
+    2304: aload         34
+    2306: if_acmpeq     2592
+    2309: aload         42
+    2311: invokevirtual #742                // Method net/minecraft/entity/EntityLivingBase.func_70089_S:()Z
+    2314: ifeq          2592
+    2317: aload_0
+    2318: aload         42
+    2320: invokevirtual #746                // Method net/minecraft/entity/player/EntityPlayer.func_70068_e:(Lnet/minecraft/entity/Entity;)D
+    2323: dload         14
+    2325: aload         42
+    2327: getfield      #747                // Field net/minecraft/entity/EntityLivingBase.field_70130_N:F
+    2330: f2d
+    2331: dadd
+    2332: dload         14
+    2334: aload         42
+    2336: getfield      #747                // Field net/minecraft/entity/EntityLivingBase.field_70130_N:F
+    2339: f2d
+    2340: dadd
+    2341: dmul
+    2342: dcmpg
+    2343: ifgt          2592
+    2346: aload         34
+    2348: aload         42
+    2350: invokevirtual #748                // Method net/minecraft/entity/EntityLivingBase.func_70068_e:(Lnet/minecraft/entity/Entity;)D
+    2353: dload         38
+    2355: dload         38
+    2357: dmul
+    2358: dcmpg
+    2359: ifgt          2592
+    2362: aload_0
+    2363: aload         42
+    2365: invokestatic  #752                // Method bettercombat/mod/util/ConfigurationHandler.rightClickAttackable:(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/entity/Entity;)Z
+    2368: ifeq          2592
+    2371: aload_0
+    2372: aload         42
+    2374: invokevirtual #755                // Method net/minecraft/entity/player/EntityPlayer.func_184191_r:(Lnet/minecraft/entity/Entity;)Z
+    2377: ifne          2592
+    2380: iconst_1
+    2381: istore        37
+    2383: getstatic     #179                // Field bettercombat/mod/util/ConfigurationHandler.baseAttackDamage:D
+    2386: dstore        43
+    2388: dload         22
+    2390: iload         9
+    2392: i2d
+    2393: ldc2_w        #712                // double 0.25d
+    2396: dmul
+    2397: dmul
+    2398: getstatic     #179                // Field bettercombat/mod/util/ConfigurationHandler.baseAttackDamage:D
+    2401: dload         22
+    2403: invokestatic  #606                // Method net/minecraft/util/math/MathHelper.func_151237_a:(DDD)D
+    2406: dstore        43
+    2408: aload_0
+    2409: aload         42
+    2411: aconst_null
+    2412: dload         43
+    2414: d2f
+    2415: invokestatic  #622                // Method playerAttackedVictim:(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/entity/MultiPartEntityPart;F)Z
+    2418: ifeq          2592
+    2421: aload         42
+    2423: aload_0
+    2424: ldc2_w        #488                // double 0.5d
+    2427: dload         6
+    2429: dmul
+    2430: ldc2_w        #756                // double 4.0d
+    2433: iload         9
+    2435: i2d
+    2436: dadd
+    2437: ldc2_w        #758                // double 8.0d
+    2440: ddiv
+    2441: ldc2_w        #488                // double 0.5d
+    2444: dconst_1
+    2445: invokestatic  #606                // Method net/minecraft/util/math/MathHelper.func_151237_a:(DDD)D
+
+## Better Combat Helpers.getRegistryNameFromItem
+  public static java.lang.String getRegistryNameFromItem(net.minecraft.item.Item);
+    Code:
+       0: aload_0
+       1: invokevirtual #828                // Method net/minecraft/item/Item.getRegistryName:()Lnet/minecraft/util/ResourceLocation;
+       4: invokevirtual #1131               // Method net/minecraft/util/ResourceLocation.func_110623_a:()Ljava/lang/String;
+       7: areturn
+
+## Better Combat ConfigurationHandler.setDefaultConfigWeaponVariables and isConfigWeapon
+  private static void setDefaultConfigWeaponVariables();
+    Code:
+       0: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+       3: ldc_w         #1338               // String
+       6: putfield      #1179               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.name:Ljava/lang/String;
+       9: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+      12: getstatic     #1341               // Field bettercombat/mod/util/ConfigurationHandler$Animation.CHOP:Lbettercombat/mod/util/ConfigurationHandler$Animation;
+      15: putfield      #1194               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.animation:Lbettercombat/mod/util/ConfigurationHandler$Animation;
+      18: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+      21: getstatic     #1343               // Field bettercombat/mod/util/ConfigurationHandler$SoundType.AXE:Lbettercombat/mod/util/ConfigurationHandler$SoundType;
+      24: putfield      #1187               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.soundType:Lbettercombat/mod/util/ConfigurationHandler$SoundType;
+      27: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+      30: getstatic     #1346               // Field bettercombat/mod/util/ConfigurationHandler$WeaponProperty.ONEHAND:Lbettercombat/mod/util/ConfigurationHandler$WeaponProperty;
+      33: putfield      #1201               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.property:Lbettercombat/mod/util/ConfigurationHandler$WeaponProperty;
+      36: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+      39: iconst_0
+      40: putfield      #1204               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.sweepMod:I
+      43: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+      46: dconst_0
+      47: putfield      #1207               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.additionalReachMod:D
+      50: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+      53: getstatic     #847                // Field baseKnockback:D
+      56: putfield      #1210               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.knockbackMod:D
+      59: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+      62: getstatic     #332                // Field baseCritPercentChance:D
+      65: putfield      #1213               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.critChanceMod:D
+      68: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+      71: dconst_0
+      72: putfield      #1216               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.additionalCritDamageMod:D
+      75: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+      78: aconst_null
+      79: putfield      #1285               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.configWeaponPotionEffect:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeaponPotionEffect;
+      82: getstatic     #1336               // Field DEFAULT_CUSTOM_WEAPON:Lbettercombat/mod/util/ConfigurationHandler$ConfigWeapon;
+      85: getstatic     #616                // Field enableParrying:Z
+      88: putfield      #1229               // Field bettercombat/mod/util/ConfigurationHandler$ConfigWeapon.parry:Z
+      91: return
+  public static boolean isConfigWeapon(net.minecraft.item.Item);
+    Code:
+       0: aload_0
+       1: invokestatic  #1377               // Method isItemClassWhiteList:(Lnet/minecraft/item/Item;)Z
+       4: ifeq          18
+       7: aload_0
+       8: invokestatic  #1380               // Method isBlacklisted:(Lnet/minecraft/item/Item;)Z
+      11: ifne          18
+      14: iconst_1
+      15: goto          19
+      18: iconst_0
+      19: ireturn
+
+## Vanilla EntityPlayer.attackTargetEntityWithCurrentItem (sweep gate and box)
+     311: iload         8
+     313: ifne          362
+     316: iload         6
+     318: ifne          362
+     321: aload_0
+     322: getfield      #268                // Field z:Z
+     325: ifeq          362
+     328: dload         10
+     330: aload_0
+     331: invokevirtual #1217               // Method cy:()F
+     334: f2d
+     335: dcmpg
+     336: ifge          362
+     339: aload_0
+     340: getstatic     #1057               // Field ub.a:Lub;
+     343: invokevirtual #1157               // Method b:(Lub;)Laip;
+     346: astore        12
+     348: aload         12
+     350: invokevirtual #799                // Method aip.c:()Lain;
+     353: instanceof    #1219               // class ajy
+     356: ifeq          362
+     359: iconst_1
+     360: istore        9
+     362: fconst_0
+     591: aload_0
+     592: getfield      #277                // Field l:Lamu;
+     595: ldc           #4                  // class vp
+     597: aload_1
+     598: invokevirtual #578                // Method vg.bw:()Lbhb;
+     601: dconst_1
+     602: ldc2_w        #385                // double 0.25d
+     605: dconst_1
+     606: invokevirtual #584                // Method bhb.c:(DDD)Lbhb;
+     609: invokevirtual #1249               // Method amu.a:(Ljava/lang/Class;Lbhb;)Ljava/util/List;
+     612: astore        23
+     614: aload         23
+     616: invokeinterface #1250,  1         // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+     621: astore        24
+     623: aload         24
+     625: invokeinterface #1087,  1         // InterfaceMethod java/util/Iterator.hasNext:()Z
+     630: ifeq          731
+     633: aload         24
+     635: invokeinterface #1091,  1         // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+     640: checkcast     #4                  // class vp
+     643: astore        25
+     645: aload         25
+     647: aload_0
+     648: if_acmpeq     623
+     651: aload         25
+     653: aload_1
+     654: if_acmpeq     623
+     657: aload_0
+     658: aload         25
+     660: invokevirtual #1252               // Method r:(Lvg;)Z
+     663: ifeq          669
+     666: goto          623
+     669: aload_0
+     670: aload         25
+     672: invokevirtual #1255               // Method h:(Lvg;)D
+     675: ldc2_w        #1256               // double 9.0d
+     678: dcmpg
+     679: ifge          728
+
+## Vanilla MathHelper static init (rk.a = SQRT_2)
+  static {};
+    Code:
+       0: fconst_2
+       1: invokestatic  #186                // Method c:(F)F
+       4: putstatic     #188                // Field a:F
