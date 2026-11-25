@@ -1,0 +1,249 @@
+{
+ "format": "rotn-weapon-sweep/1",
+ "pack": "3.3.4",
+ "description": "Which held items make a player's melee hit sweep (also hit mobs next to the struck one) on RotN 3.3.4, and how far from the struck mob the sweep reaches, for weaponSweep. Hand-written from the bytecode of Better Combat (ImmersiveCombat-12-13-25.jar, modid bettercombat 1.5.6) and the vanilla 1.12.2 server jar of the pinned pack zip, read with javap only, and from config/bettercombat.cfg; excerpts and copies in packages/rotn-data/test/fixtures/weapon-sweep-3.3.4/. confidence 'verified' = read from that bytecode and config; nothing here was watched in a run.",
+ "confidence": "verified",
+ "summary": "Better Combat's packet (the bot's attack path): the held item sweeps only if Better Combat treats it as a weapon (an ItemSword, ItemTool, ItemHoe or Spartan throwing weapon: weapons.json bcWeapon) and the first Custom Weapon Tweaker entry whose substring is in the item's registry path has Sweep 1 or more; plus the Sweeping enchantment level and the wards:effect_sweeping potion (amplifier + 1). Clubs, maces, hammers, axes, pickaxes, shovels, hoes, spears, pikes and katanas are Sweep 0; swords (_sword), sabers (saber_), longswords, cutlasses and blades 1; glaives, staves and scythes 2; greatswords 3. A sweep happens only when the main hit landed. It hits every other living mob whose position is within radius = 1 + the attacker's width (0.6 for a player) + 0.25 x (level - 1) blocks of the struck mob's position (1.6 at level 1, 1.85 at 2, 2.1 at 3) and within the attacker's reach plus that mob's width, at least 1.0 damage. The vanilla use_entity fallback sweeps with any ItemSword subclass instead (Spartan clubs included): mobs inside the struck mob's box grown by 1 sideways and 0.25 up and down, within 3 blocks of the player, only on a charged (> 0.9), grounded, non-crit, non-sprint hit.",
+ "sources": {
+  "betterCombat": {
+   "file": "mods/ImmersiveCombat-12-13-25.jar",
+   "sha256": "d19aa396cdf5e96604d4973a5a6063eeaacc66fffaff56c9e1c66626fc87e62e",
+   "modid": "bettercombat",
+   "version": "1.5.6",
+   "classes": [
+    "bettercombat.mod.util.Helpers (playerAttackVictimWithWeapon, getRegistryNameFromItem)",
+    "bettercombat.mod.util.ConfigurationHandler (Custom Weapon Tweaker parsing, setDefaultConfigWeaponVariables, isConfigWeapon)"
+   ]
+  },
+  "config": {
+   "file": "config/bettercombat.cfg",
+   "sha256": "5f25c1b46b9872086a097c3ad176ea3f0d74674b1a7c2e2b73ea82347486b43a",
+   "tweakerLines": "316-352",
+   "classWhitelistLines": "867-870"
+  },
+  "minecraft": {
+   "file": "minecraft_server.1.12.2.jar (pack root)",
+   "classes": [
+    "aed.f(vg) = EntityPlayer.attackTargetEntityWithCurrentItem (the vanilla sweep)",
+    "rk = MathHelper (SQRT_2)"
+   ]
+  }
+ },
+ "betterCombat": {
+  "match": "Helpers.playerAttackVictimWithWeapon bytecode 277-530: only for a config weapon (ConfigurationHandler.isConfigWeapon: the item's class on the Item Class Whitelist, config lines 867-870, and not blacklisted; weapons.json bcWeapon), the tweaker entries are tried in config order and the first whose substring is contained (String.contains, case-sensitive) in the item's registry path (ResourceLocation.getPath, no mod id) gives sweepMod; with no match the default weapon's sweepMod is 0. An entry whose substring has a mod id ('nyx:scythe', 'spartanweaponry:pike_invar') never matches.",
+  "level": "sweepMod + the wards:effect_sweeping potion's amplifier + 1 (bytecode 1188-1201, 1223 case 7 -> 1429-1439) + the Sweeping enchantment level (2099-2169). A non-weapon or an empty hand has sweepMod 0 but still gets the potion and enchantment terms.",
+  "when": "Only when the main hit landed (playerAttackedVictim at 1880 returned true, else ifeq 3392 skips the sweep); no ground, sprint or cooldown condition.",
+  "radius": "For level >= 1 (2177-2203): r = 1 + attacker width (field_70130_N) + 0.25 x (level - 1). Candidates: living entities in the struck mob's bounding box grown by r x SQRT_2 sideways and 1 up and down (2231-2260), other than the attacker and the struck mob, alive (2296-2314), within (reach + their width) of the attacker by squared distance (2317-2343, reach = getMainhandReach with the entry's Additional Reach), and whose position is within r of the struck mob's position (getDistanceSq, 2346-2359), attackable (rightClickAttackable) and not on the attacker's team.",
+  "damage": "Config text (Custom Weapon Tweaker comment): level 1 deals 1.0, each level above 1 adds 25% of the main hit (at least 1.0); a sweep hit is a real player hit, so the swept mob takes the player as its revenge target.",
+  "attackerWidth": 0.6,
+  "radiusByLevel": {
+   "1": 1.6,
+   "2": 1.85,
+   "3": 2.1,
+   "4": 2.35,
+   "5": 2.6
+  },
+  "entries": [
+   {
+    "line": 316,
+    "substring": "troll_weapon",
+    "sweep": 0
+   },
+   {
+    "line": 317,
+    "substring": "celeste",
+    "sweep": 2
+   },
+   {
+    "line": 318,
+    "substring": "amber_sword",
+    "sweep": 0
+   },
+   {
+    "line": 319,
+    "substring": "gladiolus",
+    "sweep": 1
+   },
+   {
+    "line": 320,
+    "substring": "dawn_star",
+    "sweep": 1
+   },
+   {
+    "line": 321,
+    "substring": "wither_bane",
+    "sweep": 1
+   },
+   {
+    "line": 322,
+    "substring": "blade",
+    "sweep": 1
+   },
+   {
+    "line": 323,
+    "substring": "aethers_guard",
+    "sweep": 1
+   },
+   {
+    "line": 324,
+    "substring": "_infinity",
+    "sweep": 1
+   },
+   {
+    "line": 325,
+    "substring": "pike_",
+    "sweep": 0
+   },
+   {
+    "line": 326,
+    "substring": "glaive_",
+    "sweep": 2
+   },
+   {
+    "line": 327,
+    "substring": "spear_",
+    "sweep": 0
+   },
+   {
+    "line": 328,
+    "substring": "lance_",
+    "sweep": 0
+   },
+   {
+    "line": 329,
+    "substring": "halberd_",
+    "sweep": 0
+   },
+   {
+    "line": 330,
+    "substring": "staff",
+    "sweep": 2
+   },
+   {
+    "line": 331,
+    "substring": "golden_club",
+    "sweep": 0
+   },
+   {
+    "line": 332,
+    "substring": "warhammer_",
+    "sweep": 0
+   },
+   {
+    "line": 333,
+    "substring": "hammer_",
+    "sweep": 0
+   },
+   {
+    "line": 334,
+    "substring": "mace_",
+    "sweep": 0
+   },
+   {
+    "line": 335,
+    "substring": "club_",
+    "sweep": 0
+   },
+   {
+    "line": 336,
+    "substring": "caestus",
+    "sweep": 0
+   },
+   {
+    "line": 337,
+    "substring": "tough_glove",
+    "sweep": 0
+   },
+   {
+    "line": 338,
+    "substring": "greatsword_",
+    "sweep": 3
+   },
+   {
+    "line": 339,
+    "substring": "katana_",
+    "sweep": 0
+   },
+   {
+    "line": 340,
+    "substring": "longsword_",
+    "sweep": 1
+   },
+   {
+    "line": 341,
+    "substring": "saber_",
+    "sweep": 1
+   },
+   {
+    "line": 342,
+    "substring": "rapier_",
+    "sweep": 0
+   },
+   {
+    "line": 343,
+    "substring": "_sword",
+    "sweep": 1
+   },
+   {
+    "line": 344,
+    "substring": "_cutlass",
+    "sweep": 1
+   },
+   {
+    "line": 345,
+    "substring": "battleaxe_",
+    "sweep": 0
+   },
+   {
+    "line": 346,
+    "substring": "_shovel",
+    "sweep": 0
+   },
+   {
+    "line": 347,
+    "substring": "_scythe",
+    "sweep": 2
+   },
+   {
+    "line": 348,
+    "substring": "nyx:scythe",
+    "sweep": 2
+   },
+   {
+    "line": 349,
+    "substring": "_pickaxe",
+    "sweep": 0
+   },
+   {
+    "line": 350,
+    "substring": "_axe",
+    "sweep": 0
+   },
+   {
+    "line": 351,
+    "substring": "_hoe",
+    "sweep": 0
+   },
+   {
+    "line": 352,
+    "substring": "spartanweaponry:pike_invar",
+    "sweep": 0
+   }
+  ]
+ },
+ "vanillaFallback": {
+  "rule": "EntityPlayer.attackTargetEntityWithCurrentItem (aed.f(vg)), used only when forge-bridge falls back to vanilla use_entity: a sweep when the swing is charged above 0.9, it is not a crit (falling) or a sprint hit, the player is on the ground and moving slower than its walking speed, and the main-hand item is an ItemSword (ajy) or a subclass (bytecode 318-356; Spartan clubs, sabers and the like extend ItemSword, weapons.json base). It hits living entities in the struck mob's box grown by (1, 0.25, 1) (595-609), other than the player and the struck mob, within 3 blocks of the player (getDistanceSq < 9.0, 672-679).",
+  "itemBase": "ItemSword",
+  "boxGrow": {
+   "x": 1,
+   "y": 0.25,
+   "z": 1
+  },
+  "maxPlayerDistance": 3
+ },
+ "unverified": [
+  "Nothing was watched in a run.",
+  "The Item Class Whitelist and blacklist check is taken from weapons.json bcWeapon (tools/build-weapons.mjs), not re-read here."
+ ],
+ "unknownItems": "weaponSweep reads Better Combat's weapon status from weapons.json (bcWeapon). An item weapons.json does not list (a held block or other non-tool item, or a name not on this pack) is answered as unknown: weapon, entry, level, sweeps and radius null, never 'does not sweep' (#621 review 2). The empty hand is known: no weapon, Sweep 0."
+}

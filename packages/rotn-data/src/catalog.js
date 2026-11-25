@@ -25,6 +25,7 @@ import { mobDigging, canMobDig } from './digging.js';
 import { mobMelee, fallingTree, fallingTreeDamage } from './melee.js';
 import { combatOf, weaponStats, meleeHitDamage, hitsToKill } from './combat.js';
 import { forageFood, forageSources, forageHazard } from './forage.js';
+import { weaponSweep } from './sweep.js';
 import { canFill } from './craft-fill.js';
 import { parseOld, registryName, WILDCARD_META } from './names.js';
 
@@ -121,6 +122,9 @@ export class RotnData {
         // What low food does to a player: Hunger Overhaul's low-food effects by food and difficulty,
         // starvation, the constant drain (hunger-effects.json, hand-written with evidence).
         this.hungerEffectsData = readJson(dir, 'hunger-effects') ?? null;
+        // Which held items make a melee hit sweep, and how far (weapon-sweep.json, hand-written from Better Combat's
+        // and vanilla's bytecode and config/bettercombat.cfg).
+        this.weaponSweepData = readJson(dir, 'weapon-sweep') ?? null;
 
         this.dump = {};
         for (const f of DUMP_FILES) this.dump[f] = readJson(dir, f);
@@ -559,6 +563,11 @@ export class RotnData {
     /** A weapon's numbers on this pack ('hand' when empty): vanilla's attackDamage, attackSpeed, cooldownTicks and Better Combat's bc* ones (null where not read), or null when not a listed weapon (src/combat.js). */
     weaponStats(item) {
         return weaponStats(this, item);
+    }
+
+    /** Whether a held item makes a melee hit sweep, its level and radius around the struck mob (src/sweep.js), or null without the data. */
+    weaponSweep(item, opts) {
+        return weaponSweep(this, item, opts);
     }
 
     /** The health one bot hit takes off a target (src/combat.js). */
