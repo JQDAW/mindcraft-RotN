@@ -106,6 +106,29 @@ test('I4 dig-refused-with-tool: n/a before rotn-v0.1.19; #618 lines with a finit
     assert.deepEqual([r.I4.count, r.I4.refusals, r.I4.source], [1, 2, 'dig refused']);
 });
 
+test('#625: the dig-refused cap line is not a refusal; with it I4 is a lower bound (capped, "at least", "≥")', () => {
+    const refused = (t) => L(t, '[forge-bridge] dig refused: undergroundbiomes:metamorphic_stone:6 at -58, 55, -50 (pickaxe level 0, hardness 0.9); held planks:1 (no pickaxe level); pickaxe tools: stone_pickaxe (level 0) off hand; rule: held Infinity, stone_pickaxe 350 ms');
+    const cap = L('10:09:00', '[forge-bridge] dig refused: 100 lines logged; further refusals on this connection are not');
+    let r = run([REL(22), refused('10:00:00'), refused('10:01:00'), cap]);
+    assert.deepEqual([r.I4.count, r.I4.refusals, r.I4.capped, r.I4.source], [2, 2, true, 'dig refused (capped)']);
+    assert.match(render(r, 'x'), /I4 dig-refused-with-tool: at least 2 of at least 2 tool refusals/);
+    assert.match(renderTable({ 'g4soak-16-x': { release: 'rotn-v0.1.22', I4_digRefusedWithTool: 2, I4_capped: true } }), /\| ≥2 \|/);
+    r = run([REL(22), cap]); // only the cap line kept (a partial journal): still a lower bound, not "no refusal"
+    assert.deepEqual([r.I4.count, r.I4.refusals, r.I4.capped], [0, 0, true]);
+    r = run([REL(22), refused('10:00:00')]);
+    assert.deepEqual([r.I4.count, r.I4.capped], [1, false]);
+});
+
+test('#623 re-review: a hunt start looks for its mob only within the window and not past the next hunt start', () => {
+    const refusal = L('10:00:00', '[reflex] hunting: left alone, it may belong to a player: animania:cow_holstein: a animania:bull_holstein within 16 blocks');
+    const start = (t) => L(t, '[survival] weapon spartanweaponry:club_wood (hunt)');
+    let r = run([REL(21), refusal, start('10:00:30'), start('10:00:40'), L('10:00:50', '[reflex] hunting animania:sow_old_spot: stuck (left alone for 5 min)')]);
+    assert.equal(r.I7.count, 0);
+    // The hunting line after the window: the hunt start's mob is unknown within it, so no act.
+    r = run([REL(21), refusal, start('10:00:50'), L('10:02:00', '[reflex] hunting animania:cow_holstein: stuck (left alone for 5 min)')]);
+    assert.equal(r.I7.count, 0);
+});
+
 test('I5 sunset-food-short: both line formats; null with no food-for-the-night line; food runs and their points', () => {
     assert.equal(run([L('10:00:00', 'x')]).I5, null);
     let r = run([
