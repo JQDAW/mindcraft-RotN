@@ -12,6 +12,7 @@ import { encodeRegister } from '../src/channels.js';
 import { buildCustomPackets } from '../src/reid.js';
 import { findMod } from '../src/modlist.js';
 import { STACKUP_MODID } from '../src/stackup.js';
+import { encodeVarInt } from '../src/wire.js';
 
 const require = createRequire(import.meta.url);
 const mc = require('minecraft-protocol');
@@ -101,4 +102,25 @@ export async function startFakeForgeServer({ modList, registries, reid = true, o
             }, 50);
         }),
     };
+}
+
+// Respawns as Forge 14.23.5.2860's PlayerList sends them (fake-server task, item 5; javap on the
+// binpatched pl, see the #618 README "Soak 14"):
+// - a death: recreatePlayerEntity sends SPacketRespawn and no effect packet (the new player has none);
+// - a dimension change: transferPlayerToDimension (the ITeleporter overload) sends SPacketRespawn
+//   (bytecode 41-72), then one SPacketEntityEffect per active effect (177-226).
+// The server player's entity id is kept in both. Effect ids go out as REID writes them (a byte, then
+// the VarInt id in the tail), as fake-world.js does.
+export const respawnPacket = (dimension = 0) => ({ dimension, difficulty: 2, gamemode: 0, levelType: 'default' });
+export function effectPacket(entityId, { id, amplifier = 0, duration = 200 }) {
+    return { entityId, effectId: ((id & 0xff) << 24) >> 24, amplifier, duration, hideParticles: 0, reidEffectId: encodeVarInt(id) };
+}
+/** A death's respawn: respawn only (to the same dimension). */
+export function respawnAfterDeath(client, dimension = 0) {
+    client.write('respawn', respawnPacket(dimension));
+}
+/** A dimension change: respawn, then every effect the player still has. */
+export function changeDimension(client, dimension, effects = [], entityId = 1) {
+    client.write('respawn', respawnPacket(dimension));
+    for (const e of effects) client.write('entity_effect', effectPacket(entityId, e));
 }

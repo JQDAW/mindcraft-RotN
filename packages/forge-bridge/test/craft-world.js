@@ -10,7 +10,9 @@ import { once } from 'node:events';
 import { createRequire } from 'node:module';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { startFakeForgeServer } from './fake-forge-server.js';
-import { attachFakeContainers } from './fake-containers.js';
+import { attachFakeContainers, dumpMaxStack } from './fake-containers.js';
+import { attachFakeDig } from './fake-dig.js';
+import { loadRotnData, PACK_VERSION } from '../../rotn-data/index.js';
 import { pinnedModList, syntheticRegistries, PING_FIXTURE, runAId } from './helpers.js';
 import { Writer } from '../src/wire.js';
 
@@ -96,13 +98,15 @@ export function joinCraftWorld(client) {
 /**
  * Start the fake server with the craft world and log Mindcraft's real initBot in to it
  * (one login retry: a loaded loopback can fail at connect). The caller closes both.
+ * `join` (default joinCraftWorld) sends the world and returns the containers; `regs` the
+ * registry sync (default registries()): the click and dig e2e tests pass their own.
  * @returns {Promise<{ server: object, bot: object, containers: () => object }>}
  */
-export async function startCraftWorld({ captureFile, onJoin } = {}) {
+export async function startCraftWorld({ captureFile, onJoin, join = joinCraftWorld, regs = registries() } = {}) {
     let containers = null;
     const server = await startFakeForgeServer({
-        modList: pinnedModList(), registries: registries(), reid: true,
-        onJoin: (client, state) => { containers = joinCraftWorld(client); onJoin?.(client, state, containers); },
+        modList: pinnedModList(), registries: regs, reid: true,
+        onJoin: (client, state) => { containers = join(client); onJoin?.(client, state, containers); },
     });
     process.env.FORGE_CAPTURE = captureFile;
     process.env.FORGE_BRIDGE = 'auto';
@@ -130,4 +134,50 @@ export async function startCraftWorld({ captureFile, onJoin } = {}) {
 export async function stopCraftWorld({ server, bot } = {}) {
     try { bot?.quit(); bot?._client.socket?.destroy(); clearTimeout(bot?._client.closeTimer); } catch { /* already gone */ }
     await server?.close();
+}
+
+/**
+ * The fake-server task's world (click-replay-e2e, dig-e2e): the craft world's floor and table, the
+ * Run A ids for `itemNames` and `blockNames`, the pack's StackUp sizes from rotn-data's dump on the
+ * server side (as #618 gives the bot), and optionally the dig model (fake-dig.js) over `digBlocks`.
+ * @param {object} o
+ * @param {string[]} o.itemNames registry names of the items in the sync
+ * @param {string[]} [o.blockNames] extra block names in the sync (air, stone, the table are always in)
+ * @param {object} o.inventory window 0 at login, { slot: { name, count, meta } }
+ * @param {object[]} [o.recipes] fake-containers recipes, by name ({ shapeless: [names], result: name })
+ * @param {object[]} [o.digBlocks] [{ x, y, z, name }] for the dig model; omitted: no dig model
+ * @param {object} [o.effects] the server player's effects for the dig model
+ * @returns {Promise<{ server, bot, containers: () => object, dig: () => object, ids: object }>}
+ */
+export async function startRotnWorld({ itemNames, blockNames = [], inventory, recipes = [], digBlocks = null, effects = {}, captureFile }) {
+    const rd = loadRotnData(PACK_VERSION);
+    const ids = Object.fromEntries(itemNames.map(n => [n, runAId(n)]));
+    const bids = Object.fromEntries(['minecraft:air', 'minecraft:stone', 'minecraft:crafting_table', ...blockNames].map(n => [n, runAId(n, 'minecraft:blocks')]));
+    const regs = registries();
+    regs[0] = { ...regs[0], ids: Object.entries(bids) };
+    regs[1] = { ...regs[1], ids: Object.entries(ids) };
+    let dig = null;
+    const join = (client) => {
+        client.write('login', { entityId: 1, gameMode: 0, dimension: 0, difficulty: 2, maxPlayers: 10, levelType: 'default', reducedDebugInfo: false });
+        client.write('map_chunk', { x: 0, z: 0, groundUp: true, bitMap: 1 << 4, chunkData: chunkData(), blockEntities: [] });
+        const containers = attachFakeContainers(client, {
+            table: TABLE,
+            recipes: recipes.map(r => ({ shapeless: r.shapeless.map(n => ids[n]), result: { id: ids[r.result], count: r.count ?? 1 } })),
+            blocks: {}, foods: {},
+            maxStack: dumpMaxStack(rd.dump.items.items, ids),
+            inventory: Object.fromEntries(Object.entries(inventory).map(([slot, st]) => [slot, { id: ids[st.name], count: st.count, meta: st.meta ?? 0 }])),
+        });
+        if (digBlocks) {
+            dig = attachFakeDig(client, {
+                containers, rd, registry: require('prismarine-registry')('1.12.2'), effects,
+                itemNames: Object.fromEntries(Object.entries(ids).map(([n, id]) => [id, n])),
+                blocks: digBlocks.map(b => ({ ...b, meta: b.meta ?? 0, id: bids[b.name] })),
+            });
+        }
+        containers.sendInventory();
+        client.write('position', { x: 8.5, y: 65, z: 6.5, yaw: 0, pitch: 0, flags: 0, teleportId: 1 });
+        return containers;
+    };
+    const world = await startCraftWorld({ captureFile, join, regs });
+    return { ...world, dig: () => dig, ids, rd };
 }
