@@ -4294,6 +4294,24 @@ export async function useDoor(bot, door_pos=null) {
     return true;
 }
 
+/**
+ * Round 17 P (rotn-data, the lead's addendum; #645 review 1): the Scroll of New Life is used: {pos, at, by} or null.
+ * The night routine's record (bot.rotnScrollUsed), else no scroll held: the mod gives it once at the first join, and an
+ * unused one survives death, so none held means used (memory.json is not reloaded on the CX23: load_memory is false).
+ */
+export function scrollUsedOn(bot) {
+    if (bot?.rotnScrollUsed) return bot.rotnScrollUsed;
+    const held = carriedItems(bot).some(i => /(^|:)spawnscroll$/.test(i?.name ?? '') && /lifescroll/.test(i?.name ?? ''))
+        || /(^|:)spawnscroll$/.test(bot?.inventory?.selectedItem?.name ?? '');
+    if (!bot?.inventory || held) return null;
+    return { pos: null, at: null, by: 'no Scroll of New Life held' };
+}
+/** The model's line for a bed refused because the scroll is used. */
+export function bedRefusalText(used) {
+    const where = used?.pos ? ` at ${used.pos.x}, ${used.pos.y}, ${used.pos.z}` : '';
+    return `Not using a bed: the Scroll of New Life is used${where ? ` (your respawn point is${where})` : ''}${used?.by && !used.pos ? ` (${used.by})` : ''}, and sleeping in a bed would end its respawn point for good (and a Zombie Player rises at every death again). Shelter for the night instead.`;
+}
+
 export async function goToBed(bot) {
     /**
      * Sleep in the nearest bed.
@@ -4302,6 +4320,9 @@ export async function goToBed(bot) {
      * @example
      * await skills.goToBed(bot);
      **/
+    // #645 review 6: refused here too (npc/controller.js calls this directly), once the scroll is used.
+    const used = scrollUsedOn(bot);
+    if (used) { log(bot, bedRefusalText(used)); return false; }
     const beds = bot.findBlocks({
         matching: (block) => {
             return block.name?.includes('bed');
