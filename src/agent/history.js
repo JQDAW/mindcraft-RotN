@@ -38,7 +38,12 @@ export function summaryChunkSize(maxMessages) {
  */
 export { MEMORY_MODES, memoryMode };
 
-/** Round 17 M: a chunk the summary model reads in code mode: one with a task giver's (trusted player's) own turn. */
+/**
+ * Round 17 M: a chunk the summary model reads in code mode: one with a user turn not marked untrusted (#637 review 6:
+ * a player's words that are not an [untrusted: ...] line; another bot's words count too, though this pack runs one).
+ * Self-prompts, agenda nudges and command results are system turns, the bot's own are assistant turns: never.
+ */
+export const OLD_NOTES_PREFIX = 'Your old notes: ';
 export function hasPlayerTurn(turns) {
     return turns.some(t => t?.role === 'user' && !isUntrustedTurn(t));
 }
@@ -59,7 +64,6 @@ export class History {
         this._summary = '';
         this.notes = '';
         this.facts = emptyFacts();
-        this._summarizing = false;
         this._factsLogged = null;
 
         // Maximum number of messages to keep in context before saving chunk to memory
@@ -77,12 +81,11 @@ export class History {
     get memoryMode() { return memoryMode(this.agent); }
 
     /**
-     * $MEMORY. "summary": the model's summary, as upstream. "code": the facts from the game state now plus the notes
-     * (while the notes are being summarized, the notes alone: the summary prompt's "old memory").
+     * $MEMORY. "summary": the model's summary, as upstream. "code": the facts from the game state now plus the notes,
+     * for every prompt (#637 review 4: the summary prompt gets its old notes as its first turn, not through $MEMORY).
      */
     get memory() {
         if (this.memoryMode !== 'code') return this._summary;
-        if (this._summarizing) return this.notes;
         let text;
         try { text = buildMemory(this.agent, { facts: this.facts, notes: this.notes }); } catch (err) {
             console.warn(`[memory] facts could not be built (${err?.message ?? err}); the notes alone`);
@@ -112,14 +115,14 @@ export class History {
         // restarted 5 times. A null, empty, non-text or failure reply, or a throw, keeps the
         // previous memory.
         let reply;
-        this._summarizing = true;
+        // Code mode (#637 review 4): the old notes go in as the first turn of what is summarized, so $MEMORY stays the
+        // facts and notes for every other prompt while this call is out.
+        const input = this.memoryMode === 'code' ? [{ role: 'system', content: `${OLD_NOTES_PREFIX}'${this.notes}'` }, ...turns] : turns;
         try {
-            reply = await this.agent.prompter.promptMemSaving(turns);
+            reply = await this.agent.prompter.promptMemSaving(input);
         } catch (err) {
             console.warn(`[memory] summary failed (${err?.message ?? err}); keeping the previous memory`);
             return;
-        } finally {
-            this._summarizing = false;
         }
         if (!isMemoryReply(reply)) {
             const what = typeof reply === 'string' ? (reply.trim() ? `failure reply "${reply.trim()}"` : 'an empty reply') : `a ${reply === null ? 'null' : typeof reply} reply`;

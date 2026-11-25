@@ -25,7 +25,7 @@ export function memoryMode(agent) {
 
 /** Bounds: records kept, lines shown, chars per line. */
 export const MEMORY_FACTS = {
-    failuresKept: 3, failureWhyMax: 100, failureCmdMax: 60,
+    failuresKept: 3, failureWhyMax: 100, failureCmdMax: 60, failureLineMax: 120, // #637 review 2: a line each
     deathsShown: 2,
     collectsKept: 4, collectsMs: 30 * 60_000,
     placesMax: 4,
@@ -67,24 +67,49 @@ export function recordFailure(facts, { cmd, why, pos = null, at: when = Date.now
     facts.failures = [...(facts.failures ?? []), entry].slice(-MEMORY_FACTS.failuresKept);
 }
 
+/** The action manager's marker for a skill that threw (action_manager.js), followed by "Error: <message>" and frames. */
+export const THREW = '!!Code threw exception!!';
+
 /**
- * The last non-empty line of a command's output, without the upstream "Action output:" wrapper, as its why.
- * null when there is no text.
+ * The why of a failed command's output: for a skill that threw (#637 review 1), the first line of its "Error: <msg>";
+ * else the last non-empty line, without the upstream "Action output:" wrapper. null when there is no text.
  */
 export function failureWhy(output) {
     if (typeof output !== 'string') return null;
+    const threw = output.indexOf(THREW);
+    if (threw >= 0) {
+        const err = output.slice(threw + THREW.length).split('\n').map(l => l.trim()).find(l => /^Error:/.test(l));
+        return err ?? 'the command threw an error';
+    }
     const lines = output.split('\n').map(l => l.trim()).filter(l => l && !/^(Action output|Code output):?$/i.test(l));
     return lines.at(-1) ?? null;
 }
 
 /**
- * Whether a command's output says it failed: the action manager's and the limits' failure texts, a "failed"/"could
- * not"/"cannot" line at the end. A successful command's output ends with what it did.
+ * Whether a command's output says it failed: a skill that threw, or a last line in one of the skills' and the command
+ * layer's failure phrasings. #637 review 3: known phrasings only, the refusals anchored at the line's start ("Not now:",
+ * "Not collecting ..."), so a success whose last line says "is not" or "not now" in passing is no failure.
  */
-const FAILED = /\b(failed|could not|couldn't|cannot|can't|not found|no path|path not found|was not broken|don't have|do not have|not enough|none (found|within|in sight|left)|no \S+ (found|within|nearby|in sight)|not allowed|refused|not now|is not|timed out|time limit)\b/i;
+const FAILED = [
+    /\bfailed\b/i, // "!collectBlocks failed: time limit ...", "Failed to ..."
+    /\b(could not|couldn't|cannot|can't|unable to)\b/i,
+    /\b(no path|path not found|pathfinding stopped)\b/i,
+    /\bwas not (broken|placed|crafted|used)\b/i,
+    /\b(do not|don't) have\b/i,
+    /\bnot enough\b/i,
+    /\bnone (found|within|in sight|left)\b/i,
+    /^no \S+( \S+)? (found|within|nearby|in sight)\b/i,
+    /\bnot found\b/i,
+    /\b(not allowed|refused|timed out|time limit)\b/i,
+    /\bnothing to (eat|place|craft|collect)\b/i,
+    /^Not (now|\w+ing)\b/, // the refusals: "Not now: the respawn escape ...", "Not collecting ...", "Not going to ..."
+    /^You are trapped\b/,
+    /^Collected 0\b/,
+];
 export function looksFailed(output) {
+    if (typeof output === 'string' && output.includes(THREW)) return true;
     const why = failureWhy(output);
-    return !!why && FAILED.test(why);
+    return !!why && FAILED.some(re => re.test(why));
 }
 
 /** A death's cause in fixed words (the server's text may carry a mob's or a player's custom name). */
@@ -166,10 +191,11 @@ function reservesLine(bot) {
     return `Reserves: ${parts.join('; ')}`;
 }
 
-function failuresLine(facts, here, now) {
+/** #637 review 2: a heading and one line per failure (newest first), each at most failureLineMax chars, the why first. */
+function failureLines(facts, here, now) {
     const f = facts?.failures ?? [];
-    if (!f.length) return null;
-    return `Recent failures: ${f.slice().reverse().map(e => `${e.cmd} ${ago(now - e.at)}${e.pos ? ` at ${at(e.pos)}${here ? ` (${bearing(here, e.pos)})` : ''}` : ''}: ${e.why}`).join(' | ')}`;
+    if (!f.length) return [];
+    return ['Recent failures (newest first):', ...f.slice().reverse().map(e => clip(`${e.cmd}: ${e.why} (${ago(now - e.at)}${e.pos ? ` at ${at(e.pos)}${here ? `, ${bearing(here, e.pos)}` : ''}` : ''})`, MEMORY_FACTS.failureLineMax))];
 }
 
 function deathsLine(facts, here, now) {
@@ -177,7 +203,7 @@ function deathsLine(facts, here, now) {
     if (!n) return null;
     const d = (facts.deaths ?? []).slice().reverse()
         .map(e => `${ago(now - e.at)}${e.pos ? ` at ${at(e.pos)}${here ? ` (${bearing(here, e.pos)})` : ''}` : ''}${e.cause ? `, ${e.cause}` : ''}`);
-    return `Deaths: ${n} since the bot started${d.length ? `; last ${d.join('; before that ')}` : ''}`;
+    return `Deaths: ${n} since this memory began${d.length ? `; last ${d.join('; before that ')}` : ''}`;
 }
 
 /** Places, only from code: the shelter (night state), the respawn point (respawn record), the memory bank. */
@@ -221,7 +247,7 @@ export function buildMemory(agent, { facts = null, notes = '', now = Date.now() 
     const add = (l) => { if (l) lines.push(clip(l, MEMORY_FACTS.lineMax)); };
     try { add(agendaLine(agent)); } catch { /* no agenda line */ }
     try { if (bot?.inventory) add(reservesLine(bot)); } catch { /* no reserves line */ }
-    add(failuresLine(facts, here, now));
+    for (const l of failureLines(facts, here, now)) add(l);
     add(deathsLine(facts, here, now));
     try { add(placesLine(agent, here)); } catch { /* no places line */ }
     add(collectsLine(facts, here, now));
