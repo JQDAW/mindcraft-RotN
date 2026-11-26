@@ -1,0 +1,37 @@
+2026-11-26T17:16:52+00:00 node[363511]: [release] rotn-v0.1.23-5d792d42e43d
+2026-11-26T18:03:31+00:00 node[363524]: [escape] trapped at 79, 25, 68 after digging (10 cells searched, no walkable way to the sky): getting out first
+2026-11-26T18:03:31+00:00 node[363524]: [escape] stuck at 79, 25, 68: getting out to 77, 78, 70 (dry ground under open sky) (up to 61 steps, 5 min)
+2026-11-26T18:03:50+00:00 node[363524]: [escape] the pathfinder found no way (timeout); digging out by hand
+2026-11-26T18:03:58+00:00 node[363524]: [escape] still stuck at 79, 25, 68 after 27.2 s (dug 2, placed 0): could not pillar up from 79, 25, 68
+2026-11-26T18:04:02+00:00 node[363524]: action "action:craftRecipe" trying to interrupt current action "action:shelterBlocks"
+2026-11-26T18:04:06+00:00 node[363524]: parsed command: { commandName: '!goToSurface', args: [] }
+2026-11-26T18:04:06+00:00 node[363524]: [escape] stuck at 79, 25, 68: getting out to 77, 78, 70 (dry ground under open sky) (up to 61 steps, 5 min)
+2026-11-26T18:04:11+00:00 node[363524]: [escape] the pathfinder found no way (timeout); digging out by hand
+2026-11-26T18:06:10+00:00 node[363524]: [tool] stone_pickaxe broke (used up) on undergroundbiomes:metamorphic_stone at 78, 44, 71
+2026-11-26T18:06:11+00:00 node[363524]: [tool] stone_pickaxe broke (used up) on undergroundbiomes:metamorphic_stone at 78, 45, 71
+2026-11-26T18:06:13+00:00 node[363524]: [escape] still stuck at 78, 44, 70 after 127.0 s (dug 53, placed 1): could not step up into 78, 44, 71
+2026-11-26T18:06:20+00:00 node[363524]: parsed command: { commandName: '!goToSurface', args: [] }
+2026-11-26T18:06:21+00:00 node[363524]: [escape] stuck at 78, 43, 70: getting out to 78, 79, 70 (dry ground under open sky) (up to 44 steps, 5 min)
+2026-11-26T18:06:21+00:00 node[363524]: [escape] the pathfinder found no way (noPath); digging out by hand
+2026-11-26T18:06:21+00:00 node[363524]: [escape] no pickaxe, and none can be made here: a stone pickaxe needs a crafting table (none carried or near)
+2026-11-26T18:06:21+00:00 node[363524]: [escape] still stuck at 78, 43, 70 after 0.4 s (dug 0, placed 0): no stair step, and no room to pillar up above 78, 43, 70: 78, 46, 70 is undergroundbiomes:metamorphic_stone, which needs a pickaxe (you carry none); a stone pickaxe needs a crafting table (none carried or near)
+2026-11-26T18:07:15+00:00 node[363524]: [trapped] at 78, 43, 70, idle: the escape runs (day budget)
+2026-11-26T18:07:16+00:00 node[363524]: [escape] stuck at 78, 43, 70: getting out to 78, 79, 70 (dry ground under open sky) (up to 44 steps, 5 min)
+2026-11-26T18:07:16+00:00 node[363524]: [escape] the pathfinder found no way (noPath); digging out by hand
+2026-11-26T18:07:17+00:00 node[363524]: [pickaxe] placed the crafting table at (77, 43, 70)
+2026-11-26T18:07:18+00:00 node[363524]: [pickaxe] made a stone pickaxe (stick x1, stone_pickaxe x1)
+2026-11-26T18:07:21+00:00 node[363524]: [escape] no pickaxe: made a stone pickaxe; climbing again
+2026-11-26T18:07:35+00:00 node[363524]: action "action:craftRecipe" trying to interrupt current action "action:escape (trapped)"
+2026-11-26T18:07:35+00:00 node[363524]: [escape] still stuck at 80, 46, 71 after 19.7 s (dug 9, placed 0): Digging aborted
+2026-11-26T18:07:35+00:00 node[363524]: [trapped] still trapped: The way out from 80, 46, 71 was stopped by something else; !goToSurface goes on from here.
+2026-11-26T18:07:40+00:00 node[363524]: [trapped] at 80, 46, 71, idle: the escape runs (day budget)
+2026-11-26T18:07:40+00:00 node[363524]: [escape] stuck at 80, 46, 71: getting out to 80, 80, 71 (dry ground under open sky) (up to 42 steps, 5 min)
+2026-11-26T18:07:45+00:00 node[363524]: [escape] the pathfinder found no way (timeout); digging out by hand
+2026-11-26T18:08:54+00:00 node[363524]: action "mode:cowardice" trying to interrupt current action "action:escape (trapped)"
+2026-11-26T18:08:54+00:00 node[363524]: [escape] still stuck at 80, 61, 72 after 73.7 s (dug 44, placed 0): Digging aborted
+2026-11-26T18:08:54+00:00 node[363524]: [trapped] still trapped: The way out from 80, 61, 72 was stopped by something else; !goToSurface goes on from here.
+2026-11-26T18:08:56+00:00 node[363524]: [survival] hurt 6 health 20->14 (by zombie)
+2026-11-26T18:09:21+00:00 node[363524]: [survival] hurt 6 health 11->5 (by zombie) since 14 at 18:09:17
+2026-11-26T18:09:45+00:00 node[363524]: [survival] hurt 1 health 1->0 (by zombie) since 7 at 18:09:35
+2026-11-26T18:09:45+00:00 node[363524]: [death] died at 80, 61, 72; waiting for the respawn
+2026-11-26T18:09:50+00:00 node[363524]: [death] died at 80, 61, 72; lost 453 pyrotech_compat:rock_metamorphic, 269 pyrotech:rock:8, 34 log:1, 13 dirt, 9 undergroundbiomes:metamorphic_cobble, 5 dynamictrees:spruceseed, 4 betterwithmods:dirt_pile, 3 pyrotech_compat:rock_metamorphic:5, 2 contenttweaker:raw_tin, 2 harvestcraft:turnipitem, 2 pyrotech_compat:rock_igneous:7, 2 pyrotech_compat:rock_sedimentary:3, 2 stick, 2 undergroundbiomes:igneous_cobble, 2 undergroundbiomes:metamorphic_cobble:6, 1 animania:raw_prime_chicken, 1 bundles:bundle, 1 contenttweaker:chalk_cobble, 1 crafting_table, 1 feather, 1 harvestcraft:blackberryitem, 1 harvestcraft:celeryitem, 1 harvestcraft:scallionitem, 1 harvestcraft:spinachitem, 1 harvestcraft:sweetpotatoitem, 1 harvestcraft:whitemushroomitem, 1 hitwithaxe:bark:20, 1 planks:1, 1 pyrotech_compat:rock_igneous, 1 pyrotech_compat:rock_sedimentary, 1 stone_axe:23, 1 stone_pickaxe:54

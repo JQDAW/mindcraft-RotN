@@ -33,9 +33,14 @@
 //                            at the journal's end. The caller is named: the trap check, the night routine, !goToSurface,
 //                            the morning, the trapped job (#642 `[trapped] at X, idle: the escape runs`), else other.
 //                            Trap spans (#648 review 1): the escapes that did not clear, joined while they stay within
-//                            `spanCells` (escape.js ESCAPE_HOLD.cells) of the first, from the first one's start until an
-//                            escape clears, the bot dies, a position line puts it more than `spanCells` away, or the
-//                            journal ends (`open`, which fires: the trap was still on). #642's `[trapped] at X …` re-plan
+//                            `spanCells` (escape.js ESCAPE_HOLD.cells) of the span's latest cell (where the last failed
+//                            escape left the bot, soak 17: a trap climbed out of a little at a time is one span), or
+//                            start within `spanJoinS` of its last escape line, from the first one's start until an
+//                            escape clears, the bot dies, a position line puts it more than `spanCells` from that
+//                            latest cell, or the journal ends (`open`, which fires: the trap was still on). A long
+//                            quiet gap at the same cell continues the span (#662 review 2, the lead: soak 16 spent a
+//                            whole night at 9, 68, -63 with no escape line, and its 34.9-min span stays whole); only a
+//                            position line more than `spanCells` away, not the gap, ends it as `moved away`. #642's `[trapped] at X …` re-plan
 //                            and give-up lines (`the escape failed N times here …`) count as escapes that did not clear.
 //                            An interrupted escape opens a span only if a failed escape or a death follows before an
 //                            escape clears or the bot moves away. I1's count is the path-failure episodes plus the trap
@@ -44,7 +49,11 @@
 //                            goToSurface and logged no `[escape]` line, and the `[trapped]` lines start with #642 (after
 //                            rotn-v0.1.22). So soak 15's trap shows only as the path episode above and I2.
 //   I2  enclosed-morning     `could not leave the shelter … after N tries` lines; nights spent in the same shelter as
-//                            the night before (`in the shelter at X until morning`, X repeated).
+//                            the night before (`in the shelter at X until morning`, X repeated). The exported
+//                            enclosedEpisodes() (g4-soak-2h's no_trap, #662 review 3) times them: from the first
+//                            `could not leave` line until the bot leaves (a `left` / `dug out of the shelter` morning
+//                            line, a cleared escape, a death, a position line over `spanCells` from the shelter). I2's
+//                            own counts are unchanged.
 //   I3  rejected-click       rejected window clicks: one per `[forge-bridge] click rejected:` line (#618) when the
 //                            journal has them, else one per `[inventory] <op>: … Server rejected transaction` line
 //                            (the first try and `the second try failed too`; each click logs further copies through
@@ -96,7 +105,7 @@ import { parseJournal as spendJournal, calls as spendCalls } from './soak-spend.
 import { memoryFactsCheck, wrongClaims, repeatedFailures, serverChat, MEMORY_CHECKS } from './soak-memory-checks.mjs';
 
 export const INVARIANTS = {
-    trapped: { minAttempts: 3, gapMin: 10, attemptGapS: 2, escapeJoinS: 30, spanCells: 3 },
+    trapped: { minAttempts: 3, gapMin: 10, attemptGapS: 2, escapeJoinS: 30, spanCells: 3, spanJoinS: 60 },
     starving: { lowFood: 4, noSafeFoodMin: 5 },
     gateThenAct: { afterS: 60 },
     falseCollect: { collectS: 30 },
@@ -247,7 +256,8 @@ function rawEscapes(lines) {
         if ((m = ESCAPE_OUT.exec(l.msg))) { end(l, 'cleared', { seconds: Number(m[5]), how: m[2], dug: Number(m[3]), placed: Number(m[4]), to: m[1] }); continue; }
         if ((m = ESCAPE_STUCK.exec(l.msg))) {
             // #648 review 3: interrupted (a reflex or a command stopped it: escape.js #562 review 5) is not a failure.
-            end(l, /^interrupted\b/.test(m[5]) ? 'interrupted' : 'not cleared', { seconds: Number(m[2]), dug: Number(m[3]), placed: Number(m[4]), why: m[5] });
+            // `endAt`: where the escape left the bot (soak 17: it climbs its own shaft from y 25 to 44 and stays trapped).
+            end(l, /^interrupted\b/.test(m[5]) ? 'interrupted' : 'not cleared', { seconds: Number(m[2]), dug: Number(m[3]), placed: Number(m[4]), why: m[5], endAt: m[1] });
             continue;
         }
         if ((m = NIGHT_ESCAPE_OUT.exec(l.msg))) { end(l, 'cleared', { to: m[1] }); continue; }
@@ -273,14 +283,18 @@ export function escapeEpisodes(lines) {
         const lastT = (e.end ?? e.last).t;
         // The escape's own seconds when its end line gives them, else the journal's (whole seconds).
         const seconds = e.extra.seconds ?? Math.round((lastT - e.from.t) / 100) / 10;
-        return { t: hms(e.from.t), line: e.from.n, at: e.at, by: e.by, result: e.result, endLine: e.end ? e.end.n : null, ...e.extra, seconds };
+        const { endAt: _endAt, ...extra } = e.extra; // endAt is trapSpans' own (#662 review 4: the episodes' JSON is unchanged)
+        return { t: hms(e.from.t), line: e.from.n, at: e.at, by: e.by, result: e.result, endLine: e.end ? e.end.n : null, ...extra, seconds };
     });
 }
 
 /**
  * The trap spans (#648 review 1): the escapes that did not clear (and #642's still-trapped lines), joined while they
- * stay within `spanCells` of the span's first cell, until an escape clears, a death, a line puts the bot more than
- * `spanCells` away (outside an escape's own lines), or the journal ends ('open'). An interrupted escape starts a span
+ * stay within `spanCells` of the span's latest cell, until an escape clears, a death, a line puts the bot more than
+ * `spanCells` away from it (outside an escape's own lines), or the journal ends ('open'). The latest cell is where the
+ * last failed escape left the bot (its `still stuck at` cell), else where it started (soak 17 review: a trap the bot
+ * climbs out of a little at a time, 79, 25, 68 to 78, 44, 70 to 80, 61, 72, is one span). A failed escape at another
+ * cell also continues the span when it starts within `spanJoinS` of the span's last escape or still-trapped line. An interrupted escape starts a span
  * only if a failed escape, a still-trapped line or a death follows first. [{t, line, at, until, untilLine, minutes,
  * end: 'cleared'|'died'|'moved away'|'open', fails, interrupted, gaveUp}].
  */
@@ -303,12 +317,17 @@ export function trapSpans(lines) {
     let span = null;
     let pend = null; // interrupted escapes not yet a span
     const close = (ev, why) => { if (span) spans.push({ ...span, until: ev.t, untilLine: ev.n, end: why }); span = null; };
-    const fail = (ev, at, fromL, extra = {}) => {
-        if (span && within(at, span.at)) { span.fails++; if (extra.gaveUp) span.gaveUp = true; return; }
+    const near = (at, t) => span && (within(at, span.lastAt) || within(at, span.at) || t - span.lastT <= INVARIANTS.trapped.spanJoinS * 1000);
+    const fail = (ev, at, fromL, extra = {}, endAt = null) => {
+        if (near(at, fromL.t)) {
+            span.fails++; if (extra.gaveUp) span.gaveUp = true;
+            span.lastAt = endAt ?? at ?? span.lastAt; span.lastT = ev.t;
+            return;
+        }
         // The old span ends where the new escape starts.
         if (span) close({ n: fromL.n, t: fromL.t }, at && span.at ? 'moved away' : 'another escape (a cell not known)');
         const p = pend && within(at, pend.at) ? pend : null;
-        span = { fromT: p ? p.fromT : fromL.t, fromN: p ? p.fromN : fromL.n, at: p ? p.at : at, fails: 1, interrupted: p ? p.interrupted : 0, gaveUp: !!extra.gaveUp };
+        span = { fromT: p ? p.fromT : fromL.t, fromN: p ? p.fromN : fromL.n, at: p ? p.at : at, lastAt: endAt ?? at, lastT: ev.t, fails: 1, interrupted: p ? p.interrupted : 0, gaveUp: !!extra.gaveUp };
         pend = null;
     };
     for (const ev of events) {
@@ -316,26 +335,63 @@ export function trapSpans(lines) {
             const r = ev.e.result;
             if (r === 'cleared') { close(ev, 'cleared'); pend = null; continue; }
             if (r === 'interrupted') {
-                if (span && within(ev.e.at, span.at)) span.interrupted++;
+                if (near(ev.e.at, ev.e.from.t)) { span.interrupted++; span.lastAt = ev.e.extra.endAt ?? ev.e.at ?? span.lastAt; span.lastT = ev.t; }
                 else if (pend && within(ev.e.at, pend.at)) pend.interrupted++;
                 else pend = { fromT: ev.e.from.t, fromN: ev.e.from.n, at: ev.e.at, interrupted: 1 };
                 continue;
             }
-            fail(ev, ev.e.at, ev.e.from); // not cleared, or open at the journal's end
+            fail(ev, ev.e.at, ev.e.from, {}, ev.e.extra.endAt ?? null); // not cleared, or open at the journal's end
             continue;
         }
         if (ev.kind === 'sig') { fail(ev, ev.s.at, ev.s.l, { gaveUp: ev.s.gaveUp }); continue; }
         if (ev.kind === 'death') {
-            if (!span && pend) span = { fromT: pend.fromT, fromN: pend.fromN, at: pend.at, fails: 0, interrupted: pend.interrupted, gaveUp: false };
+            if (!span && pend) span = { fromT: pend.fromT, fromN: pend.fromN, at: pend.at, lastAt: pend.at, lastT: pend.fromT, fails: 0, interrupted: pend.interrupted, gaveUp: false };
             pend = null;
             close(ev, 'died');
             continue;
         }
-        if (span && span.at && dist(ev.at, span.at) > cells) close(ev, 'moved away');
+        if (span && span.lastAt && dist(ev.at, span.lastAt) > cells) close(ev, 'moved away');
         if (pend && pend.at && dist(ev.at, pend.at) > cells) pend = null;
     }
     if (span && lines.length) close({ n: lines.at(-1).n, t: lines.at(-1).t }, 'open');
     return spans.map(s => ({ t: hms(s.fromT), line: s.fromN, at: s.at, until: hms(s.until), untilLine: s.untilLine, minutes: Math.round((s.until - s.fromT) / 6000) / 10, end: s.end, fails: s.fails, interrupted: s.interrupted, gaveUp: s.gaveUp }));
+}
+
+// The night routine's ways out of a shelter it could not leave (night_routine.js): a dug or walked exit.
+const LEFT_SHELTER = /^\[night\] morning: (?:left|dug out of) the shelter at /;
+
+/**
+ * The enclosed episodes (I2's `could not leave the shelter` lines, the lead's no_trap decision after #662): from a
+ * `could not leave the shelter at X` line until the bot leaves: a morning `left` / `dug out of the shelter` line, an
+ * escape that clears, a death, a line (BOT_AT, outside nothing) that puts it more than `spanCells` from X, or the
+ * journal's end ('open'). A later `could not leave` line within `spanCells` of X continues the episode (soak 15: the
+ * pocket at -58, 57, -50 on two mornings). [{t, line, at, until, untilLine, minutes, end: 'left'|'cleared'|'died'|
+ * 'moved away'|'open', mornings}].
+ */
+export function enclosedEpisodes(lines) {
+    const cells = INVARIANTS.trapped.spanCells;
+    const out = [];
+    let ep = null;
+    const close = (l, end) => { out.push({ ...ep, until: l.t, untilLine: l.n, end }); ep = null; };
+    for (const l of lines) {
+        let m;
+        if ((m = COULD_NOT_LEAVE.exec(l.msg))) {
+            if (ep && (dist(m[1], ep.at) ?? Infinity) <= cells) { ep.mornings++; continue; }
+            if (ep) close(l, 'moved away');
+            ep = { fromT: l.t, fromN: l.n, at: m[1], mornings: 1 };
+            continue;
+        }
+        if (!ep) continue;
+        if (DEATH.test(l.msg)) { close(l, 'died'); continue; }
+        if (LEFT_SHELTER.test(l.msg)) { close(l, 'left'); continue; }
+        if (ESCAPE_OUT.test(l.msg) || NIGHT_ESCAPE_OUT.test(l.msg) || TRAPPED_OUT.test(l.msg)) { close(l, 'cleared'); continue; }
+        for (const re of BOT_AT) {
+            const p = re.exec(l.msg);
+            if (p) { if ((dist(cellOf(p), ep.at) ?? 0) > cells) close(l, 'moved away'); break; }
+        }
+    }
+    if (ep && lines.length) close(lines.at(-1), 'open');
+    return out.map(e => ({ t: hms(e.fromT), line: e.fromN, at: e.at, until: hms(e.until), untilLine: e.untilLine, minutes: Math.round((e.until - e.fromT) / 6000) / 10, end: e.end, mornings: e.mornings }));
 }
 
 function trapped(lines, rel) {
