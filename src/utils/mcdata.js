@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, requireRotnData, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachDigTime, dumpDigSources, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting, attachAttackCounts, attachRespawnEffectsLog, applyStackSizes, attachClickDiagnostics, attachDigRefusedLog, attachCraftRefusedLog } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, requireRotnData, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachDigTime, dumpDigSources, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting, attachAttackCounts, attachRespawnEffectsLog, applyStackSizes, attachClickDiagnostics, attachDigRefusedLog, attachCraftRefusedLog, attachPvpCallers } from '../../packages/forge-bridge/index.js';
 import { loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -294,7 +294,12 @@ export function initBot(username, { onMsaCode, loadRotnData: loadRd = () => load
     bot.once('spawn', () => { if (forge.bridge) console.log(`[forge-bridge] ${forge.bcAttack.status()}`); });
     // Soak 14: the attack packets sent and the wrapper's calls, numbers only (a minute with a change,
     // each death, the end); and the effects a respawn dropped (patches/mineflayer clears them).
-    forge.attackCounts = attachAttackCounts(bot, { stats: () => forge.bcAttack.stats });
+    // Soak 16 death 2: each line also names the packets' targets, their bot.attack callers and the replaced calls.
+    forge.attackCounts = attachAttackCounts(bot, {
+        stats: () => forge.bcAttack.stats,
+        caller: () => forge.bcAttack.firingCaller,
+        takeReplacements: () => forge.bcAttack.takeReplacements(),
+    });
     forge.respawnEffects = attachRespawnEffectsLog(bot);
     // Soak 15 (N2): each window click the server rejects, with the client's view and the server's resend.
     forge.clickDiagnostics = attachClickDiagnostics(bot);
@@ -339,6 +344,8 @@ export function initBot(username, { onMsaCode, loadRotnData: loadRd = () => load
 
     bot.loadPlugin(pathfinder);
     bot.loadPlugin(pvp);
+    // #653 review 1: who called bot.pvp.attack per target, for the attack lines' hits mineflayer-pvp sends.
+    forge.pvpCallers = attachPvpCallers(bot);
     bot.loadPlugin(collectblock);
     bot.loadPlugin(autoEat);
     bot.loadPlugin(armorManager); // auto equip armor

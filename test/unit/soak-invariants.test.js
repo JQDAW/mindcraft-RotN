@@ -127,16 +127,18 @@ test('I1 escape episodes: start to out (cleared, its seconds), still stuck (not 
     assert.equal(e[3].at, '1, 60, 1'); // the night start names no cell; escape.js's start line does
     assert.equal(e[5].why, 'no stair step');
     assert.equal(e[6].why, 'died');
-    // The trap spans: 9, 68, -63 from 10:10 until the escape at 10:30 cleared; the failed night escape (no cell) joined
-    // by the !goToSurface one until the death; the escape still open at the journal's end (it fires: still trapped).
+    // The trap spans: 9, 68, -63 from 10:10 until the escape at 10:30 cleared; the failed night escape (no cell: #648
+    // re-review, it joins nothing and nothing joins it) until the next escape starts; the !goToSurface one until the
+    // death; the escape still open at the journal's end (it fires: still trapped).
     assert.deepEqual(r.I1.spanList.map(x => [x.t, x.at, x.until, x.minutes, x.end, x.fails]), [
         ['10:10:00', '9, 68, -63', '10:30:04', 20.1, 'cleared', 2],
-        ['10:50:00', '10, 68, -63', '11:00:40', 10.7, 'died', 2],
+        ['10:50:00', null, '11:00:00', 10, 'another escape (a cell not known)', 1],
+        ['11:00:00', '10, 68, -63', '11:00:40', 0.7, 'died', 1],
         ['11:10:00', '5, 50, 5', '11:10:03', 0.1, 'open', 1],
     ]);
-    assert.deepEqual([r.I1.count, r.I1.pathEpisodes, r.I1.trapSpans, r.I1.longestMin, r.I1.escapes, r.I1.escapesNotCleared, r.I1.escapesCleared, r.I1.longestClearedS], [3, 0, 3, 20.1, 8, 4, 3, 126.6]);
+    assert.deepEqual([r.I1.count, r.I1.pathEpisodes, r.I1.trapSpans, r.I1.longestMin, r.I1.escapes, r.I1.escapesNotCleared, r.I1.escapesCleared, r.I1.longestClearedS], [4, 0, 4, 20.1, 8, 4, 3, 126.6]);
     const text = render(r, 'synthetic');
-    assert.match(text, /- I1 trapped: 3 \(0 path-failure episodes, 0 failed path attempts; 3 trap spans; 8 escape episodes: 4 not cleared, 0 interrupted, 3 cleared, the longest cleared in 126\.6 s; longest 20\.1 min\)/);
+    assert.match(text, /- I1 trapped: 4 \(0 path-failure episodes, 0 failed path attempts; 4 trap spans; 8 escape episodes: 4 not cleared, 0 interrupted, 3 cleared, the longest cleared in 126\.6 s; longest 20\.1 min\)/);
     assert.match(text, /trap span 11:10:00 \(driver\.log:24\) at 5, 50, 5 until 11:10:03 \(driver\.log:25\), 0\.1 min, ended: open \(still trapped at the journal's end\)/);
     assert.match(text, /escape 10:00:00 \(driver\.log:2\) at -42, 65, -12 by trap check: cleared in 126\.6 s to -41, 69, -12 \(by hand; dug 0, placed 3\) \(driver\.log:5\)/);
     assert.match(text, /escape 10:40:00 \(driver\.log:17\) by night: cleared in 0 s to -7, 65, 30/);
@@ -182,13 +184,19 @@ test('I1 trap spans (#648 review 1, 3): joined within 3 cells; a move away ends 
     assert.deepEqual(r.I1.spanList.map(x => [x.t, x.until, x.minutes, x.end, x.fails]), [['10:00:00', '10:20:00', 20, 'moved away', 2]]);
     // A failed escape 5 blocks from the span's first cell starts a new span (the first ends: moved away).
     r = run([REL(22), stuck('10:00:00', '1, 60, 1'), fail('10:00:01', '1, 60, 1'), stuck('10:10:00', '6, 60, 1'), fail('10:10:01', '6, 60, 1'), L('10:11:00', '[escape] stuck at 6, 60, 1: x'), L('10:11:01', '[escape] out at 6, 64, 1 (by hand; dug 4, placed 0) in 1.0 s')]);
-    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.until, x.end]), [['10:00:00', '10:10:01', 'moved away'], ['10:10:00', '10:11:01', 'cleared']]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.until, x.end]), [['10:00:00', '10:10:00', 'moved away'], ['10:10:00', '10:11:01', 'cleared']]);
     // Interrupted (a reflex stopped it), then cleared: no trap.
     r = run([REL(22), stuck('10:00:00', '1, 60, 1'), fail('10:00:30', '1, 63, 1', 'interrupted'), stuck('10:01:00', '1, 63, 1'), L('10:01:02', '[escape] out at 1, 66, 1 (by hand; dug 3, placed 0) in 2.0 s')]);
     assert.deepEqual([r.I1.count, r.I1.trapSpans, r.I1.escapesInterrupted], [0, 0, 1]);
     // Interrupted, then a move away: no trap.
     r = run([REL(22), stuck('10:00:00', '1, 60, 1'), fail('10:00:30', '1, 63, 1', 'interrupted'), L('10:02:00', 'You have reached at 20, 64, 1.'), L('10:30:00', 'x')]);
     assert.equal(r.I1.trapSpans, 0);
+    // #648 re-review: a failed escape with no known cell never joins an open span, and a position line cannot end a
+    // span whose cell is not known.
+    r = run([REL(22), stuck('10:00:00', '1, 60, 1'), fail('10:00:01', '1, 60, 1'),
+        L('10:05:00', '[night] could not get out of the water (no dry ground within 8 blocks): getting out first (escape 1 of 2)'), L('10:05:09', '[night] the escape failed (no stair step)'),
+        L('10:06:00', 'You have reached at 40, 60, 40.'), L('10:09:00', 'x')]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.at, x.until, x.end]), [['10:00:00', '1, 60, 1', '10:05:00', 'another escape (a cell not known)'], ['10:05:00', null, '10:09:00', 'open']]);
     // Interrupted, then a death: a trap (soak 16's end).
     r = run([REL(22), stuck('10:00:00', '1, 60, 1'), fail('10:00:30', '1, 63, 1', 'interrupted'), L('10:00:40', '[death] died at 1, 63, 1; waiting for the respawn')]);
     assert.deepEqual(r.I1.spanList.map(x => [x.t, x.until, x.end, x.fails, x.interrupted]), [['10:00:00', '10:00:40', 'died', 0, 1]]);
