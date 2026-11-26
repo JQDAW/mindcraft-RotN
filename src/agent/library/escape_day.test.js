@@ -122,7 +122,7 @@ test('soak 16 (E4): gravel over the pocket: the escape stops with a why that nam
     assert.match(step.why, /a falling gravel above at -?\d+, \d+, -?\d+/);
     const r = await escape(bot, { budget: 'day', moveTo: teleport, say: () => {} });
     assert.equal(r.out, false);
-    assert.match(escapeText(r), /^You are trapped at 0, 56, 0: no walkable way to open ground within 8 blocks\. The escape stopped after \d+ s \(dug 0, placed 0\): no stair step.*falling gravel.*\. Start sideways, away from the falling block/);
+    assert.match(escapeText(r), /^You are trapped at 0, 56, 0: no walkable way to open ground within 8 blocks\. The escape stopped after \d+ s \(dug 0, placed 0\): no stair step.*falling gravel.*\. Get out from under the falling block first: !moveAway\(3\) walks about 3 blocks in any direction/); // #645 review 4
 });
 
 test('soak 16 (E, the lead\'s order): dirt, then planks, then cobblestone only beyond the shelter\'s 14; the pathfinder places in that order', () => {
@@ -183,7 +183,8 @@ test('soak 16 (E3, E4): the post-condition: a command that dug and left the bot 
 test('soak 16 (E3): the commands with the post-condition, and how', async () => {
     await import('../agent.js'); // the real import order (commands/index.js first)
     const { POST_ESCAPE } = await import('../commands/actions.js');
-    assert.deepEqual(POST_ESCAPE, { collectBlocks: 'down-or-failed', digDown: 'deep', goToCoordinates: 'failed', searchForBlock: 'failed', goToRememberedPlace: 'failed', goToBed: 'failed', goToPlayer: 'failed' });
+    // Soak 16 trap (the lead's go): the walks are 'walk' (failed, or ended 3 or more below their start).
+    assert.deepEqual(POST_ESCAPE, { collectBlocks: 'down-or-failed', digDown: 'deep', goToCoordinates: 'walk', searchForBlock: 'walk', goToRememberedPlace: 'walk', goToBed: 'walk', goToPlayer: 'walk' });
 });
 
 test('soak 16 (E4): the lines for the model: out, interrupted, and a next step for each why', () => {

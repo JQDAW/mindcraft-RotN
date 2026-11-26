@@ -172,12 +172,13 @@ export async function withinLimit(agent, name, fn, ms) {
  * out first (escape.escapeIfTrapped, the day budget): 'down-or-failed' (#624 review 2, the lead: a cave is "trapped"
  * too, and a collect in one is no reason) only when the collect took the bot 3 or more blocks below where it started,
  * or a walk of it failed (no path, out of reach); 'deep' (!digDown: a hole dug on purpose) only deeper than 2 below
- * where it started; 'failed' (the walks) only when the walk itself failed (a walk that got where the model asked,
- * underground included, is left there). Model commands only: never a reflex or a night job. (!breakBlockAt is no
+ * where it started; 'walk' (soak 16 trap, the lead's go; was 'failed') when the walk itself failed (no path, the time
+ * limit, or "Unable to reach": it ended short), or ended 3 or more blocks below where it started ('failed', kept for
+ * other callers: only a failed walk). Model commands only: never a reflex or a night job. (!breakBlockAt is no
  * command: a skill only.)
  */
 export const POST_ESCAPE = { collectBlocks: 'down-or-failed', digDown: 'deep',
-    goToCoordinates: 'failed', searchForBlock: 'failed', goToRememberedPlace: 'failed', goToBed: 'failed', goToPlayer: 'failed' };
+    goToCoordinates: 'walk', searchForBlock: 'walk', goToRememberedPlace: 'walk', goToBed: 'walk', goToPlayer: 'walk' };
 /** The escape's own minutes, added to a command's limit when its post-condition may run. */
 const POST_ESCAPE_MIN = 6;
 export async function postEscape(agent, label, start, { escapeIfTrapped = null } = {}) {
@@ -186,11 +187,17 @@ export async function postEscape(agent, label, start, { escapeIfTrapped = null }
     const bot = agent.bot;
     const walkFailed = (bot.rotnWalkFailedAt ?? 0) >= start.t;
     if (kind === 'failed' && !walkFailed) return null;
+    // Soak 16 trap (the lead's go): a walk that dug is checked when it failed (no path, the time limit, "Unable to
+    // reach": a walk that ended short), or when it ended 3 or more blocks below where it started.
     // #624 re-review nit 1 (the lead): the collect only when its last walk failed or it got fewer than asked
     // (bot.rotnCollectEnd), never for one target out of reach on the way.
     const end = bot.rotnCollectEnd;
     const collectShort = kind === 'down-or-failed' && (end?.at ?? 0) >= start.t && (end.lastWalkFailed || end.short);
-    const minDepth = kind === 'deep' ? 3 : kind === 'down-or-failed' && !collectShort ? 3 : 0;
+    // #642 review 7: a walk that reached a goal whose own y is 3 or more below its start went down on purpose (a bed or a
+    // saved place underground): no check.
+    const reached = bot.rotnWalkReached;
+    if (kind === 'walk' && !walkFailed && start.at && (reached?.at ?? 0) >= start.t && reached.y <= start.at.y - 3) return null;
+    const minDepth = kind === 'deep' ? 3 : kind === 'down-or-failed' && !collectShort ? 3 : kind === 'walk' && !walkFailed ? 3 : 0;
     const run = escapeIfTrapped ?? (await import('../library/escape.js')).escapeIfTrapped;
     const line = await run(bot, { digsBefore: start.digs, from: start.at, minDepth });
     if (line) skills.log(bot, line);
@@ -236,6 +243,24 @@ function runAsAction (actionFn, resume = false, timeout = -1, label = null) {
     }
 
     return wrappedAction;
+}
+
+const useOnAction = runAsAction(async (agent, tool_name, target) => {
+    await skills.useToolOn(agent.bot, tool_name, target);
+}, false, -1, 'useOn');
+const goToBedAction = runAsAction(async (agent) => { await skills.goToBed(agent.bot); }, false, -1, 'goToBed');
+
+/**
+ * Round 17 P: the Scroll of New Life's use, {pos, at} or null: this session's (the night routine's respawnSet, round 17
+ * M) or the saved one (History.scrollUsed, kept in memory.json across restarts).
+ */
+export function scrollUsed(agent) {
+    const n = agent?._night?.respawnSet;
+    if (n) return n;
+    const h = agent?.history?.scrollUsed;
+    if (h && typeof h === 'object') return h;
+    // #645 review 1: no scroll held means used (memory.json is not reloaded on the CX23: load_memory is false).
+    return skills.scrollUsedOn(agent?.bot);
 }
 
 export const actionsList = [
@@ -404,7 +429,7 @@ export const actionsList = [
     },
     {
         name: '!standOnBlock',
-        description: 'Stand on top of the block at x, y, z (give the coordinates of the block itself) and check that it is the block under your feet. Use it whenever you must stand on a block; say you are on it only after it says so.',
+        description: 'Stand on the block at x, y, z (the block\'s own coordinates) and check it is under your feet. Use it whenever you must stand on a block; say you are on it only after it says so.',
         params: {
             'type': {type: 'BlockName', description: 'The block to stand on, e.g. gold_block.'},
             'x': {type: 'float', description: 'The x coordinate of the block.', domain: [-Infinity, Infinity]},
@@ -433,7 +458,7 @@ export const actionsList = [
     },
     {
         name: '!searchForEntity',
-        description: 'Find and go to the nearest entity of a given type in a given range. A pig, cow, sheep or rabbit also finds the pack\'s Animania ones; the bot sees animals only within 64 blocks, and a miss lists the animals in sight.',
+        description: 'Go to the nearest entity of a type within a range. A pig, cow, sheep or rabbit also finds the pack\'s Animania ones; animals are seen only within 64 blocks, and a miss lists the animals in sight.',
         params: {
             'type': { type: 'string', description: 'The type of entity to go to.' },
             'search_range': { type: 'float', description: 'The range to search for the entity.', domain: [32, 512] }
@@ -589,7 +614,7 @@ export const actionsList = [
     {
         // G4 #5: wild food before hunting (rotn-data forageFood; library/foraging.js).
         name: '!forage',
-        description: 'Gather ripe wild food near you: picks the berries off Rustic wildberry bushes (right-click; the bush stays and regrows), breaks ripe wild herbs and HarvestCraft gardens, and picks up the food. Never a bare bush or an unripe herb, never the hawthorn, poison ivy or thorns, never a crop near fences, farmland, chests or houses (it may be a player\'s).',
+        description: 'Gather ripe wild food near you: picks wildberry bushes (right-click; they regrow), breaks ripe wild herbs and HarvestCraft gardens, picks the food up. Never a bare bush, an unripe herb, hawthorn, poison ivy or thorns, nor a crop near fences, farmland, chests or houses (it may be a player\'s).',
         perform: runAsAction(async (agent) => {
             await skills.forageNearby(agent.bot);
         })
@@ -629,7 +654,7 @@ export const actionsList = [
     },
         {
         name: '!placeHere',
-        description: 'Place a given block in the current location. A full block (dirt, cobblestone) goes under you by a jump, so you end up standing one block higher on it (a way up out of a pit or water); a torch or the like goes where you stand. Do NOT use to build structures, only use for single blocks/torches.',
+        description: 'Place one block where you stand. A full block (dirt, cobblestone) goes under you by a jump, so you stand one higher on it (a way up out of a pit or water); a torch or the like goes where you stand. Only single blocks or torches, never structures.',
         params: {'type': { type: 'BlockOrItemName', description: 'The block type to place.' }},
         perform: runAsAction(async (agent, type) => {
             // Soak 8 (the escape plan PR 2): the bot's own cell; a full block by a jump (escape.placeHere).
@@ -760,9 +785,14 @@ export const actionsList = [
     {
         name: '!goToBed',
         description: 'Go to the nearest bed and sleep.',
-        perform: runAsAction(async (agent) => {
-            await skills.goToBed(agent.bot);
-        })
+        perform: function (agent, ...rest) {
+            // Round 17 P (rotn-data, the lead's addendum): any spawn change other than the Scroll of New Life itself (a
+            // bed sets the spawn when you wake) ends the scroll's respawn point and its 32-block Zombie Player guard
+            // for good. Once the scroll is used, never a bed.
+            const used = scrollUsed(agent);
+            if (used) return skills.bedRefusalText(used);
+            return goToBedAction(agent, ...rest);
+        }
     },
     {
         name: '!stay',
@@ -1002,8 +1032,10 @@ export const actionsList = [
             'target': { type: 'string', description: 'The target as an entity type, block type, or "nothing" for no target.' }
         },
         // Bounded inside useToolOn (60 s); ACTION_LIMITS_MIN (2 min) is the backstop (G3 batch A: it hung).
-        perform: runAsAction(async (agent, tool_name, target) => {
-            await skills.useToolOn(agent.bot, tool_name, target);
-        })
+        perform: function (agent, tool_name, target, ...rest) {
+            // #645 review 6: right-clicking a bed sets the spawn too: refused once the Scroll of New Life is used.
+            if (/(^|:|_)bed$/.test(String(target ?? '')) && scrollUsed(agent)) return skills.bedRefusalText(scrollUsed(agent));
+            return useOnAction(agent, tool_name, target, ...rest);
+        }
     },
 ];

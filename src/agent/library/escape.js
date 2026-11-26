@@ -18,7 +18,10 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { isEmpty, isLiquid, isFalling, hurtsOnContact, shelterItems, softItems, countOf, craftMore } from './shelter.js';
 import { placeableDirt } from './night.js';
-import { burrowDiggable, digEquip } from './burrow.js';
+import { burrowDiggable, digEquip, digRule } from './burrow.js';
+import { toolLevels } from './rotn_sources.js';
+import { handDiggable } from './night.js';
+import { bestPickaxe, makePickaxe, PICKAXE_RECIPE_TEXT } from './pickaxe.js';
 import { digWithin } from './pit.js';
 import { goodFloor, inWater, boundedWalk } from './shelter_ground.js';
 import { fallSafe, isTreePart } from './fall_safety.js';
@@ -37,7 +40,10 @@ import { dumpState } from './night.js';
 export const ESCAPE = { planMs: 5000, walkMs: 60_000, totalMs: 90_000, maxPlaced: 8, maxSteps: 24, targetRadius: 8, skyCheck: 40, moveMs: 3000, jumpMs: 1000, landMs: 1500, countMs: 50,
     // Soak 16 (E): reserve: the sturdy blocks a climb never uses (agenda.SHELTER_HOLD: the night's shelter and its
     // repairs; a test pins the two equal); pileCraftMax: at most this many dirt crafted from piles for one escape.
-    reserve: 14, pileCraftMax: 16 };
+    reserve: 14, pileCraftMax: 16,
+    // Soak 16 trap (21:20): sideSteps: at most this many sideways steps by hand when only the cell over the head is
+    // blocked (an ore above the pickaxe's level, a wet cell); tableReach: a crafting table this near counts as at hand.
+    sideSteps: 2, tableReach: 4 };
 
 /**
  * Soak 16 (E, the lead): the escape's budgets. morning: the night routine's morning and the unstuck reflex, as before
@@ -253,24 +259,42 @@ function fallingNear(bot, p) {
     return '';
 }
 
+/** The why of a climb blocked for want of a pickaxe (digWhy's text). */
+export const NO_PICKAXE = /needs a pickaxe \(you carry none\)/;
+
 /**
- * A cell can be dug for the escape: empty already, or diggable (burrow.burrowDiggable: by hand or a
- * held tool, never a tree part), with no liquid next to it or above it (ours excepted: the bot's own
- * two cells, and the other cells of the same step), and nothing that falls above it.
+ * Soak 16 trap (21:20, "no room to pillar"): why a cell cannot be dug for the escape, naming the cell and its block,
+ * or null when it can: empty already, or diggable (burrow.burrowDiggable: by hand or a held tool, never a tree part),
+ * with no liquid next to it or above it (ours excepted: the bot's own two cells, and the other cells of the same step),
+ * and nothing that falls above it.
  */
-function safeToDig(bot, c, ours) {
+export function digWhy(bot, c, ours) {
     const b = bot.blockAt(c);
-    if (!b || isLiquid(b)) return false;
-    if (isEmpty(b)) return true;
-    if (!burrowDiggable(bot, b)) return false;
+    if (!b) return `${at(c)} is not loaded`;
+    if (isLiquid(b)) return `${at(c)} is ${b.name}`;
+    if (isEmpty(b)) return null;
+    if (!burrowDiggable(bot, b)) return `${at(c)} is ${b.name}, which ${cantDigText(bot, b)}`;
     for (const d of SIX) {
         const q = c.plus(d);
         if (ours.has(key(q))) continue;
         const n = bot.blockAt(q);
-        if (isLiquid(n)) return false;
-        if (d.y === 1 && isFalling(n)) return false;
+        if (isLiquid(n)) return `${at(c)} (${b.name}) has ${n.name} next to it`;
+        if (d.y === 1 && isFalling(n)) return `${at(c)} (${b.name}) has a falling ${n.name} on it`;
     }
-    return true;
+    return null;
+}
+const safeToDig = (bot, c, ours) => digWhy(bot, c, ours) === null;
+
+/** Why burrowDiggable says no, in words: the tool the dump asks for and what the bot carries. */
+function cantDigText(bot, b) {
+    if (isTreePart(b)) return 'is part of a tree (never dug in a climb)';
+    if (!solid(b)) return 'is no full block to dig';
+    const rule = digRule(b);
+    if (rule === false) return 'nothing can break';
+    if (rule === undefined) return handDiggable(b) ? 'cannot be dug here' : 'needs a tool (not by hand)';
+    if (!rule) return 'cannot be dug here';
+    const levels = toolLevels(bot, rule.type);
+    return levels.length ? `needs a level ${rule.minLevel} ${rule.type} (yours: level ${Math.max(...levels)})` : `needs a ${rule.type} (you carry none)`;
 }
 
 /**
@@ -307,9 +331,29 @@ export function nextStep(bot, target, state) {
     const reserve = reserveOf(state);
     if (buildCount(bot, reserve) < 1) return { why: `no stair step, and no block to pillar up with${reserve > 0 && countOf(shelterItems(bot)) > 0 ? ` (the ${Math.min(countOf(shelterItems(bot)), reserve)} sturdy blocks kept for the night's shelter are not used)` : ''}` };
     const ours = new Set([key(p), key(p.offset(0, 1, 0)), key(head2)]);
-    if (!safeToDig(bot, head2, ours) || !safeToDig(bot, head2.offset(0, 1, 0), new Set([...ours, key(head2.offset(0, 1, 0))])))
-        return { why: `no stair step, and no room to pillar up above ${at(p)}${fallingNear(bot, p)}` };
-    return { kind: 'pillar', dig: [head2, head2.offset(0, 1, 0)].filter(c => !isEmpty(bot.blockAt(c))) };
+    const blocked = digWhy(bot, head2, ours) ?? digWhy(bot, head2.offset(0, 1, 0), new Set([...ours, key(head2.offset(0, 1, 0))]));
+    if (!blocked) return { kind: 'pillar', dig: [head2, head2.offset(0, 1, 0)].filter(c => !isEmpty(bot.blockAt(c))) };
+    // Soak 16 trap: the cell over the head blocks every stair and the pillar: a step sideways (feet and head height,
+    // no headroom needed) to a column whose own headroom can be dug, at most ESCAPE.sideSteps per escape.
+    const side = (state.sides ?? 0) < ESCAPE.sideSteps ? sideStep(bot, target, state, p) : null;
+    if (side) return side;
+    return { why: `no stair step, and no room to pillar up above ${at(p)}: ${blocked}${fallingNear(bot, p)}` };
+}
+
+/** A sideways step: the side cell and the one above it dug (or empty), solid ground under it, and its headroom diggable. */
+function sideStep(bot, target, state, p) {
+    const toward = (d) => (target ? -(d.x * (target.x - p.x) + d.z * (target.z - p.z)) : 0);
+    for (const d of [...HORIZONTAL].sort((a, b) => toward(a) - toward(b))) {
+        const to = p.plus(d);
+        const under = bot.blockAt(to.offset(0, -1, 0));
+        if (!solid(under) || treeLike(under)) continue;
+        const cells = [to, to.offset(0, 1, 0)];
+        const ours = new Set([key(p), key(p.offset(0, 1, 0)), ...cells.map(key), key(to.offset(0, 2, 0))]);
+        if (!cells.every(c => safeToDig(bot, c, ours))) continue;
+        if (!safeToDig(bot, to.offset(0, 2, 0), ours)) continue; // no use stepping under another blocked cell
+        return { kind: 'side', d, to, dig: cells.filter(c => !isEmpty(bot.blockAt(c))) };
+    }
+    return null;
 }
 
 /**
@@ -475,6 +519,9 @@ async function byHand(bot, target, state, deadline, { moveTo, pillar }) {
         if (step.kind === 'stair') {
             if (!await moveTo(bot, step.to, deadline)) return Date.now() >= deadline ? late : { why: `could not step up into ${at(step.to)}` };
             state.stairs++;
+        } else if (step.kind === 'side') {
+            if (!await moveTo(bot, step.to, deadline)) return Date.now() >= deadline ? late : { why: `could not step sideways into ${at(step.to)}` };
+            state.sides = (state.sides ?? 0) + 1;
         } else {
             const item = buildStacks(bot)[0];
             if (!await pillar(bot, item, deadline)) return Date.now() >= deadline ? late : { why: `could not pillar up from ${at(feetOf(bot))}` };
@@ -522,7 +569,21 @@ export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = 
         if (bot.interrupt_code) return report(done(false, null, 'interrupted'), say);
         say(`[escape] ${first.why}; digging out by hand`);
         const second = await byHand(bot, target, state, deadline, { moveTo, pillar });
-        return report(second.out ? done(true, 'by hand') : done(false, null, second.why), say);
+        if (second.out) return report(done(true, 'by hand'), say);
+        // Soak 16 trap (21:20), #642 review 6: the way out is blocked for want of a pickaxe (used up by the walk that dug
+        // the bot in: every stone cell is undiggable): one is made from what the bot carries, then the climb again.
+        // Only after the pathfinder and the climb said so, and never with hostiles near (the respawn escape: no craft
+        // among player zombies).
+        if (NO_PICKAXE.test(second.why ?? '') && !state.away.length && !bestPickaxe(bot) && !bot.interrupt_code && Date.now() < deadline) {
+            const tableNear = (() => { try { return !!bot.findBlock?.({ matching: (b) => /crafting_table$/.test(b?.name ?? ''), maxDistance: ESCAPE.tableReach }); } catch { return false; } })();
+            const r = await makePickaxe(bot, { craft, tableNear, say });
+            state.pickaxe = r.made ? 'made' : r.why;
+            say(r.made ? '[escape] no pickaxe: made a stone pickaxe; climbing again' : `[escape] no pickaxe, and none can be made here: ${r.why}`);
+            if (!r.made) return report(done(false, null, `${second.why}; ${r.why}`), say);
+            const third = await byHand(bot, target, state, deadline, { moveTo, pillar });
+            return report(third.out ? done(true, 'by hand') : done(false, null, third.why), say);
+        }
+        return report(done(false, null, second.why), say);
     } catch (err) {
         return report(done(false, null, err?.message ?? String(err)), say);
     } finally {
@@ -558,19 +619,24 @@ export function escapeText(r) {
         : `Reached open ground at ${at(r.at)} (${r.how === 'pathfinder' ? 'by the pathfinder' : 'by stairs and pillars dug by hand'}; dug ${r.dug}, placed ${r.placed}${r.crafted ? `, ${r.crafted} dirt crafted from piles` : ''}) in ${secs} s.`;
     if (r.interrupted) return `The way out from ${at(r.at)} was stopped by something else; !goToSurface goes on from here.`;
     const why = String(r.why ?? 'no reason');
-    const next = /the ground is below you/.test(why)
+    const next = /needs a pickaxe \(you carry none\)/.test(why)
+        ? `You have no pickaxe, and every stone here needs one: ${PICKAXE_RECIPE_TEXT}. Get those, then !craftRecipe("stone_pickaxe", 1) and !goToSurface.`
+        : /needs a level \d+ pickaxe/.test(why)
+        ? 'That block needs a better pickaxe: !goToSurface tries a step sideways first; if it stops again, dig around it.'
+        : /the ground is below you/.test(why)
         // #624 re-review nit 2: the ground under a canopy (or downhill): down, not up.
         ? 'Climb down to it: !goToCoordinates to that spot (a walk down), or break the leaves under you with !digDown(1) one at a time while the drop below is short.'
         : /no block to pillar|blocks for pillars are spent|used the \d+ blocks/.test(why)
         ? 'Make dirt from dirt piles (4 piles each) or planks, then !goToSurface again (the cobblestone kept for the night\'s shelter is not used).'
         : /falling/.test(why)
-        ? 'Start sideways, away from the falling block: !breakBlockAt the block beside you on another side, step into it, then !goToSurface.'
+        // Round 17 P (the lead): only real commands (no command digs one chosen block; !breakBlockAt is a skill).
+        ? 'Get out from under the falling block first: !moveAway(3) walks about 3 blocks in any direction (digging if it must), then !goToSurface.'
         : /liquid|water|lava/.test(why)
         ? 'Dig away from the liquid, on the other side, then !goToSurface.'
         : /ran out|steps were not enough/.test(why)
         ? '!goToSurface goes on from here, a bit higher each time.'
         : /could not dig/.test(why)
-        ? 'That block needs a better tool: dig another side with !breakBlockAt, then !goToSurface.'
+        ? 'That block needs a better tool: !moveAway(3) walks about 3 blocks in any direction (digging if it must), then !goToSurface from there.'
         : '!goToSurface tries again from here.';
     return `You are trapped at ${at(r.at)}: no walkable way to open ground within ${ESCAPE.targetRadius} blocks. The escape stopped after ${secs} s (dug ${r.dug}, placed ${r.placed}): ${why}. ${next}`;
 }
