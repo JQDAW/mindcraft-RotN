@@ -150,7 +150,7 @@ index 666b0b3..71b7baa 100644
      const entity = fetchEntity(packet.entityId)
      if (!entity.attributes) entity.attributes = {}
 diff --git a/node_modules/mineflayer/lib/plugins/inventory.js b/node_modules/mineflayer/lib/plugins/inventory.js
-index 70db312..031ce51 100644
+index 70db312..50e0cb7 100644
 --- a/node_modules/mineflayer/lib/plugins/inventory.js
 +++ b/node_modules/mineflayer/lib/plugins/inventory.js
 @@ -1,12 +1,13 @@
@@ -202,7 +202,7 @@ index 70db312..031ce51 100644
        })
      }
    }
-@@ -536,15 +547,56 @@
+@@ -536,15 +547,67 @@
      return changedSlots
    }
  
@@ -220,6 +220,17 @@ index 70db312..031ce51 100644
 +  // at the dug position, then DIG_CLICK_GRACE_MS for that tick's slot updates. The server sends block updates
 +  // after the tick's packets (WorldServer.tick, before updateEntities), so a click sent after it is handled in
 +  // a later tick, after the damage was sent. At most DIG_CLICK_HOLD_MS (a block update that never comes).
++  // Limits (#664 review):
++  // - A STOP below progress 0.7 is not covered: the server sends the block back in that STOP's tick, which ends
++  //   the hold, and breaks it a few ticks later (the delayed destroy). That break's damage is sent in its own
++  //   tick (EntityPlayerMP.onUpdate runs the delayed destroy before detectAndSendChanges, B_ bytecode 4 and 38),
++  //   so it is not hidden; but a mode-0 click on the tool sent while that set_slot is on its way is still
++  //   rejected, and the caller's resync answers it.
++  // - The grace is always the whole DIG_CLICK_GRACE_MS: a window-0 set_slot does not end it early (the slot
++  //   updates of one tick need not come in one read, and a dig that damages nothing sends none).
++  // - A chunk with 64 or more block changes in one tick (Forge's clumpingThreshold, 64 in the pack's forge.cfg)
++  //   is sent as a map_chunk of the changed sections, not as block updates (PlayerChunkMapEntry.update), so the
++  //   hold runs to its DIG_CLICK_HOLD_MS cap.
 +  let digHold = null
 +  bot.on('digStopSent', (position) => {
 +    const pos = { x: position.x, y: position.y, z: position.z }
