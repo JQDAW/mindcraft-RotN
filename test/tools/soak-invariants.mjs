@@ -614,7 +614,7 @@ export function baselineRow(r) {
         I11_bigSummaries: c(r.I11), I11_summaries: c(r.I11, 'summaries'), I11_shareOfSpend: c(r.I11, 'share'),
         I12_unknownHurt: c(r.I12), I12_deathsUnnamed: c(r.I12, 'deathsUnnamed'),
         I11_usdPerHour: c(r.I11, 'usdPerHour'),
-        I13_factsLines: c(r.I13, 'factsLines'), I13_misses: c(r.I13, 'misses'), I13_fields: c(r.I13, 'fields'),
+        I13_factsLines: c(r.I13, 'factsLines'), I13_misses: c(r.I13, 'misses'), I13_fields: c(r.I13, 'fields'), I13_gate: c(r.I13, 'gate'),
         I14_claims: c(r.I14, 'claims'), I14_wrong: c(r.I14, 'wrong'), I14_unverifiable: c(r.I14, 'unverifiable'),
         I15_repeats: c(r.I15), I15_perHour: c(r.I15, 'perHour'), I15_inMemory: c(r.I15, 'inMemory'),
     };
@@ -671,7 +671,8 @@ export function render(r, name = 'soak') {
     o.push(`    M4 check 5: summaries ${cell(r.I11.share)}% of USD ${r.I11.usd} (USD ${cell(r.I11.usdPerHour)}/h of journal); ${r.I11.skipped} chunks cut with no summary call`);
     row('I12', 'unattributed-hurt', r.I12, r.I12 && `${r.I12.count} "(by unknown)" hurt lines; ${cell(r.I12.deathsUnnamed)} deaths by a mob with no mob named before them${r.I12.deathsUnnamed == null ? ` (${r.I12.note ?? 'no server.log'})` : ''}`);
     for (const d of r.I12?.deathsFirst ?? []) o.push(`    death ${d.t} (driver.log:${d.line}), server: ${d.server} (server.log:${d.serverLine})`);
-    row('I13', 'memory-facts', r.I13, r.I13 && `${r.I13.misses} of ${r.I13.fields} verifiable fields wrong in ${r.I13.factsLines} facts lines (${cell(r.I13.share)}% match; ${r.I13.unverifiable} unverifiable); ${Object.entries(r.I13.byField).map(([k, v]) => `${k} ${v.match}/${v.miss}/${v.unverifiable}`).join(', ')} (match/miss/unverifiable)`);
+    row('I13', 'memory-facts', r.I13, r.I13 && `gate ${r.I13.gate} (0 misses and at least ${MEMORY_CHECKS.minSamples} non-trivial samples per field); ${r.I13.misses} of ${r.I13.fields} verifiable fields wrong in ${r.I13.factsLines} facts lines (${r.I13.unverifiable} unverifiable)`);
+    for (const [k, v] of Object.entries(r.I13?.byField ?? {})) o.push(`    field ${k}: ${v.match} match, ${v.miss} miss, ${v.unverifiable} unverifiable${v.trivial ? ` (${v.trivial} of the matches trivial)` : ''}; ${r.I13.gateByField[k].samples} samples: ${r.I13.gateByField[k].verdict}`);
     for (const m of r.I13?.missesFirst ?? []) o.push(`    miss ${m.t} (driver.log:${m.line}) ${m.field}: said ${m.said}, state ${m.state ?? '?'}`);
     row('I14', 'wrong-state claims', r.I14, `${r.I14.wrong} of ${r.I14.claims} claims wrong (${r.I14.unverifiable} unverifiable) in ${r.I14.claimReplies} of ${r.I14.replies} replies; y ${r.I14.byKind.y.join('/')}, count ${r.I14.byKind.count.join('/')}, step ${r.I14.byKind.step.join('/')} (right/wrong/unverifiable)`);
     for (const w of r.I14.wrongFirst) o.push(`    wrong ${w.t} (driver.log:${w.line}) ${w.kind}: said ${w.said}, state ${w.state ?? '?'}`);
