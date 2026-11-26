@@ -242,6 +242,25 @@ describe('the service adapter: state, journal, stop', () => {
         assert.equal(cx.calls.length, n + 2, 'refresh() forces metrics and the journal');
     });
 
+    test('#662 review 6: timedLines() keeps every line from the start with its UTC time, from +0000 and +00:00 stamps alike', async () => {
+        const cx = fakeCx23();
+        const b = mk(cx);
+        await b.start();
+        cx.clock.t += 9000;
+        cx.add(cx.clock.t, 'node[123]', '[escape] stuck at 1, 20, 1: getting out upward (the sky starts at y 70)');
+        await b.refresh();
+        const out = b.output();
+        const timed = b.timedLines();
+        assert.equal(timed.length, out.length, 'no line lost to a time that did not parse (the fake stamps +0000)');
+        assert.deepEqual(timed.map((l) => l.msg), out);
+        assert.deepEqual(timed.map((l) => l.n), out.map((_, i) => i + 1));
+        assert.equal(timed.find((l) => /^\[escape\]/.test(l.msg)).t, cx.clock.t, '+0000 is UTC');
+        assert.ok(!timed.some((l) => /OLD run/.test(l.msg)));
+        // A +00:00 stamp parses the same way (fake-ctl.mjs writes that form).
+        const iso = '2026-11-08T12:00:09+00:00 node[1]: x';
+        assert.equal(Date.parse(`${parseJournalLine(iso).time}Z`), Date.parse('2026-11-08T12:00:09Z'));
+    });
+
     test('linesFromStart, parseJournalLine, parseMetrics', () => {
         assert.deepEqual(parseJournalLine('2026-11-08T12:00:01+0000 node[123]: hello: world'), { time: '2026-11-08T12:00:01', ident: 'node', msg: 'hello: world' });
         assert.deepEqual(parseJournalLine('2026-11-08T12:00:01+00:00 systemd[1]: Started x.'), { time: '2026-11-08T12:00:01', ident: 'systemd', msg: 'Started x.' });

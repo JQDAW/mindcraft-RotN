@@ -355,9 +355,19 @@ test('soak 17 (#661): shelter blocks before a later job (S1), the standing goal\
     // A wrong pickaxe is a miss.
     const unknown = memoryFactsCheck(J([REL, L('18:06:10', '[tool] stone_pickaxe broke (used up) on stone at 1, 2, 3'), res('18:06:20', 0, 0, 'tools: stone_pickaxe (off hand)')]), []);
     assert.equal(unknown.byField.pickaxe.unverifiable, 1); // a break with no count before it: unknown
-    const wrong2 = memoryFactsCheck(J([REL, L('18:00:00', 'Successfully crafted stone_pickaxe, you now have 1 stone_pickaxe.'), L('18:06:10', '[tool] stone_pickaxe broke (used up) on stone at 1, 2, 3'),
+    const shown = [L('17:59:00', 'INVENTORY'), L('17:59:00', '- stick: 3'), L('17:59:00', 'WEARING: Nothing')];
+    const wrong2 = memoryFactsCheck(J([REL, ...shown, L('18:00:00', 'Successfully crafted stone_pickaxe, you now have 1 stone_pickaxe.'), L('18:06:10', '[tool] stone_pickaxe broke (used up) on stone at 1, 2, 3'),
         res('18:06:20', 0, 0, 'tools: stone_pickaxe (off hand)')]), []);
     assert.deepEqual(wrong2.byField.pickaxe, f(0, 1, 0));
+    // With no listing first, a craft and its break leave the other kinds unknown: no evidence for "none".
+    const noList = memoryFactsCheck(J([REL, L('18:00:00', 'Successfully crafted stone_pickaxe, you now have 1 stone_pickaxe.'), L('18:06:10', '[tool] stone_pickaxe broke (used up) on stone at 1, 2, 3'),
+        res('18:06:20', 0, 0, 'tools: stone_axe (off hand)')]), []);
+    assert.deepEqual(noList.byField.pickaxe, f(0, 0, 1));
+    // #662 review 5: per kind. An iron pickaxe in the listing, a stone one crafted and broken: still a pickaxe.
+    const kinds = [L('17:59:00', 'INVENTORY'), L('17:59:00', '- iron_pickaxe: 1'), L('17:59:00', 'WEARING: Nothing'),
+        L('18:00:00', 'Successfully crafted stone_pickaxe, you now have 1 stone_pickaxe.'), L('18:06:10', '[tool] stone_pickaxe broke (used up) on stone at 1, 2, 3')];
+    assert.deepEqual(memoryFactsCheck(J([REL, ...kinds, res('18:06:20', 0, 0, 'tools: iron_pickaxe')]), []).byField.pickaxe, f(1, 0, 0));
+    assert.deepEqual(memoryFactsCheck(J([REL, ...kinds, res('18:06:20', 0, 0, 'tools: stone_axe')]), []).byField.pickaxe, f(0, 1, 0));
 });
 
 test('I14 (#661, soak 17 18:06:20): "up from y=25 to y=44" claims y 44, not 25; "up to y=60" is still a claim', () => {

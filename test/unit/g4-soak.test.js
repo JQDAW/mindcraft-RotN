@@ -50,7 +50,8 @@ const REAL_NEARBY = ['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS',
  * opt.naming (the "[naming] ... near spawn" line at minute 0.9, NAMING_OK by default; null: none); opt.entities (the
  * entity line at minute 2, ENTITIES_OK by default; null: none); opt.trap ({at, minutes, died}: a trap from minute `at`,
  * a failed escape every minute for `minutes`, then the escape clears or the bot dies there). timedLines() gives the
- * cached journal with each line's simulated time (lib/service.mjs).
+ * cached journal with each line's simulated time (lib/service.mjs). opt.enclosed ({at, minutes}: a `could not leave the
+ * shelter` morning at minute `at`, the bot elsewhere `minutes` later).
  */
 function sim(opt = {}) {
     let t = 0;
@@ -113,6 +114,10 @@ function sim(opt = {}) {
                     else jr(`[escape] stuck at 5, ${30 + k}, 5: getting out to 5, 80, 5 (dry ground under open sky) (up to 50 steps, 5 min)`, `[escape] out at 5, 80, 5 (by hand; dug 9, placed 0) in 20.0 s`);
                 });
             }
+        }
+        if (opt.enclosed) {
+            at(opt.enclosed.at, 'encl', () => jr('[night] morning: could not leave the shelter at 5, 60, 5 after 3 tries (no safe side of the shelter at 5, 60, 5 to open yet); back to work, still enclosed: dig a way out'));
+            at(opt.enclosed.at + opt.enclosed.minutes, 'enclEnd', () => jr('You have reached at 50, 64, 50.'));
         }
         if (opt.leaveAt) at(opt.leaveAt, 'leave', () => { online = false; add(`${NAME} lost connection: Disconnected`); add(`${NAME} left the game`); unit.state = 'failed'; });
     };
@@ -287,7 +292,7 @@ describe('g4-soak-2h on a simulated service', () => {
 
 describe('no_trap (the lead, after soak 17): no trap span over 5 min, no death while trapped', () => {
     test('no trap: a pass; a 3-min trap that clears: a pass with the span named', async () => {
-        assert.equal(byName(await run(sim())).no_trap.detail, 'no trap span');
+        assert.equal(byName(await run(sim())).no_trap.detail, 'no trap span or enclosed shelter');
         const c = byName(await run(sim({ trap: { at: 20, minutes: 3 } })));
         assert.equal(c.no_trap.pass, true, c.no_trap.detail);
         assert.match(c.no_trap.detail, /^1 trap span\(s\), the longest \S+-\S+ at 5, 30, 5, 5 min, ended: cleared; no death while trapped$/); // the sim writes lines at the 5-min samples
@@ -300,12 +305,20 @@ describe('no_trap (the lead, after soak 17): no trap span over 5 min, no death w
         assert.equal(c.no_trap.pass, false);
         assert.match(c.no_trap.detail, /^1 death\(s\) while trapped \(\S+ at 5, 30, 5, 5 min, ended: died\)$/);
     });
+    test('#662 review 3: an enclosed shelter (soak 15\'s `could not leave the shelter`) over 5 min fails; a short one passes', async () => {
+        let c = byName(await run(sim({ enclosed: { at: 30, minutes: 40 } })));
+        assert.equal(c.no_trap.pass, false);
+        assert.match(c.no_trap.detail, /^1 trap span\(s\) over 5 min \(longest enclosed in the shelter \S+ at 5, 60, 5, 40 min, ended: moved away\)$/);
+        c = byName(await run(sim({ enclosed: { at: 30, minutes: 4 } })));
+        assert.equal(c.no_trap.pass, true, c.no_trap.detail);
+        assert.match(c.no_trap.detail, /^1 trap span\(s\), the longest enclosed in the shelter \S+ at 5, 60, 5, 5 min, ended: moved away; no death while trapped$/);
+    });
     test('a journal gap: a seen long trap stands; a pass is not reached (infra)', async () => {
         let c = byName(await run(sim({ trap: { at: 20, minutes: 7 }, refreshFailAt: 70 })));
         assert.equal(c.no_trap.pass, false);
         assert.match(c.no_trap.detail, /^1 trap span\(s\) over 5 min/);
         c = byName(await run(sim({ refreshFailAt: 70 })));
-        assert.match(c.no_trap.detail, /^not reached \(infra\): .*; on what was read: no trap span$/);
+        assert.match(c.no_trap.detail, /^not reached \(infra\): .*; on what was read: no trap span or enclosed shelter$/);
     });
 });
 

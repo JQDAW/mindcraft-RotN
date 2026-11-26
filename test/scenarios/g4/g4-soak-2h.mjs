@@ -38,15 +38,17 @@
 //                      time once read, so the order is the bound); no death passes it
 //   no_trap            (the lead's decision after soak 17) no trap span (test/tools/soak-invariants.mjs trapSpans, with
 //                      the soak 17 span fix: the failed escapes and still-trapped lines of one trap, until an escape
-//                      clears, a death, or the bot is elsewhere) over trapMaxMinutes (5), and no death while trapped (a
-//                      span that ends 'died'). S only: it needs the journal's times (lib/service.mjs timedLines); on T it
-//                      is not reached. A span still open at the end counts with its minutes so far.
+//                      clears, a death, or the bot is elsewhere) and no enclosed episode (#662 review 3: enclosedEpisodes,
+//                      from a `could not leave the shelter` line until the bot leaves; soak 15) over trapMaxMinutes (5),
+//                      and no death while trapped or enclosed (one that ends 'died'). S only: it needs the journal's
+//                      times (lib/service.mjs timedLines); on T it is not reached. One still open at the end counts with
+//                      its minutes so far.
 // Notes: every sample, the survival counts (eats, fights by outcome, flees), the deaths, the LLM usage, the coverage.
 import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED } from '../../runner/lib/g2.mjs';
 import { exitedText } from '../../runner/lib/service.mjs';
 import { agentExits, blockNameProblem, deathEvents, entityNamingAtStart, isAir, llmUsage, namingAtStart, nearbyBlocksResults, survivalEvents } from '../../runner/lib/survival.mjs';
-import { trapSpans } from '../../tools/soak-invariants.mjs';
+import { enclosedEpisodes, trapSpans } from '../../tools/soak-invariants.mjs';
 
 const MS = 1000;
 const MIN = 60 * MS;
@@ -72,7 +74,7 @@ export default {
         food_floor: 'The food level never falls below the floor (#5)',
         ate_when_low: 'When the food level is low, the bot eats (#5)',
         deaths_reported: 'Every death is reported (#5, as in #6)',
-        no_trap: 'No trap underground over 5 minutes, and no death while trapped (the lead, after soak 17)',
+        no_trap: 'No trap underground or enclosed shelter over 5 minutes, and no death while trapped (the lead, after soak 17)',
     },
     defaults: {
         bot: 'FRCFLD',
@@ -281,13 +283,15 @@ export default {
         // long trap or a death while trapped stands on a partial read; a pass needs the whole journal.
         if (!service || typeof bot.timedLines !== 'function') notReached(['no_trap'], 'not the CX23 service (the journal\'s times are needed)');
         else {
-            const spans = trapSpans(bot.timedLines());
+            const timed = bot.timedLines();
+            const enclosed = enclosedEpisodes(timed);
+            const spans = [...trapSpans(timed), ...enclosed.map((x) => ({ ...x, enclosed: true }))].sort((a, b) => a.line - b.line);
             ctx.note('trapSpans', spans);
             const longest = spans.reduce((a, b) => (b.minutes > (a?.minutes ?? -1) ? b : a), null);
             const died = spans.filter((x) => x.end === 'died');
             const long = spans.filter((x) => x.minutes > Number(p.trapMaxMinutes));
-            const span = (x) => `${x.t}-${x.until} at ${x.at}, ${x.minutes} min, ended: ${x.end}`;
-            const detail = !spans.length ? 'no trap span'
+            const span = (x) => `${x.enclosed ? 'enclosed in the shelter ' : ''}${x.t}-${x.until} at ${x.at}, ${x.minutes} min, ended: ${x.end}`;
+            const detail = !spans.length ? 'no trap span or enclosed shelter'
                 : [long.length && `${long.length} trap span(s) over ${p.trapMaxMinutes} min (longest ${span(longest)})`,
                     died.length && `${died.length} death(s) while trapped (${span(died[0])})`].filter(Boolean).join('; ')
                     || `${spans.length} trap span(s), the longest ${span(longest)}; no death while trapped`;

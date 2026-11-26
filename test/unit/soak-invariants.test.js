@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { soakInvariants, table, evidenceDirs, serverDeaths, renderTable, render, releaseAtLeast, releaseOf, readJournal } from '../tools/soak-invariants.mjs';
+import { soakInvariants, table, evidenceDirs, serverDeaths, renderTable, render, releaseAtLeast, releaseOf, readJournal, enclosedEpisodes } from '../tools/soak-invariants.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const TOOL = path.join(ROOT, 'test/tools/soak-invariants.mjs');
@@ -510,4 +510,24 @@ test('I1 trap spans (soak 17 fix): a failed escape continues the span from where
     // A position line far from the span's latest cell (not its first) ends it.
     r = run([REL(23), stuck('10:00:00', '1, 20, 1'), fail('10:01:00', '1, 40, 1'), L('10:02:00', '- Position: x: 1.5, y: 41.0, z: 1.5'), L('10:03:00', '- Position: x: 30.5, y: 70.0, z: 1.5'), L('10:04:00', 'x')]);
     assert.deepEqual(r.I1.spanList.map(x => [x.until, x.end]), [['10:03:00', 'moved away']]);
+});
+
+test('enclosedEpisodes (#662 review 3): soak 15\'s pocket at -58, 57, -50, two mornings, 44.1 min until the bot is elsewhere', () => {
+    const lines = readJournal(fs.readFileSync(path.join(EVIDENCE, 'g4soak-15-20261124/driver.log'), 'utf8'));
+    assert.deepEqual(enclosedEpisodes(lines), [{ t: '23:18:02', line: 1513, at: '-58, 57, -50', until: '00:02:05', untilLine: 2357, minutes: 44.1, end: 'moved away', mornings: 2 }]);
+    // Soak 16: the morning in the trap (21:52:32) until the death at the exit.
+    const s16 = enclosedEpisodes(readJournal(fs.readFileSync(path.join(EVIDENCE, 'g4soak-16-20261125/driver.log'), 'utf8')));
+    assert.deepEqual(s16.map(e => [e.t, e.until, e.minutes, e.end]), [['21:52:32', '21:54:59', 2.5, 'died']]);
+});
+
+test('enclosedEpisodes: left by a morning line, by a cleared escape, by a move; open at the end; a far could-not-leave starts another', () => {
+    const could = (t, c) => L(t, `[night] morning: could not leave the shelter at ${c} after 3 tries (no side to open yet); back to work, still enclosed: dig a way out`);
+    const e = enclosedEpisodes(readJournal([REL(23), could('06:00:00', '1, 60, 1'), L('06:01:00', 'You have reached at 2, 60, 1.'), L('06:04:00', '[night] morning: dug out of the shelter at 2, 60, 1; back to work'),
+        could('07:00:00', '1, 60, 1'), L('07:00:30', '[escape] out at 1, 70, 1 (by hand; dug 9, placed 0) in 30.0 s'),
+        could('08:00:00', '1, 60, 1'), L('08:10:00', '- Position: x: 9.5, y: 64.0, z: 1.5'),
+        could('09:00:00', '1, 60, 1'), could('09:30:00', '40, 60, 40'), L('09:45:00', 'x')].join('\n')));
+    assert.deepEqual(e.map(x => [x.t, x.until, x.minutes, x.end]), [
+        ['06:00:00', '06:04:00', 4, 'left'], ['07:00:00', '07:00:30', 0.5, 'cleared'], ['08:00:00', '08:10:00', 10, 'moved away'],
+        ['09:00:00', '09:30:00', 30, 'moved away'], ['09:30:00', '09:45:00', 15, 'open'],
+    ]);
 });

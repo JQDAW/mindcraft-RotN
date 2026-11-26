@@ -65,8 +65,8 @@ const AGENDA_REPLY = /^Agent executed: !agenda and got: agenda: (active, step (\
 // The standing goal's own numbers (agenda.js standingGoal): food held and shelter blocks, computed when it is sent.
 const STANDING_NUMBERS = /Standing goal \(the agenda is done\): keep food worth at least \d+ points \(you hold ([\d.]+)\) and \d+ blocks .*?\(you have (\d+);/;
 // The pickaxe count (I13 daytime sources): a craft's `you now have N`, the escape's `[pickaxe] made`, a `[tool] broke`.
-const PICK_MADE = /^\[pickaxe\] made an? \S+ pickaxe\b/;
-const PICK_BROKE = /^\[tool\] \S*pickaxe broke\b/;
+const PICK_MADE = /^\[pickaxe\] made an? (\S+) pickaxe\b/;
+const PICK_BROKE = /^\[tool\] (\S*pickaxe) broke\b/;
 // An inventory change that may land between two code-built numbers a second apart (soak 17: a forage's pickup).
 const IN_FLIGHT = /^(Picked up [1-9]|Foraged |Collected [1-9]|.*\byou now have \d|\[survival\] ate |Successfully crafted )/;
 const REPLY = /^Generated response: (.*)$/;
@@ -129,7 +129,10 @@ function stateOf(lines, chat) {
     const pos = [], goals = [], agendaReplies = [], deaths = [], shelters = [], picks = [], food = [], inventories = [], nowHave = [], collected = [], nights = [], commands = [];
     const standing = [], inFlight = [], pickTimeline = [];
     let nightNo = 0;
-    let pickCount = null;
+    // The pickaxes carried, per kind (#662 review 5: a second kind must not be lost to one kind's count or break).
+    // `known`: a listing that shows the hands said what is carried; a death makes it unknown again.
+    const picks2 = { known: false, kinds: new Map() };
+    const pickState = () => { const sum = [...picks2.kinds.values()].reduce((a, b) => a + b, 0); return sum > 0 ? sum : picks2.known ? 0 : null; };
     for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
         let m0;
@@ -141,12 +144,13 @@ function stateOf(lines, chat) {
         if ((m = AGENDA_REPLY.exec(l.msg))) agendaReplies.push({ t: l.t, step: m[2] ?? m[4] ?? null, done: m[2] ? (m[3] ?? '').split(', ').filter(Boolean) : 'all' });
         if ((m = STANDING_NUMBERS.exec(l.msg)) && /goal/.test(l.msg)) standing.push({ t: l.t, n: l.n, held: Number(m[1]), blocks: Number(m[2]) });
         if (IN_FLIGHT.test(l.msg)) inFlight.push({ t: l.t, n: l.n });
-        // The pickaxe count: absolute from a craft's `you now have` or a listing (below), else +1 made / -1 broke; a
-        // death makes it unknown (what a death keeps is not logged per item).
-        if ((m = NOW_HAVE.exec(l.msg)) && /pickaxe/.test(m[2])) pickCount = Number(m[1]);
-        else if (PICK_MADE.test(l.msg)) pickCount = (pickCount ?? 0) + 1;
-        else if (PICK_BROKE.test(l.msg)) pickCount = pickCount == null ? null : Math.max(0, pickCount - 1);
-        else if (DEATH.test(l.msg)) pickCount = null;
+        // The pickaxe count per kind: a craft's `you now have N <kind>` sets that kind, `[pickaxe] made` adds one, a
+        // `[tool] <kind> broke` takes one; a listing (below) sets them all; a death makes them unknown (what a death keeps
+        // is not logged per item).
+        if ((m = NOW_HAVE.exec(l.msg)) && /pickaxe/.test(m[2])) picks2.kinds.set(m[2], Number(m[1]));
+        else if ((m = PICK_MADE.exec(l.msg))) { const k = `${m[1]}_pickaxe`; picks2.kinds.set(k, (picks2.kinds.get(k) ?? 0) + 1); }
+        else if ((m = PICK_BROKE.exec(l.msg))) { if (picks2.kinds.has(m[1])) picks2.kinds.set(m[1], Math.max(0, picks2.kinds.get(m[1]) - 1)); }
+        else if (DEATH.test(l.msg)) { picks2.known = false; picks2.kinds.clear(); }
         if ((m = DEATH.exec(l.msg))) deaths.push({ t: l.t, at: `${m[1]}, ${m[2]}, ${m[3]}` });
         for (const re of SHELTER_AT) { const s = re.exec(l.msg); if (s) { shelters.push({ t: l.t, at: `${s[1]}, ${s[2]}, ${s[3]}`, night: nightNo }); break; } }
         if (NIGHT_START.test(l.msg)) { nightNo++; nights.push({ t: l.t, no: nightNo, morning: null }); }
@@ -168,15 +172,18 @@ function stateOf(lines, chat) {
             inventories.push({ t: l.t, n: l.n, items });
             // The pickaxe count from a listing only when it also shows the hands (`IN THE OFF HAND: …`, `WEARING: …`, the
             // lines after the items): soak 17's pickaxe sat in the off hand, which the item lines leave out.
-            let hands = false, off = 0;
+            let hands = false;
+            const held = new Map();
+            for (const x of items) if (/pickaxe/.test(x.item)) held.set(x.item, (held.get(x.item) ?? 0) + x.count);
             for (let j = i + 1 + items.length; j < lines.length && j <= i + items.length + 4 && lines[j].t - l.t <= 2000; j++) {
                 const h = /^IN THE OFF HAND: (?:(\d+) (\S+)|nothing)/i.exec(lines[j].msg);
-                if (h) { hands = true; if (h[2] && /pickaxe/.test(h[2])) off += Number(h[1]); continue; }
+                if (h) { hands = true; if (h[2] && /pickaxe/.test(h[2])) held.set(h[2], (held.get(h[2]) ?? 0) + Number(h[1])); continue; }
                 if (/^WEARING: /.test(lines[j].msg)) hands = true;
             }
-            if (hands) pickCount = items.filter(x => /pickaxe/.test(x.item)).reduce((a, x) => a + x.count, 0) + off;
+            if (hands) { picks2.known = true; picks2.kinds = held; }
         }
-        if (!pickTimeline.length || pickTimeline.at(-1).count !== pickCount) pickTimeline.push({ t: l.t, n: l.n, count: pickCount });
+        const pc = pickState();
+        if (!pickTimeline.length || pickTimeline.at(-1).count !== pc) pickTimeline.push({ t: l.t, n: l.n, count: pc });
     }
     const stepDone = chat.map(c => { const m = /^agenda step (\S+) done$/.exec(c.msg); return m ? { t: c.t, id: m[1] } : /^agenda done$/.test(c.msg) ? { t: c.t, all: true } : null; }).filter(Boolean);
     // #650 review 5: "agenda step shelter_blocks: the scripted job (run 1 of 2 today)" (the id ends at the colon). Soak 17
