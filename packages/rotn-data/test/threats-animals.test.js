@@ -176,14 +176,16 @@ test('soak 16 death 2: hens and roosters chase and knock back; the give-up rules
     const chicken = section('Animania EntityAnimaniaChicken');
     inOrder(method(chicken, 'EntityAnimaniaChicken(net.minecraft.world.World)'), 'iconst_1', 'GenericAIPanic', 'func_75776_a');
     assert.ok(!method(chicken, 'func_110147_ax').includes('field_111265_b'), 'no FOLLOW_RANGE: the default 16');
-    inOrder(method(section('Animania EntityHenBase'), 'EntityHenBase(net.minecraft.world.World)'), 'bipush        10', 'EntityAIAttackMelee', 'dconst_1', 'iconst_1');
+    inOrder(method(section('Animania EntityHenBase'), 'EntityHenBase(net.minecraft.world.World)'), 'bipush        9', 'EntityAILeapAtTarget', 'bipush        10', 'EntityAIAttackMelee', 'dconst_1', 'iconst_1');
+    // #651 review: the rooster's leap and melee are both at priority 3 (its melee's iconst_1 is longMemory, not the priority).
+    inOrder(method(section('Animania EntityRoosterBase'), 'EntityRoosterBase(net.minecraft.world.World)'), 'iconst_3', 'EntityAILeapAtTarget', 'iconst_3', 'EntityAIAttackMelee', 'iconst_1', 'func_75776_a');
     // Against a player each hit adds knockBack(this, 1.0f, dx, dz).
     for (const title of ['Animania EntityHenBase', 'Animania EntityRoosterBase']) {
         inOrder(method(section(title), 'func_70652_k'), 'fconst_2', 'func_70097_a', 'EntityPlayer', 'fconst_1', 'func_70653_a');
     }
     for (const n of ['animania:hen_rhode_island_red', 'animania:rooster_leghorn']) {
         const p = pack.threatOf(n).provoked;
-        assert.deepEqual([p.damage, p.fightBack, p.attackIntervalTicks, p.knockback, p.followRange, p.loseSightTicks], [2, true, 20, 1, 16, 60], n);
+        assert.deepEqual([p.damage, p.fightBack, p.attackIntervalTicks, p.knockback, p.followRange, p.loseSightTicks, p.revengeTicks], [2, true, 20, 1, 16, 60, 100], n);
         assert.match(pack.threatOf(n).summary, /more than 16 blocks away or out of its sight for 3 s.*Fight it back at once rather than flee/, n);
     }
     // Chicks never attack: no provoked block (the next test checks they stay ignore).

@@ -72,7 +72,8 @@ function classRule(catalog, e) {
  *   { damage, health?, callsForHelp, helpers, fightBack, ... }; the Animania bulls add reach,
  *   attackIntervalTicks, chaseSpeed, width, stepHeight and angerMetadata ({ index, type, field, note }:
  *   the metadata entry that is true while the bull charges); hens and roosters add attackIntervalTicks,
- *   knockback, followRange and loseSightTicks (when it gives up the chase). null otherwise. group: the group's id
+ *   knockback, followRange and loseSightTicks (when it gives up the chase) and revengeTicks (when its panic
+ *   ends). null otherwise. group: the group's id
  *   when the entry came from 'groups'.
  *   traits: an entry's structured facts (threat-reactions.json description; the troll: size, speed,
  *   breaksBlocks 'blast', sunlight 'turns-to-stone', ...), null otherwise.
