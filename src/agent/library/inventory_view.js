@@ -8,7 +8,10 @@
 // Every module reads the inventory through this one (a static test checks no other module reads slots); the window
 // click layer (inventory_sync.js) is the only other one that touches slots, to move stacks.
 
-export const SLOTS = Object.freeze({ RESULT: 0, GRID: Object.freeze([1, 2, 3, 4]), ARMOR: Object.freeze([5, 6, 7, 8]), USABLE_FROM: 9, USABLE_TO: 44, OFF_HAND: 45 });
+export const SLOTS = Object.freeze({ RESULT: 0, GRID: Object.freeze([1, 2, 3, 4]), ARMOR: Object.freeze([5, 6, 7, 8]), USABLE_FROM: 9, HOTBAR_FROM: 36, USABLE_TO: 44, OFF_HAND: 45 });
+/** #657 review 5: the 2x2 grid's slots, for the click layer (inventory_sync.js re-exports it). */
+export const GRID_SLOTS = SLOTS.GRID;
+export const OFF_HAND = SLOTS.OFF_HAND;
 export const ARMOR_NAMES = Object.freeze(['head', 'torso', 'legs', 'feet']);
 
 const ok = (s) => !!s && typeof s.name === 'string' && (s.count ?? 1) > 0;
@@ -72,7 +75,7 @@ export function freeUsableSlot(bot, except = null) {
 }
 
 /** The hotbar's 9 slots (36-44), empty ones as null: which one to hold. */
-export const hotbar = (bot) => Array.from({ length: 9 }, (_, i) => { const st = slotsOf(bot)[36 + i]; return ok(st) ? st : null; });
+export const hotbar = (bot) => Array.from({ length: 9 }, (_, i) => { const st = slotsOf(bot)[SLOTS.HOTBAR_FROM + i]; return ok(st) ? st : null; });
 /** An open window's cursor stack (a chest's or a table's), or null. */
 export const windowCursor = (win) => (ok(win?.selectedItem) ? win.selectedItem : null);
 

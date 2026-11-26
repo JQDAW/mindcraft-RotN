@@ -101,10 +101,18 @@ export async function offHandToolBack(bot) {
         return false;
     }
 }
-export async function rearmWeapon(bot) {
+/**
+ * #657 review 1: what rearmWeapon would do now, without a click: {moves: [{item, dest, what}], ok}, from its own
+ * branches (the pickaxe to the off hand and the weapon to the main hand from the stone pickaxe on; with no pickaxe the
+ * weapon in the off hand; a shield in the off hand stays; WEAPON_HAND.offHand). rearmWeapon carries out exactly these
+ * moves, so the idle repair (hands.armsWrong) can never disagree with it.
+ */
+export function rearmNeeds(bot) {
     const items = bot?.inventory?.items?.() ?? [];
-    const best = items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0] ?? null;
+    const order = weaponOrder(attackPath(bot));
+    const best = items.filter(i => isWeaponItem(i)).sort(order)[0] ?? null;
     const off = inv.offHand(bot);
+    const canEquip = typeof bot?.equip === 'function';
     // #584 re-review (a): a full-inventory fight swaps the club into a hotbar slot and that slot's item
     // (dirt, say) into the off hand; equipping the weapon to the off hand swaps them back. Only a
     // shield there is kept (then the weapon goes to the main hand).
@@ -115,28 +123,42 @@ export async function rearmWeapon(bot) {
     // weapon in the off hand, as before.
     const pick = items.filter(isPickaxeItem).sort((a, b) => pickLevel(b) - pickLevel(a))[0] ?? null;
     const offPick = !!off && isPickaxeItem(off);
-    if (WEAPON_HAND.offHand && !shield && (pick || offPick) && typeof bot.equip === 'function') {
-        if (!offPick || (pick && pickLevel(pick) > pickLevel(off))) await bot.equip(pick, 'off-hand');
-        const weapons = (bot.inventory.items?.() ?? []).filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)));
+    const moves = [];
+    if (WEAPON_HAND.offHand && !shield && (pick || offPick) && canEquip) {
+        const pickMoves = !offPick || (pick && pickLevel(pick) > pickLevel(off));
+        if (pickMoves) moves.push({ item: pick, dest: 'off-hand', what: 'pickaxe' });
+        // The off hand's own stack comes into the inventory when the pickaxe takes its place.
+        const after = pickMoves && off && isWeaponItem(off) ? [...items, off] : items;
+        const weapons = after.filter(i => isWeaponItem(i)).sort(order);
         const held = bot.heldItem && isWeaponItem(bot.heldItem) ? bot.heldItem : null;
-        if (held && !(weapons[0] && weaponOrder(attackPath(bot))(weapons[0], held) < 0)) return true;
-        if (!weapons[0]) return !!held;
-        await bot.equip(weapons[0], 'hand');
-        return true;
+        if (held && !(weapons[0] && order(weapons[0], held) < 0)) return { moves, ok: true };
+        if (!weapons[0]) return { moves, ok: !!held };
+        moves.push({ item: weapons[0], dest: 'hand', what: 'weapon' });
+        return { moves, ok: true };
     }
     if (WEAPON_HAND.offHand && !shield) {
         const offWeapon = !!off && isWeaponItem(off);
         // #584 nit 5: a better weapon in the inventory takes the off hand's place.
-        if (offWeapon && !(best && weaponOrder(attackPath(bot))(best, off) < 0)) return true;
-        if (!best || typeof bot.equip !== 'function') return offWeapon;
-        await bot.equip(best, 'off-hand');
-        return true;
+        if (offWeapon && !(best && order(best, off) < 0)) return { moves, ok: true };
+        if (!best || !canEquip) return { moves, ok: offWeapon };
+        moves.push({ item: best, dest: 'off-hand', what: 'weapon' });
+        return { moves, ok: true };
     }
     // The main hand (with the flag off, or a shield in the off hand, which stays).
-    if (bot?.heldItem && isWeaponItem(bot.heldItem)) return true;
-    if (!best || typeof bot.equip !== 'function') return false;
-    await bot.equip(best, 'hand');
-    return true;
+    if (bot?.heldItem && isWeaponItem(bot.heldItem)) return { moves, ok: true };
+    if (!best || !canEquip) return { moves, ok: false };
+    moves.push({ item: best, dest: 'hand', what: 'weapon' });
+    return { moves, ok: true };
+}
+
+export async function rearmWeapon(bot) {
+    const { moves, ok } = rearmNeeds(bot);
+    for (const m of moves) {
+        // The weapon taken after the pickaxe's move: as the window has it now (the swap may have moved it).
+        const item = m.what === 'weapon' && moves[0] !== m ? ((bot.inventory.items?.() ?? []).find(i => i.name === m.item.name && (i.metadata ?? 0) === (m.item.metadata ?? 0)) ?? m.item) : m.item;
+        await bot.equip(item, m.dest);
+    }
+    return ok;
 }
 
 export async function equipHighestAttack(bot, fight = null) {
