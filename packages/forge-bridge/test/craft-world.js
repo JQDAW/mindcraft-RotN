@@ -31,6 +31,8 @@ export const B = {
     cobble: runAId('minecraft:cobblestone', 'minecraft:blocks'), rock: runAId('pyrotech:rock', 'minecraft:blocks'),
 };
 export const TABLE = { x: 10, y: 65, z: 8 };
+/** startRotnWorld's chest (opts.chest), next to the table. */
+export const CHEST = { x: 7, y: 65, z: 8 };
 
 // The sync the bot gets: the real ids and the real fastbench override, plus the synthetic
 // entity, biome and serializer registries the other e2e tests use.
@@ -48,10 +50,12 @@ export function registries() {
 }
 
 // One section (y 64-79): stone floor at y=64 and the crafting table.
-export function chunkData() {
+// `extra`: more blocks in the section, [{ x, y, z, stateId }] (y 64-79).
+export function chunkData(extra = []) {
     const data = new BitArray({ bitsPerValue: 16, capacity: 4096 });
     for (let i = 0; i < 256; i++) data.set(i, B.stone << 4);
     data.set(((TABLE.y - 64) << 8) | (TABLE.z << 4) | TABLE.x, B.table << 4);
+    for (const b of extra) data.set(((b.y - 64) << 8) | (b.z << 4) | b.x, b.stateId);
     const sb = new SmartBuffer();
     data.writeBuffer(sb);
     const longs = sb.toBuffer();
@@ -148,21 +152,24 @@ export async function stopCraftWorld({ server, bot } = {}) {
  *   result: name, count?), matched first to last as the server's registry
  * @param {object[]} [o.digBlocks] [{ x, y, z, name }] for the dig model; omitted: no dig model
  * @param {object} [o.effects] the server player's effects for the dig model
+ * @param {boolean} [o.chest] a chest at CHEST (fake-containers' chest window)
  * @returns {Promise<{ server, bot, containers: () => object, dig: () => object, ids: object }>}
  */
-export async function startRotnWorld({ itemNames, blockNames = [], inventory, recipes = [], digBlocks = null, effects = {}, captureFile }) {
+export async function startRotnWorld({ itemNames, blockNames = [], inventory, recipes = [], digBlocks = null, effects = {}, chest = false, captureFile }) {
     const rd = loadRotnData(PACK_VERSION);
     const ids = Object.fromEntries(itemNames.map(n => [n, runAId(n)]));
-    const bids = Object.fromEntries(['minecraft:air', 'minecraft:stone', 'minecraft:crafting_table', ...blockNames].map(n => [n, runAId(n, 'minecraft:blocks')]));
+    const bids = Object.fromEntries(['minecraft:air', 'minecraft:stone', 'minecraft:crafting_table', ...(chest ? ['minecraft:chest'] : []), ...blockNames].map(n => [n, runAId(n, 'minecraft:blocks')]));
     const regs = registries();
     regs[0] = { ...regs[0], ids: Object.entries(bids) };
     regs[1] = { ...regs[1], ids: Object.entries(ids) };
     let dig = null;
     const join = (client) => {
         client.write('login', { entityId: 1, gameMode: 0, dimension: 0, difficulty: 2, maxPlayers: 10, levelType: 'default', reducedDebugInfo: false });
-        client.write('map_chunk', { x: 0, z: 0, groundUp: true, bitMap: 1 << 4, chunkData: chunkData(), blockEntities: [] });
+        const extra = chest ? [{ ...CHEST, stateId: (bids['minecraft:chest'] << 4) | 2 }] : []; // facing north
+        client.write('map_chunk', { x: 0, z: 0, groundUp: true, bitMap: 1 << 4, chunkData: chunkData(extra), blockEntities: [] });
         const containers = attachFakeContainers(client, {
             table: TABLE,
+            chest: chest ? CHEST : null,
             recipes: recipes.map(r => ({
                 ...(r.shaped ? { shaped: r.shaped.map(row => row.map(n => (n ? ids[n] : null))) } : { shapeless: r.shapeless.map(n => ids[n]) }),
                 result: { id: ids[r.result], count: r.count ?? 1 },
