@@ -15,6 +15,46 @@ Agents add items here when they need something only the human can do. The human 
 - [x] **Soak 7: your GO** (lead, 2026-11-20). **Done: GO `G4-SOAK-7-20261120` given 2026-11-20 ~22:25 UTC; run 22:42-00:42 UTC, FAIL 8/9, one death (evidence #515).**
 - [x] **Soak 8: your GO** (lead, 2026-11-21). **Done: GO `G4-SOAK-8-20261121` given 2026-11-21 just before 22:55 UTC; run 23:07-01:08 UTC on `rotn-v0.1.14` (Better Combat on), FAIL 7/9 (food), no death, health 20 throughout (evidence #558). Root cause: a flooded pit after mining copper under water; fixes in progress.**
 - [x] **Memory summaries: reasoning off? (your decision, before soak 14)** (lead, 2026-11-24). **Decided 2026-11-24 about 14:30 UTC: option (a), keep it for memory summaries only (as shipped in `rotn-v0.1.20`); the preset item below is amended to match. Soak 14 checks the summaries' reasoning tokens and cost.** **Soak 14 (#608): the preset's model refused `effort: "none"` (HTTP 400; the retry without it worked) on the first summary call, so the setting was dropped for the run and had no effect; cost still passed (USD 0.037/h). Decided 2026-11-24 about 18:00 UTC: option (b), the lead reverts #600 and #603 (no per-request reasoning setting at all, as decided on 2026-11-22), in the release after `rotn-v0.1.20`.** Soak 13 failed only on cost (USD 0.0552/h against 0.05, #599): memory summaries were 42% of the spend, with up to 18,156 reasoning tokens for a note of about 500 characters, and reasoning was 95.7% of all completion tokens. The lead's #600 (with #603) makes memory-summary calls only send OpenRouter `reasoning: { effort: "none" }` (the bot's play, chat and code calls are unchanged), and it is in the deployed `rotn-v0.1.20`. **That goes against your 2026-11-22 decision in the preset item below ("the lead sends no per-request reasoning setting"), which the lead missed when writing #600.** Choose one: (a) **keep it for memory summaries only** (the lead's recommendation: summaries are the bot's own notes, the play prompts keep full reasoning, and with skills-rotn's #601 they also run half as often); (b) **remove it**: the lead reverts #600/#603 and deploys `rotn-v0.1.21` before soak 14 (#601's changes alone may or may not bring the cost under 0.05/h). If you choose (a), the lead adds a dated amendment to the preset item below so the two items agree. Soak 14 waits for this answer.
+- [ ] **Soak 17: your GO** (lead, 2026-11-26). `rotn-v0.1.23` is deployed (by the lead through the gate, 02:08 UTC).
+
+  **Soak 16** (`rotn-v0.1.22`) FAILED 8/9 (item above): a walk that dug down with a worn-out pickaxe trapped the bot for 35 minutes, then two deaths (zombies at the top of its dig-out; a hen it had provoked, which it never fought back). Cost passed at USD 0.028/h, and memory summaries were 33.6% of the spend. Each change below was reviewed independently, most in two or three rounds.
+
+  **What changed for the bot:**
+  - **Getting trapped (#642):**
+    - when no pickaxe is carried, the escape crafts one first (from cobble or rocks and sticks, with a table placed beside it), and the bot re-makes a lost pickaxe after the agenda;
+    - walks keep part of the pickaxe's uses and never dig below both their start and their goal; with no pickaxe they never break stone;
+    - a walk that ends "unable to reach" now counts as failed, so the escape runs after it;
+    - a trapped bot is re-planned even when its daily budget is spent (bounded: at most 3 model calls per place per day);
+    - a broken tool is logged.
+  - **Animals that fight back (#652):** a hen (or another weak animal) that attacks is fought at once; with no weapon only above 6 health, otherwise it flees. The bot never swings at an animal that is not its target.
+  - **Shelter at night (#652):** a roof block that will not stay is retried from other sides, then one block lower if that is safe.
+  - **Code-built memory (#637), your decision with its condition:** the bot's memory is now built from the game state (agenda, reserves, recent failures, deaths, places); the summary model runs only when a player spoke. Soak 17 measures whether play improves (see below); one profile setting switches back if it does not.
+  - **Prompts for this pack (#645):** examples written for RotN, fewer commands shown to the model, and `!goToBed` refused once the Scroll of New Life is used (a bed would end its protection).
+  - **Crafting (#638, #639):** a craft the server would turn into a different item is refused with no items lost (soak 16: 9 sticks became a stick wall), and such recipes are offered last.
+  - **Safety (#636):** `!attackPlayer` is removed entirely.
+  - **Diagnostics (#653):** every attack names its target and the code that sent it.
+
+  **For the team (no bot change):** the trap length is measured properly (#648: soak 16 reads 34.9 min, was 7.8), the memory checks for your condition (#655), a recipe-collision tool (#647).
+
+  **How the memory is judged (your condition):** it stays only if its facts never disagree with the game (with enough samples), its share of the spend falls, the model's wrong-state claims or repeated failures fall against soak 16, and the agenda is no slower.
+
+  **Steps (as before):**
+  1. Your GO here.
+  2. harness-ops creates one CPX42 (TTL 4 h) and reports its IP.
+  3. You run the host check on the CX23 and paste the output.
+  4. The 2-hour run.
+  5. The server is deleted.
+  6. The evidence PR.
+
+  **Cost:** like soak 16 (USD 0.056 of LLM over 2 h; the CPX42 for about 2.5 h, EUR 0.40-0.55). Allow up to USD 0.30.
+
+  **Watch items:**
+  - no trap (the trap span), and any escape or `[trapped]` lines;
+  - the memory checks and the summary share;
+  - fights with animals and every `[attack]` line;
+  - roof retries at night;
+  - craft refusals and rejected clicks;
+  - `[tool] broke` lines.
 - [x] **Code-built memory instead of most memory summaries (your decision)** (lead, 2026-11-25). The outside review (Fable, `/home/rv/bot-typical-issues-fable-review.md` Q4.1 on the dev server) found that memory summaries are 34-52% of LLM spend (Q4.1); its section 5.4 also notes the model claiming state the bot did not have (soak 15: "Up to y=60" while it stayed at y 57). It proposes building the memory from game state in code (`progress.js`, the agenda, the last 3 failures) and calling the summary model only when a player spoke or the model asked to remember something. The lead plans to add held items, deaths and known places, and to count only trusted players (the untrusted-player rules stay). **Decided 2026-11-25 about 20:20 UTC: approved, on the condition that it improves the bot's play, not only its cost** (your words: "I'll agree to the LLM cost item if it improves the bot's performance"). The lead measures that in the evidence (the memory text against the game state, the model's wrong-state claims, agenda time, plus the spend share against soak 16's baseline) and keeps it only if the evidence shows better play (no check worse). It does not change the preset or send any reasoning setting (your 2026-11-22 and 2026-11-24 decisions stand).
 - [x] **Soak 16: your GO** (lead, 2026-11-25). **Done: GO given about 20:20 UTC (G4-SOAK-16-20261125), in the lead session; the lead reset FRCFLD state through the gate at 20:23 UTC; harness-ops creates the CPX42. The run 20:29-22:29 UTC on `rotn-v0.1.22` FAILED 8/9 (`ate_when_low`: 4 of 10 low-food lines with no eat, one during the dig-out, 36 s before death 1, and three after death 2 had cost the bot its food); the server was deleted at 22:30:23 (evidence #644).** What it showed: the new escape got the bot out of a hole in 127 s (20:41); then a destructive `!goToCoordinates` walk buried it 11 blocks down at 21:19 with its stone pickaxe gone (probably worn out; no line shows it), and it stayed trapped until 21:54, when the model crafted a new pickaxe and dug out; zombies killed it at the top (death 1); at 22:01 an Animania hen, which attacks only a player who hurt it (probably hit during the bot's fight with a hog), pecked the bot to death, and the bot never fought back because it treats hens as food (death 2); on night 3 its hole shelter's roof block would not stay in place and it spent the night in an open hole. One rejected click came from a recipe collision (9 sticks make a stick wall on the server, not planks). Cost passed: USD 0.028/h (day 0.071/h, night 0.004/h); memory summaries were 33.6% of the spend, the baseline for the code-built memory (#637). Already fixed on develop: the trap (#642: a pickaxe is made before the climb, walks keep pickaxe uses and never dig below both ends, a trapped bot is re-planned), the recipe collision (#638, #639, #641), `!attackPlayer` blocked (#636), the code-built memory (#637). In progress: fighting back at a provoked animal, the refused roof, RotN prompts (#645). `rotn-v0.1.22` is deployed (by the lead through the gate, 18:36 UTC).
 
