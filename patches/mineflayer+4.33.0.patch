@@ -89,10 +89,19 @@ index a5fe563..d6fecce 100644
          if (!recipe.outShape) {
            for (let i = 1; i <= w * h; i++) {
 diff --git a/node_modules/mineflayer/lib/plugins/digging.js b/node_modules/mineflayer/lib/plugins/digging.js
-index 496cf63..813a667 100644
+index 496cf63..5c3620d 100644
 --- a/node_modules/mineflayer/lib/plugins/digging.js
 +++ b/node_modules/mineflayer/lib/plugins/digging.js
-@@ -242,11 +242,14 @@ function inject (bot) {
+@@ -151,6 +151,8 @@
+           location: bot.targetDigBlock.position,
+           face: bot.targetDigFace // always the same as the start face
+         })
++        // mindcraft-rotn (soak 17): window clicks wait for the server's answer to this STOP (inventory.js, digClickHold).
++        bot.emit('digStopSent', bot.targetDigBlock.position)
+       }
+       bot.targetDigBlock = null
+       bot.targetDigFace = null
+@@ -242,11 +244,14 @@
        enchantments = enchantments.concat(helmetEnchantments)
      }
  
@@ -141,10 +150,28 @@ index 666b0b3..71b7baa 100644
      const entity = fetchEntity(packet.entityId)
      if (!entity.attributes) entity.attributes = {}
 diff --git a/node_modules/mineflayer/lib/plugins/inventory.js b/node_modules/mineflayer/lib/plugins/inventory.js
-index 70db312..54650ff 100644
+index 70db312..50e0cb7 100644
 --- a/node_modules/mineflayer/lib/plugins/inventory.js
 +++ b/node_modules/mineflayer/lib/plugins/inventory.js
-@@ -23,7 +23,12 @@
+@@ -1,12 +1,13 @@
+ const assert = require('assert')
+ const { Vec3 } = require('vec3')
+-const { once, sleep, createDoneTask, createTask, withTimeout } = require('../promise_utils')
++const { once, createDoneTask, createTask, withTimeout } = require('../promise_utils')
+ 
+ module.exports = inject
+ 
+-// ms to wait before clicking on a tool so the server can send the new
+-// damage information
+-const DIG_CLICK_TIMEOUT = 500
++// mindcraft-rotn (soak 17): after a finished dig, a window click waits for the server's block update at
++// the dug position, then DIG_CLICK_GRACE_MS, at most DIG_CLICK_HOLD_MS in all (digClickHold below).
++const DIG_CLICK_HOLD_MS = 500
++const DIG_CLICK_GRACE_MS = 50
+ // The number of milliseconds to wait for the server to respond with consume completion.
+ // This number is larger than the eat time of 1.61 seconds to account for latency and low tps.
+ // The eat time comes from https://minecraft.wiki/w/Food#Usage
+@@ -23,7 +24,12 @@
  
  function inject (bot, { hideErrors }) {
    const Item = require('prismarine-item')(bot.registry)
@@ -158,7 +185,7 @@ index 70db312..54650ff 100644
  
    let eatingTask = createDoneTask()
    let sequence = 0
-@@ -125,10 +130,15 @@
+@@ -125,10 +131,15 @@
          cursorZ: -1
        })
      } else if (bot.supportFeature('useItemWithOwnPacket')) {
@@ -175,6 +202,82 @@ index 70db312..54650ff 100644
        })
      }
    }
+@@ -536,15 +547,67 @@
+     return changedSlots
+   }
+ 
++  // mindcraft-rotn (soak 17, 18:03:58: a click on the stone pickaxe rejected, its damage 79 on the client and
++  // 80 on the server). A 1.12 server runs a tick's queued packets before its entity updates. A finished dig's
++  // STOP that breaks the block at once damages the held tool while those packets run, and the new damage is
++  // sent by that tick's detectAndSendChanges (EntityPlayerMP.onUpdate). But an accepted click in the same tick
++  // runs detectAndSendChanges itself with isChangingQuantityOnly set: every changed slot is recorded as sent
++  // and none is sent (NetHandlerPlayServer.processClickWindow, pa.a(lf) bytecode 167-233; EntityPlayerMP.
++  // sendSlotContents, oq.a(afr,int,aip) bytecode 31-38, returns while the flag is set). So the client never
++  // gets that damage, and the next mode-0 click carrying the tool is rejected (the server compares damage).
++  // A mode-2 swap carries no item, so it is accepted and can move the stale tool on.
++  // Upstream's wait for this (500 ms after a dig, hotbar slots only) never ran: it compared new Date() with
++  // performance.now(). Now every click after a finished dig (a STOP sent) waits for the server's block update
++  // at the dug position, then DIG_CLICK_GRACE_MS for that tick's slot updates. The server sends block updates
++  // after the tick's packets (WorldServer.tick, before updateEntities), so a click sent after it is handled in
++  // a later tick, after the damage was sent. At most DIG_CLICK_HOLD_MS (a block update that never comes).
++  // Limits (#664 review):
++  // - A STOP below progress 0.7 is not covered: the server sends the block back in that STOP's tick, which ends
++  //   the hold, and breaks it a few ticks later (the delayed destroy). That break's damage is sent in its own
++  //   tick (EntityPlayerMP.onUpdate runs the delayed destroy before detectAndSendChanges, B_ bytecode 4 and 38),
++  //   so it is not hidden; but a mode-0 click on the tool sent while that set_slot is on its way is still
++  //   rejected, and the caller's resync answers it.
++  // - The grace is always the whole DIG_CLICK_GRACE_MS: a window-0 set_slot does not end it early (the slot
++  //   updates of one tick need not come in one read, and a dig that damages nothing sends none).
++  // - A chunk with 64 or more block changes in one tick (Forge's clumpingThreshold, 64 in the pack's forge.cfg)
++  //   is sent as a map_chunk of the changed sections, not as block updates (PlayerChunkMapEntry.update), so the
++  //   hold runs to its DIG_CLICK_HOLD_MS cap.
++  let digHold = null
++  bot.on('digStopSent', (position) => {
++    const pos = { x: position.x, y: position.y, z: position.z }
++    const at = (x, y, z) => x === pos.x && y === pos.y && z === pos.z
++    const hold = { done: false, position: pos }
++    hold.promise = new Promise((resolve) => {
++      let grace = null
++      const finish = () => {
++        if (hold.done) return
++        hold.done = true
++        clearTimeout(cap)
++        clearTimeout(grace)
++        bot._client.removeListener('block_change', onChange)
++        bot._client.removeListener('multi_block_change', onMulti)
++        if (digHold === hold) digHold = null
++        resolve()
++      }
++      const seen = () => { if (grace === null) grace = setTimeout(finish, DIG_CLICK_GRACE_MS) }
++      const onChange = (p) => { if (p.location && at(p.location.x, p.location.y, p.location.z)) seen() }
++      const onMulti = (p) => {
++        if (!Array.isArray(p.records)) return
++        if (p.records.some(r => at(p.chunkX * 16 + (r.horizontalPos >> 4), r.y, p.chunkZ * 16 + (r.horizontalPos & 15)))) seen()
++      }
++      const cap = setTimeout(finish, DIG_CLICK_HOLD_MS)
++      bot._client.on('block_change', onChange)
++      bot._client.on('multi_block_change', onMulti)
++    })
++    digHold = hold
++  })
++  async function digClickHold () {
++    while (digHold && !digHold.done) await digHold.promise
++  }
++
+   async function clickWindow (slot, mouseButton, mode) {
+-    // if you click on the quick bar and have dug recently,
+-    // wait a bit
+-    if (slot >= bot.QUICK_BAR_START && bot.lastDigTime != null) {
+-      let timeSinceLastDig
+-      while ((timeSinceLastDig = new Date() - bot.lastDigTime) < DIG_CLICK_TIMEOUT) {
+-        await sleep(DIG_CLICK_TIMEOUT - timeSinceLastDig)
+-      }
+-    }
++    // only while a hold is on: without one the click is written at once, as before
++    if (digHold && !digHold.done) await digClickHold()
+     const window = bot.currentWindow || bot.inventory
+ 
+     assert.ok(mode >= 0 && mode <= 4)
 diff --git a/node_modules/mineflayer/lib/plugins/place_block.js b/node_modules/mineflayer/lib/plugins/place_block.js
 index fdaec6b..3a93b70 100644
 --- a/node_modules/mineflayer/lib/plugins/place_block.js

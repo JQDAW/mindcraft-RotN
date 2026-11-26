@@ -15,6 +15,7 @@ import { requestReplan } from '../replan.js';
 import { safeError } from '../safe_error.js';
 import { nightPhase } from './night.js';
 import { isPlayerZombie, canFightHard } from './threats.js';
+import { everyStack } from './inventory_view.js';
 
 /** Samples kept while alive (one a second). */
 export const SAMPLES_KEPT = 3;
@@ -58,7 +59,7 @@ const HOME_NAMES = /home|shelter|bed|base/i;
 /** {key: count} over every slot (inventory, armor, off hand). The key keeps 1.12 variants apart. */
 export function inventoryCounts(bot) {
     const counts = {};
-    for (const it of bot?.inventory?.slots || []) {
+    for (const it of everyStack(bot)) { // round 17 V: every stack, the grid, the armour and the cursor too
         if (!it || !it.name || !(it.count > 0)) continue;
         const key = it.metadata ? `${it.name}:${it.metadata}` : it.name;
         counts[key] = (counts[key] || 0) + it.count;

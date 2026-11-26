@@ -12,6 +12,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { startFakeForgeServer } from './fake-forge-server.js';
 import { attachFakeContainers, dumpMaxStack } from './fake-containers.js';
 import { attachFakeDig } from './fake-dig.js';
+import { attachServerTick } from './fake-tick.js';
 import { loadRotnData, PACK_VERSION } from '../../rotn-data/index.js';
 import { pinnedModList, syntheticRegistries, PING_FIXTURE, runAId } from './helpers.js';
 import { Writer } from '../src/wire.js';
@@ -153,9 +154,12 @@ export async function stopCraftWorld({ server, bot } = {}) {
  * @param {object[]} [o.digBlocks] [{ x, y, z, name }] for the dig model; omitted: no dig model
  * @param {object} [o.effects] the server player's effects for the dig model
  * @param {boolean} [o.chest] a chest at CHEST (fake-containers' chest window)
- * @returns {Promise<{ server, bot, containers: () => object, dig: () => object, ids: object }>}
+ * @param {boolean} [o.serverTick] the server tick (fake-tick.js): packets run at the next tick, window 0's changes
+ *   sent at its end (fake-containers' tickModel), the dig model's delayed destroy in it and its tool damage on
+ * @param {object} [o.digOptions] more attachFakeDig options (multiBlockChange)
+ * @returns {Promise<{ server, bot, containers: () => object, dig: () => object, tick: () => object, ids: object }>}
  */
-export async function startRotnWorld({ itemNames, blockNames = [], inventory, recipes = [], digBlocks = null, effects = {}, chest = false, captureFile }) {
+export async function startRotnWorld({ itemNames, blockNames = [], inventory, recipes = [], digBlocks = null, effects = {}, chest = false, serverTick = false, digOptions = {}, captureFile }) {
     const rd = loadRotnData(PACK_VERSION);
     const ids = Object.fromEntries(itemNames.map(n => [n, runAId(n)]));
     const bids = Object.fromEntries(['minecraft:air', 'minecraft:stone', 'minecraft:crafting_table', ...(chest ? ['minecraft:chest'] : []), ...blockNames].map(n => [n, runAId(n, 'minecraft:blocks')]));
@@ -163,6 +167,7 @@ export async function startRotnWorld({ itemNames, blockNames = [], inventory, re
     regs[0] = { ...regs[0], ids: Object.entries(bids) };
     regs[1] = { ...regs[1], ids: Object.entries(ids) };
     let dig = null;
+    let tick = null;
     const join = (client) => {
         client.write('login', { entityId: 1, gameMode: 0, dimension: 0, difficulty: 2, maxPlayers: 10, levelType: 'default', reducedDebugInfo: false });
         const extra = chest ? [{ ...CHEST, stateId: (bids['minecraft:chest'] << 4) | 2 }] : []; // facing north
@@ -177,18 +182,21 @@ export async function startRotnWorld({ itemNames, blockNames = [], inventory, re
             blocks: {}, foods: {},
             maxStack: dumpMaxStack(rd.dump.items.items, ids),
             inventory: Object.fromEntries(Object.entries(inventory).map(([slot, st]) => [slot, { id: ids[st.name], count: st.count, meta: st.meta ?? 0 }])),
+            tickModel: serverTick,
         });
         if (digBlocks) {
             dig = attachFakeDig(client, {
                 containers, rd, registry: require('prismarine-registry')('1.12.2'), effects,
                 itemNames: Object.fromEntries(Object.entries(ids).map(([n, id]) => [id, n])),
                 blocks: digBlocks.map(b => ({ ...b, meta: b.meta ?? 0, id: bids[b.name] })),
+                ...(serverTick ? { tick: 'external', toolDamage: true } : {}), ...digOptions,
             });
         }
+        if (serverTick) tick = attachServerTick(client, { containers, dig });
         containers.sendInventory();
         client.write('position', { x: 8.5, y: 65, z: 6.5, yaw: 0, pitch: 0, flags: 0, teleportId: 1 });
         return containers;
     };
     const world = await startCraftWorld({ captureFile, join, regs });
-    return { ...world, dig: () => dig, ids, rd };
+    return { ...world, dig: () => dig, tick: () => tick, ids, rd };
 }

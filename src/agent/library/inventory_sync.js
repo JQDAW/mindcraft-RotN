@@ -28,6 +28,9 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import prismarineItem from 'prismarine-item';
+// #657 review 5: every slot number from the one inventory view; this file is the window-click layer, the only one
+// besides the view that touches slots (to move stacks).
+import { SLOTS, GRID_SLOTS as VIEW_GRID } from './inventory_view.js';
 
 /** How long a resync waits for the server to resend the window after a rejected click. */
 export const RESYNC_MS = 1000;
@@ -117,7 +120,7 @@ export async function clearCursor(bot, click = (...a) => bot.clickWindow(...a)) 
 }
 
 /** The player window's hotbar (slots 36-44) and main inventory (9-35). */
-const HOTBAR = 36, HOTBAR_END = 44, MAIN = 9;
+const HOTBAR = SLOTS.HOTBAR_FROM, HOTBAR_END = SLOTS.USABLE_TO, MAIN = SLOTS.USABLE_FROM;
 const sameKind = (a, b) => !!a && !!b && a.type === b.type;
 const sameStack = (a, b) => sameKind(a, b) && (a.metadata ?? 0) === (b.metadata ?? 0)
     && JSON.stringify(a.nbt ?? null) === JSON.stringify(b.nbt ?? null);
@@ -134,7 +137,7 @@ export function currentItem(bot, item) {
     if (!item || typeof item !== 'object' || !Array.isArray(slots)) return item ?? null;
     if (sameStack(slots[item.slot], item)) return slots[item.slot];
     const range = (from, to) => [...Array(to - from + 1).keys()].map(i => i + from);
-    const order = [...range(HOTBAR, HOTBAR_END), ...range(MAIN, HOTBAR - 1), 45];
+    const order = [...range(HOTBAR, HOTBAR_END), ...range(MAIN, HOTBAR - 1), SLOTS.OFF_HAND];
     return order.map(k => slots[k]).find(s => sameStack(s, item))
         ?? order.map(k => slots[k]).find(s => sameKind(s, item)) ?? null;
 }
@@ -217,7 +220,7 @@ export async function withCleanCursor(bot, label, op, { resyncMs = RESYNC_MS } =
  * closed container), so the server puts the grid back (ContainerPlayer.onContainerClosed). No shift-clicks:
  * prismarine-windows cannot predict them. A line names what moved. Returns {moved, left} or null (nothing to do).
  */
-export const GRID_SLOTS = [1, 2, 3, 4];
+export const GRID_SLOTS = VIEW_GRID;
 export const GRID_WAIT = { ms: RESYNC_MS, stepMs: 50 };
 export async function returnGrid(bot, why, { waitMs = GRID_WAIT.ms, stepMs = GRID_WAIT.stepMs } = {}) {
     const inv = bot?.inventory;
@@ -245,7 +248,7 @@ export async function returnGrid(bot, why, { waitMs = GRID_WAIT.ms, stepMs = GRI
     // #619 review 3: with no room the server drops a grid stack (placeItemBackInInventory): what came back is what the
     // inventory gained of that item; the rest was dropped. The grid's slots are sent before the inventory's, so the
     // wait goes on until the gain is seen or the time is up.
-    const held = (name) => slots.slice(9, 46).reduce((n, s) => n + (s?.name === name ? s.count : 0), 0);
+    const held = (name) => slots.slice(SLOTS.USABLE_FROM, SLOTS.OFF_HAND + 1).reduce((n, s) => n + (s?.name === name ? s.count : 0), 0);
     const names = [...new Set(stacks.map(g => g.name))];
     const before = Object.fromEntries(names.map(n => [n, held(n)]));
     const want = Object.fromEntries(names.map(n => [n, stacks.filter(g => g.name === n).reduce((a, g) => a + g.count, 0)]));

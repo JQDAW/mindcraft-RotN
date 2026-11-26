@@ -17,6 +17,7 @@ import { carriedItems } from './rotn_names.js';
 import { isLiquid, isFalling } from './shelter.js';
 import { goToGoal } from './skills.js';
 import { digWithin, PIT } from './pit.js';
+import { offHand } from './inventory_view.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const SIX = [...HORIZONTAL, new Vec3(0, 1, 0), new Vec3(0, -1, 0)];
@@ -146,7 +147,7 @@ export function bestDig(bot, b) {
  * the rest drops where the bot died). The items in the main and off hand now.
  */
 export function keptItems(bot) {
-    return [bot?.heldItem ?? null, bot?.inventory?.slots?.[45] ?? null].filter(i => i?.name);
+    return [bot?.heldItem ?? null, offHand(bot)].filter(i => i?.name);
 }
 /** Soak 13 (S2): the best dig time of b with the hand or an item a death keeps (keptItems), in ms. */
 export function keptDigMs(bot, b) {

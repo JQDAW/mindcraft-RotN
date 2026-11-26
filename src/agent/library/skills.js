@@ -5,7 +5,7 @@ import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey, carriedItems } from "./rotn_names.js";
 import { worldSources, itemVariants, toolAllows, allowedTool, allowedTools, toolUsesLeft, describeTool, stowCarried, isToolFor, handRoute } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
-import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
+import { isGenericCobble, cobbleChoices, cobbleRocksHeld, cobbleRecipes, ROCKS_PER_COBBLE } from "./cobble.js";
 import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTrunkShell, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
 import { oreMemberNames } from "../agenda_driver.js";
 import { fallSafe, treeSafe, standsOnTree, supportBlock, isFirmGround, isUnsafeBlock, isLeafBlock, isTreePart, leafFromGround, itemOnGround, firstBelow, MAX_SAFE_DROP } from "./fall_safety.js";
@@ -21,8 +21,9 @@ import { returnGrid, clearCursor } from './inventory_sync.js';
 import * as lines from './collect_lines.js';
 import { digBudget, digLine, effectsText, DIG_STALL } from './pit.js';
 import { foodKey, foodValue } from "./food.js";
-import { walkPickaxeOk } from './pickaxe.js';
+import { walkPickaxeOk, bestPickaxe } from './pickaxe.js';
 import { digRule } from './burrow.js';
+import { guardedMovements, guardMovements, targetCheckMovements, walkFloorY, setCollectFloor, clearCollectFloor, collectFloorY, noteCollectDig, surfaceTargetBelowFloor, walksBackToFloor, WALK_GUARD } from './movements.js';
 import { getItem as rotnItem, registryName as rotnRegistryName } from "../../../packages/rotn-data/index.js";
 /**
  * Soak 14, #612 review 8: the item classes (rotn-data's) !consume may eat or drink although rotn-data has no food
@@ -34,6 +35,7 @@ import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRe
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
+import * as inv from './inventory_view.js';
 
 const blockPlaceDelay = settings.block_place_delay == null ? 0 : settings.block_place_delay;
 const useDelay = blockPlaceDelay > 0;
@@ -82,7 +84,7 @@ const pickLevel = (item) => { try { return rotnItem(rotnRegistryName(item.name))
  * back after. True when one was moved.
  */
 export async function offHandToolBack(bot) {
-    const off = bot?.inventory?.slots?.[45] ?? null;
+    const off = inv.offHand(bot);
     if (!off || !isPickaxeItem(off)) return false;
     const slot = bot.inventory?.firstEmptyInventorySlot?.();
     const empty = Number.isInteger(slot) && slot >= 0 ? slot : null; // null (mineflayer) or -1: no free slot
@@ -100,10 +102,18 @@ export async function offHandToolBack(bot) {
         return false;
     }
 }
-export async function rearmWeapon(bot) {
+/**
+ * #657 review 1: what rearmWeapon would do now, without a click: {moves: [{item, dest, what}], ok}, from its own
+ * branches (the pickaxe to the off hand and the weapon to the main hand from the stone pickaxe on; with no pickaxe the
+ * weapon in the off hand; a shield in the off hand stays; WEAPON_HAND.offHand). rearmWeapon carries out exactly these
+ * moves, so the idle repair (hands.armsWrong) can never disagree with it.
+ */
+export function rearmNeeds(bot) {
     const items = bot?.inventory?.items?.() ?? [];
-    const best = items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0] ?? null;
-    const off = bot?.inventory?.slots?.[45] ?? null;
+    const order = weaponOrder(attackPath(bot));
+    const best = items.filter(i => isWeaponItem(i)).sort(order)[0] ?? null;
+    const off = inv.offHand(bot);
+    const canEquip = typeof bot?.equip === 'function';
     // #584 re-review (a): a full-inventory fight swaps the club into a hotbar slot and that slot's item
     // (dirt, say) into the off hand; equipping the weapon to the off hand swaps them back. Only a
     // shield there is kept (then the weapon goes to the main hand).
@@ -114,28 +124,58 @@ export async function rearmWeapon(bot) {
     // weapon in the off hand, as before.
     const pick = items.filter(isPickaxeItem).sort((a, b) => pickLevel(b) - pickLevel(a))[0] ?? null;
     const offPick = !!off && isPickaxeItem(off);
-    if (WEAPON_HAND.offHand && !shield && (pick || offPick) && typeof bot.equip === 'function') {
-        if (!offPick || (pick && pickLevel(pick) > pickLevel(off))) await bot.equip(pick, 'off-hand');
-        const weapons = (bot.inventory.items?.() ?? []).filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)));
-        const held = bot.heldItem && isWeaponItem(bot.heldItem) ? bot.heldItem : null;
-        if (held && !(weapons[0] && weaponOrder(attackPath(bot))(weapons[0], held) < 0)) return true;
-        if (!weapons[0]) return !!held;
-        await bot.equip(weapons[0], 'hand');
-        return true;
+    const moves = [];
+    if (WEAPON_HAND.offHand && !shield && (pick || offPick) && canEquip) {
+        const pickMoves = !offPick || (pick && pickLevel(pick) > pickLevel(off));
+        if (pickMoves) moves.push({ item: pick, dest: 'off-hand', what: 'pickaxe' });
+        // The off hand's own stack comes into the inventory when the pickaxe takes its place.
+        const after = pickMoves && off && isWeaponItem(off) ? [...items, off] : items;
+        const weapons = after.filter(i => isWeaponItem(i)).sort(order);
+        // #657 round 2 (b): the held item after that move: when the pickaxe is the held stack, the off hand's stack
+        // takes its slot (bot.equip swaps them), so a weapon there is then held (no extra equip, no false line).
+        const pickHeld = pickMoves && !!bot.heldItem && (bot.heldItem === pick || (bot.heldItem.slot != null && bot.heldItem.slot === pick?.slot));
+        const heldAfter = pickHeld ? off : bot.heldItem;
+        const held = heldAfter && isWeaponItem(heldAfter) ? heldAfter : null;
+        if (held && !(weapons[0] && order(weapons[0], held) < 0)) return { moves, ok: true };
+        if (!weapons[0]) return { moves, ok: !!held };
+        moves.push({ item: weapons[0], dest: 'hand', what: 'weapon' });
+        return { moves, ok: true };
     }
     if (WEAPON_HAND.offHand && !shield) {
         const offWeapon = !!off && isWeaponItem(off);
         // #584 nit 5: a better weapon in the inventory takes the off hand's place.
-        if (offWeapon && !(best && weaponOrder(attackPath(bot))(best, off) < 0)) return true;
-        if (!best || typeof bot.equip !== 'function') return offWeapon;
-        await bot.equip(best, 'off-hand');
-        return true;
+        if (offWeapon && !(best && order(best, off) < 0)) return { moves, ok: true };
+        if (!best || !canEquip) return { moves, ok: offWeapon };
+        moves.push({ item: best, dest: 'off-hand', what: 'weapon' });
+        return { moves, ok: true };
     }
     // The main hand (with the flag off, or a shield in the off hand, which stays).
-    if (bot?.heldItem && isWeaponItem(bot.heldItem)) return true;
-    if (!best || typeof bot.equip !== 'function') return false;
-    await bot.equip(best, 'hand');
-    return true;
+    if (bot?.heldItem && isWeaponItem(bot.heldItem)) return { moves, ok: true };
+    if (!best || !canEquip) return { moves, ok: false };
+    moves.push({ item: best, dest: 'hand', what: 'weapon' });
+    return { moves, ok: true };
+}
+
+/**
+ * #657 round 2 (a): the stack weaponOrder ranked, found again after the pickaxe's move: the off hand's weapon is now in
+ * the pickaxe's old slot, any other weapon in its own slot. Failing that (the window changed), the weapons ranked again.
+ */
+function sameWeaponAfter(bot, ranked, movedPick) {
+    const items = bot.inventory.items?.() ?? [];
+    const slot = ranked.slot === inv.OFF_HAND ? movedPick?.slot : ranked.slot;
+    return items.find(i => i.slot === slot && inv.sameStack(i, ranked))
+        ?? items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0]
+        ?? ranked;
+}
+
+export async function rearmWeapon(bot) {
+    const { moves, ok } = rearmNeeds(bot);
+    for (const m of moves) {
+        // The weapon taken after the pickaxe's move: as the window has it now (the swap may have moved it).
+        const item = m.what === 'weapon' && moves[0] !== m ? sameWeaponAfter(bot, m.item, moves[0].item) : m.item;
+        await bot.equip(item, m.dest);
+    }
+    return ok;
 }
 
 export async function equipHighestAttack(bot, fight = null) {
@@ -158,7 +198,7 @@ export async function equipHighestAttack(bot, fight = null) {
         if (!fight.noWeaponSaid) { fight.noWeaponSaid = why; console.log(`[survival] no weapon in hand: ${why}; holding ${bot.heldItem?.name ?? 'nothing'}`); }
         return false;
     };
-    const off = bot.inventory.slots?.[45];
+    const off = inv.offHand(bot);
     const inInventory = best(bot.inventory.items());
     if (isWeapon(off) && (!inInventory || order(off, inInventory) < 0)) {
         const full = (bot.inventory.firstEmptyInventorySlot?.() ?? null) === null;
@@ -1135,13 +1175,13 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
             await equipHighestAttack(bot, fight);
             if (bot.entity.position.distanceTo(enemy.position) >= 4 && enemy.name !== 'creeper' && enemy.name !== 'phantom') {
                 try {
-                    bot.pathfinder.setMovements(new pf.Movements(bot));
+                    bot.pathfinder.setMovements(guardedMovements(bot)); // soak 17 T: the walk rules (movements.js)
                     await boundedGoto(bot, new pf.goals.GoalFollow(enemy, 3.5), GO_TO_LIMITS.stepMs);
                 } catch (err) {/* might error if entity dies, ignore */}
             }
             if (bot.entity.position.distanceTo(enemy.position) <= 2) {
                 try {
-                    bot.pathfinder.setMovements(new pf.Movements(bot));
+                    bot.pathfinder.setMovements(guardedMovements(bot)); // soak 17 T
                     let inverted_goal = new pf.goals.GoalInvert(new pf.goals.GoalFollow(enemy, 2));
                     await boundedGoto(bot, inverted_goal, GO_TO_LIMITS.stepMs);
                 } catch (err) {/* might error if entity dies, ignore */}
@@ -1338,7 +1378,101 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
     return swings > 0;
 }
 
+/**
+ * Soak 17 T (the lead's decisions): every collect has a floor, its start's y - WALK_GUARD.floorBelow, fixed for the
+ * whole collect (movements.setCollectFloor): no walk in it breaks a block, steps into a cell or lands a drop below it
+ * (mineflayer-collectblock's own walk included), and no target below it is taken (said once). Soak 17's
+ * !collectBlocks("cobblestone") dug a shaft 44 blocks down to a buried vanilla cobblestone; at 18:40 a
+ * !collectBlocks("undergroundbiomes:metamorphic_stone") dug 14 down, stone after stone. A collect inside another one
+ * (the cobble route's rocks, a craft's table pickup) keeps the outer floor.
+ */
 export async function collectBlock(bot, blockType, num=1, exclude=null, range=64, limits=COLLECT_LIMITS) {
+    // Off a tree first (G3 round 4 B, as collectBlockRun): the floor is the ground's, not the treetop's (its descent and
+    // the ground's targets would be below a treetop floor).
+    if (num >= 1 && collectFloorY(bot) === null && standsOnTree(bot) && !(await descendFromTree(bot, currentRun(bot)))) {
+        log(bot, `Not collecting ${blockType}: you are up on a tree and found no safe way down; try !moveAway or wait.`);
+        return false;
+    }
+    const y = bot?.entity?.position?.y;
+    const floor = collectFloorY(bot) === null && Number.isFinite(y) ? setCollectFloor(bot, Math.floor(y) - WALK_GUARD.floorBelow, { startY: Math.floor(y) }) : null;
+    try {
+        if (num >= 1) {
+            const route = await cobbleRoute(bot, blockType, num, exclude, range, limits);
+            if (route) {
+                if (route.rest <= 0 || currentRun(bot).aborted || bot.interrupt_code) return route.made > 0;
+                // Vanilla cobblestone blocks (a dungeon, a ruin) for the rest: exposed and within the floor only.
+                log(bot, `Looking for ${route.rest} more as cobblestone blocks (only exposed ones, and none below y ${collectFloorY(bot)}).`);
+                const more = await collectBlockRun(bot, blockType, route.rest, exclude, range, limits);
+                return route.made > 0 || more;
+            }
+        }
+        return await collectBlockRun(bot, blockType, num, exclude, range, limits);
+    } finally {
+        clearCollectFloor(bot, floor);
+    }
+}
+
+/**
+ * Soak 17 T(2) (the lead): a collect whose blocks give rocks, not the item, with the pickaxe carried:
+ * - "cobblestone" with a pickaxe below Sturdy (rotn-data's only cobblestone rule, stone:0, needs level 1; the collect
+ *   used to search for vanilla cobblestone blocks only, and walked to a buried one);
+ * - a stone block that the rock rule (mine-stone-for-rocks) covers for the pickaxe carried: it drops 4 rocks, never
+ *   itself (18:40: "undergroundbiomes:metamorphic_stone", 14 down; 18:42 the model said "4 rocks craft into a stone block").
+ * Then: cobble from the rocks carried first; else collect rocks (the rock collect's rules: loose ones first, exposed
+ * stone that keeps a way out, the floor) and craft them (4 of one kind make 1 cobble of that kind). Returns null when
+ * this does not apply, else {made, rest}: rest is what a "cobblestone" collect may still take as exposed vanilla
+ * cobblestone blocks (0 for a stone block asked for: it never drops itself).
+ */
+async function cobbleRoute(bot, blockType, num, exclude, range, limits) {
+    const generic = isGenericCobble(blockType);
+    let why = null;
+    if (generic) {
+        if (worldSources(blockType).some(s => toolAllows(bot, s.tool))) return null; // a Sturdy pickaxe: stone drops cobble
+        why = carriedItems(bot).some(i => /pickaxe/.test(i?.name ?? ''))
+            ? 'Stone here drops rocks with a pickaxe below Sturdy (cobblestone needs a level 1 pickaxe, such as iron)'
+            : 'Cobblestone comes from rocks here (stone needs a pickaxe, and drops cobblestone only to a level 1 one, such as iron)';
+    } else {
+        const rule = worldSources('pyrotech:rock').find(r => r.id === 'mine-stone-for-rocks');
+        const asked = parseName(blockType);
+        const covered = !!rule && !!asked && rule.blocks.some(b => { const q = parseName(b); return q?.name === asked.name && (asked.meta == null || q.meta == null || q.meta === asked.meta); });
+        const pick = covered && toolAllows(bot, rule.tool) ? allowedTool(bot, rule.tool) : null;
+        if (!pick) return null;
+        why = `${blockType} drops 4 rocks with your ${pick.name}, never itself`;
+    }
+    const run = currentRun(bot);
+    const kinds = () => [...new Set(cobbleRecipes().map(r => r.gives))];
+    const held = () => kinds().reduce((n, g) => n + countItem(bot, g), 0);
+    const craftable = () => cobbleChoices(bot).reduce((n, c) => n + Math.floor(c.have / ROCKS_PER_COBBLE), 0);
+    const before = held();
+    const fromHeld = Math.min(num, craftable());
+    if (fromHeld > 0) {
+        log(bot, `${why}: crafting ${fromHeld} cobble from the rocks you carry first.`);
+        await craftCobbleFromRocks(bot, fromHeld);
+    }
+    let made = Math.max(0, held() - before);
+    // #665 review 8: the rocks carried were enough but the craft stopped short: no more rocks dug for a craft that fails.
+    if (fromHeld > 0 && made < fromHeld) {
+        log(bot, `Crafted ${made} of ${fromHeld} cobble from the rocks you carry: the craft stopped (see above), so no more rocks are collected for it.`);
+        bot.rotnCollectEnd = { at: Date.now(), short: true, lastWalkFailed: false, reason: 'craft' };
+        return { made, rest: 0 };
+    }
+    if (made < num && !run.aborted && !bot.interrupt_code) {
+        const rest = num - made;
+        const rocks = rest * ROCKS_PER_COBBLE;
+        log(bot, `${made > 0 ? `${rest} cobble short` : why}: collecting ${rocks} rocks (pyrotech:rock) to craft ${rest} cobble (${ROCKS_PER_COBBLE} rocks of one kind make 1 cobble of that kind${generic ? '' : `, not ${blockType}`}).`);
+        await collectBlockRun(bot, 'pyrotech:rock', rocks, exclude, range, limits);
+        const n = Math.min(rest, craftable());
+        if (n > 0 && !run.aborted && !bot.interrupt_code) await craftCobbleFromRocks(bot, n);
+        made = Math.max(0, held() - before);
+    }
+    log(bot, `Crafted ${made} cobble from your rocks${generic ? '' : ` (instead of ${blockType})`}, of ${num} asked.`);
+    const end = bot.rotnCollectEnd;
+    bot.rotnCollectEnd = { at: Date.now(), short: made < num, lastWalkFailed: !!end?.lastWalkFailed, reason: end?.reason ?? null };
+    bot.rotnCollects = [...(bot.rotnCollects ?? []), { item: blockType, got: made, wanted: num, reason: 'rocks', range, from: null, to: bot.entity?.position?.floored?.() ?? null, at: bot.rotnCollectEnd.at }].slice(-8);
+    return { made, rest: generic ? num - made : 0 };
+}
+
+async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, limits=COLLECT_LIMITS) {
     /**
      * Collect one of the given block type.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -1419,7 +1553,16 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     const tiered = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0;
     // Soak 16 (R): by-hand blocks and blocks mined with a tool (rocks: loose piles, and stone with a pickaxe).
     const mines = !tiered && handMatchers.length > 0 && ruleTools.length > 0;
-    const esc = mines ? await import('./escape.js') : null;
+    // Soak 17 T: the plain search's pickaxe targets get the way-out rule too (below), so the escape module always.
+    const esc = await import('./escape.js');
+    // Soak 17 T: the collect floor (collectBlock): targets below it are skipped, said once (belowFloorSaid).
+    // #665 round 2 nit 4: a collect that withinLimit abandoned (the command's time ran out: its action is over) runs on
+    // until it sees the stop; its walks then have no collect floor (the floor holds only while its action is the current
+    // one), but wanted() still filters its targets with this floorY, taken at its start.
+    const floorY = collectFloorY(bot);
+    const belowFloor = new Set();
+    let belowFloorSaid = false;
+    const buried = new Set(); // soak 17 T: pickaxe targets with no air face (the plain search), said once
     const noWayOut = [];
     let noWayOutSaid = 0;
     let exposeCapped = false;
@@ -1429,6 +1572,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     const outOfReach = unreachableLeaves(bot); // and other targets out of reach (round 10 B)
     const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
+    // Soak 17 T: a target a pickaxe digs (stone, ore, cobblestone).
+    const pickDug = (b) => { try { return digRule(b)?.type === 'pickaxe'; } catch { return false; } };
     const avoidToolFor = (block) => avoidTools.find(([matches]) => matches(block))?.[1] ?? null;
     // Never hold a tool that changes the rule's drop (a shovel of level 1+ for dirt piles); false
     // when it cannot be let go without throwing it away (#291 review: a full inventory).
@@ -1493,6 +1638,15 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     let wetSaid = false, wetLooked = 0;
     const WET_SKIP_MAX = 32;
     const sayDeathSkips = () => {
+        // Soak 17 T: the targets below the collect floor, and buried ones (the plain search's pickaxe targets), once each.
+        if (belowFloor.size && !belowFloorSaid) {
+            belowFloorSaid = true;
+            log(bot, `Left ${belowFloor.size} ${belowFloor.size === 1 ? 'block' : 'blocks'} for ${blockType} below y ${floorY} alone (more than ${WALK_GUARD.floorBelow} under where this collect started): a collect never digs or walks below that. Look for them nearer your level.`);
+        }
+        if (buried.size && !buried.said) {
+            buried.said = true;
+            log(bot, `Left ${buried.size} ${buried.size === 1 ? 'block' : 'blocks'} for ${blockType} buried in the rock (no open face): a collect takes cobblestone blocks only where they lie open.`);
+        }
         // G4 #5: the wild food blocks left alone (breakRefusal), at most 2 reasons, once.
         if (forageRefusals.size && !forageSaid) {
             forageSaid = true;
@@ -1519,7 +1673,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     const startHeld = countsItems ? heldByKey() : null;
     let lateNote = '';
 
-    const movements = new pf.Movements(bot);
+    // Soak 17 T: its safeToBreak (wanted(), below) keeps the collect floor too (movements.targetCheckMovements).
+    const movements = targetCheckMovements(bot);
     movements.dontMineUnderFallingBlock = false;
     movements.dontCreateFlow = true;
 
@@ -1544,6 +1699,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
     // Intended to last (#256 nit): mineflayer-collectblock keeps one Movements for every collect, so
     // this makes all its walks fall-safe from the first collect on (fallSafe marks it, so only once).
     if (bot.collectBlock?.movements) fallSafe(bot.collectBlock.movements);
+    // Soak 17 T: and guarded (movements.js): the collect floor and the pickaxe's keep hold in the plugin's own walk, which
+    // dug soak 17's shaft (it has no floor of its own: the collect's is read at each search).
+    if (bot.collectBlock?.movements) guardMovements(bot, bot.collectBlock.movements, { floorY: null });
     for (let i=0; i<num && collected<num; i++) { // collected counts the items really gained (a stone can give 4 rocks)
         // G3 round 9 B: a stop (interrupt_code) ends the collect here too, not only at the loop's end,
         // which a break that threw skipped: the next block was started until the stop's 10 s ran out
@@ -1561,6 +1719,15 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             // findBlocks' section scan passes blocks without a position (G3 round 2 B: "Cannot read
             // properties of null (reading 'x')" after the first give-up).
             if (block.position && givenUp.some(p => p.equals(block.position))) return false;
+            // Soak 17 T (the lead): nothing below the collect floor, open cave or not; only a block at the surface when the
+            // collect began (#665 round 1: a log or dirt in a valley under open sky) is taken there.
+            // #665 round 2 (blocker): and, whatever its tool, its break keeps a walkable way out (escape.keepsWayOut) and a
+            // walk back up to the floor (a pit's bottom under open sky passes neither).
+            if (block.position && floorY !== null && block.position.y < floorY
+                && !(surfaceTargetBelowFloor(bot, block.position) && esc.keepsWayOut(bot, block) && walksBackToFloor(bot, block.position, { free: new Set([leafKey(block.position)]) }))) {
+                belowFloor.add(leafKey(block.position));
+                return false;
+            }
             // Leaves only where the bot can reach them standing on the ground: never climb for them.
             if (isLeafBlock(block) && !leafFromGround(bot, block)) return false;
             // Round 9 B: not leaves once CL.unreachableLeaves were out of reach in this collect, nor
@@ -1631,7 +1798,35 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 noWayOutSaid = noWayOut.length;
             }
         }
-        else if (!tiered) blocks = world.getNearestBlocksWhere(bot, wanted, range, 1);
+        else if (!tiered) {
+            // Soak 17 T (the lead's addendum, 18:40; #665 round 1): a target a pickaxe digs (stone, ore, cobblestone) only when
+            // its break keeps a walkable way out (soak 16 R's rule for mined stone); one below the bot's feet is checked
+            // (keepsWayOut), one at or above them is reached and left by a level tunnel. Vanilla cobblestone (a dungeon's
+            // walls) also only where it lies open (an air face; decision 1).
+            const top = esc.topMemo(bot);
+            let checks = 0;
+            const feetY = Math.floor(bot.entity?.position?.y ?? 0);
+            const open = (b) => {
+                if (!b.position || b.name !== 'cobblestone') return true;
+                if (++checks > CL.exposeChecks) { exposeCapped = true; return false; }
+                if (esc.exposedBlock(bot, b)) return true;
+                buried.add(leafKey(b.position));
+                return false;
+            };
+            const cands = world.getNearestBlocksWhere(bot, b => wanted(b) && open(b), range, CL.mineCandidates);
+            blocks = [];
+            for (const b of cands) {
+                // A wet one is taken here and skipped by the wet-ore rule below (said with its liquid), not as "no way out".
+                if (!b.position || !pickDug(b) || wetOreSkip(bot, b) || b.position.y >= feetY || esc.keepsWayOut(bot, b, top)) { blocks = [b]; break; }
+                noWayOut.push(b);
+                givenUp.push(b.position.clone ? b.position.clone() : b.position);
+            }
+            if (noWayOut.length > noWayOutSaid) {
+                const b = noWayOut[noWayOut.length - 1];
+                log(bot, `Skipped ${noWayOut.length} ${noWayOut.length === 1 ? 'block' : 'blocks'} to mine (${b.name} at ${b.position.x}, ${b.position.y}, ${b.position.z}${noWayOut.length > 1 ? ' and others' : ''}): breaking ${noWayOut.length === 1 ? 'it' : 'them'} would leave no walkable way out.`);
+                noWayOutSaid = noWayOut.length;
+            }
+        }
         else {
             blocks = nearestOf(0, CL.handFirstRadius);
             if (blocks.length === 0) blocks = nearestOf(3, CL.handFirstRadius);
@@ -1748,7 +1943,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
             // library/hands.js) or its fell; the walk's window ends there (a fell's cuts and later digs are not the walk).
             let targetStart = null;
             const markTarget = () => { targetStart ??= { held: allHeld(), n: bot.rotnDigs?.count ?? 0 }; };
-            bot.rotnDigHook = (b) => { if (block.position && b?.position && b.position.x === block.position.x && b.position.y === block.position.y && b.position.z === block.position.z) markTarget(); };
+            bot.rotnDigHook = (b) => { noteCollectDig(bot, b?.position); if (block.position && b?.position && b.position.x === block.position.x && b.position.y === block.position.y && b.position.z === block.position.z) markTarget(); };
             const breakIt = async () => {
                 if (isLiquid) return await useToolOnBlock(bot, 'bucket', block);
                 // By hand when the block has no collision box (a rock pile), or when a rule's tool must
@@ -1779,7 +1974,11 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                 // A rule whose drop a tool changes is dug here too: bot.collectBlock.collect would
                 // equip the fastest tool (rotn-data #288).
                 const avoid = avoidToolFor(block);
-                if (ruleTool || avoid || mc.mustCollectManually(block.name)) {
+                // #665 review 2: a pickaxe target too (mineflayer-collectblock checks its own movements' safeToBreak and drops
+                // the target silently while the pickaxe is at its keep: the target's own dig is no walk), and a surface
+                // target below the floor (the floor bars that break in the plugin's walk).
+                const belowFloorTarget = block.position && floorY !== null && block.position.y < floorY;
+                if (ruleTool || avoid || mc.mustCollectManually(block.name) || pickDug(block) || belowFloorTarget) {
                     await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
                     // #340 nit 2: a stopped walk returns (goToGoal gives false on PathStopped): never a
                     // dig at a block the bot did not reach.
@@ -1796,6 +1995,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
                         return false;
                     }
                     if (!await handOff(avoid)) { log(bot, cannotLetGo(block)); return false; } // still not after the walk
+                    // #665 round 2 nit 3: a pickaxe or below-floor target with no rule tool: the right tool again after the
+                    // walk (it may have changed what is held), as the plugin's own mineBlock does before its dig.
+                    if (!ruleTool && !avoid && (pickDug(block) || belowFloorTarget) && !(canGiveNone(block) && isHand(block))) { try { await bot.tool?.equipForBlock?.(block); } catch { /* the hand will do */ } }
                     await bot.dig(block);
                     if (run.aborted) return true; // broken; the gain is still counted below
                     await pickupNearbyItems(bot);
@@ -2016,8 +2218,7 @@ export async function stopHolding(bot, tool) {
 /** stopHolding for any item the predicate matches (shears, which have no tool class). */
 export async function stopHoldingWhere(bot, isUnwanted) {
     if (!bot.heldItem || !isUnwanted(bot.heldItem)) return true;
-    const slots = bot.inventory?.slots ?? [];
-    const hotbar = Array.from({ length: 9 }, (_, i) => slots[HOTBAR_START + i] ?? null);
+    const hotbar = inv.hotbar(bot); // HOTBAR_START + i
     let i = hotbar.findIndex(it => !it);
     if (i < 0) i = hotbar.findIndex(it => !isUnwanted(it));
     if (i >= 0 && typeof bot.setQuickBarSlot === 'function') {
@@ -2530,7 +2731,9 @@ export const CANOPY_DESCENT = { maxDigs: 40, minHealthAfterDrop: 10, landMs: 200
 export async function descendFromTree(bot, run = currentRun(bot)) {
     if (!standsOnTree(bot)) return true;
     bot.rotnTreeWhy = null;
-    const moves = fallSafe(new pf.Movements(bot));
+    // Soak 17 T: guarded with no floor of its own: the way down from a tree is as deep as the tree (the collect floor,
+    // during a collect, still applies).
+    const moves = guardedMovements(bot, { floorY: null });
     moves.allow1by1towers = false;
     moves.allowParkour = false;
     moves.scafoldingBlocks = [];
@@ -2616,7 +2819,7 @@ async function shiftToLeafColumn(bot, run) {
     }
     for (const spot of spots) {
         if (run.aborted || bot.interrupt_code) return false;
-        const moves = fallSafe(new pf.Movements(bot));
+        const moves = guardedMovements(bot, { floorY: null }); // soak 17 T (no digging: over the canopy)
         moves.canDig = false;
         moves.allow1by1towers = false;
         moves.allowParkour = false;
@@ -2744,7 +2947,7 @@ async function centreOnCell(bot, run) {
  */
 export async function breakLeafFromGround(bot, block, run = currentRun(bot)) {
     const p = block.position;
-    bot.pathfinder.setMovements(treeSafe(bot, new pf.Movements(bot)));
+    bot.pathfinder.setMovements(treeSafe(bot, guardedMovements(bot))); // soak 17 T
     try {
         await within(bot, bot.pathfinder.goto(new pf.goals.GoalNear(p.x, p.y, p.z, TREE_SAFETY.leafReach)),
             TREE_SAFETY.leafWalkMs, () => stopWalking(bot));
@@ -2825,7 +3028,7 @@ export async function fellTree(bot, block, run = currentRun(bot), refused = null
     // Walks near the tree never dig (#242 review 2): a broken branch would fell it onto the bot.
     // And never drop over 3 blocks (G3 round 4 B).
     const walk = async (goal, ms) => {
-        const moves = fallSafe(new pf.Movements(bot));
+        const moves = guardedMovements(bot); // soak 17 T
         moves.canDig = false;
         bot.pathfinder.setMovements(moves);
         try { await within(bot, bot.pathfinder.goto(goal), ms, () => stopWalking(bot)); } catch { /* checked by the caller */ }
@@ -2988,7 +3191,7 @@ export async function breakBlockAt(bot, x, y, z) {
 
         if (bot.entity.position.distanceTo(block.position) > 4.5) {
             let pos = block.position;
-            let movements = new pf.Movements(bot);
+            let movements = guardedMovements(bot); // soak 17 T
             movements.canPlaceOn = false;
             movements.allow1by1towers = false;
             bot.pathfinder.setMovements(movements);
@@ -3168,14 +3371,13 @@ export async function placeBlock(bot, blockType, x, y, z, placeOn='bottom', dont
         // too close
         let goal = new pf.goals.GoalNear(targetBlock.position.x, targetBlock.position.y, targetBlock.position.z, 2);
         let inverted_goal = new pf.goals.GoalInvert(goal);
-        bot.pathfinder.setMovements(new pf.Movements(bot));
+        bot.pathfinder.setMovements(guardedMovements(bot)); // soak 17 T
         await boundedGoto(bot, inverted_goal, GO_TO_LIMITS.stepMs);
     }
     if (bot.entity.position.distanceTo(targetBlock.position) > 4.5) {
         // too far
         let pos = targetBlock.position;
-        let movements = new pf.Movements(bot);
-        bot.pathfinder.setMovements(movements);
+        bot.pathfinder.setMovements(guardedMovements(bot)); // soak 17 T (goToGoal sets its own)
         await goToGoal(bot, new pf.goals.GoalNear(pos.x, pos.y, pos.z, 4));
     }
 
@@ -3212,7 +3414,8 @@ export async function equip(bot, itemName) {
         log(bot, `Unequipped hand.`);
         return true;
     }
-    let item = bot.inventory.slots.find(slot => slot && itemMatches(slot, itemName));
+    // Round 17 V: what the bot carries, or wears already (never the 2x2 grid or the crafting result).
+    let item = inv.findIn([...inv.carried(bot), ...inv.wornArmor(bot)], slot => itemMatches(slot, itemName));
     if (!item) {
         if (bot.game.gameMode === "creative") {
             await bot.creative.setInventorySlot(36, mc.makeItem(itemName, 1));
@@ -3410,7 +3613,7 @@ export function spawnScrollRefused(bot, item) {
     const isScroll = (n) => /(^|:)spawnscroll$/.test(String(n ?? '').trim().toLowerCase().replace(/:\d+$/, ''));
     const name = typeof item === 'string' ? item : item?.name;
     let slot = null;
-    if (typeof item === 'string') { try { slot = (bot?.inventory?.slots ?? []).find(s => s && itemMatches(s, item.trim())) ?? null; } catch { slot = null; } }
+    if (typeof item === 'string') { try { slot = inv.findIn(inv.everyStack(bot), s => itemMatches(s, item.trim())); } catch { slot = null; } }
     if (!isScroll(name) && !isScroll(slot?.name)) return false;
     log(bot, 'Not using the Scroll of New Life (lifescroll:spawnscroll): it sets your respawn point where you stand and does not teleport. '
         + 'The night routine uses it once, at a closed shelter far from the spawn and every place you died; never use it yourself.');
@@ -3434,13 +3637,13 @@ export async function consume(bot, itemName="") {
     // Soak 16 (22:01:16): "You do not have any animania:raw_prime_pork to eat" with 3 held: not in slots 9-44 (the
     // hen's pecks had cut a craft short). The off hand, then the 2x2 grid and the cursor (put back first).
     if (!item && itemName) {
-        const off = bot.inventory?.slots?.[45];
+        const off = inv.offHand(bot);
         if (off && itemMatches(off, itemName)) { item = off; where = ' (from the off hand)'; }
     }
     if (!item && itemName) {
-        const inv = bot.inventory;
-        const inGrid = [1, 2, 3, 4].some(k => inv?.slots?.[k] && itemMatches(inv.slots[k], itemName));
-        const onCursor = !!inv?.selectedItem && itemMatches(inv.selectedItem, itemName);
+        const v = inv.view(bot); // round 17 V
+        const inGrid = v.grid.some(st => itemMatches(st, itemName));
+        const onCursor = !!v.cursor && itemMatches(v.cursor, itemName);
         if (inGrid || onCursor) {
             try { if (onCursor) await clearCursor(bot); if (inGrid) await returnGrid(bot, 'consume'); } catch { /* looked for again below */ }
             item = findItem(bot, itemName);
@@ -3560,27 +3763,10 @@ export async function giveToPlayer(bot, itemType, username, num=1) {
  * - without such a pickaxe, no destructive fallback: only the non-destructive movements (and no stone at all).
  * pickaxeMs: how long the pickaxe's uses are cached during a search (the cost function runs per block).
  */
-export const WALK_GUARD = { floorBelow: 2, pickaxeMs: 1000, breakNever: 100 };
-export function walkFloorY(bot, goal, { pickaxe = walkPickaxeOk(bot) } = {}) {
-    const start = Math.floor(bot.entity?.position?.y ?? 0);
-    const goalY = Number.isFinite(goal?.y) ? Math.floor(goal.y) : start;
-    return Math.min(start, goalY) - (pickaxe ? WALK_GUARD.floorBelow : 0);
-}
-export function guardWalkBreaks(bot, movements, floorY) {
-    if (!Array.isArray(movements?.exclusionAreasBreak) || movements.rotnWalkGuard) return movements;
-    movements.rotnWalkGuard = { floorY };
-    let ok = null, okAt = 0;
-    const pickaxeOk = () => { const t = Date.now(); if (ok === null || t - okAt > WALK_GUARD.pickaxeMs) { ok = walkPickaxeOk(bot); okAt = t; } return ok; };
-    movements.exclusionAreasBreak.push((block) => (block?.position && block.position.y < floorY ? WALK_GUARD.breakNever : 0));
-    movements.exclusionAreasBreak.push((block) => {
-        let rule;
-        try { rule = digRule(block); } catch { rule = undefined; }
-        return rule && rule.type === 'pickaxe' && !pickaxeOk() ? WALK_GUARD.breakNever : 0;
-    });
-    return movements;
-}
+// Soak 17 T: the walk rules (WALK_GUARD, walkFloorY, guardWalkBreaks) live in movements.js (the seed of round 17 W).
+export { WALK_GUARD, walkFloorY, guardWalkBreaks } from './movements.js';
 
-export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noBuild = false } = {}) {
+export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noBuild = false, keep = true } = {}) {
     /**
      * Navigate to the given goal. Use doors and attempt minimally destructive movements.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -3595,7 +3781,13 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
     // Every walk is fall-safe (G3 round 4 B, fall_safety.js): no drop over 3 blocks, and never a
     // broken Dynamic Trees branch, which fells the tree (also the stuck reflex's walk away).
     // G4 #5: and steps around poison ivy and thorns (touch-hazard plants, foraging.js plantSafe).
-    const nonDestructiveMovements = plantSafe(fallSafe(new pf.Movements(bot)));
+    // Soak 16 trap: the walk's rules (WALK_GUARD): the break floor, the pickaxe's last uses kept, and no destructive
+    // fallback without a pickaxe that has them. Soak 17 T: built by movements.guardedMovements (and a collect's floor).
+    // #665 round 1 (the lead): keep false (the hazard walks: a falling block, lava or fire, the unstuck walk) may spend
+    // the pickaxe's last uses; the floor stays.
+    const pickaxeOk = keep ? walkPickaxeOk(bot) : !!bestPickaxe(bot);
+    const floorY = walkFloorY(bot, goal, { pickaxe: pickaxeOk });
+    const nonDestructiveMovements = plantSafe(guardedMovements(bot, { floorY, keep }));
     const dontBreakBlocks = ['glass', 'glass_pane'];
     for (let block of dontBreakBlocks) {
         nonDestructiveMovements.blocksCantBreak.add(mc.getBlockId(block));
@@ -3606,12 +3798,7 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
     // ones here; a drop resting on leaves then led the bot up into the tree (G3 round 4 B).
     if (!canDig) nonDestructiveMovements.canDig = false;
 
-    // Soak 16 trap: the walk's rules (WALK_GUARD): the break floor, the pickaxe's last uses kept, and no destructive
-    // fallback without a pickaxe that has them.
-    const pickaxeOk = walkPickaxeOk(bot);
-    const floorY = walkFloorY(bot, goal, { pickaxe: pickaxeOk });
-    guardWalkBreaks(bot, nonDestructiveMovements, floorY);
-    const destructiveMovements = canDig && pickaxeOk ? guardWalkBreaks(bot, plantSafe(fallSafe(new pf.Movements(bot))), floorY) : nonDestructiveMovements;
+    const destructiveMovements = canDig && pickaxeOk ? plantSafe(guardedMovements(bot, { floorY, keep })) : nonDestructiveMovements;
     if (offTrees) for (const m of new Set([nonDestructiveMovements, destructiveMovements])) offTreeParts(bot, m);
     if (noBuild) for (const m of new Set([nonDestructiveMovements, destructiveMovements])) { m.allow1by1towers = false; m.scafoldingBlocks = []; }
 
@@ -4024,7 +4211,8 @@ export async function followPlayer(bot, username, distance=4) {
 
     // Fall-safe, like every other walk (G3 round 4 B, fall_safety.js): no drop over 3 blocks and
     // never a broken Dynamic Trees branch, which fells the tree onto the bot.
-    const move = fallSafe(new pf.Movements(bot));
+    // Soak 17 T: guarded with no floor of its own (a player leads the walk; the pickaxe's keep still holds).
+    const move = guardedMovements(bot, { floorY: null });
     move.digCost = 10;
     bot.pathfinder.setMovements(move);
     let doorCheckInterval = startDoorInterval(bot);
@@ -4102,7 +4290,7 @@ export async function followPlayer(bot, username, distance=4) {
 }
 
 
-export async function moveAway(bot, distance, { offTrees = false } = {}) {
+export async function moveAway(bot, distance, { offTrees = false, keep = true } = {}) {
     /**
      * Move away from current position in any direction.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -4117,10 +4305,10 @@ export async function moveAway(bot, distance, { offTrees = false } = {}) {
     const pos = bot.entity.position.clone();
     let goal = new pf.goals.GoalNear(pos.x, pos.y, pos.z, distance);
     let inverted_goal = new pf.goals.GoalInvert(goal);
-    bot.pathfinder.setMovements(fallSafe(new pf.Movements(bot))); // goToGoal's are fall-safe too (G3 round 4 B)
+    bot.pathfinder.setMovements(guardedMovements(bot)); // goToGoal's are fall-safe too (G3 round 4 B); soak 17 T: and guarded
 
     if (bot.modes.isOn('cheat')) {
-        const move = new pf.Movements(bot);
+        const move = guardedMovements(bot); // soak 17 T
         const path = await bot.pathfinder.getPathTo(move, inverted_goal, 10000);
         let last_move = path.path[path.path.length-1];
         if (last_move) {
@@ -4132,7 +4320,7 @@ export async function moveAway(bot, distance, { offTrees = false } = {}) {
         }
     }
 
-    if (!await goToGoal(bot, inverted_goal, { offTrees })) return false; // stopped: an interrupt (round 2)
+    if (!await goToGoal(bot, inverted_goal, { offTrees, keep })) return false; // stopped: an interrupt (round 2)
     let new_pos = bot.entity.position;
     log(bot, `Moved away from ${pos.floored()} to ${new_pos.floored()}.`);
     return true;
@@ -4148,7 +4336,7 @@ export async function moveAwayFromEntity(bot, entity, distance=16) {
      **/
     let goal = new pf.goals.GoalFollow(entity, distance);
     let inverted_goal = new pf.goals.GoalInvert(goal);
-    bot.pathfinder.setMovements(new pf.Movements(bot));
+    bot.pathfinder.setMovements(guardedMovements(bot)); // soak 17 T
     // An entity that follows keeps an inverted goal from ever ending: bounded (G3 review of #221).
     return await boundedGoto(bot, inverted_goal, GO_TO_LIMITS.fleeMs) === true;
 }
@@ -4208,7 +4396,7 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
             away = point;
             still = 0;
             // Soak 10 (R5): a flee never digs ("Found destructive path" while fleeing: caught digging).
-            const moves = new pf.Movements(bot);
+            const moves = guardedMovements(bot); // soak 17 T
             moves.canDig = false;
             bot.pathfinder.setMovements(moves);
             bot.pathfinder.setGoal(new pf.goals.GoalInvert(new pf.goals.GoalNear(point.x, point.y, point.z, distance + 1)));
@@ -4332,7 +4520,7 @@ export function scrollUsedOn(bot) {
     if (bot?.rotnScrollUsed) return bot.rotnScrollUsed;
     // #645 nit: one test for every place it may be (the inventory, the off hand, the cursor).
     const isScroll = (i) => /(^|:)spawnscroll$/.test(i?.name ?? '') && /lifescroll/.test(i?.name ?? '');
-    const held = carriedItems(bot).some(isScroll) || isScroll(bot?.inventory?.selectedItem);
+    const held = carriedItems(bot).some(isScroll) || isScroll(inv.cursorStack(bot));
     if (!bot?.inventory || held) return null;
     return { pos: null, at: null, by: 'no Scroll of New Life held' };
 }
@@ -4425,7 +4613,7 @@ export async function tillAndSow(bot, x, y, z, seedType=null) {
     // if distance is too far, move to the block
     if (bot.entity.position.distanceTo(block.position) > 4.5) {
         let pos = block.position;
-        bot.pathfinder.setMovements(new pf.Movements(bot));
+        bot.pathfinder.setMovements(guardedMovements(bot)); // soak 17 T (goToGoal sets its own)
         await goToGoal(bot, new pf.goals.GoalNear(pos.x, pos.y, pos.z, 4));
     }
     if (block.name !== 'farmland') {
@@ -4473,7 +4661,7 @@ export async function activateNearestBlock(bot, type) {
     }
     if (bot.entity.position.distanceTo(block.position) > 4.5) {
         let pos = block.position;
-        bot.pathfinder.setMovements(new pf.Movements(bot));
+        bot.pathfinder.setMovements(guardedMovements(bot)); // soak 17 T (goToGoal sets its own)
         await goToGoal(bot, new pf.goals.GoalNear(pos.x, pos.y, pos.z, 4));
     }
     await bot.activateBlock(block);
@@ -4992,7 +5180,7 @@ function stopWalking(bot) {
 /** {name[:meta]: count} over every inventory slot. */
 function slotCounts(bot) {
     const counts = {};
-    for (const it of bot.inventory?.slots || []) {
+    for (const it of inv.everyStack(bot)) {
         if (!it || !it.name || !(it.count > 0)) continue;
         const key = it.metadata ? `${it.name}:${it.metadata}` : it.name;
         counts[key] = (counts[key] || 0) + it.count;
@@ -5073,7 +5261,7 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
     const start = Date.now();
     const left = () => L.totalMs - (Date.now() - start);
     if (toolName !== 'hand' && bot.game.gameMode !== 'creative'
-        && !bot.inventory.slots.find(slot => slot && itemMatches(slot, toolName))) {
+        && !inv.findIn(inv.carried(bot), slot => itemMatches(slot, toolName))) {
         log(bot, `You do not have any ${toolName} to use.`);
         return false;
     }

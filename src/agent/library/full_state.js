@@ -8,6 +8,7 @@ import {
     getFirstBlockAboveHead
 } from "./world.js";
 import convoManager from '../conversation.js';
+import { view, slotCount } from './inventory_view.js';
 
 export function getFullState(agent) {
     const bot = agent.bot;
@@ -35,10 +36,7 @@ export function getFullState(agent) {
     let bots = convoManager.getInGameAgents().filter(b => b !== agent.name);
     players = players.filter(p => !bots.includes(p));
 
-    const helmet = bot.inventory.slots[5];
-    const chestplate = bot.inventory.slots[6];
-    const leggings = bot.inventory.slots[7];
-    const boots = bot.inventory.slots[8];
+    const { head: helmet, torso: chestplate, legs: leggings, feet: boots } = view(bot).armor; // round 17 V
 
     // Richer activity than a bare "Idle": a bot counts as idle (no action executing) even while
     // chatting, deciding its next move, or stopped. Surface those so the dashboard is meaningful.
@@ -85,7 +83,7 @@ export function getFullState(agent) {
         inventory: {
             counts: getInventoryCounts(bot),
             stacksUsed: bot.inventory.items().length,
-            totalSlots: bot.inventory.slots.length,
+            totalSlots: slotCount(bot),
             equipment: {
                 helmet: helmet ? helmet.name : null,
                 chestplate: chestplate ? chestplate.name : null,

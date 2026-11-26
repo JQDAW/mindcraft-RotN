@@ -37,6 +37,7 @@ import { isGiverGoal, say } from './agenda_driver.js';
 import { placesToLeave } from './respawn_relocate.js';
 import { waitText } from './library/wait_text.js';
 import { escape } from './library/escape.js';
+import { offHand } from './library/inventory_view.js';
 export { waitText }; // #588 re-review nit 2: one helper (library/wait_text.js)
 
 /**
@@ -356,7 +357,7 @@ const noteWindow = (agent, now) => {
  * off-hand rule is for placing blocks; nothing is placed now). Returns whether it moved.
  */
 export async function preArm(bot, { log = (l) => console.log(l) } = {}) {
-    const off = bot?.inventory?.slots?.[45];
+    const off = offHand(bot);
     if (!isWeaponItem(off) || isWeaponItem(bot.heldItem) || !hostilesNear(bot, ESCAPE_RUN.nightHostile).length) return false;
     let ok = false;
     try { ok = await equipHighestAttack(bot, {}); } catch { ok = false; }

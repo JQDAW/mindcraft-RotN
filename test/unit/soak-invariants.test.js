@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { soakInvariants, table, evidenceDirs, serverDeaths, renderTable, render, releaseAtLeast, releaseOf, readJournal } from '../tools/soak-invariants.mjs';
+import { soakInvariants, table, evidenceDirs, serverDeaths, renderTable, render, releaseAtLeast, releaseOf, readJournal, enclosedEpisodes } from '../tools/soak-invariants.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const TOOL = path.join(ROOT, 'test/tools/soak-invariants.mjs');
@@ -276,12 +276,12 @@ test('I4 dig-refused-with-tool: n/a before rotn-v0.1.19; #618 lines with a finit
     assert.deepEqual([r.I4.count, r.I4.refusals, r.I4.source], [1, 2, 'dig refused']);
 });
 
-test('#625: the dig-refused cap line is not a refusal; with it I4 is a lower bound (capped, "at least", "≥")', () => {
+test('#625, #626 review: the dig-refused cap line is not a refusal; with it I4 may be low (capped, "≥"), not "at least N lost"', () => {
     const refused = (t) => L(t, '[forge-bridge] dig refused: undergroundbiomes:metamorphic_stone:6 at -58, 55, -50 (pickaxe level 0, hardness 0.9); held planks:1 (no pickaxe level); pickaxe tools: stone_pickaxe (level 0) off hand; rule: held Infinity, stone_pickaxe 350 ms');
     const cap = L('10:09:00', '[forge-bridge] dig refused: 100 lines logged; further refusals on this connection are not');
     let r = run([REL(22), refused('10:00:00'), refused('10:01:00'), cap]);
     assert.deepEqual([r.I4.count, r.I4.refusals, r.I4.capped, r.I4.source], [2, 2, true, 'dig refused (capped)']);
-    assert.match(render(r, 'x'), /I4 dig-refused-with-tool: at least 2 of at least 2 tool refusals/);
+    assert.match(render(r, 'x'), /I4 dig-refused-with-tool: 2 of 2 logged tool refusals with a usable tool carried \(dig refused \(capped\); the 100-line cap was reached: refusals after it, if any, are not logged\)/);
     assert.match(renderTable({ 'g4soak-16-x': { release: 'rotn-v0.1.22', I4_digRefusedWithTool: 2, I4_capped: true } }), /\| ≥2 \|/);
     r = run([REL(22), cap]); // only the cap line kept (a partial journal): still a lower bound, not "no refusal"
     assert.deepEqual([r.I4.count, r.I4.refusals, r.I4.capped], [0, 0, true]);
@@ -289,13 +289,16 @@ test('#625: the dig-refused cap line is not a refusal; with it I4 is a lower bou
     assert.deepEqual([r.I4.count, r.I4.capped], [1, false]);
 });
 
-test('#623 re-review: a hunt start looks for its mob only within the window and not past the next hunt start', () => {
+test('#623 re-review, #626 review: a hunt start names its mob by the next hunting line (not past the next hunt start; not bound by the window)', () => {
     const refusal = L('10:00:00', '[reflex] hunting: left alone, it may belong to a player: animania:cow_holstein: a animania:bull_holstein within 16 blocks');
     const start = (t) => L(t, '[survival] weapon spartanweaponry:club_wood (hunt)');
     let r = run([REL(21), refusal, start('10:00:30'), start('10:00:40'), L('10:00:50', '[reflex] hunting animania:sow_old_spot: stuck (left alone for 5 min)')]);
     assert.equal(r.I7.count, 0);
-    // The hunting line after the window: the hunt start's mob is unknown within it, so no act.
+    // The hunt started within the window; its naming line comes after the window: still an act on the cow, at 50 s.
     r = run([REL(21), refusal, start('10:00:50'), L('10:02:00', '[reflex] hunting animania:cow_holstein: stuck (left alone for 5 min)')]);
+    assert.deepEqual([r.I7.count, r.I7.first[0].afterS], [1, 50]);
+    // A hunt started after the window is no act, whatever it names.
+    r = run([REL(21), refusal, start('10:01:10'), L('10:01:20', '[reflex] hunting animania:cow_holstein: stuck (left alone for 5 min)')]);
     assert.equal(r.I7.count, 0);
 });
 
@@ -484,4 +487,47 @@ test('the CLI: a dir reads its server.log; --table; --json; usage errors exit 2;
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
+});
+
+test('soak 17 (#661): the trap climbed out of a little at a time (79, 25, 68 -> 78, 44, 70 -> 80, 61, 72) is one 6.2-min span to the death', () => {
+    // The trap's lines from soak 17's driver.log (17:16:52 release line, then 18:03:31-18:09:50), as committed in #661.
+    const r = soakInvariants(fs.readFileSync(path.join(ROOT, 'test/unit/fixtures/soak17-trap1-excerpt.log'), 'utf8'));
+    assert.deepEqual(r.I1.spanList, [{ t: '18:03:31', line: 2, at: '79, 25, 68', until: '18:09:45', untilLine: 36, minutes: 6.2, end: 'died', fails: 5, interrupted: 0, gaveUp: false }]);
+    assert.deepEqual([r.I1.count, r.I1.trapSpans, r.I1.longestMin, r.I1.escapes, r.I1.escapesNotCleared], [1, 1, 6.2, 5, 5]);
+});
+
+test('I1 trap spans (soak 17 fix): a failed escape continues the span from where the last one left the bot, or within 60 s of it', () => {
+    const stuck = (t, c) => L(t, `[escape] stuck at ${c}: getting out upward (the sky starts at y 99)`);
+    const fail = (t, c, why = 'no stair step') => L(t, `[escape] still stuck at ${c} after 1.0 s (dug 9, placed 0): ${why}`);
+    // Each escape ends 10+ blocks above its start; the next starts where it ended: one span.
+    let r = run([REL(23), stuck('10:00:00', '1, 20, 1'), fail('10:02:00', '1, 35, 1'), stuck('10:03:00', '1, 35, 1'), fail('10:05:00', '1, 50, 1'),
+        stuck('10:05:30', '2, 50, 1'), L('10:06:00', '[death] died at 2, 52, 1; waiting for the respawn')]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.at, x.until, x.minutes, x.end, x.fails]), [['10:00:00', '1, 20, 1', '10:06:00', 6, 'died', 3]]);
+    // A start at another cell with no end cell between: joined within 60 s of the last failure, not after.
+    r = run([REL(23), stuck('10:00:00', '1, 20, 1'), L('10:00:05', '[trapped] still trapped: The way out from 1, 20, 1 was stopped by something else; !goToSurface goes on from here.'),
+        stuck('10:00:50', '9, 30, 9'), fail('10:00:51', '9, 30, 9'), stuck('10:10:00', '40, 60, 40'), fail('10:10:01', '40, 60, 40'), L('10:12:00', 'x')]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.at, x.until, x.end, x.fails]), [['10:00:00', '1, 20, 1', '10:10:00', 'moved away', 2], ['10:10:00', '40, 60, 40', '10:12:00', 'open', 1]]);
+    // A position line far from the span's latest cell (not its first) ends it.
+    r = run([REL(23), stuck('10:00:00', '1, 20, 1'), fail('10:01:00', '1, 40, 1'), L('10:02:00', '- Position: x: 1.5, y: 41.0, z: 1.5'), L('10:03:00', '- Position: x: 30.5, y: 70.0, z: 1.5'), L('10:04:00', 'x')]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.until, x.end]), [['10:03:00', 'moved away']]);
+});
+
+test('enclosedEpisodes (#662 review 3): soak 15\'s pocket at -58, 57, -50, two mornings, 44.1 min until the bot is elsewhere', () => {
+    const lines = readJournal(fs.readFileSync(path.join(EVIDENCE, 'g4soak-15-20261124/driver.log'), 'utf8'));
+    assert.deepEqual(enclosedEpisodes(lines), [{ t: '23:18:02', line: 1513, at: '-58, 57, -50', until: '00:02:05', untilLine: 2357, minutes: 44.1, end: 'moved away', mornings: 2 }]);
+    // Soak 16: the morning in the trap (21:52:32) until the death at the exit.
+    const s16 = enclosedEpisodes(readJournal(fs.readFileSync(path.join(EVIDENCE, 'g4soak-16-20261125/driver.log'), 'utf8')));
+    assert.deepEqual(s16.map(e => [e.t, e.until, e.minutes, e.end]), [['21:52:32', '21:54:59', 2.5, 'died']]);
+});
+
+test('enclosedEpisodes: left by a morning line, by a cleared escape, by a move; open at the end; a far could-not-leave starts another', () => {
+    const could = (t, c) => L(t, `[night] morning: could not leave the shelter at ${c} after 3 tries (no side to open yet); back to work, still enclosed: dig a way out`);
+    const e = enclosedEpisodes(readJournal([REL(23), could('06:00:00', '1, 60, 1'), L('06:01:00', 'You have reached at 2, 60, 1.'), L('06:04:00', '[night] morning: dug out of the shelter at 2, 60, 1; back to work'),
+        could('07:00:00', '1, 60, 1'), L('07:00:30', '[escape] out at 1, 70, 1 (by hand; dug 9, placed 0) in 30.0 s'),
+        could('08:00:00', '1, 60, 1'), L('08:10:00', '- Position: x: 9.5, y: 64.0, z: 1.5'),
+        could('09:00:00', '1, 60, 1'), could('09:30:00', '40, 60, 40'), L('09:45:00', 'x')].join('\n')));
+    assert.deepEqual(e.map(x => [x.t, x.until, x.minutes, x.end]), [
+        ['06:00:00', '06:04:00', 4, 'left'], ['07:00:00', '07:00:30', 0.5, 'cleared'], ['08:00:00', '08:10:00', 10, 'moved away'],
+        ['09:00:00', '09:30:00', 30, 'moved away'], ['09:30:00', '09:45:00', 15, 'open'],
+    ]);
 });

@@ -222,6 +222,23 @@ test('pathfinder choices: noPath rejects every goal; teleport puts the bot on th
     assert.equal(c.bot.modes.isOn('cowardice'), false);
 });
 
+test('#631 re-review: teleport meets a ranged goal (GoalNear rangeSq) at the goal or the nearest standable cell within range, never inside a block', async () => {
+    // The ground's surface is y 63 (the bot stands at y 64). A goal inside the stone below: the nearest standable cell
+    // within range 2 is on the surface above it, not in the stone.
+    const w = fakeWorld({ pathfinder: 'teleport', at: V(10, 64, 10) });
+    await w.bot.pathfinder.goto({ x: 0, y: 62, z: 0, rangeSq: 4 });
+    assert.equal(w.bot.entity.position.toString(), '(0.5, 64, 0.5)');
+    assert.equal(w.bot.blockAt(w.bot.entity.position).boundingBox, 'empty');
+    // A goal the bot can stand on: there.
+    await w.bot.pathfinder.goto({ x: 3, y: 64, z: 3, rangeSq: 4 });
+    assert.equal(w.bot.entity.position.toString(), '(3.5, 64, 3.5)');
+    // `range` as well as rangeSq; no standable cell within it: no path.
+    await assert.rejects(w.bot.pathfinder.goto({ x: 0, y: 40, z: 0, range: 2 }), /No path/);
+    // A goal with no range (GoalBlock) is still the cell itself.
+    await w.bot.pathfinder.goto({ x: 5, y: 64, z: 5 });
+    assert.equal(w.bot.entity.position.toString(), '(5.5, 64, 5.5)');
+});
+
 test('pocketUnderRock (soak 15): 8 below the ground under dirt over metamorphic stone; the pickaxe in the off hand is out of reach', async (t) => {
     quiet(t);
     const { bot, calls } = pocketUnderRock();
@@ -330,26 +347,29 @@ test('findBlocks: ids or a function; useExtraInfo as a second matcher; count nea
     assert.deepEqual(f.bot.findBlocks({ matching: (b) => b.name === 'gold_ore', maxDistance: 8, count: 3 }).map(String), ['(2, 10, 0)']);
 });
 
-test('the real collectBlock on pocketUnderRock: a stone collect with the pickaxe in the off hand, and in the hand', async (t) => {
+test('the real collectBlock on pocketUnderRock: a stone collect takes the rock route, and in the pocket no stone keeps a way out (soak 17 T)', async (t) => {
     quiet(t);
+    // Soak 15 (22:41:56) pinned the off-hand Tool Progression refusal here (#631 nit 4); since soak 17 T a stone that
+    // drops rocks with the carried pickaxe is collected as rocks, and the rock collect mines only stone whose break keeps
+    // a walkable way out. In this 1x2 pocket under rock none does: nothing is dug, placed or refused, with the pickaxe in
+    // the off hand or in the hand. The off-hand refusal itself stays covered by src/agent/library/collect_rotn.test.js
+    // (#595 review 2) and the off-hand dig tests.
+    for (const opts of [{}, { slots: { 36: ['stone_pickaxe', 1] } }]) { // the pickaxe in the off hand, then in the hand
+        const w = pocketUnderRock(opts);
+        useRegistry(t, w.bot);
+        assert.equal(await collectBlock(w.bot, 'undergroundbiomes:metamorphic_stone', 1), false);
+        assert.deepEqual(w.calls.refused, [], 'no dig is tried, so none is refused');
+        assert.equal(w.calls.dug.length, 0);
+        assert.equal(w.calls.placed.length, 0);
+        assert.match(w.bot.output, /undergroundbiomes:metamorphic_stone drops 4 rocks with your stone_pickaxe, never itself: collecting 4 rocks \(pyrotech:rock\) to craft 1 cobble/);
+        assert.match(w.bot.output, /Skipped 8 blocks to mine \(undergroundbiomes:metamorphic_stone at -1, 57, 0 and others\): breaking them would leave no walkable way out\./);
+        assert.match(w.bot.output, /Crafted 0 cobble from your rocks \(instead of undergroundbiomes:metamorphic_stone\), of 1 asked\./);
+    }
+    // The off-hand pickaxe stays where #614 keeps it.
     const off = pocketUnderRock();
     useRegistry(t, off.bot);
-    const got = await collectBlock(off.bot, 'undergroundbiomes:metamorphic_stone', 1);
-    // Soak 15 (22:41:56): with the pickaxe out of items() the dig is refused with the Tool Progression line; a collect
-    // that takes the pickaxe back first (skills-rotn's fixes) gets it with no refusal. Either way, never a silent miss.
-    if (got) {
-        assert.equal(off.calls.refused.length, 0);
-        assert.equal(off.bot.inventory.slots[SLOT.OFF_HAND], null);
-    } else {
-        assert.match(off.bot.output, /undergroundbiomes:metamorphic_stone needs a better tool \(Tool Progression\)/);
-        assert.ok(off.calls.refused.length >= 1);
-    }
-    const inHand = pocketUnderRock({ slots: { 36: ['stone_pickaxe', 1] } });
-    useRegistry(t, inHand.bot);
-    assert.equal(await collectBlock(inHand.bot, 'undergroundbiomes:metamorphic_stone', 1), true, inHand.bot.output);
-    assert.equal(inHand.calls.dug.length, 1);
-    assert.equal(inHand.calls.dug[0].name, 'undergroundbiomes:metamorphic_stone');
-    assert.equal(inHand.calls.refused.length, 0);
+    await collectBlock(off.bot, 'undergroundbiomes:metamorphic_stone', 1);
+    assert.equal(off.bot.inventory.slots[SLOT.OFF_HAND]?.name, 'stone_pickaxe');
 });
 
 test('#628 re-review nits: fill clears metadata; equip of the cursor stack says why; the layer blocks are in the registry at once; the stack sizes are computed once', async () => {
