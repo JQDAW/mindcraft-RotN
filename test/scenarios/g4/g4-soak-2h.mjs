@@ -36,11 +36,17 @@
 //   ate_when_low       (#5) every "low" food line is followed by an "ate" line within eatWithinMinutes
 //   deaths_reported    (#5, as in #6) every death has its report line before the next death (journal messages carry no
 //                      time once read, so the order is the bound); no death passes it
+//   no_trap            (the lead's decision after soak 17) no trap span (test/tools/soak-invariants.mjs trapSpans, with
+//                      the soak 17 span fix: the failed escapes and still-trapped lines of one trap, until an escape
+//                      clears, a death, or the bot is elsewhere) over trapMaxMinutes (5), and no death while trapped (a
+//                      span that ends 'died'). S only: it needs the journal's times (lib/service.mjs timedLines); on T it
+//                      is not reached. A span still open at the end counts with its minutes so far.
 // Notes: every sample, the survival counts (eats, fights by outcome, flees), the deaths, the LLM usage, the coverage.
 import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED } from '../../runner/lib/g2.mjs';
 import { exitedText } from '../../runner/lib/service.mjs';
 import { agentExits, blockNameProblem, deathEvents, entityNamingAtStart, isAir, llmUsage, namingAtStart, nearbyBlocksResults, survivalEvents } from '../../runner/lib/survival.mjs';
+import { trapSpans } from '../../tools/soak-invariants.mjs';
 
 const MS = 1000;
 const MIN = 60 * MS;
@@ -66,6 +72,7 @@ export default {
         food_floor: 'The food level never falls below the floor (#5)',
         ate_when_low: 'When the food level is low, the bot eats (#5)',
         deaths_reported: 'Every death is reported (#5, as in #6)',
+        no_trap: 'No trap underground over 5 minutes, and no death while trapped (the lead, after soak 17)',
     },
     defaults: {
         bot: 'FRCFLD',
@@ -76,12 +83,13 @@ export default {
         usdPerHourMax: 0.05,    // USD per hour of soak time, ADR 0010
         foodFloor: 6,
         eatWithinMinutes: 5,
+        trapMaxMinutes: 5,
         loginTimeoutMs: 240 * MS,
         pollMs: 5 * MS,
         logTail: 20000,
         consoleWaitS: 1,
     },
-    gateParams: { durationMinutes: 'equal', sampleMinutes: 'equal', peakMemoryMaxMb: 'equal', usdPerHourMax: 'equal', foodFloor: 'equal', eatWithinMinutes: 'equal' },
+    gateParams: { durationMinutes: 'equal', sampleMinutes: 'equal', peakMemoryMaxMb: 'equal', usdPerHourMax: 'equal', foodFloor: 'equal', eatWithinMinutes: 'equal', trapMaxMinutes: 'equal' },
     // The login wait, the soak and a minute for the last reads.
     runMinutes: (p) => p.loginTimeoutMs / MIN + p.durationMinutes + 1,
 
@@ -268,5 +276,22 @@ export default {
         const deathDetail = deaths.length === 0 ? 'no death' : unreported.length ? `${unreported.length} of ${deaths.length} death(s) with no report` : `each of ${deaths.length} death(s) reported`;
         if (gap) infra('deaths_reported', `on what was read: ${deathDetail}`);
         else ctx.check('deaths_reported', unreported.length === 0, deathDetail);
+
+        // no trap (the lead, after soak 17): the trap spans with their wall-clock minutes (S: the journal's times). A seen
+        // long trap or a death while trapped stands on a partial read; a pass needs the whole journal.
+        if (!service || typeof bot.timedLines !== 'function') notReached(['no_trap'], 'not the CX23 service (the journal\'s times are needed)');
+        else {
+            const spans = trapSpans(bot.timedLines());
+            ctx.note('trapSpans', spans);
+            const longest = spans.reduce((a, b) => (b.minutes > (a?.minutes ?? -1) ? b : a), null);
+            const died = spans.filter((x) => x.end === 'died');
+            const long = spans.filter((x) => x.minutes > Number(p.trapMaxMinutes));
+            const span = (x) => `${x.t}-${x.until} at ${x.at}, ${x.minutes} min, ended: ${x.end}`;
+            const detail = !spans.length ? 'no trap span'
+                : [long.length && `${long.length} trap span(s) over ${p.trapMaxMinutes} min (longest ${span(longest)})`,
+                    died.length && `${died.length} death(s) while trapped (${span(died[0])})`].filter(Boolean).join('; ')
+                    || `${spans.length} trap span(s), the longest ${span(longest)}; no death while trapped`;
+            partial('no_trap', !long.length && !died.length, detail);
+        }
     },
 };

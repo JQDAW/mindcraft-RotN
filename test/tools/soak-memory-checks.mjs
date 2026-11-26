@@ -3,12 +3,19 @@
 // (the agenda's chat lines). Offline, reads files only. #637's PR body has the line formats.
 //
 //   I13 memory-facts (M4 check 1)  every `[memory] facts <n> chars: <text>` line (its lines joined by " / "), field by
-//       field, against the code's own state lines within `windowS` (either side): the agenda step (the self-prompt
-//       goal `RotN agenda, step N of M (<id>)`, `!agenda` replies, the server's `agenda step <id> started|done`), the
+//       field, against the code's own state lines within `windowS` (either side): the agenda step (soak 17: the state at
+//       the facts line's time, the latest source at or before it within `bracketMin` plus any within `agendaAfterS`
+//       after it: the self-prompt goal `RotN agenda, step N of M (<id>)`, `!agenda` replies (also `done (…), step X`),
+//       the server's `agenda step <id> started`, `agenda done` / `agenda standing goal started`, and a scripted-job line
+//       while the agenda is active; a numbered step named after its `step X done` line or in the line's own done list,
+//       and `active, all steps done` with steps not done, are misses), the
 //       deaths (`[death] died at X; waiting for the respawn` lines so far, the last one's cell), the last shelter
 //       (`[night] in the shelter at X until morning`), the pickaxe (`[shelter] pickaxe check: … inventory: …`,
-//       `dig refused: … pickaxe tools: …`), the food held (`[night] food for the night: … held H points`), the shelter
-//       blocks (the server's `shelter_blocks: the scripted job ended: … (N of 14`), each failure (a command with those
+//       `dig refused: … pickaxe tools: …`; soak 17, by day: the pickaxe count from a craft's `you now have`, a listing that
+//       shows the hands, `[pickaxe] made`, `[tool] … broke`, unknown after a death), the food held (`[night] food for the
+//       night: … held H points`, and the standing goal's `you hold H` within `goalS` unless an inventory change lands
+//       between), the shelter blocks (the server's `shelter_blocks: the scripted job ended: +G … (N of 14`: N once it
+//       ended, N - G before it; the standing goal's `you have N` as above), each failure (a command with those
 //       args that ran and failed around `<n> min ago`) and each collect (`Collected N <item>` around its time). A
 //       field is a match, a miss, or unverifiable (no state line in the window). n/a with no facts line (the
 //       summary mode, or a release before #637). The check passes at 100% of the verifiable fields.
@@ -30,7 +37,7 @@ import { ROTN_EARLY_GAME } from '../../src/agent/agenda.js';
 const STEP_IDS = ROTN_EARLY_GAME.map(s => s.id);
 const KNOWN_IDS = new Set([...STEP_IDS, 'shelter_blocks', 'weapon', 'food']);
 
-export const MEMORY_CHECKS = { windowS: 30, yTolerance: 2, repeatMin: 10, handSample: 20, minSamples: 5, bracketMin: 10 };
+export const MEMORY_CHECKS = { windowS: 30, yTolerance: 2, repeatMin: 10, handSample: 20, minSamples: 5, bracketMin: 10, agendaAfterS: 3, goalS: 5, inFlightS: 2 };
 
 const hms = (ms) => new Date(ms).toISOString().slice(11, 19);
 const C3 = '(-?\\d+), (-?\\d+), (-?\\d+)';
@@ -53,7 +60,15 @@ const DIG_PICKS = /^\[forge-bridge\] dig refused: .*; pickaxe tools: ([^;]+?)(;|
 const NIGHT_FOOD = /^\[night\] food for the night: .*?held ([\d.]+) points/;
 const GOAL = /RotN agenda, step (?:(\d+) of \d+ \(([^)]+)\)|([a-z_]+) \(([^)]+)\))/;
 const STANDING = /Standing goal \(the agenda is done\)/;
-const AGENDA_REPLY = /^Agent executed: !agenda and got: agenda: (active, step (\S+) .*?(?:; done: (.*))?|done\b.*)$/;
+// soak 17 (A4): a done agenda that keeps a step open answers `agenda: done (before night …), step shelter_blocks (…)`.
+const AGENDA_REPLY = /^Agent executed: !agenda and got: agenda: (active, step (\S+) .*?(?:; done: (.*))?|done\b(?: \([^)]*\), step (\S+) \()?.*)$/;
+// The standing goal's own numbers (agenda.js standingGoal): food held and shelter blocks, computed when it is sent.
+const STANDING_NUMBERS = /Standing goal \(the agenda is done\): keep food worth at least \d+ points \(you hold ([\d.]+)\) and \d+ blocks .*?\(you have (\d+);/;
+// The pickaxe count (I13 daytime sources): a craft's `you now have N`, the escape's `[pickaxe] made`, a `[tool] broke`.
+const PICK_MADE = /^\[pickaxe\] made an? \S+ pickaxe\b/;
+const PICK_BROKE = /^\[tool\] \S*pickaxe broke\b/;
+// An inventory change that may land between two code-built numbers a second apart (soak 17: a forage's pickup).
+const IN_FLIGHT = /^(Picked up [1-9]|Foraged |Collected [1-9]|.*\byou now have \d|\[survival\] ate |Successfully crafted )/;
 const REPLY = /^Generated response: (.*)$/;
 const PARSED_ONE = /^parsed command: \{ commandName: '(![A-Za-z]+)', args: \[(.*)\] \}$/;
 const PARSED_OPEN = /^parsed command: \{$/;
@@ -112,7 +127,9 @@ export function sameItem(phrase, id) {
 /** The bot's state lines from the journal (and the server's chat), in time order. */
 function stateOf(lines, chat) {
     const pos = [], goals = [], agendaReplies = [], deaths = [], shelters = [], picks = [], food = [], inventories = [], nowHave = [], collected = [], nights = [], commands = [];
+    const standing = [], inFlight = [], pickTimeline = [];
     let nightNo = 0;
+    let pickCount = null;
     for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
         let m0;
@@ -121,7 +138,15 @@ function stateOf(lines, chat) {
         let m;
         if ((m = GOAL.exec(l.msg)) && /goal/.test(l.msg)) goals.push({ t: l.t, num: m[1] ? Number(m[1]) : null, id: m[2] ?? m[3] });
         else if (STANDING.test(l.msg) && /goal/.test(l.msg)) goals.push({ t: l.t, done: true });
-        if ((m = AGENDA_REPLY.exec(l.msg))) agendaReplies.push({ t: l.t, step: m[2] ?? null, done: m[2] ? (m[3] ?? '').split(', ').filter(Boolean) : 'all' });
+        if ((m = AGENDA_REPLY.exec(l.msg))) agendaReplies.push({ t: l.t, step: m[2] ?? m[4] ?? null, done: m[2] ? (m[3] ?? '').split(', ').filter(Boolean) : 'all' });
+        if ((m = STANDING_NUMBERS.exec(l.msg)) && /goal/.test(l.msg)) standing.push({ t: l.t, n: l.n, held: Number(m[1]), blocks: Number(m[2]) });
+        if (IN_FLIGHT.test(l.msg)) inFlight.push({ t: l.t, n: l.n });
+        // The pickaxe count: absolute from a craft's `you now have` or a listing (below), else +1 made / -1 broke; a
+        // death makes it unknown (what a death keeps is not logged per item).
+        if ((m = NOW_HAVE.exec(l.msg)) && /pickaxe/.test(m[2])) pickCount = Number(m[1]);
+        else if (PICK_MADE.test(l.msg)) pickCount = (pickCount ?? 0) + 1;
+        else if (PICK_BROKE.test(l.msg)) pickCount = pickCount == null ? null : Math.max(0, pickCount - 1);
+        else if (DEATH.test(l.msg)) pickCount = null;
         if ((m = DEATH.exec(l.msg))) deaths.push({ t: l.t, at: `${m[1]}, ${m[2]}, ${m[3]}` });
         for (const re of SHELTER_AT) { const s = re.exec(l.msg); if (s) { shelters.push({ t: l.t, at: `${s[1]}, ${s[2]}, ${s[3]}`, night: nightNo }); break; } }
         if (NIGHT_START.test(l.msg)) { nightNo++; nights.push({ t: l.t, no: nightNo, morning: null }); }
@@ -141,13 +166,37 @@ function stateOf(lines, chat) {
             const items = [];
             for (let j = i + 1; j < lines.length && lines[j].t - l.t <= 2000; j++) { const it = INV_ITEM.exec(lines[j].msg); if (it) items.push({ item: it[1], count: Number(it[2]) }); else if (!/^- /.test(lines[j].msg)) break; }
             inventories.push({ t: l.t, n: l.n, items });
+            // The pickaxe count from a listing only when it also shows the hands (`IN THE OFF HAND: …`, `WEARING: …`, the
+            // lines after the items): soak 17's pickaxe sat in the off hand, which the item lines leave out.
+            let hands = false, off = 0;
+            for (let j = i + 1 + items.length; j < lines.length && j <= i + items.length + 4 && lines[j].t - l.t <= 2000; j++) {
+                const h = /^IN THE OFF HAND: (?:(\d+) (\S+)|nothing)/i.exec(lines[j].msg);
+                if (h) { hands = true; if (h[2] && /pickaxe/.test(h[2])) off += Number(h[1]); continue; }
+                if (/^WEARING: /.test(lines[j].msg)) hands = true;
+            }
+            if (hands) pickCount = items.filter(x => /pickaxe/.test(x.item)).reduce((a, x) => a + x.count, 0) + off;
         }
+        if (!pickTimeline.length || pickTimeline.at(-1).count !== pickCount) pickTimeline.push({ t: l.t, n: l.n, count: pickCount });
     }
     const stepDone = chat.map(c => { const m = /^agenda step (\S+) done$/.exec(c.msg); return m ? { t: c.t, id: m[1] } : /^agenda done$/.test(c.msg) ? { t: c.t, all: true } : null; }).filter(Boolean);
-    // #650 review 5: "agenda step shelter_blocks: the scripted job (run 1 of 2 today)" (the id ends at the colon).
-    const stepStarted = chat.map(c => { const m = /^agenda step ([a-z_]+)(?: started\b|: the scripted job \(run)/.exec(c.msg); return m ? { t: c.t, id: m[1] } : null; }).filter(Boolean);
-    const shelterBlocks = chat.map(c => { const m = /^agenda step shelter_blocks: the scripted job ended: .*?\((\d+) of \d+;/.exec(c.msg); return m ? { t: c.t, count: Number(m[1]) } : null; }).filter(Boolean);
-    return { pos, goals, agendaReplies, deaths, shelters, picks, food, inventories, nowHave, collected, stepDone, stepStarted, shelterBlocks, nights, commands };
+    // #650 review 5: "agenda step shelter_blocks: the scripted job (run 1 of 2 today)" (the id ends at the colon). Soak 17
+    // (A2): after `agenda done` (or `agenda standing goal started`) that job runs under the standing goal, so its line is a
+    // step only while the agenda is active; a `step X started` line re-opens it. `agendaDone`: the done marks, a source.
+    const stepStarted = [], agendaDone = [], shelterBlocks = [];
+    let doneNow = false, jobStart = null;
+    for (const c of chat) {
+        let m;
+        if (/^agenda (?:done|standing goal started\b)/.test(c.msg)) { doneNow = true; agendaDone.push({ t: c.t }); continue; }
+        if ((m = /^agenda step ([a-z_]+) started\b/.exec(c.msg))) { doneNow = false; stepStarted.push({ t: c.t, id: m[1] }); continue; }
+        if ((m = /^agenda step ([a-z_]+): the scripted job \(run/.exec(c.msg))) {
+            if (m[1] === 'shelter_blocks') jobStart = c.t;
+            if (!doneNow) stepStarted.push({ t: c.t, id: m[1] });
+            continue;
+        }
+        // S1: the job's end count, its gain and its start (the count before the job is count - gain).
+        if ((m = /^agenda step shelter_blocks: the scripted job ended: \+(\d+) shelter blocks \((\d+) of \d+;/.exec(c.msg))) { shelterBlocks.push({ t: c.t, count: Number(m[2]), gain: Number(m[1]), start: jobStart ?? c.t }); jobStart = null; }
+    }
+    return { pos, goals, agendaReplies, deaths, shelters, picks, food, inventories, nowHave, collected, stepDone, stepStarted, agendaDone, shelterBlocks, nights, commands, standing, inFlight, pickTimeline };
 }
 
 /** Executed commands: [{t, n, cmd: '!name', args: 'normalized', key, output, failed}]. */
@@ -234,12 +283,34 @@ export function memoryFactsCheck(lines, chat = []) {
         // Agenda: the step id named, against any agenda source in the window.
         if (f.agenda) {
             const step = /step (\S+) \(/.exec(f.agenda)?.[1] ?? (/^Agenda: done\b/.test(f.agenda) ? 'done' : null);
+            // Soak 17 (A1, A3): the agenda's state at the facts line's time: the latest source at or before it (within
+            // bracketMin), and any source up to agendaAfterS after it (the same moment, logged a little later); not every
+            // source within ±windowS (a step that began or ended 20 s later is not the state then).
+            const all = [
+                ...st.goals.map(g => ({ t: g.t, id: g.done ? 'done' : g.id })),
+                ...st.agendaReplies.map(a => ({ t: a.t, id: a.step ?? 'done' })),
+                ...st.stepStarted.map(s => ({ t: s.t, id: s.id })),
+                ...st.agendaDone.map(d => ({ t: d.t, id: 'done' })),
+            ].sort((a, b) => a.t - b.t);
+            const last = before(all, t);
             const src = [
-                ...near(st.goals, t, W).map(g => (g.done ? 'done' : g.id)),
-                ...near(st.agendaReplies, t, W).map(a => a.step ?? 'done'),
-                ...near(st.stepStarted, t, W).map(s => s.id),
+                ...(last && t - last.t <= MEMORY_CHECKS.bracketMin * 60_000 ? [last.id] : []),
+                ...all.filter(x => x.t > t && x.t - t <= MEMORY_CHECKS.agendaAfterS * 1000).map(x => x.id),
             ];
-            judge('agenda', src.length && step ? src.includes(step) : null, l, { said: step, state: [...new Set(src)].join(',') });
+            // #661 review 1: `active, all steps done` (no step set yet: soak 17 17:17:05, `done: none`) claims every step
+            // done. Its own done list is the test: wrong when the list is `none` or names, untruncated, fewer than all.
+            const doneList = /; done: (.*)$/.exec(f.agenda.trim())?.[1] ?? null;
+            const listed = doneList == null || doneList === 'none' ? [] : doneList.split(', ').map(x => x.trim());
+            const truncated = /\.\.\.$/.test(doneList ?? '');
+            if (!step && /^Agenda: active, all steps done\b/.test(f.agenda)) {
+                const all = doneList === 'none' || (!truncated && STEP_IDS.some(id => !listed.includes(id)));
+                judge('agenda', all ? false : null, l, { said: 'active, all steps done', state: `done: ${doneList ?? '?'}` });
+            } else if (step && STEP_IDS.includes(step) && (listed.slice(0, truncated ? -1 : undefined).includes(step)
+                || st.stepDone.some(d => d.id === step && d.t <= t && (!last || d.t > last.t)))) {
+                // #661 (soak 17 17:22:20, 17:22:23): a numbered step named as the current one after its `step X done` line,
+                // or listed in the line's own done list, is stale, whatever the sources before it say.
+                judge('agenda', false, l, { said: step, state: `${step} done` });
+            } else judge('agenda', src.length && step ? src.includes(step) : null, l, { said: step, state: [...new Set(src)].join(',') });
         }
         // Deaths: the count so far (a death within the window may not be in yet), and the last one's cell. A death with
         // no cell (or an 'unknown' cause) still counts.
@@ -265,12 +336,36 @@ export function memoryFactsCheck(lines, chat = []) {
             // The pickaxe: carried or not, against the pickaxe check and dig-refused lines in the window.
             // "stone_pickaxe": no word boundary before "pickaxe" ("_" is a word character).
             const has = /pickaxe/.test(f.reserves.replace(/no pickaxe, axe or weapon/, ''));
-            const src = near(st.picks, t, W);
-            judge('pickaxe', src.length ? src.some(p => p.has === has) : null, l, { said: has, state: src.map(p => p.has).join(',') });
+            // Daytime sources (soak 17: 0 samples from the night lines alone): the pickaxe count at this line (a craft's
+            // `you now have`, a listing, `[pickaxe] made`, `[tool] … broke`; unknown from a death to the next absolute
+            // count), and after a change within inFlightS (logged a little after the facts were built).
+            const src = near(st.picks, t, W).map(p => p.has);
+            const atLine = before(st.pickTimeline.map(x => ({ ...x, t: x.n })), l.n);
+            if (atLine && atLine.count != null) src.push(atLine.count > 0);
+            for (const x of st.pickTimeline) if (x.n > l.n && x.t - t <= MEMORY_CHECKS.inFlightS * 1000 && x.count != null) src.push(x.count > 0);
+            judge('pickaxe', src.length ? src.some(v => v === has) : null, l, { said: has, state: src.join(',') });
+            // The standing goal's own numbers within goalS, unless an inventory change lands between the two (or within
+            // inFlightS before the earlier one): then that goal line is no evidence (soak 17: a forage's pickup).
+            const goals = near(st.standing, t, MEMORY_CHECKS.goalS).filter(g => {
+                const lo = Math.min(g.t, t) - MEMORY_CHECKS.inFlightS * 1000, hi = Math.max(g.t, t);
+                const [a, b] = [Math.min(g.n, l.n), Math.max(g.n, l.n)];
+                return !st.inFlight.some(x => (x.n > a && x.n < b) || (x.t >= lo && x.t <= hi && x.n < a));
+            });
             const held = Number(/food held ([\d.]+) points/.exec(f.reserves)?.[1]);
-            if (Number.isFinite(held)) { const src2 = near(st.food, t, W); judge('food held', src2.length ? src2.some(x => Math.abs(x.held - held) <= 0.1) : null, l, { said: held, state: src2.map(x => x.held).join(',') }); }
+            if (Number.isFinite(held)) { const src2 = [...near(st.food, t, W).map(x => x.held), ...goals.map(g => g.held)]; judge('food held', src2.length ? src2.some(x => Math.abs(x - held) <= 0.1) : null, l, { said: held, state: src2.join(',') }); }
             const blocks = Number(/shelter blocks (\d+) of/.exec(f.reserves)?.[1]);
-            if (Number.isFinite(blocks)) { const src3 = near(st.shelterBlocks, t, W); judge('shelter blocks', src3.length ? src3.some(x => x.count === blocks) : null, l, { said: blocks, state: src3.map(x => x.count).join(',') }); }
+            if (Number.isFinite(blocks)) {
+                // S1: a job that ended by this line gives its count; a later one (within the window) the count before it
+                // (count - gain), and both while it ran.
+                const src3 = [];
+                for (const x of near(st.shelterBlocks, t, W)) {
+                    if (x.t <= t) src3.push(x.count);
+                    else if (x.start >= t) src3.push(x.count - x.gain);
+                    else src3.push(x.count, x.count - x.gain);
+                }
+                src3.push(...goals.map(g => g.blocks));
+                judge('shelter blocks', src3.length ? src3.some(x => x === blocks) : null, l, { said: blocks, state: src3.join(',') });
+            }
         }
         // Each failure: a command with those args that ran and failed around its "N min ago". A line cut before its
         // "(N min ago …)" (memory_facts.js clips at 120 chars), or a command with no `Agent executed` line in the window
@@ -415,6 +510,9 @@ export function wrongClaims(lines, chat = []) {
         let any = false;
         for (const m of text.matchAll(Y_CLAIM)) {
             if (m[1]) continue; // a target ("to the surface (y=72)"), not where the bot is
+            // #661 (soak 17 18:06:20): "up from y=25 to y=44": the from-y is where the bot was; the to-y is the claim.
+            if (/\bfrom\s*$/i.test(text.slice(Math.max(0, m.index - 8), m.index + (m[0].length - m[0].trimStart().length)))
+                && /^\W{0,3}(?:up |down |back )?to y\b/i.test(text.slice(m.index + m[0].length))) continue;
             any = true;
             const ys = ysAt(l.t);
             const y = Number(m[2]);

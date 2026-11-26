@@ -120,7 +120,10 @@ test('#650 review 4, 5, 8, 9, 10: the shelter lines and nights, the scripted-job
     const r = memoryFactsCheck(J(lines), chat);
     const f = (match, miss, unverifiable, trivial = 0) => ({ match, miss, unverifiable, trivial });
     assert.deepEqual(r.byField.shelter, f(3, 1, 1));
-    assert.deepEqual(r.byField.agenda, f(2, 0, 3)); // the scripted-job line at 10:05:05 names shelter_blocks; the start line at 10:50:10
+    // The scripted-job line at 10:05:05 names shelter_blocks (the agenda is active), and it is the latest agenda source for
+    // 10:05:10, 10:06:10 and 10:07:10 (soak 17 A1: the state at the facts line's time); 10:31:00 is over bracketMin after
+    // it (unverifiable); the start line at 10:50:10 for 10:50:20.
+    assert.deepEqual(r.byField.agenda, f(4, 0, 1));
     assert.deepEqual(r.byField.failure, f(0, 0, 1));
     // No death so far: "0 = 0" is right but no evidence (trivial), so the deaths field has 0 samples.
     assert.deepEqual(r.byField.deaths, f(6, 0, 0, 6));
@@ -287,4 +290,79 @@ test('soak 16: the M baseline (no facts lines: I13 n/a; I14 and I15 counted; che
     assert.match(text, /- I14 wrong-state claims: 0 of 7 claims wrong \(2 unverifiable\) in 7 of 94 replies/);
     assert.match(text, /- I15 repeated failures: 0 repeats within 10 min of the same failure \(0\/h; 0 after a facts line named it\) of 12 failed commands; within 30 min 0, within 60 min 3/);
     assert.match(text, /M4 check 5: summaries 33\.6% of USD 0\.056454 \(USD 0\.02814\/h of journal\); 0 chunks cut with no summary call/);
+});
+
+test('soak 17 (#661): the agenda at the facts line\'s time (A1, A3), a job line after agenda done is no step (A2), "done (…), step X" (A4), stale steps and "active, all steps done"', () => {
+    const ag = (time, text) => facts(time, `Agenda: ${text}`);
+    const lines = [
+        REL,
+        ag('17:17:05', 'active, all steps done; done: none'), // wrong: nothing done yet (#661 review 1)
+        ag('17:20:05', 'active, step shelter_blocks (keep 14 blocks); done: sticks, logs'), // A1: the start 31 s before
+        ag('17:21:24', 'active, step first_plank (make the first plank); done: rocks'), // A1: began 48 s before
+        L('17:22:06', 'Agent executed: !agenda and got: agenda: active, step stone_pickaxe (craft a stone pickaxe); done: rocks'),
+        ag('17:22:20', 'active, step stone_pickaxe (craft a stone pickaxe); done: rocks, stone_pickaxe'), // stale: done at 17:22:15
+        ag('17:29:41', 'active, step shelter_blocks (keep 14 blocks); done: rocks'), // A1: agenda done 1 s later
+        ag('18:00:20', 'done (before night it still keeps the shelter blocks), all steps done; done: rocks'), // A2
+        ag('18:06:50', 'done (before night it still keeps the shelter blocks), all steps done; done: rocks'), // A3: re-opened 29 s later
+        L('18:09:59', 'Agent executed: !agenda and got: agenda: done (before night it still keeps the shelter blocks), step shelter_blocks (keep 14 blocks); done: rocks'),
+        ag('18:10:35', 'done (before night it still keeps the shelter blocks), step shelter_blocks (keep 14 blocks); done: rocks'), // A4
+    ];
+    const chat = chatOf(lines, [
+        SV('17:19:34', 'agenda step shelter_blocks started: keep 14 blocks'), SV('17:20:06', 'agenda step rocks started: collect 6 rocks'),
+        SV('17:20:36', 'agenda step first_plank started: make the first plank'), SV('17:21:33', 'agenda step first_plank done'),
+        SV('17:21:33', 'agenda step crafting_tools started: craft Crafting Tools'), SV('17:22:15', 'agenda step stone_pickaxe done'),
+        SV('17:26:36', 'agenda step shelter_blocks started: keep 14 blocks'), SV('17:29:42', 'agenda done'),
+        SV('17:59:20', 'agenda standing goal started (day 1)'), SV('18:00:47', 'agenda step shelter_blocks: the scripted job (run 1 of 2 today)'),
+        SV('18:07:19', 'agenda step shelter_blocks started: keep 14 blocks'), SV('18:09:48', 'agenda step shelter_blocks started: keep 14 blocks'),
+    ]);
+    const r = memoryFactsCheck(J(lines), chat);
+    assert.deepEqual(r.byField.agenda, { match: 6, miss: 2, unverifiable: 0, trivial: 0 });
+    assert.deepEqual(r.missesFirst.map(m => [m.t, m.said, m.state]), [['17:17:05', 'active, all steps done', 'done: none'], ['17:22:20', 'stone_pickaxe', 'stone_pickaxe done']]);
+});
+
+test('soak 17 (#661): shelter blocks before a later job (S1), the standing goal\'s numbers unless a pickup lands between, the pickaxe by day', () => {
+    const res = (time, blocks, held, tools) => facts(time, `Reserves: shelter blocks ${blocks} of 14 (stone or cobble); food held ${held} points, a night needs 0 more than your bar; ${tools}`);
+    const goal = (time, held, blocks) => L(time, `received message from system : You are self-prompting with the goal: 'Standing goal (the agenda is done): keep food worth at least 12 points (you hold ${held}) and 14 blocks for the night's shelter and its repairs (you have ${blocks}; cobblestone first); keep a weapon'`);
+    const lines = [
+        REL,
+        L('17:21:32', 'INVENTORY'), L('17:21:32', '- stick: 3'), L('17:21:32', 'WEARING: Nothing'),
+        res('17:21:40', 0, 10.2, 'tools: spartanweaponry:club_wood (off hand)'), // no pickaxe: the listing shows the hands
+        L('17:22:20', 'Successfully crafted stone_pickaxe, you now have 1 stone_pickaxe.'),
+        res('17:22:21', 0, 10.2, 'tools: stone_pickaxe (off hand)'),
+        L('17:28:24', 'INVENTORY'), L('17:28:24', '- stick: 3'), L('17:28:24', 'IN THE OFF HAND: 1 stone_pickaxe (kept at a death; taken back when a dig needs it)'),
+        goal('17:59:20', 10.2, 5),
+        res('17:59:20', 5, 10.2, 'tools: stone_pickaxe (off hand)'), // S1: the job at 17:59:35 ends with 6 (+1)
+        L('18:06:10', '[tool] stone_pickaxe broke (used up) on undergroundbiomes:metamorphic_stone at 78, 44, 71'),
+        res('18:06:14', 9, 13.3, 'tools: stone_axe (off hand)'),
+        L('18:07:18', '[pickaxe] made a stone pickaxe (stick x1, stone_pickaxe x1)'),
+        res('18:07:34', 9, 13.3, 'tools: stone_pickaxe, stone_axe (off hand)'),
+        L('18:09:45', '[death] died at 80, 61, 72; waiting for the respawn'),
+        res('18:10:03', 0, 0, 'tools: stone_axe, stone_pickaxe'), // after a death, until the next count: unverifiable
+        L('18:38:40', 'Foraged 1 block: got 1 harvestcraft:turnipitem, 1 harvestcraft:zucchiniitem.'),
+        goal('18:38:40', 2.3, 0), // built before the pickup counted: no evidence
+        res('18:38:41', 0, 4.3, 'tools: stone_axe, stone_pickaxe'),
+        res('18:41:48', 0, 20.9, 'tools: stone_axe, stone_pickaxe'), // S1: the job at 18:41:51 ends +14 (14 of 14)
+    ];
+    const chat = chatOf(lines, [
+        SV('17:59:35', 'agenda step shelter_blocks: the scripted job (run 1 of 2 today)'), SV('17:59:41', 'agenda step shelter_blocks: the scripted job ended: +1 shelter blocks (6 of 14; stopped); stopped early: not counted'),
+        SV('18:41:51', 'agenda step shelter_blocks: the scripted job (run 1 of 2 today)'), SV('18:41:57', 'agenda step shelter_blocks: the scripted job ended: +14 shelter blocks (14 of 14; enough)'),
+    ]);
+    const r = memoryFactsCheck(J(lines), chat);
+    const f = (match, miss, unverifiable) => ({ match, miss, unverifiable, trivial: 0 });
+    assert.deepEqual(r.byField.pickaxe, f(5, 0, 3)); // 17:21:40, 17:22:21, 17:59:20, 18:06:14, 18:07:34; after the death unknown
+    assert.deepEqual(r.byField['shelter blocks'], f(2, 0, 6)); // 17:59:20 (job and goal), 18:41:48 (14 - 14)
+    assert.deepEqual(r.byField['food held'], f(1, 0, 7)); // 17:59:20 from the goal; 18:38:41's goal lagged the pickup
+    // A wrong pickaxe is a miss.
+    const unknown = memoryFactsCheck(J([REL, L('18:06:10', '[tool] stone_pickaxe broke (used up) on stone at 1, 2, 3'), res('18:06:20', 0, 0, 'tools: stone_pickaxe (off hand)')]), []);
+    assert.equal(unknown.byField.pickaxe.unverifiable, 1); // a break with no count before it: unknown
+    const wrong2 = memoryFactsCheck(J([REL, L('18:00:00', 'Successfully crafted stone_pickaxe, you now have 1 stone_pickaxe.'), L('18:06:10', '[tool] stone_pickaxe broke (used up) on stone at 1, 2, 3'),
+        res('18:06:20', 0, 0, 'tools: stone_pickaxe (off hand)')]), []);
+    assert.deepEqual(wrong2.byField.pickaxe, f(0, 1, 0));
+});
+
+test('I14 (#661, soak 17 18:06:20): "up from y=25 to y=44" claims y 44, not 25; "up to y=60" is still a claim', () => {
+    const lines = [REL, L('18:06:14', '- Position: x: 78.5, y: 44.0, z: 70.5'), L('18:06:20', "Generated response: Getting there — I'm up from y=25 to y=44. Retrying the climb: !goToSurface"),
+        L('18:06:30', 'Generated response: Up to y=44 now.')];
+    const r = wrongClaims(J(lines), []);
+    assert.deepEqual([r.claims, r.wrong, r.byKind.y], [2, 0, [2, 0, 0]]);
 });

@@ -488,3 +488,26 @@ test('the CLI: a dir reads its server.log; --table; --json; usage errors exit 2;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('soak 17 (#661): the trap climbed out of a little at a time (79, 25, 68 -> 78, 44, 70 -> 80, 61, 72) is one 6.2-min span to the death', () => {
+    // The trap's lines from soak 17's driver.log (17:16:52 release line, then 18:03:31-18:09:50), as committed in #661.
+    const r = soakInvariants(fs.readFileSync(path.join(ROOT, 'test/unit/fixtures/soak17-trap1-excerpt.log'), 'utf8'));
+    assert.deepEqual(r.I1.spanList, [{ t: '18:03:31', line: 2, at: '79, 25, 68', until: '18:09:45', untilLine: 36, minutes: 6.2, end: 'died', fails: 5, interrupted: 0, gaveUp: false }]);
+    assert.deepEqual([r.I1.count, r.I1.trapSpans, r.I1.longestMin, r.I1.escapes, r.I1.escapesNotCleared], [1, 1, 6.2, 5, 5]);
+});
+
+test('I1 trap spans (soak 17 fix): a failed escape continues the span from where the last one left the bot, or within 60 s of it', () => {
+    const stuck = (t, c) => L(t, `[escape] stuck at ${c}: getting out upward (the sky starts at y 99)`);
+    const fail = (t, c, why = 'no stair step') => L(t, `[escape] still stuck at ${c} after 1.0 s (dug 9, placed 0): ${why}`);
+    // Each escape ends 10+ blocks above its start; the next starts where it ended: one span.
+    let r = run([REL(23), stuck('10:00:00', '1, 20, 1'), fail('10:02:00', '1, 35, 1'), stuck('10:03:00', '1, 35, 1'), fail('10:05:00', '1, 50, 1'),
+        stuck('10:05:30', '2, 50, 1'), L('10:06:00', '[death] died at 2, 52, 1; waiting for the respawn')]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.at, x.until, x.minutes, x.end, x.fails]), [['10:00:00', '1, 20, 1', '10:06:00', 6, 'died', 3]]);
+    // A start at another cell with no end cell between: joined within 60 s of the last failure, not after.
+    r = run([REL(23), stuck('10:00:00', '1, 20, 1'), L('10:00:05', '[trapped] still trapped: The way out from 1, 20, 1 was stopped by something else; !goToSurface goes on from here.'),
+        stuck('10:00:50', '9, 30, 9'), fail('10:00:51', '9, 30, 9'), stuck('10:10:00', '40, 60, 40'), fail('10:10:01', '40, 60, 40'), L('10:12:00', 'x')]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.t, x.at, x.until, x.end, x.fails]), [['10:00:00', '1, 20, 1', '10:10:00', 'moved away', 2], ['10:10:00', '40, 60, 40', '10:12:00', 'open', 1]]);
+    // A position line far from the span's latest cell (not its first) ends it.
+    r = run([REL(23), stuck('10:00:00', '1, 20, 1'), fail('10:01:00', '1, 40, 1'), L('10:02:00', '- Position: x: 1.5, y: 41.0, z: 1.5'), L('10:03:00', '- Position: x: 30.5, y: 70.0, z: 1.5'), L('10:04:00', 'x')]);
+    assert.deepEqual(r.I1.spanList.map(x => [x.until, x.end]), [['10:03:00', 'moved away']]);
+});

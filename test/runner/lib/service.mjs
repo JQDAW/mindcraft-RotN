@@ -16,6 +16,8 @@
 //                the runner's 20 s signal race keep running).
 //   output()     synchronous, from a cache refreshed the same way: the journal's messages since the start (the
 //                "driver log"), plus a "[service] ..." line for a failed start or an incident.
+//   timedLines() the same cache with each line's time and number ([{n, t, msg}]; no "[service]" lines), for checks that
+//                need wall-clock spans (g4-soak-2h's no_trap).
 //   exitCode()   always null (a unit has no exit code here); unitState() gives the ActiveState.
 //   stop()       async: `stop <bot>` once a start was sent (also after a failed start: its state is unknown), then
 //                waits for inactive and writes the journal to outFile. It uses the GO checked at that start and does not
@@ -288,6 +290,10 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
         output() {
             if (since && !starting && now() - journal.at >= journalRefreshMs) background('journal', readJournal);
             return [...journal.lines, ...extraLines()];
+        },
+        /** The cached journal from the unit's start with each line's time (UTC ms) and its 1-based number: [{n, t, msg}]. */
+        timedLines() {
+            return linesFromStart(journal.raw, bot).map((p, i) => ({ n: i + 1, t: Date.parse(`${p.time}Z`), msg: p.msg })).filter((l) => Number.isFinite(l.t));
         },
         needsStop: () => startSent && !stopped,
         metrics,
