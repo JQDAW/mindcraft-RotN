@@ -59,7 +59,8 @@
 //                            the older rule only knows a pickaxe was listed, so it counts every refusal it sees.
 //                            #625 logs at most 100 `dig refused:` lines per connection, then one limit line (`… lines
 //                            logged; further refusals on this connection are not`), which DIG_REFUSED does not match;
-//                            it marks I4 as capped: its counts are then lower bounds (`capped`, printed "at least").
+//                            it marks I4 as capped: refusals after the 100th line, if any, are not logged, so its counts
+//                            may be low (`capped`; "≥" in the table). The cap line comes after the 100th line itself.
 //   I5  sunset-food-short    food-for-the-night lines (each sunset, and each night shelter after a respawn) with food
 //                            held below the night's need: `held H points, the night needs about N`
 //                            with H < N (rotn-v0.1.21 on), `food worth W hunger held, … less than T` (before);
@@ -395,7 +396,8 @@ function digRefusedWithTool(lines, rel) {
     if (fb.length || capped) {
         // `rule: held Infinity, <tool> <ms> ms`: a carried tool with a finite time is a usable tool out of the hand.
         const usable = fb.filter(l => /rule: .*?, \S+ \d+ ms/.test(l.msg));
-        // Past #625's cap line the refusals are not logged: the counts are then lower bounds ("at least").
+        // #625's cap line comes right after the 100th line, whether or not more refusals follow: with it, refusals after
+        // the 100th (if any) are not logged, so the counts may be low (#626 review: "may", not "at least N were lost").
         return { count: usable.length, refusals: fb.length, capped, source: capped ? 'dig refused (capped)' : 'dig refused', first: firsts(usable.map(at)) };
     }
     let pickaxeListed = false;
@@ -454,13 +456,14 @@ function starving(lines) {
 
 /**
  * Whether lines[i] is an act on `mob`: a hunt started on it, a !attack on it that ran, a hunting line or a hit.
- * A hunt start's mob is the next hunting line's, looked for by index up to `untilT` and never past the next hunt
- * start (#623 re-review).
+ * A hunt start's mob is the next hunting line's, never past the next hunt start (#623 re-review). #626 review: that
+ * naming line is not bound by the act window (the act is the hunt start, timed from it; soak 15's cow hunt named its
+ * mob 58 s after the refusal, in a `stuck` line).
  */
-function actsOn(lines, i, mob, untilT = Infinity) {
+function actsOn(lines, i, mob) {
     const { msg } = lines[i];
     if (HUNT_START.test(msg)) {
-        for (let j = i + 1; j < lines.length && lines[j].t <= untilT; j++) {
+        for (let j = i + 1; j < lines.length; j++) {
             if (HUNT_START.test(lines[j].msg)) return false;
             const h = HUNTING.exec(lines[j].msg);
             if (h) return h[1] === mob;
@@ -483,7 +486,7 @@ function gateThenAct(lines, rel) {
     const out = [];
     for (const r of refusals) {
         const untilT = r.l.t + p.afterS * 1000;
-        const act = lines.find((l, i) => l.t > r.l.t && l.t <= untilT && actsOn(lines, i, r.mob, untilT));
+        const act = lines.find((l, i) => l.t > r.l.t && l.t <= untilT && actsOn(lines, i, r.mob));
         if (act) out.push({ ...at(r.l), mob: r.mob, act: hms(act.t), actLine: act.n, afterS: Math.round((act.t - r.l.t) / 1000) });
     }
     return { count: out.length, refusals: refusals.length, first: firsts(out) };
@@ -659,7 +662,7 @@ export function render(r, name = 'soak') {
     }
     row('I2', 'enclosed-morning', r.I2, `${r.I2.count} "could not leave the shelter", ${r.I2.sameShelterNights} nights in the same shelter as the night before`);
     row('I3', 'rejected-click', r.I3, `${r.I3.count} rejected clicks (from ${r.I3.source}${r.I3.secondTries != null ? `; ${r.I3.secondTries} second tries failed too` : ''})`);
-    row('I4', 'dig-refused-with-tool', r.I4, r.I4 && `${r.I4.capped ? 'at least ' : ''}${r.I4.count} of ${r.I4.capped ? 'at least ' : ''}${r.I4.refusals} tool refusals with a usable tool carried (${r.I4.source}${r.I4.capped ? '; refusals past the cap line are not logged' : ''})`);
+    row('I4', 'dig-refused-with-tool', r.I4, r.I4 && `${r.I4.count} of ${r.I4.refusals} logged tool refusals with a usable tool carried (${r.I4.source}${r.I4.capped ? '; the 100-line cap was reached: refusals after it, if any, are not logged' : ''})`);
     row('I5', 'sunset-food-short', r.I5, r.I5 && `${r.I5.count} of ${r.I5.nightFoodLines} food-for-the-night lines short of the night's need; ${r.I5.foodRuns} sunset food runs (+${r.I5.foodRunPoints} points)`);
     row('I6', 'starving', r.I6, `${r.I6.count} food lines at ${INVARIANTS.starving.lowFood} or less (lowest ${cell(r.I6.lowestFood)}), ${r.I6.noSafeFoodRuns} "no safe food" runs over ${INVARIANTS.starving.noSafeFoodMin} min (longest ${r.I6.longestNoSafeFoodMin} min), ${r.I6.starvingHurt} starving hurt lines`);
     row('I7', 'gate-then-act', r.I7, r.I7 && `${r.I7.count} of ${r.I7.refusals} refusals followed by an act on that mob (a hunt started, a !attack that ran, a hunting line or a hit) within ${INVARIANTS.gateThenAct.afterS} s`);

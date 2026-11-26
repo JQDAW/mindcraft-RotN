@@ -276,12 +276,12 @@ test('I4 dig-refused-with-tool: n/a before rotn-v0.1.19; #618 lines with a finit
     assert.deepEqual([r.I4.count, r.I4.refusals, r.I4.source], [1, 2, 'dig refused']);
 });
 
-test('#625: the dig-refused cap line is not a refusal; with it I4 is a lower bound (capped, "at least", "≥")', () => {
+test('#625, #626 review: the dig-refused cap line is not a refusal; with it I4 may be low (capped, "≥"), not "at least N lost"', () => {
     const refused = (t) => L(t, '[forge-bridge] dig refused: undergroundbiomes:metamorphic_stone:6 at -58, 55, -50 (pickaxe level 0, hardness 0.9); held planks:1 (no pickaxe level); pickaxe tools: stone_pickaxe (level 0) off hand; rule: held Infinity, stone_pickaxe 350 ms');
     const cap = L('10:09:00', '[forge-bridge] dig refused: 100 lines logged; further refusals on this connection are not');
     let r = run([REL(22), refused('10:00:00'), refused('10:01:00'), cap]);
     assert.deepEqual([r.I4.count, r.I4.refusals, r.I4.capped, r.I4.source], [2, 2, true, 'dig refused (capped)']);
-    assert.match(render(r, 'x'), /I4 dig-refused-with-tool: at least 2 of at least 2 tool refusals/);
+    assert.match(render(r, 'x'), /I4 dig-refused-with-tool: 2 of 2 logged tool refusals with a usable tool carried \(dig refused \(capped\); the 100-line cap was reached: refusals after it, if any, are not logged\)/);
     assert.match(renderTable({ 'g4soak-16-x': { release: 'rotn-v0.1.22', I4_digRefusedWithTool: 2, I4_capped: true } }), /\| ≥2 \|/);
     r = run([REL(22), cap]); // only the cap line kept (a partial journal): still a lower bound, not "no refusal"
     assert.deepEqual([r.I4.count, r.I4.refusals, r.I4.capped], [0, 0, true]);
@@ -289,13 +289,16 @@ test('#625: the dig-refused cap line is not a refusal; with it I4 is a lower bou
     assert.deepEqual([r.I4.count, r.I4.capped], [1, false]);
 });
 
-test('#623 re-review: a hunt start looks for its mob only within the window and not past the next hunt start', () => {
+test('#623 re-review, #626 review: a hunt start names its mob by the next hunting line (not past the next hunt start; not bound by the window)', () => {
     const refusal = L('10:00:00', '[reflex] hunting: left alone, it may belong to a player: animania:cow_holstein: a animania:bull_holstein within 16 blocks');
     const start = (t) => L(t, '[survival] weapon spartanweaponry:club_wood (hunt)');
     let r = run([REL(21), refusal, start('10:00:30'), start('10:00:40'), L('10:00:50', '[reflex] hunting animania:sow_old_spot: stuck (left alone for 5 min)')]);
     assert.equal(r.I7.count, 0);
-    // The hunting line after the window: the hunt start's mob is unknown within it, so no act.
+    // The hunt started within the window; its naming line comes after the window: still an act on the cow, at 50 s.
     r = run([REL(21), refusal, start('10:00:50'), L('10:02:00', '[reflex] hunting animania:cow_holstein: stuck (left alone for 5 min)')]);
+    assert.deepEqual([r.I7.count, r.I7.first[0].afterS], [1, 50]);
+    // A hunt started after the window is no act, whatever it names.
+    r = run([REL(21), refusal, start('10:01:10'), L('10:01:20', '[reflex] hunting animania:cow_holstein: stuck (left alone for 5 min)')]);
     assert.equal(r.I7.count, 0);
 });
 
