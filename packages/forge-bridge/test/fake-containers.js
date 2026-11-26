@@ -34,6 +34,13 @@
 // EntityPlayerMP.displayGUIChest), mode-0 clicks as above; closing it drops the cursor (Container.
 // onContainerClosed; the chest's closeInventory sends no slot) and window 0's changed slots follow.
 // Its contents stay between openings (the tile entity).
+// The server tick (opts.tickModel, fake-tick.js runs it; soak 17): window 0's slots the client was last sent
+// (Container.inventoryItemStacks) are kept, and detectAndSendChanges sends each slot that differs, at the end of
+// the tick, while window 0 is the open container. An accepted click (mode 0 or 2) runs it at once with
+// isChangingQuantityOnly: the changed slots are recorded as sent and none is sent (NetHandlerPlayServer.
+// processClickWindow, pa.a(lf) bytecode 167-233; EntityPlayerMP.sendSlotContents, oq.a(afr,int,aip) bytecode
+// 31-38), so a tool's damage from a dig in the same tick never reaches the client. A rejected click's resend
+// (sendAllContents) leaves the record as it is. Without tickModel nothing of this runs.
 // This is a model, not a server: the live probe batch is still the proof.
 
 import { encodeOpenGui } from '../src/channels.js';
@@ -158,7 +165,20 @@ export function attachFakeContainers(client, opts) {
         pending: null, // { windowId, action } after a rejected click
         clicks: [], rejected: [], ignored: [], unsupported: [], placed: [], uses: [], closed: [],
         swaps: [], dropped: [], returned: [], // mode-2 clicks; stacks dropped and grid stacks put back by a close of window 0
+        sent: inv.map(copy), // tickModel: window 0 as the client was last sent it (inventoryItemStacks)
+        unsent: [], // tickModel: { slot, item } recorded as sent by an accepted click's detectAndSendChanges, not sent
     };
+    // tickModel: Container.detectAndSendChanges for window 0 (slot 0, the crafting result, is never sent).
+    function detectAndSendChanges(quantityOnly = false) {
+        if (!opts.tickModel || state.tableWindow || state.chestWindow) return;
+        for (let s = 1; s < 46; s++) {
+            if (same(state.sent[s], inv[s])) continue;
+            state.sent[s] = copy(inv[s]);
+            if (quantityOnly) state.unsent.push({ slot: s, item: copy(inv[s]) });
+            else client.write('set_slot', { windowId: 0, slot: s, item: toWire(inv[s]) });
+        }
+    }
+    const sentAll = () => { if (opts.tickModel) state.sent = inv.map(copy); };
     let nextWindowId = 0;
 
     // Slot access per window. FastWorkbench: 0 result, 1-9 grid, 10-45 = player slots 9-44.
@@ -296,6 +316,7 @@ export function attachFakeContainers(client, opts) {
             state.swaps.push(p);
             // SWAP returns EMPTY; the client sends no item for mode 2: always equal, accepted, no echo.
             client.write('transaction', { windowId: p.windowId, action: p.action, accepted: true });
+            detectAndSendChanges(true);
             return;
         }
         if (p.mode !== 0) {
@@ -307,6 +328,7 @@ export function attachFakeContainers(client, opts) {
         const returned = slotClick(p.windowId, p.slot, p.mouseButton);
         if (same(fromWire(p.item), returned)) {
             client.write('transaction', { windowId: p.windowId, action: p.action, accepted: true });
+            detectAndSendChanges(true);
         } else {
             state.rejected.push({ click: p, server: returned });
             state.pending = { windowId: p.windowId, action: p.action };
@@ -478,6 +500,8 @@ export function attachFakeContainers(client, opts) {
     return {
         state,
         windowItems,
+        /** tickModel: the end of a server tick's detectAndSendChanges for window 0 (fake-tick.js calls it). */
+        detectAndSendChanges: () => detectAndSendChanges(false),
         /** Replace the server's recipes (matched first to last), e.g. with a maxUses hook. */
         setRecipes(list) { recipes = list; },
         /** The chest's contents as { slot: {id, count, meta} } (non-empty slots). */
@@ -485,6 +509,7 @@ export function attachFakeContainers(client, opts) {
         /** Send the player's inventory window (as at login). */
         sendInventory() {
             client.write('window_items', { windowId: 0, items: windowItems(0) });
+            sentAll();
             health();
         },
         /** Set the food level directly, with saturation 0 (update_health). Not what any command does. */
@@ -530,6 +555,7 @@ export function attachFakeContainers(client, opts) {
             let n = 0;
             for (let s = 0; s < inv.length; s++) if (inv[s]) { n += inv[s].count; inv[s] = null; }
             client.write('window_items', { windowId: 0, items: windowItems(0) });
+            sentAll();
             return n;
         },
         /** Replace window 0 and the cursor ({slot: {id, count, meta}}) and resend them, as after a login. */
@@ -540,6 +566,7 @@ export function attachFakeContainers(client, opts) {
             state.pending = null;
             client.write('window_items', { windowId: 0, items: windowItems(0) });
             client.write('set_slot', { windowId: -1, slot: -1, item: toWire(state.cursor) });
+            sentAll();
         },
         /** The server's window 0 and cursor ({ slots: [...46], cursor }), copies. */
         serverView() { return { slots: inv.map(copy), cursor: copy(state.cursor) }; },
