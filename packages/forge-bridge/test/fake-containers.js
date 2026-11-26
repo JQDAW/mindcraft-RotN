@@ -29,6 +29,11 @@
 // detectAndSendChanges sends the changed window-0 slots (not after a click, so not quantity-only).
 // Closing the table does the same with its 3x3 grid (ContainerWorkbench.onContainerClosed): the cursor
 // dropped, the grid put back, then window 0's changed slots.
+// A single chest (opts.chest, #633 review 2): ContainerChest, window type minecraft:chest, slots 0-26 the
+// chest and 27-62 the player's 9-44; opened with open_window and window_items (BlockChest.onBlockActivated,
+// EntityPlayerMP.displayGUIChest), mode-0 clicks as above; closing it drops the cursor (Container.
+// onContainerClosed; the chest's closeInventory sends no slot) and window 0's changed slots follow.
+// Its contents stay between openings (the tile entity).
 // This is a model, not a server: the live probe batch is still the proof.
 
 import { encodeOpenGui } from '../src/channels.js';
@@ -129,12 +134,16 @@ export function simulateHunger(s, seconds, amplifier) {
  * @param {{ recipes: Array<{shaped?: (number|null)[][], shapeless?: number[], result: {id:number,count?:number,meta?:number}}>,
  *           blocks: Record<number, number>, foods: Record<number, number|{hunger:number,saturation:number}>,
  *           table: {x:number,y:number,z:number}, inventory: Record<number, {id:number,count:number,meta?:number}>,
- *           placeDelayMs?: number, entityId?: number, food?: number, saturation?: number }} opts
+ *           placeDelayMs?: number, entityId?: number, food?: number, saturation?: number,
+ *           chest?: {x:number,y:number,z:number} }} opts
+ *   recipes are matched first to last (the server's registry order); maxUses (a test hook) makes a recipe
+ *   stop matching after it has been crafted that many times (a server whose result changes between crafts).
  *   blocks: item id -> block id that placing it sets; foods: item id -> food points, or food points and
  *   the saturation modifier (RotN's bread, scripts/food.zs: { hunger: 3, saturation: 0.2 }).
  */
 export function attachFakeContainers(client, opts) {
-    const { recipes, blocks, foods, table, placeDelayMs = 0, entityId = 1, food = 20, saturation = 5, maxStack = {} } = opts;
+    let { recipes } = opts;
+    const { blocks, foods, table, chest, placeDelayMs = 0, entityId = 1, food = 20, saturation = 5, maxStack = {} } = opts;
     // Item max stack size (tools are 1 on a real server), DEFAULT_MAX_STACK otherwise.
     const max = (id) => maxStack[id] ?? DEFAULT_MAX_STACK;
     const inv = Array(46).fill(null); // ContainerPlayer: 0 result, 1-4 grid, 5-8 armour, 9-35 main, 36-44 hotbar, 45 offhand
@@ -142,6 +151,9 @@ export function attachFakeContainers(client, opts) {
     const state = {
         inv, cursor: null, held: 0, food, saturation, exhaustion: 0, table: table ? { ...table } : null, noiseNext: null,
         tableWindow: null, // { id, grid: Array(10) } while FastWorkbench is open
+        chest: chest ? { ...chest } : null, chestSlots: Array(27).fill(null), // the chest's contents
+        chestWindow: null, // { id, invAtOpen } while the chest is open
+        resultRecipe: {}, // windowId -> the recipe behind the result slot (for maxUses)
         pending: null, // { windowId, action } after a rejected click
         clicks: [], rejected: [], ignored: [], unsupported: [], placed: [], uses: [], closed: [],
         swaps: [], dropped: [], returned: [], // mode-2 clicks; stacks dropped and grid stacks put back by a close of window 0
@@ -149,14 +161,19 @@ export function attachFakeContainers(client, opts) {
     let nextWindowId = 0;
 
     // Slot access per window. FastWorkbench: 0 result, 1-9 grid, 10-45 = player slots 9-44.
+    // The chest: 0-26 the chest, 27-62 = player slots 9-44.
+    const isChest = (windowId) => windowId !== 0 && state.chestWindow?.id === windowId;
     function grid(windowId) { return windowId === 0 ? inv : state.tableWindow.grid; }
     function get(windowId, slot) {
+        if (isChest(windowId)) return slot < 27 ? state.chestSlots[slot] : inv[slot - 18];
         if (windowId === 0 || slot <= 9) return grid(windowId)[slot];
         return inv[slot - 1];
     }
     function set(windowId, slot, s) {
-        if (windowId === 0 || slot <= 9) grid(windowId)[slot] = s && s.count > 0 ? s : null;
-        else inv[slot - 1] = s && s.count > 0 ? s : null;
+        const v = s && s.count > 0 ? s : null;
+        if (isChest(windowId)) { if (slot < 27) state.chestSlots[slot] = v; else inv[slot - 18] = v; return; }
+        if (windowId === 0 || slot <= 9) grid(windowId)[slot] = v;
+        else inv[slot - 1] = v;
     }
     const gridSize = (windowId) => (windowId === 0 ? 2 : 3);
     function gridCells(windowId) {
@@ -168,6 +185,7 @@ export function attachFakeContainers(client, opts) {
         const cells = gridCells(windowId);
         const filled = cells.flat().filter(Boolean);
         for (const r of recipes) {
+            if (r.maxUses !== undefined && (r.used ?? 0) >= r.maxUses) continue;
             if (r.shapeless) {
                 const want = [...r.shapeless].sort();
                 const have = filled.map(s => s.id).sort();
@@ -195,6 +213,7 @@ export function attachFakeContainers(client, opts) {
 
     function updateResult(windowId) {
         const r = match(windowId);
+        state.resultRecipe[windowId] = r;
         const result = r ? stack(r.result.id, r.result.count ?? 1, r.result.meta ?? 0) : null;
         if (!same(grid(windowId)[0], result)) {
             grid(windowId)[0] = result;
@@ -203,8 +222,8 @@ export function attachFakeContainers(client, opts) {
     }
 
     function windowItems(windowId) {
-        // Both windows have 46 slots: 9 crafting + armour/offhand or 10 + 36 player slots.
-        return Array.from({ length: 46 }, (_, s) => toWire(get(windowId, s)));
+        // Window 0 and the table have 46 slots: 9 crafting + armour/offhand or 10 + 36 player slots; the chest 27 + 36.
+        return Array.from({ length: isChest(windowId) ? 63 : 46 }, (_, s) => toWire(get(windowId, s)));
     }
 
     // Container.slotClick, PICKUP (mode 0) only. Returns the stack it reports back.
@@ -215,12 +234,15 @@ export function attachFakeContainers(client, opts) {
             return null;
         }
         const before = copy(get(windowId, slot));
-        if (slot === 0) { // the crafting result: take it all, or add it to a matching cursor
+        const crafting = !isChest(windowId);
+        if (crafting && slot === 0) { // the crafting result: take it all, or add it to a matching cursor
             const res = get(windowId, 0);
             if (res && (!state.cursor || (state.cursor.id === res.id && state.cursor.meta === res.meta && state.cursor.count + res.count <= max(res.id)))) {
                 state.cursor = state.cursor ? { ...state.cursor, count: state.cursor.count + res.count } : copy(res);
                 for (let s = 1; s <= gridEnd; s++) { const g = get(windowId, s); if (g) set(windowId, s, { ...g, count: g.count - 1 }); }
                 grid(windowId)[0] = null;
+                const made = state.resultRecipe[windowId];
+                if (made) made.used = (made.used ?? 0) + 1;
                 updateResult(windowId);
             }
             return before;
@@ -240,7 +262,7 @@ export function attachFakeContainers(client, opts) {
                 state.cursor = c.count > 1 ? { ...c, count: c.count - 1 } : null;
             } else if (c && s) { set(windowId, slot, c); state.cursor = s; }
         }
-        if (slot >= 1 && slot <= gridEnd) updateResult(windowId);
+        if (crafting && slot >= 1 && slot <= gridEnd) updateResult(windowId);
         return before;
     }
 
@@ -248,22 +270,24 @@ export function attachFakeContainers(client, opts) {
     // The crafting result (slot 0) and armour validity are not modelled: a swap on slot 0 is recorded
     // in unsupported and changes nothing.
     function swapClick(windowId, slot, button) {
-        if (slot === 0 || slot < 0) { state.unsupported.push({ windowId, slot, mode: 2, mouseButton: button }); return; }
-        const hot = windowId === 0 ? 36 + button : 37 + button; // the table maps player slot n to n + 1
+        if (slot < 0 || (slot === 0 && !isChest(windowId))) { state.unsupported.push({ windowId, slot, mode: 2, mouseButton: button }); return; }
+        // the table maps player slot n to n + 1, the chest to n + 18
+        const hot = windowId === 0 ? 36 + button : isChest(windowId) ? 54 + button : 37 + button;
         if (hot === slot) return;
         const h = get(windowId, hot);
         const s = get(windowId, slot);
         if (!h && !s) return;
         set(windowId, hot, s ? { ...s } : null);
         set(windowId, slot, h ? { ...h } : null);
-        if (slot >= 1 && slot <= (windowId === 0 ? 4 : 9)) updateResult(windowId);
+        if (!isChest(windowId) && slot >= 1 && slot <= (windowId === 0 ? 4 : 9)) updateResult(windowId);
     }
 
     client.on('window_click', (p) => {
         state.clicks.push(p);
         // processClickWindow only acts on the open container: while the table is open, a
         // window-0 click is dropped silently (no transaction), as on a real server.
-        const open = state.tableWindow ? p.windowId === state.tableWindow.id : p.windowId === 0;
+        const openId = state.tableWindow?.id ?? state.chestWindow?.id ?? 0;
+        const open = p.windowId === openId;
         if (!open || (state.pending && state.pending.windowId === p.windowId)) { state.ignored.push(p); return; }
         if (p.mode === 2 && p.mouseButton >= 0 && p.mouseButton <= 8) {
             swapClick(p.windowId, p.slot, p.mouseButton);
@@ -300,6 +324,13 @@ export function attachFakeContainers(client, opts) {
         state.closed.push(p.windowId);
         if (state.tableWindow) { // closeContainer closes the open container, whatever the packet's id
             closeTableWindow();
+            return;
+        }
+        if (state.chestWindow) {
+            const { invAtOpen } = state.chestWindow;
+            state.chestWindow = null;
+            if (state.cursor) { state.dropped.push({ ...state.cursor, why: 'cursor' }); state.cursor = null; }
+            sendChangedNextTick(invAtOpen);
             return;
         }
         closePlayerWindow();
@@ -376,6 +407,15 @@ export function attachFakeContainers(client, opts) {
             client.write('set_slot', { windowId: -1, slot: -1, item: toWire(state.cursor) });
             return;
         }
+        const ch = state.chest;
+        if (ch && at.x === ch.x && at.y === ch.y && at.z === ch.z) { // BlockChest.onBlockActivated -> displayGUIChest
+            nextWindowId = (nextWindowId % 100) + 1;
+            state.chestWindow = { id: nextWindowId, invAtOpen: inv.map(copy) };
+            client.write('open_window', { windowId: nextWindowId, inventoryType: 'minecraft:chest', windowTitle: JSON.stringify({ translate: 'container.chest' }), slotCount: 27 });
+            client.write('window_items', { windowId: nextWindowId, items: windowItems(nextWindowId) });
+            client.write('set_slot', { windowId: -1, slot: -1, item: toWire(state.cursor) });
+            return;
+        }
         const heldSlot = 36 + state.held;
         const item = inv[heldSlot];
         const blockId = item && blocks[item.id];
@@ -423,6 +463,10 @@ export function attachFakeContainers(client, opts) {
     return {
         state,
         windowItems,
+        /** Replace the server's recipes (matched first to last), e.g. with a maxUses hook. */
+        setRecipes(list) { recipes = list; },
+        /** The chest's contents as { slot: {id, count, meta} } (non-empty slots). */
+        chestContents() { return Object.fromEntries(state.chestSlots.map((c, i) => [i, c]).filter(([, c]) => c)); },
         /** Send the player's inventory window (as at login). */
         sendInventory() {
             client.write('window_items', { windowId: 0, items: windowItems(0) });

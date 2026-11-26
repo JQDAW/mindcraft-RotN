@@ -12,9 +12,12 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { tmpFile } from './helpers.js';
-import { startRotnWorld, stopCraftWorld, within } from './craft-world.js';
+import { createRequire } from 'node:module';
+import { startRotnWorld, stopCraftWorld, within, CHEST } from './craft-world.js';
 import { inventoryDiff } from './fake-containers.js';
 
+const require = createRequire(import.meta.url);
+const Vec3 = require('vec3');
 const PILE = 'betterwithmods:dirt_pile';
 const ROCK = 'pyrotech:rock';
 let world;
@@ -25,6 +28,7 @@ test('soak 15 clicks through real mineflayer: cases A, B and C with and without 
         itemNames: [PILE, ROCK, 'minecraft:cobblestone', 'minecraft:planks', 'minecraft:stone_pickaxe', 'minecraft:stick'],
         inventory: { 36: { name: 'minecraft:planks', count: 1 } },
         recipes: [{ shapeless: [ROCK, ROCK, ROCK, ROCK], result: 'minecraft:cobblestone' }],
+        chest: true, // the third test's chest
         captureFile: tmpFile('click-replay.jsonl'),
     });
     const { bot, ids } = world;
@@ -159,10 +163,12 @@ test('soak 15 clicks through real mineflayer: cases A, B and C with and without 
 
 test('stacks prismarine-windows makes itself have the server\'s size: a split, and the one-by-one right-clicks of deposit/withdraw (patches/mineflayer: prismarine-windows(bot.registry))', { timeout: 30000 }, async () => {
     // Before the patch mineflayer built prismarine-windows from bot.version, so these stacks were made
-    // with a fresh 1.12.2 registry: a modded item was 'unknown' with stack size 1 (#629's todo test).
+    // with a fresh 1.12.2 registry: a modded item was 'unknown' with stack size 1.
     const { bot, ids } = world;
     const c = world.containers();
     const P = ids[PILE];
+    // #633 review 3: the first test swaps in 64 and puts the dump's size back; this one needs it back.
+    assert.equal(bot.registry.items[P].stackSize, 256, 'the dump\'s size in bot.registry at the start');
     c.setInventory({ 11: { id: P, count: 40 } });
     for (let w = 0; bot.inventory.slots[11]?.count !== 40 && w < 2000; w += 20) await sleep(20);
     await within(5000, bot.clickWindow(11, 1, 0), 'split'); // right-click: half onto the cursor, made by prismarine-windows
@@ -178,4 +184,49 @@ test('stacks prismarine-windows makes itself have the server\'s size: a split, a
     for (let i = 0; i < 3; i++) await within(5000, bot.clickWindow(20, 1, 0), 'one more');
     assert.deepEqual([bot.inventory.slots[20]?.count, bot.inventory.selectedItem?.count], [3, 37]);
     assert.deepEqual(inventoryDiff(bot.inventory, c.state), [], 'three placed on both sides');
+});
+
+test('a chest deposit and withdraw of part of a modded stack (mineflayer transfer: one-by-one right-clicks into a chest window) keep the views in step (patches/mineflayer: prismarine-windows(bot.registry); #633 review 2)', { timeout: 30000 }, async () => {
+    // transfer right-clicks one item at a time when it moves fewer than the cursor holds; the first
+    // click makes the stack in the empty destination slot, with prismarine-windows' own Item class. With
+    // bot.version that stack had stack size 1 (a modded item), so the next click went to another empty
+    // slot: 30 dirt piles took 27 one-item slots and then "destination full", where the server fits 256.
+    const { bot, ids } = world;
+    const c = world.containers();
+    const st = c.state;
+    const P = ids[PILE];
+    assert.equal(bot.registry.items[P].stackSize, 256, 'the dump\'s size in bot.registry at the start');
+    c.setInventory({ 11: { id: P, count: 40 } });
+    for (let w = 0; bot.inventory.slots[11]?.count !== 40 && w < 2000; w += 20) await sleep(20);
+    const rejectedBefore = st.rejected.length;
+    const chestBlock = bot.blockAt(new Vec3(CHEST.x, CHEST.y, CHEST.z));
+    assert.equal(chestBlock?.name, 'chest');
+    const chest = await within(5000, bot.openContainer(chestBlock), 'open the chest');
+    assert.equal(chest.type, 'minecraft:chest');
+    assert.equal(chest.inventoryStart, 27);
+    const chestView = () => Object.fromEntries(chest.slots.slice(0, 27).map((it, i) => [i, it && { id: it.type, count: it.count, meta: it.metadata ?? 0 }]).filter(([, v]) => v));
+    // The player's dirt piles in the chest window (slots 27-62 = player slots 9-44), and the server's.
+    const playerView = () => chest.slots.slice(27).reduce((n, it) => n + (it?.type === P ? it.count : 0), 0);
+    const playerSlots = () => chest.slots.slice(27).map((it, i) => (it ? `${i + 9}:${it.count}` : null)).filter(Boolean);
+    const serverSlots = () => st.inv.slice(9, 45).map((it, i) => (it ? `${i + 9}:${it.count}` : null)).filter(Boolean);
+
+    await within(10000, chest.deposit(P, null, 30), 'deposit 30');
+    assert.deepEqual(c.chestContents(), { 0: { id: P, count: 30, meta: 0 } }, 'the server: one stack of 30');
+    assert.deepEqual(chestView(), c.chestContents(), 'the client\'s chest matches the server\'s');
+    assert.deepEqual([playerView(), c.count(P), chest.selectedItem], [10, 10, null]);
+    assert.deepEqual(playerSlots(), serverSlots(), 'the player\'s slots in the chest window match the server\'s');
+
+    await within(10000, chest.withdraw(P, null, 20), 'withdraw 20');
+    assert.deepEqual(c.chestContents(), { 0: { id: P, count: 10, meta: 0 } });
+    assert.deepEqual(chestView(), c.chestContents(), 'the client\'s chest matches the server\'s');
+    assert.deepEqual([playerView(), c.count(P), chest.selectedItem], [30, 30, null]);
+    assert.deepEqual(playerSlots(), serverSlots(), 'the player\'s slots in the chest window match the server\'s');
+    assert.equal(st.rejected.length, rejectedBefore, 'no rejected click');
+
+    chest.close();
+    for (let w = 0; (st.chestWindow || inventoryDiff(bot.inventory, st).length) && w < 3000; w += 20) await sleep(20);
+    assert.equal(st.chestWindow, null);
+    assert.deepEqual(inventoryDiff(bot.inventory, st), [], 'window 0 in step after the close');
+    assert.equal(bot.inventory.slots.reduce((n, it) => n + (it?.type === P ? it.count : 0), 0), 30);
+    assert.deepEqual(st.dropped.filter(d => d.why === 'cursor' && d.id === P), [], 'nothing on the cursor at the close');
 });

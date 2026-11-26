@@ -160,21 +160,26 @@ export async function makePickaxe(bot, { craft, tableNear = false, placeTable = 
     if (!plan.ready) return { made: false, why: plan.why, crafted: [] };
     const crafted = [];
     let placed = null;
-    for (const [item, times] of plan.crafts) {
-        if (bot.interrupt_code) return { made: false, why: 'interrupted', crafted };
-        // #642 review 4: the table goes in a cell of the pocket chosen here (craftRecipe's own free-space search can
-        // pick the bot's own cell); it is broken again after the craft (by hand: its drop lands beside the bot).
-        if (item === PICKAXE.item && !tableNear) {
-            placed = await placeTable(bot, { say });
-            if (placed?.why) return { made: false, why: placed.why, crafted };
+    try {
+        for (const [item, times] of plan.crafts) {
+            if (bot.interrupt_code) return { made: false, why: 'interrupted', crafted };
+            // #642 review 4: the table goes in a cell of the pocket chosen here (craftRecipe's own free-space search can
+            // pick the bot's own cell); it is broken again afterwards, whatever happened (by hand: its drop lands beside
+            // the bot).
+            if (item === PICKAXE.item && !tableNear) {
+                placed = await placeTable(bot, { say });
+                if (placed?.why) return { made: false, why: placed.why, crafted };
+            }
+            let ok = false;
+            try { ok = await craft(bot, item, times); } catch (err) { ok = false; say(`[pickaxe] crafting ${item}: ${err?.message ?? err}`); }
+            // A step that failed leaves no way to the pickaxe: stop there, saying which (no table placed for nothing).
+            if (!ok) return { made: false, why: item === PICKAXE.item ? 'the stone pickaxe craft failed' : `crafting ${item} for the stone pickaxe failed`, crafted };
+            crafted.push([item, times]);
         }
-        let ok = false;
-        try { ok = await craft(bot, item, times); } catch (err) { ok = false; say(`[pickaxe] crafting ${item}: ${err?.message ?? err}`); }
-        if (!ok && item === PICKAXE.item) return { made: false, why: `the stone pickaxe craft failed`, crafted };
-        if (ok) crafted.push([item, times]);
+        const made = !!bestPickaxe(bot);
+        say(`[pickaxe] ${made ? 'made a stone pickaxe' : 'no stone pickaxe after the crafts'} (${crafted.map(([i, n]) => `${i} x${n}`).join(', ') || 'no craft'})`);
+        return { made, why: made ? null : 'the crafts made no pickaxe', crafted };
+    } finally {
+        if (placed?.cell) { try { const t = bot.blockAt(placed.cell); if (/crafting_table$/.test(t?.name ?? '')) await bot.dig(t); } catch { /* left where it is */ } }
     }
-    if (placed?.cell) { try { const t = bot.blockAt(placed.cell); if (/crafting_table$/.test(t?.name ?? '')) await bot.dig(t); } catch { /* left where it is */ } }
-    const made = !!bestPickaxe(bot);
-    say(`[pickaxe] ${made ? 'made a stone pickaxe' : 'no stone pickaxe after the crafts'} (${crafted.map(([i, n]) => `${i} x${n}`).join(', ') || 'no craft'})`);
-    return { made, why: made ? null : 'the crafts made no pickaxe', crafted };
 }
