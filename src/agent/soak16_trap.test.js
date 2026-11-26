@@ -20,11 +20,14 @@ const quiet = (t) => { t.mock.method(console, 'log', () => {}); t.mock.method(co
 const useRegistry = (t, bot) => { __setRegistryForTest(bot.registry); t.after(() => __setRegistryForTest(null)); };
 const DAY = { placed: 0, budget: { maxPlaced: 32, reserve: 14, kind: 'day' } };
 // Soak 16's bag at 21:20 (the appendix: no pickaxe; cobble from the shelter_blocks runs, planks, the table picked up).
+// Soak 17 E(4)(iii): a day escape at dusk seals in for the night; the fixture's default time (6000) is dusk on RotN's
+// clock (5.5 min to sunset), so the daytime climbs here run in the morning.
+const MORNING = 1000;
 const BAG = { 36: ['stone_axe', 1], 9: ['undergroundbiomes:metamorphic_cobble', 8], 10: ['undergroundbiomes:igneous_cobble', 5], 11: ['planks', 4], 12: ['crafting_table', 1], 13: ['dirt', 6] };
 
 test('soak 16 trap (1): no pickaxe in a stone pocket: the why names the cell over the head, its block and the missing pickaxe', (t) => {
     quiet(t);
-    const { bot } = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] } });
+    const { bot } = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] }, timeOfDay: MORNING });
     useRegistry(t, bot);
     const step = nextStep(bot, V(0, 64, 0), { ...DAY });
     assert.equal(step.why, 'no stair step, and no room to pillar up above 0, 56, 0: 0, 58, 0 is undergroundbiomes:metamorphic_stone, which needs a pickaxe (you carry none)');
@@ -73,7 +76,7 @@ test('soak 16 trap (1): the real escape in a tunnel end with soak 16\'s bag: the
     t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
     t.mock.method(console, 'warn', () => {});
     // The walk's tunnel behind the bot (1, 56, 0) is open: the only room for a table (#642 review 4).
-    const w = pocketUnderRock({ slots: BAG, set: { '0,56,0': 'air', '0,57,0': 'air', '1,56,0': 'air' } });
+    const w = pocketUnderRock({ slots: BAG, set: { '0,56,0': 'air', '0,57,0': 'air', '1,56,0': 'air' }, timeOfDay: MORNING });
     useRegistry(t, w.bot);
     const crafts = [];
     const craft = (bot, item, n) => {
@@ -94,13 +97,13 @@ test('soak 16 trap (1): the real escape in a tunnel end with soak 16\'s bag: the
     assert.ok(order.findIndex(l => /digging out by hand/.test(l)) >= 0 && order.findIndex(l => /digging out by hand/.test(l)) < craftAt, order.join('\n'));
     assert.ok(order.some(l => /\[pickaxe\] placed the crafting table at \(1, 56, 0\)/.test(l)), order.join('\n'));
     // With hostiles given (the respawn escape among player zombies): no craft at all.
-    const z = pocketUnderRock({ slots: BAG, set: { '0,56,0': 'air', '0,57,0': 'air', '1,56,0': 'air' } });
+    const z = pocketUnderRock({ slots: BAG, set: { '0,56,0': 'air', '0,57,0': 'air', '1,56,0': 'air' }, timeOfDay: MORNING });
     let zc = 0;
     const rz = await escape(z.bot, { budget: 'day', target: surfaceTarget(z.bot), craft: () => { zc++; return Promise.resolve(true); }, hostiles: [V(5, 56, 5)] });
     assert.deepEqual([rz.out, zc], [false, 0]);
     assert.match(rz.why, /needs a pickaxe \(you carry none\)/);
     // Without the makings: no craft, and the why says what is missing (the model's line names the recipe).
-    const bare = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] } });
+    const bare = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] }, timeOfDay: MORNING });
     const r2 = await escape(bare.bot, { budget: 'day', target: surfaceTarget(bare.bot), craft: () => { throw new Error('no craft'); } });
     assert.equal(r2.out, false);
     assert.match(r2.why, /needs a pickaxe \(you carry none\); a stone pickaxe needs 3 rocks/);
@@ -248,7 +251,7 @@ const TRAP_WHY = 'no stair step, and no room to pillar up above 0, 56, 0: 0, 58,
 test('soak 16 trap (3): idle and trapped with the standing budget spent: the escape runs (keepReplan), then one due re-plan said as being trapped', async (t) => {
     const lines = [];
     t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
-    const w = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] } });
+    const w = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] }, timeOfDay: MORNING });
     useRegistry(t, w.bot);
     w.bot.time = { day: 1 };
     const agent = idleAgent(w.bot);
@@ -272,7 +275,7 @@ test('soak 16 trap (3): idle and trapped with the standing budget spent: the esc
 
 test('#642 review 3: bounded: re-plans at most once per hold and replansPerDay per place and day; after ESCAPE_HOLD.fails failures no more escapes or re-plans until the bot moves or the next day', async (t) => {
     quiet(t);
-    const w = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] } });
+    const w = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] }, timeOfDay: MORNING });
     useRegistry(t, w.bot);
     w.bot.time = { day: 1 };
     const agent = idleAgent(w.bot);
@@ -370,7 +373,7 @@ test('soak 16 trap: the post-agenda pickaxe reserve: the stone_pickaxe step done
 
 test('#642 nit (a): slow escapes (6 min apart, outside ESCAPE_HOLD.windowMs) still give up after ESCAPE_HOLD.fails at a place; nit (b): leaving the place forgets it', async (t) => {
     quiet(t);
-    const w = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] } });
+    const w = pocketUnderRock({ slots: { 36: ['planks', 1, 1], 9: ['dirt', 6] }, timeOfDay: MORNING });
     useRegistry(t, w.bot);
     w.bot.time = { day: 1 };
     const agent = idleAgent(w.bot);

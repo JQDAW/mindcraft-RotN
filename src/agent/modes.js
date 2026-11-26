@@ -14,7 +14,7 @@ import { forageTarget } from './library/foraging.js';
 import { actionProgress } from './library/progress.js';
 import { isFalling, centerIn, stepTo, wallHitters, farSpot, WALL_HITTERS } from './library/shelter.js';
 import { fallingTreeNear } from './library/felling.js';
-import { escape } from './library/escape.js';
+import { escape, stillTrapped } from './library/escape.js';
 import { noteDrowning } from './library/wet_ore.js';
 
 /**
@@ -121,6 +121,33 @@ function nightRoutineBusy(agent) {
     // #477 review 2: and the morning leave (away from a crowd or a creeper): no melee in the opening meanwhile.
     return [REPAIR_LABEL, BACK_AWAY_LABEL, POCKET_LABEL, BURROW_LABEL].includes(agent.actions.currentActionLabel) || (!!agent._night?.leaveFrom && !!agent._night?.job)
         || agent._night?.morningLeaving === true;
+}
+
+/** Soak 17 E(4)(i): climbing out (the escape) or still trapped: fights stay in place, and no flee walks. */
+export function holdsInPlace(bot) {
+    if (bot?.rotnClimbing === true) return true;
+    try { return !!stillTrapped(bot); } catch { return false; }
+}
+/** HOLD_SAY_MS: the "no flee walk" line at most this often. */
+export const HOLD_SAY_MS = 30_000;
+let holdSaidAt = -Infinity;
+/**
+ * Soak 17 E(4)(i): in place of a flee walk or a pursuit while climbing out or trapped: a melee mob in reach
+ * (threats.shelterTarget, skills.inShelterReach) is fought where the bot stands, as a cornered bot (no fight refusal);
+ * with none in reach, nothing (the climb goes on). Returns whether a fight started.
+ */
+export function fightInPlace(mode, agent, plan) {
+    const bot = agent.bot;
+    const target = world.getNearestEntityWhere(bot, (e) => threats.shelterTarget(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
+    if (Date.now() - holdSaidAt >= HOLD_SAY_MS) {
+        holdSaidAt = Date.now();
+        console.log(`[survival] ${bot.rotnClimbing ? 'climbing out of a hole' : 'trapped'}: no ${plan.action === 'flee' ? 'flee walk' : 'chase'} from the ${mobName(plan.from)} (${plan.why}); ${target ? `fighting the ${mobName(target)} in reach, in place` : 'nothing in reach yet'}`);
+    }
+    if (!target || !claimThreat(mode.name)) return false;
+    void execute(mode, agent, async () => {
+        await skills.defendInPlace(bot, threats.shelterTarget, () => true);
+    });
+    return true;
 }
 
 /**
@@ -667,6 +694,9 @@ const modes_list = [
             this.prev_dig_block = null;
         }
     },
+    // Soak 17 E(4)(i) (the lead): climbing out of a hole (escape.js sets bot.rotnClimbing) or still trapped, no flee walk
+    // and no pursuit: in a shaft a walk away goes down it, and the mobs follow (18:09: "Moved 16 away", then the next hit
+    // 16 lower; death in its own shaft). What is in reach is fought in place, cornered (the hazard modes still act).
     // skills-rotn D2c: both modes follow rotn-data's threat table (threats.js threatPlan) instead
     // of fleeing or fighting anything with type 'mob'. cowardice flees what must not be fought
     // (a dangerous mob, one that explodes, a ranged one, two or more melee mobs at once);
@@ -679,6 +709,7 @@ const modes_list = [
         active: false,
         update: async function (agent) {
             const plan = threats.threatPlan(agent.bot);
+            if (plan?.action === 'flee' && holdsInPlace(agent.bot)) { fightInPlace(this, agent, plan); return; }
             if (plan?.action === 'flee' && await world.isClearPath(agent.bot, plan.from)) {
                 if (!claimThreat(this.name)) return; // checked after the await: another mode may own it now
                 console.log(fleeLine(mobName(plan.from), plan.why)); // G4 #5
@@ -707,6 +738,7 @@ const modes_list = [
                 return;
             }
             const plan = threats.threatPlan(agent.bot);
+            if (plan?.action === 'fight' && holdsInPlace(agent.bot)) { fightInPlace(this, agent, plan); return; }
             if (plan?.action === 'fight' && await world.isClearPath(agent.bot, plan.from)) {
                 if (!claimThreat(this.name)) return; // checked after the await: another mode may own it now
                 say(agent, `Fighting ${plan.from.name}!`);
