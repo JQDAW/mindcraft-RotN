@@ -141,23 +141,24 @@ index 666b0b3..71b7baa 100644
      const entity = fetchEntity(packet.entityId)
      if (!entity.attributes) entity.attributes = {}
 diff --git a/node_modules/mineflayer/lib/plugins/inventory.js b/node_modules/mineflayer/lib/plugins/inventory.js
-index 70db312..41f5755 100644
+index 70db312..54650ff 100644
 --- a/node_modules/mineflayer/lib/plugins/inventory.js
 +++ b/node_modules/mineflayer/lib/plugins/inventory.js
-@@ -23,7 +23,11 @@
+@@ -23,7 +23,12 @@
  
  function inject (bot, { hideErrors }) {
    const Item = require('prismarine-item')(bot.registry)
 -  const windows = require('prismarine-windows')(bot.version)
-+  // mindcraft-rotn (#629's todo test): the windows' own Item class from bot.registry, not a fresh
-+  // registry for bot.version, so a stack prismarine-windows makes itself (a right-click into an empty
-+  // slot, a split) has the stack size the server uses (forge-bridge's #618 sizes from the dump; a
-+  // modded item was 'unknown', size 1). The same registry object: forge-bridge extends it in place.
++  // mindcraft-rotn: the windows' own Item class from bot.registry, not a fresh registry for
++  // bot.version, so a stack prismarine-windows makes itself (a right-click into an empty slot, a split,
++  // the one-by-one right-clicks of a chest deposit or withdraw) has the server's stack size, as the
++  // stacks the server sends do (forge-bridge's sizes from the dump). With bot.version a modded item was
++  // unknown, stack size 1. The same registry object: forge-bridge extends it in place.
 +  const windows = require('prismarine-windows')(bot.registry)
  
    let eatingTask = createDoneTask()
    let sequence = 0
-@@ -125,10 +129,15 @@
+@@ -125,10 +130,15 @@
          cursorZ: -1
        })
      } else if (bot.supportFeature('useItemWithOwnPacket')) {
