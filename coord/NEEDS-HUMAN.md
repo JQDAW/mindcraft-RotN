@@ -17,18 +17,18 @@ Agents add items here when they need something only the human can do. The human 
 - [x] **Memory summaries: reasoning off? (your decision, before soak 14)** (lead, 2026-11-24). **Decided 2026-11-24 about 14:30 UTC: option (a), keep it for memory summaries only (as shipped in `rotn-v0.1.20`); the preset item below is amended to match. Soak 14 checks the summaries' reasoning tokens and cost.** **Soak 14 (#608): the preset's model refused `effort: "none"` (HTTP 400; the retry without it worked) on the first summary call, so the setting was dropped for the run and had no effect; cost still passed (USD 0.037/h). Decided 2026-11-24 about 18:00 UTC: option (b), the lead reverts #600 and #603 (no per-request reasoning setting at all, as decided on 2026-11-22), in the release after `rotn-v0.1.20`.** Soak 13 failed only on cost (USD 0.0552/h against 0.05, #599): memory summaries were 42% of the spend, with up to 18,156 reasoning tokens for a note of about 500 characters, and reasoning was 95.7% of all completion tokens. The lead's #600 (with #603) makes memory-summary calls only send OpenRouter `reasoning: { effort: "none" }` (the bot's play, chat and code calls are unchanged), and it is in the deployed `rotn-v0.1.20`. **That goes against your 2026-11-22 decision in the preset item below ("the lead sends no per-request reasoning setting"), which the lead missed when writing #600.** Choose one: (a) **keep it for memory summaries only** (the lead's recommendation: summaries are the bot's own notes, the play prompts keep full reasoning, and with skills-rotn's #601 they also run half as often); (b) **remove it**: the lead reverts #600/#603 and deploys `rotn-v0.1.21` before soak 14 (#601's changes alone may or may not bring the cost under 0.05/h). If you choose (a), the lead adds a dated amendment to the preset item below so the two items agree. Soak 14 waits for this answer.
 - [ ] **Soak 17: your GO** (lead, 2026-11-26). `rotn-v0.1.23` is deployed (by the lead through the gate, 02:08 UTC).
 
-  **Soak 16** (`rotn-v0.1.22`) FAILED 8/9 (item above): a walk that dug down with a worn-out pickaxe trapped the bot for 35 minutes, then two deaths (zombies at the top of its dig-out; a hen it had provoked, which it never fought back). Cost passed at USD 0.028/h, and memory summaries were 33.6% of the spend. Each change below was reviewed independently, most in two or three rounds.
+  **Soak 16** (`rotn-v0.1.22`) FAILED 8/9 (item below): a walk that dug down through stone used up its pickaxe (probably) and trapped the bot for 35 minutes, then two deaths (zombies at the top of its dig-out; a hen it had provoked, which it never fought back). Cost passed at USD 0.028/h, and memory summaries were 33.6% of the spend. Each change below was reviewed independently, most in two or three rounds.
 
   **What changed for the bot:**
   - **Getting trapped (#642):**
-    - when no pickaxe is carried, the escape crafts one first (from cobble or rocks and sticks, with a table placed beside it), and the bot re-makes a lost pickaxe after the agenda;
-    - walks keep part of the pickaxe's uses and never dig below both their start and their goal; with no pickaxe they never break stone;
+    - when the way out needs a pickaxe and none is carried, the escape crafts one (from cobble or rocks and sticks, at a table it places beside it); once the agenda's pickaxe step is done, the bot re-makes a lost pickaxe in idle time (at most 2 tries a day);
+    - walks keep the last fifth of the pickaxe's uses and never dig more than 2 blocks below the lower of their start and goal; with no usable pickaxe they never break stone;
     - a walk that ends "unable to reach" now counts as failed, so the escape runs after it;
     - a trapped bot is re-planned even when its daily budget is spent (bounded: at most 3 model calls per place per day);
     - a broken tool is logged.
   - **Animals that fight back (#652):** a hen (or another weak animal) that attacks is fought at once; with no weapon only above 6 health, otherwise it flees. The bot never swings at an animal that is not its target.
   - **Shelter at night (#652):** a roof block that will not stay is retried from other sides, then one block lower if that is safe.
-  - **Code-built memory (#637), your decision with its condition:** the bot's memory is now built from the game state (agenda, reserves, recent failures, deaths, places); the summary model runs only when a player spoke. Soak 17 measures whether play improves (see below); one profile setting switches back if it does not.
+  - **Code-built memory (#637), your decision with its condition:** the bot's memory is now built from the game state (agenda, reserves, recent failures, deaths, places); the summary model runs only when a task giver (a trusted player) spoke. Soak 17 measures whether play improves (see below); one profile setting switches back if it does not.
   - **Prompts for this pack (#645):** examples written for RotN, fewer commands shown to the model, and `!goToBed` refused once the Scroll of New Life is used (a bed would end its protection).
   - **Crafting (#638, #639):** a craft the server would turn into a different item is refused with no items lost (soak 16: 9 sticks became a stick wall), and such recipes are offered last.
   - **Safety (#636):** `!attackPlayer` is removed entirely.
@@ -36,7 +36,7 @@ Agents add items here when they need something only the human can do. The human 
 
   **For the team (no bot change):** the trap length is measured properly (#648: soak 16 reads 34.9 min, was 7.8), the memory checks for your condition (#655), a recipe-collision tool (#647).
 
-  **How the memory is judged (your condition):** it stays only if its facts never disagree with the game (with enough samples), its share of the spend falls, the model's wrong-state claims or repeated failures fall against soak 16, and the agenda is no slower.
+  **How the memory is judged (your condition):** it stays only if every fact it states that can be checked matches the game, the summaries are under 5% of the spend (the USD per hour is reported too), the agenda is no slower than soak 16 (within 15%), and no check is worse than soak 16. Soak 16 had no wrong-state claims (0 of 7) and no repeated failures, so these two can only stay level, not improve; the lead reports them and asks you whether that counts as better play. If any check is worse, one profile setting switches back to the summaries.
 
   **Steps (as before):**
   1. Your GO here.
@@ -46,7 +46,7 @@ Agents add items here when they need something only the human can do. The human 
   5. The server is deleted.
   6. The evidence PR.
 
-  **Cost:** like soak 16 (USD 0.056 of LLM over 2 h; the CPX42 for about 2.5 h, EUR 0.40-0.55). Allow up to USD 0.30.
+  **Cost:** like soak 16 (USD 0.056 of LLM over 2 h; the CPX42 billed about 3 h, about EUR 0.45). ADR 0010's target is USD 0.05/h (about USD 0.10 for the 2 h); allow up to USD 0.30 in case a day runs far above it.
 
   **Watch items:**
   - no trap (the trap span), and any escape or `[trapped]` lines;
