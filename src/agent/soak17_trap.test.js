@@ -54,7 +54,8 @@ function stoneWorld({ surfaceY = 63, half = 8, depth = 8, extra = [] } = {}) {
     const listed = () => {
         const out = [];
         for (let x = -half; x <= half; x++) for (let z = -half; z <= half; z++) for (let y = surfaceY - depth; y <= surfaceY; y++) out.push(V(x, y, z));
-        for (const k of extras.keys()) { const [x, y, z] = k.split(',').map(Number); out.push(V(x, y, z)); }
+        const seen = new Set(out.map(key));
+        for (const k of extras.keys()) { if (seen.has(k)) continue; const [x, y, z] = k.split(',').map(Number); out.push(V(x, y, z)); }
         return out.filter(p => nameAt(p) !== 'air');
     };
     return { blockAt, dig: (p) => dug.add(key(p)), listed, dug };
@@ -200,18 +201,115 @@ test('soak 17 18:39:37 (the lead): !collectBlocks("undergroundbiomes:metamorphic
     assert.match(bot.output, /Crafted 14 cobble from your rocks \(instead of undergroundbiomes:metamorphic_stone\), of 14 asked\./);
 });
 
-test('soak 17 T: during a collect, mineflayer-collectblock\'s own movements are guarded by the collect floor', async (t) => {
+test('soak 17 T: during a collect, mineflayer-collectblock\'s own movements are guarded by the collect floor (a step below it under rock too)', async (t) => {
     t.mock.method(console, 'log', () => {});
     const world = stoneWorld({ surfaceY: 63, extra: [['cobblestone', V(3, 64, 0)]] });
     const items = [{ ...stack('iron_pickaxe', 0, 1) }];
     const bot = fakeBot({ world, items, start: V(0.5, 64, 0.5) });
     let seen = null;
-    bot.collectBlock.collect = (b) => {
+    // #665 review 2: a pickaxe target is dug by the collect itself (the walk, then bot.dig), so the plugin's movements are
+    // read at the dig, while the collect floor holds.
+    const dig = bot.dig;
+    bot.dig = (b) => {
         const m = bot.collectBlock.movements;
         const cost = (y) => m.exclusionAreasBreak.reduce((n, f) => n + f({ name: STONE, metadata: 0, position: V(0, y, 0) }), 0);
-        seen = { below: cost(61), at: cost(62), step: m.exclusionAreasStep.reduce((n, f) => n + f({ position: V(0, 61, 0) }), 0) };
-        return bot.dig(b);
+        seen ??= { below: cost(61), at: cost(62), step: m.exclusionAreasStep.reduce((n, f) => n + f({ position: V(0, 61, 0) }), 0) };
+        return dig(b);
     };
     await skills.collectBlock(bot, 'cobblestone', 1);
     assert.deepEqual(seen, { below: WALK_GUARD.breakNever, at: 0, step: WALK_GUARD.breakNever }, bot.output);
+});
+
+// ---- #665 review round 1 ----
+test('#665 review 1: a collect inside a collect leaves the outer floor in place (the soak 17 trap again otherwise)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const world = stoneWorld({ surfaceY: 63, extra: [['cobblestone', V(3, 64, 0)]] });
+    const items = [{ ...stack('iron_pickaxe', 0, 1) }];
+    const bot = fakeBot({ world, items, start: V(0.5, 64, 0.5) });
+    let after = 'not run';
+    const dig = bot.dig;
+    bot.dig = async (b) => {
+        if (after === 'not run') { await skills.collectBlock(bot, 'dirt', 1); after = collectFloorY(bot); } // as a table pickup
+        return dig(b);
+    };
+    await skills.collectBlock(bot, 'cobblestone', 1);
+    assert.equal(after, 62, 'the outer floor after the nested collect returned');
+    assert.equal(collectFloorY(bot), null, 'and cleared by the outer one at its end');
+});
+
+test('#665 review 2: a pickaxe target is dug by the collect itself (never dropped silently by the plugin), also with the pickaxe at its keep', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { walkKeep } = await import('./library/pickaxe.js');
+    const keep = walkKeep({ name: 'iron_pickaxe' });
+    const world = stoneWorld({ surfaceY: 63, extra: [['cobblestone', V(3, 64, 0)]] });
+    const items = [{ ...stack('iron_pickaxe', 250 + 1 - keep, 1) }]; // uses left == its keep
+    const bot = fakeBot({ world, items, start: V(0.5, 64, 0.5) });
+    await skills.collectBlock(bot, 'cobblestone', 1);
+    assert.deepEqual(bot.calls.collected, [], 'not through mineflayer-collectblock');
+    assert.deepEqual(bot.calls.dug.map(key), ['3,64,0'], bot.output);
+});
+
+test('#665 round 1 (decision 4): an ore at the bot\'s level behind one stone is taken again; one below the feet that keeps no way out is not', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // A wall of stone at y 64-65 east of the bot, the ore inside it at 3, 64, 0 (no air face).
+    const wall = [];
+    for (let x = 2; x <= 6; x++) for (let y = 64; y <= 65; y++) for (let z = -2; z <= 2; z++) wall.push([x === 3 && y === 64 && z === 0 ? 'iron_ore' : STONE, V(x, y, z)]);
+    const world = stoneWorld({ surfaceY: 63, extra: wall });
+    const items = [pickaxe()];
+    const bot = fakeBot({ world, items, start: V(0.5, 64, 0.5) });
+    await skills.collectBlock(bot, 'iron_ore', 1);
+    assert.ok(bot.calls.dug.map(key).includes('3,64,0'), bot.output);
+    // Under the floor of a 1-wide pit at the feet: no way out once broken: skipped and said.
+    const deep = stoneWorld({ surfaceY: 63, extra: [['iron_ore', V(0, 62, 0)], ['air', V(0, 63, 0)]] });
+    const b2 = fakeBot({ world: deep, items: [pickaxe()], start: V(1.5, 64, 0.5) });
+    await skills.collectBlock(b2, 'iron_ore', 1);
+    assert.deepEqual(b2.calls.dug, [], b2.output);
+    assert.match(b2.output, /Skipped 1 block to mine \(iron_ore at 0, 62, 0\): breaking it would leave no walkable way out\./);
+});
+
+test('#665 round 1 (the surface exception): a cobblestone boulder in a valley 6 below the start is taken; one in a cave mouth below the floor is never', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // The bot on a hill (stone up to 69 for x <= 2); east of x 2 a valley down to y 63 under open sky; a cave under the
+    // hill at y 60-61 (x -4..-2), its cobblestone at -3, 60, 0 under rock.
+    const extra = [];
+    for (let x = -8; x <= 2; x++) for (let z = -8; z <= 8; z++) for (let y = 64; y <= 69; y++) extra.push([STONE, V(x, y, z)]);
+    for (let x = -4; x <= -2; x++) for (let y = 60; y <= 61; y++) extra.push(['air', V(x, y, 0)]);
+    extra.push(['cobblestone', V(6, 64, 0)], ['cobblestone', V(-3, 60, 0)]);
+    const world = stoneWorld({ surfaceY: 63, extra });
+    const items = [{ ...stack('iron_pickaxe', 0, 1) }];
+    const bot = fakeBot({ world, items, start: V(0.5, 70, 0.5) });
+    await skills.collectBlock(bot, 'cobblestone', 2);
+    assert.deepEqual(bot.calls.dug.map(key), ['6,64,0'], `the valley's boulder (6 below the start, under open sky), never the cave's: ${bot.output}`);
+    assert.match(bot.output, /Left 1 block for cobblestone below y 68 alone/);
+});
+
+test('#665 review 8: rocks carried enough, but the craft fails: said, and no rocks are dug for it', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const world = stoneWorld({ surfaceY: 69 });
+    const items = [pickaxe(), stack(ROCK, 0, 40)];
+    const bot = fakeBot({ world, items, start: V(0.5, 70, 0.5) });
+    bot.craft = () => Promise.reject(new Error('the server refused the craft'));
+    await skills.collectBlock(bot, 'cobblestone', 3);
+    assert.deepEqual(bot.calls.dug, []);
+    assert.match(bot.output, /Crafted 0 of 3 cobble from the rocks you carry: the craft stopped \(see above\), so no more rocks are collected for it\./);
+});
+
+test('#665 round 1 (decision 6): a hazard walk (keep: false) may dig with a pickaxe at its keep; an ordinary walk may not', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { walkKeep } = await import('./library/pickaxe.js');
+    const keep = walkKeep({ name: 'stone_pickaxe' });
+    const world = stoneWorld({ surfaceY: 63 });
+    const items = [{ ...stack('stone_pickaxe', 131 + 1 - keep, 1) }];
+    const bot = fakeBot({ world, items, start: V(0.5, 64, 0.5) });
+    const seen = [];
+    bot.pathfinder.getPathTo = (m) => { seen.push(m); return { status: 'noPath', path: [] }; };
+    const pf = (await import('mineflayer-pathfinder')).default;
+    const goal = new pf.goals.GoalInvert(new pf.goals.GoalNear(0, 64, 0, 5));
+    await skills.goToGoal(bot, goal);
+    assert.equal(new Set(seen).size, 1, 'keep: only the non-destructive movements (no destructive fallback at the keep)');
+    seen.length = 0;
+    await skills.goToGoal(bot, goal, { keep: false });
+    assert.equal(new Set(seen).size, 2, 'keep false: the destructive fallback too');
+    const stoneCost = (m) => m.exclusionAreasBreak.reduce((n, f) => n + f({ name: STONE, metadata: 0, position: V(0, 63, 0) }), 0);
+    assert.equal(stoneCost(seen[1]), 0, 'and it may break stone with that pickaxe');
 });

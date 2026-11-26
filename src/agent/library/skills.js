@@ -21,9 +21,9 @@ import { returnGrid, clearCursor } from './inventory_sync.js';
 import * as lines from './collect_lines.js';
 import { digBudget, digLine, effectsText, DIG_STALL } from './pit.js';
 import { foodKey, foodValue } from "./food.js";
-import { walkPickaxeOk } from './pickaxe.js';
+import { walkPickaxeOk, bestPickaxe } from './pickaxe.js';
 import { digRule } from './burrow.js';
-import { guardedMovements, guardMovements, targetCheckMovements, walkFloorY, setCollectFloor, clearCollectFloor, collectFloorY, WALK_GUARD } from './movements.js';
+import { guardedMovements, guardMovements, targetCheckMovements, walkFloorY, setCollectFloor, clearCollectFloor, collectFloorY, noteCollectDig, surfaceTargetBelowFloor, WALK_GUARD } from './movements.js';
 import { getItem as rotnItem, registryName as rotnRegistryName } from "../../../packages/rotn-data/index.js";
 /**
  * Soak 14, #612 review 8: the item classes (rotn-data's) !consume may eat or drink although rotn-data has no food
@@ -1394,7 +1394,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null, range=64
         return false;
     }
     const y = bot?.entity?.position?.y;
-    const floor = collectFloorY(bot) === null && Number.isFinite(y) ? setCollectFloor(bot, Math.floor(y) - WALK_GUARD.floorBelow) : null;
+    const floor = collectFloorY(bot) === null && Number.isFinite(y) ? setCollectFloor(bot, Math.floor(y) - WALK_GUARD.floorBelow, { startY: Math.floor(y) }) : null;
     try {
         if (num >= 1) {
             const route = await cobbleRoute(bot, blockType, num, exclude, range, limits);
@@ -1450,6 +1450,12 @@ async function cobbleRoute(bot, blockType, num, exclude, range, limits) {
         await craftCobbleFromRocks(bot, fromHeld);
     }
     let made = Math.max(0, held() - before);
+    // #665 review 8: the rocks carried were enough but the craft stopped short: no more rocks dug for a craft that fails.
+    if (fromHeld > 0 && made < fromHeld) {
+        log(bot, `Crafted ${made} of ${fromHeld} cobble from the rocks you carry: the craft stopped (see above), so no more rocks are collected for it.`);
+        bot.rotnCollectEnd = { at: Date.now(), short: true, lastWalkFailed: false, reason: 'craft' };
+        return { made, rest: 0 };
+    }
     if (made < num && !run.aborted && !bot.interrupt_code) {
         const rest = num - made;
         const rocks = rest * ROCKS_PER_COBBLE;
@@ -1563,6 +1569,8 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
     const outOfReach = unreachableLeaves(bot); // and other targets out of reach (round 10 B)
     const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
+    // Soak 17 T: a target a pickaxe digs (stone, ore, cobblestone).
+    const pickDug = (b) => { try { return digRule(b)?.type === 'pickaxe'; } catch { return false; } };
     const avoidToolFor = (block) => avoidTools.find(([matches]) => matches(block))?.[1] ?? null;
     // Never hold a tool that changes the rule's drop (a shovel of level 1+ for dirt piles); false
     // when it cannot be let go without throwing it away (#291 review: a full inventory).
@@ -1634,7 +1642,7 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
         }
         if (buried.size && !buried.said) {
             buried.said = true;
-            log(bot, `Left ${buried.size} ${buried.size === 1 ? 'block' : 'blocks'} for ${blockType} buried in the rock (no open face): a collect digs stone and ore only where it lies open and leaves you a way out.`);
+            log(bot, `Left ${buried.size} ${buried.size === 1 ? 'block' : 'blocks'} for ${blockType} buried in the rock (no open face): a collect takes cobblestone blocks only where they lie open.`);
         }
         // G4 #5: the wild food blocks left alone (breakRefusal), at most 2 reasons, once.
         if (forageRefusals.size && !forageSaid) {
@@ -1708,8 +1716,9 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             // findBlocks' section scan passes blocks without a position (G3 round 2 B: "Cannot read
             // properties of null (reading 'x')" after the first give-up).
             if (block.position && givenUp.some(p => p.equals(block.position))) return false;
-            // Soak 17 T (the lead): nothing below the collect floor, open cave or not.
-            if (block.position && floorY !== null && block.position.y < floorY) { belowFloor.add(leafKey(block.position)); return false; }
+            // Soak 17 T (the lead): nothing below the collect floor, open cave or not; only a block at the surface when the
+            // collect began (#665 round 1: a log or dirt in a valley under open sky) is taken there.
+            if (block.position && floorY !== null && block.position.y < floorY && !surfaceTargetBelowFloor(bot, block.position)) { belowFloor.add(leafKey(block.position)); return false; }
             // Leaves only where the bot can reach them standing on the ground: never climb for them.
             if (isLeafBlock(block) && !leafFromGround(bot, block)) return false;
             // Round 9 B: not leaves once CL.unreachableLeaves were out of reach in this collect, nor
@@ -1781,13 +1790,15 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             }
         }
         else if (!tiered) {
-            // Soak 17 T (the lead's addendum, 18:40): a target a pickaxe digs (stone, ore, cobblestone) only where it lies
-            // open (an air face) and its break keeps a walkable way out, as the rock collect's mined stone (soak 16 R).
+            // Soak 17 T (the lead's addendum, 18:40; #665 round 1): a target a pickaxe digs (stone, ore, cobblestone) only when
+            // its break keeps a walkable way out (soak 16 R's rule for mined stone); one below the bot's feet is checked
+            // (keepsWayOut), one at or above them is reached and left by a level tunnel. Vanilla cobblestone (a dungeon's
+            // walls) also only where it lies open (an air face; decision 1).
             const top = esc.topMemo(bot);
             let checks = 0;
-            const pickDug = (b) => { try { return digRule(b)?.type === 'pickaxe'; } catch { return false; } };
+            const feetY = Math.floor(bot.entity?.position?.y ?? 0);
             const open = (b) => {
-                if (!b.position || !pickDug(b)) return true;
+                if (!b.position || b.name !== 'cobblestone') return true;
                 if (++checks > CL.exposeChecks) { exposeCapped = true; return false; }
                 if (esc.exposedBlock(bot, b)) return true;
                 buried.add(leafKey(b.position));
@@ -1797,7 +1808,7 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             blocks = [];
             for (const b of cands) {
                 // A wet one is taken here and skipped by the wet-ore rule below (said with its liquid), not as "no way out".
-                if (!b.position || !pickDug(b) || wetOreSkip(bot, b) || esc.keepsWayOut(bot, b, top)) { blocks = [b]; break; }
+                if (!b.position || !pickDug(b) || wetOreSkip(bot, b) || b.position.y >= feetY || esc.keepsWayOut(bot, b, top)) { blocks = [b]; break; }
                 noWayOut.push(b);
                 givenUp.push(b.position.clone ? b.position.clone() : b.position);
             }
@@ -1923,7 +1934,7 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             // library/hands.js) or its fell; the walk's window ends there (a fell's cuts and later digs are not the walk).
             let targetStart = null;
             const markTarget = () => { targetStart ??= { held: allHeld(), n: bot.rotnDigs?.count ?? 0 }; };
-            bot.rotnDigHook = (b) => { if (block.position && b?.position && b.position.x === block.position.x && b.position.y === block.position.y && b.position.z === block.position.z) markTarget(); };
+            bot.rotnDigHook = (b) => { noteCollectDig(bot, b?.position); if (block.position && b?.position && b.position.x === block.position.x && b.position.y === block.position.y && b.position.z === block.position.z) markTarget(); };
             const breakIt = async () => {
                 if (isLiquid) return await useToolOnBlock(bot, 'bucket', block);
                 // By hand when the block has no collision box (a rock pile), or when a rule's tool must
@@ -1954,7 +1965,11 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
                 // A rule whose drop a tool changes is dug here too: bot.collectBlock.collect would
                 // equip the fastest tool (rotn-data #288).
                 const avoid = avoidToolFor(block);
-                if (ruleTool || avoid || mc.mustCollectManually(block.name)) {
+                // #665 review 2: a pickaxe target too (mineflayer-collectblock checks its own movements' safeToBreak and drops
+                // the target silently while the pickaxe is at its keep: the target's own dig is no walk), and a surface
+                // target below the floor (the floor bars that break in the plugin's walk).
+                const belowFloorTarget = block.position && floorY !== null && block.position.y < floorY;
+                if (ruleTool || avoid || mc.mustCollectManually(block.name) || pickDug(block) || belowFloorTarget) {
                     await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
                     // #340 nit 2: a stopped walk returns (goToGoal gives false on PathStopped): never a
                     // dig at a block the bot did not reach.
@@ -3739,7 +3754,7 @@ export async function giveToPlayer(bot, itemType, username, num=1) {
 // Soak 17 T: the walk rules (WALK_GUARD, walkFloorY, guardWalkBreaks) live in movements.js (the seed of round 17 W).
 export { WALK_GUARD, walkFloorY, guardWalkBreaks } from './movements.js';
 
-export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noBuild = false } = {}) {
+export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noBuild = false, keep = true } = {}) {
     /**
      * Navigate to the given goal. Use doors and attempt minimally destructive movements.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -3756,9 +3771,11 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
     // G4 #5: and steps around poison ivy and thorns (touch-hazard plants, foraging.js plantSafe).
     // Soak 16 trap: the walk's rules (WALK_GUARD): the break floor, the pickaxe's last uses kept, and no destructive
     // fallback without a pickaxe that has them. Soak 17 T: built by movements.guardedMovements (and a collect's floor).
-    const pickaxeOk = walkPickaxeOk(bot);
+    // #665 round 1 (the lead): keep false (the hazard walks: a falling block, lava or fire, the unstuck walk) may spend
+    // the pickaxe's last uses; the floor stays.
+    const pickaxeOk = keep ? walkPickaxeOk(bot) : !!bestPickaxe(bot);
     const floorY = walkFloorY(bot, goal, { pickaxe: pickaxeOk });
-    const nonDestructiveMovements = plantSafe(guardedMovements(bot, { floorY }));
+    const nonDestructiveMovements = plantSafe(guardedMovements(bot, { floorY, keep }));
     const dontBreakBlocks = ['glass', 'glass_pane'];
     for (let block of dontBreakBlocks) {
         nonDestructiveMovements.blocksCantBreak.add(mc.getBlockId(block));
@@ -3769,7 +3786,7 @@ export async function goToGoal(bot, goal, { canDig = true, offTrees = false, noB
     // ones here; a drop resting on leaves then led the bot up into the tree (G3 round 4 B).
     if (!canDig) nonDestructiveMovements.canDig = false;
 
-    const destructiveMovements = canDig && pickaxeOk ? plantSafe(guardedMovements(bot, { floorY })) : nonDestructiveMovements;
+    const destructiveMovements = canDig && pickaxeOk ? plantSafe(guardedMovements(bot, { floorY, keep })) : nonDestructiveMovements;
     if (offTrees) for (const m of new Set([nonDestructiveMovements, destructiveMovements])) offTreeParts(bot, m);
     if (noBuild) for (const m of new Set([nonDestructiveMovements, destructiveMovements])) { m.allow1by1towers = false; m.scafoldingBlocks = []; }
 
@@ -4261,7 +4278,7 @@ export async function followPlayer(bot, username, distance=4) {
 }
 
 
-export async function moveAway(bot, distance, { offTrees = false } = {}) {
+export async function moveAway(bot, distance, { offTrees = false, keep = true } = {}) {
     /**
      * Move away from current position in any direction.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -4291,7 +4308,7 @@ export async function moveAway(bot, distance, { offTrees = false } = {}) {
         }
     }
 
-    if (!await goToGoal(bot, inverted_goal, { offTrees })) return false; // stopped: an interrupt (round 2)
+    if (!await goToGoal(bot, inverted_goal, { offTrees, keep })) return false; // stopped: an interrupt (round 2)
     let new_pos = bot.entity.position;
     log(bot, `Moved away from ${pos.floored()} to ${new_pos.floored()}.`);
     return true;
