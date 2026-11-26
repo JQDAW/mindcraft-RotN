@@ -1,0 +1,2 @@
+## test-server.sh starts, run right after test-server.sh up (17:14:14 UTC on 2026-11-26, mcr-test-20261126-171053, the soak server)
+starts=1 files=1
