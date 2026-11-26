@@ -1,6 +1,57 @@
 # Status: skills-rotn
 
-Updated: 2026-11-25T02:32Z (from `date -u`)
+Updated: 2026-11-26T01:28Z (from `date -u`)
+
+## 2026-11-26: soak 16 fixes, round 17 M and P, the soak 16 trap and failures (summary, 2026-11-26T01:28Z by `date -u`)
+
+### Merged since the 2026-11-25 summary
+| PR | What | In tag |
+| --- | --- | --- |
+| #624 | Soak 16 E: one escape wired everywhere (`!goToSurface` to open ground, the morning dig-out, the digging commands' post-condition, the unstuck reflex); the day budget; dirt, then planks, then cobble beyond the 14-block reserve | rotn-v0.1.22 |
+| #627 | Soak 16 F: the day food reserve by script (forage within 48, hunt within 64), hogs huntable, the herd rule by same-breed cows, re-checked during the chase | rotn-v0.1.22 |
+| #630 | Soak 16 R: the rock collect stays out of holes (exposed stone first, a walkable way out kept, loose rocks within 48), the `shelter_blocks` text, a scripted `shelter_blocks` job, the agenda job watchdog | rotn-v0.1.22 |
+| #632 | Soak 16 C: truthful Broke/Collected lines ("was not broken", the walk's digs named apart, drops that craft into the item) | rotn-v0.1.22 |
+| #637 | Round 17 M: code-built memory (agenda, reserves, the last 3 failures, deaths, places, collects; the bot's notes); the summary model only for a task giver's chunk; `!note`; the profile's `"memory": "code"` switch | none yet (soak 17's tag) |
+| #642 | Soak 16 trap: the escape names the blocking cell, makes a stone pickaxe when the climb needs one, steps sideways; walks never dig below both ends or with the pickaxe's last 20%; "Unable to reach" is a failed walk; the update-loop trapped job and due re-plan; the post-agenda pickaxe reserve; `[tool] <item> broke` | none yet |
+| #645 | Round 17 P: RotN conversation examples, the hidden docs commands, the five long descriptions shortened, `!goToBed` and `!useOn` on a bed refused once the Scroll of New Life is used (none held counts as used), only real commands in the model's texts (a contract test); #642's nits | none yet |
+| #652 | Soak 16 failures: a pecking hen (any food animal that fights back) fought back, a weak one even with no weapon above health 6; a guard on `bot.attack` (a passive animal or a player only when the calling skill named it); the hurt detail without the death's own Zombie Player; a refused hole roof tried on its other faces, then one deeper; a strict night escape from an open hole; the kill's drop from the inventory gain; `!consume` finds food in the off hand, the grid and the cursor | none yet |
+
+### Open
+- **#657 (draft): round 17 V.** One inventory view, every reader through it, and the idle re-arm of the hands. It merges after the soak 17 tag (the lead).
+
+### Next (after soak 17's evidence, the lead's order)
+- **Z:** the morning wait for a stationary zombie: break the shelter's own wall on the side away from it (the lead's answer 5).
+- **K:** command preconditions and structured results; soak 16/17's failure counts pick the first commands.
+- **W:** one movements factory (after soak 17 shows the escape works live).
+- **A hen threat-data follow-up,** if rotn-data's frogs/toads/chicks entries land.
+
+### Follow-ups (noted, not scheduled)
+- **Night 3's refused roof:** the cause is not settled. #652 logs the other faces tried and the living entities within 2 blocks; read them in soak 17 if it happens again.
+- **The memory with `load_memory` false on the CX23:** the notes and the fact records (failures, deaths since start, collects) are not reloaded after a restart, and the first save writes them empty. Nothing breaks: "Deaths: N since this memory began" counts since the start. The Scroll of New Life's use is kept (#645).
+- **The fake-dig C1 end-to-end test** (`packages/forge-bridge/test/fake-dig.js`) for the collect's "was not broken" line.
+- **The fake world's `findBlocks` with the palette pass,** so the collect can run whole on the soak 15 pocket (harness-ops).
+- **"No place 64 blocks … within 160"** (`respawn_relocate.js:142`): the relocation search finding no target on open ground.
+- **Soak 16 watch items still open:** about 1.7-2 s of CPU per rock-collect pick on stone-poor terrain (watch for "Can't keep up"); snow-layer and tall-grass faces not counted as exposed.
+
+### To check in soak 17 (offline-tested only)
+- **Memory (#637), and the line formats in #637's body:**
+  - `[memory] facts <n> chars: …` when it changes;
+  - `[memory] summary skipped (no player turn)`;
+  - `[memory] note …`;
+  - the summary share of the spend, and USD/h.
+- **The trap (#642):**
+  - `[trapped] at …, idle: the escape runs`, then `[trapped] out` or `still trapped`, and at most one `re-plan (due …)` per hold;
+  - `[escape] no pickaxe: made a stone pickaxe; climbing again`;
+  - `[pickaxe] reserve: …`;
+  - `[tool] stone_pickaxe broke (used up) …`.
+- **Prompts (#645):** no hidden command in the model's replies; the RotN examples in `selected examples:`.
+- **The hen and the guard (#652):**
+  - `[attack] <caller> -> <name>#<id>` on each first swing;
+  - `[attack] refused: …` only for a target no skill named;
+  - a pecking hen fought (`fight start …hen`), not fled.
+- **The roof (#652):** `then N other faces tried`, `near it: …`, and `the hole's roof … did not stay: one deeper`.
+- **The drop (#652):** `Its drop: picked up …` after a kill where the bot stood over the animal.
+
 
 ## 2026-11-25: soaks 13 to 15 fixes, #619, soak 16 plan (summary, 2026-11-25T02:32Z by `date -u`)
 
