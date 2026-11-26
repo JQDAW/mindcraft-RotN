@@ -267,20 +267,22 @@ test('#665 round 1 (decision 4): an ore at the bot\'s level behind one stone is 
     assert.match(b2.output, /Skipped 1 block to mine \(iron_ore at 0, 62, 0\): breaking it would leave no walkable way out\./);
 });
 
-test('#665 round 1 (the surface exception): a cobblestone boulder in a valley 6 below the start is taken; one in a cave mouth below the floor is never', async (t) => {
+test('#665 round 1 and 2 (the surface exception): a boulder in a valley 6 below the start, reached by steps, is taken; one in a cave mouth or at a pit\'s bottom below the floor never is', async (t) => {
     t.mock.method(console, 'log', () => {});
-    // The bot on a hill (stone up to 69 for x <= 2); east of x 2 a valley down to y 63 under open sky; a cave under the
-    // hill at y 60-61 (x -4..-2), its cobblestone at -3, 60, 0 under rock.
+    // The bot on a hill (stone up to 69 for x <= 2); east of it steps of one down to the valley floor (y 63 from x 8);
+    // a cave under the hill at y 60-61 (x -4..-2), its cobblestone at -3, 60, 0 under rock; west, a 1x1 pit at -6, 6
+    // open down to y 63, its cobblestone at the bottom (-6, 63, 6): open sky, but no walk back up to the floor.
     const extra = [];
-    for (let x = -8; x <= 2; x++) for (let z = -8; z <= 8; z++) for (let y = 64; y <= 69; y++) extra.push([STONE, V(x, y, z)]);
+    const hill = (x) => (x <= 2 ? 69 : Math.max(63, 71 - x));
+    for (let x = -8; x <= 8; x++) for (let z = -8; z <= 8; z++) for (let y = 64; y <= hill(x); y++) if (!(x === -6 && z === 6)) extra.push([STONE, V(x, y, z)]);
     for (let x = -4; x <= -2; x++) for (let y = 60; y <= 61; y++) extra.push(['air', V(x, y, 0)]);
-    extra.push(['cobblestone', V(6, 64, 0)], ['cobblestone', V(-3, 60, 0)]);
-    const world = stoneWorld({ surfaceY: 63, extra });
+    extra.push(['cobblestone', V(9, 64, 0)], ['cobblestone', V(-3, 60, 0)], ['cobblestone', V(-6, 64, 6)]);
+    const world = stoneWorld({ surfaceY: 63, half: 10, extra });
     const items = [{ ...stack('iron_pickaxe', 0, 1) }];
     const bot = fakeBot({ world, items, start: V(0.5, 70, 0.5) });
-    await skills.collectBlock(bot, 'cobblestone', 2);
-    assert.deepEqual(bot.calls.dug.map(key), ['6,64,0'], `the valley's boulder (6 below the start, under open sky), never the cave's: ${bot.output}`);
-    assert.match(bot.output, /Left 1 block for cobblestone below y 68 alone/);
+    await skills.collectBlock(bot, 'cobblestone', 3);
+    assert.deepEqual(bot.calls.dug.map(key), ['9,64,0'], `the valley's boulder only: ${bot.output}`);
+    assert.match(bot.output, /Left 2 blocks for cobblestone below y 68 alone/);
 });
 
 test('#665 review 8: rocks carried enough, but the craft fails: said, and no rocks are dug for it', async (t) => {

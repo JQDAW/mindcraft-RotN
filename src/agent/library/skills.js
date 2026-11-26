@@ -23,7 +23,7 @@ import { digBudget, digLine, effectsText, DIG_STALL } from './pit.js';
 import { foodKey, foodValue } from "./food.js";
 import { walkPickaxeOk, bestPickaxe } from './pickaxe.js';
 import { digRule } from './burrow.js';
-import { guardedMovements, guardMovements, targetCheckMovements, walkFloorY, setCollectFloor, clearCollectFloor, collectFloorY, noteCollectDig, surfaceTargetBelowFloor, WALK_GUARD } from './movements.js';
+import { guardedMovements, guardMovements, targetCheckMovements, walkFloorY, setCollectFloor, clearCollectFloor, collectFloorY, noteCollectDig, surfaceTargetBelowFloor, walksBackToFloor, WALK_GUARD } from './movements.js';
 import { getItem as rotnItem, registryName as rotnRegistryName } from "../../../packages/rotn-data/index.js";
 /**
  * Soak 14, #612 review 8: the item classes (rotn-data's) !consume may eat or drink although rotn-data has no food
@@ -1556,6 +1556,9 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
     // Soak 17 T: the plain search's pickaxe targets get the way-out rule too (below), so the escape module always.
     const esc = await import('./escape.js');
     // Soak 17 T: the collect floor (collectBlock): targets below it are skipped, said once (belowFloorSaid).
+    // #665 round 2 nit 4: a collect that withinLimit abandoned (the command's time ran out: its action is over) runs on
+    // until it sees the stop; its walks then have no collect floor (the floor holds only while its action is the current
+    // one), but wanted() still filters its targets with this floorY, taken at its start.
     const floorY = collectFloorY(bot);
     const belowFloor = new Set();
     let belowFloorSaid = false;
@@ -1718,7 +1721,13 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             if (block.position && givenUp.some(p => p.equals(block.position))) return false;
             // Soak 17 T (the lead): nothing below the collect floor, open cave or not; only a block at the surface when the
             // collect began (#665 round 1: a log or dirt in a valley under open sky) is taken there.
-            if (block.position && floorY !== null && block.position.y < floorY && !surfaceTargetBelowFloor(bot, block.position)) { belowFloor.add(leafKey(block.position)); return false; }
+            // #665 round 2 (blocker): and, whatever its tool, its break keeps a walkable way out (escape.keepsWayOut) and a
+            // walk back up to the floor (a pit's bottom under open sky passes neither).
+            if (block.position && floorY !== null && block.position.y < floorY
+                && !(surfaceTargetBelowFloor(bot, block.position) && esc.keepsWayOut(bot, block) && walksBackToFloor(bot, block.position, { free: new Set([leafKey(block.position)]) }))) {
+                belowFloor.add(leafKey(block.position));
+                return false;
+            }
             // Leaves only where the bot can reach them standing on the ground: never climb for them.
             if (isLeafBlock(block) && !leafFromGround(bot, block)) return false;
             // Round 9 B: not leaves once CL.unreachableLeaves were out of reach in this collect, nor
@@ -1986,6 +1995,9 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
                         return false;
                     }
                     if (!await handOff(avoid)) { log(bot, cannotLetGo(block)); return false; } // still not after the walk
+                    // #665 round 2 nit 3: a pickaxe or below-floor target with no rule tool: the right tool again after the
+                    // walk (it may have changed what is held), as the plugin's own mineBlock does before its dig.
+                    if (!ruleTool && !avoid && (pickDug(block) || belowFloorTarget) && !(canGiveNone(block) && isHand(block))) { try { await bot.tool?.equipForBlock?.(block); } catch { /* the hand will do */ } }
                     await bot.dig(block);
                     if (run.aborted) return true; // broken; the gain is still counted below
                     await pickupNearbyItems(bot);

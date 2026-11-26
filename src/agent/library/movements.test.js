@@ -10,7 +10,7 @@ import { Vec3 } from 'vec3';
 import minecraftData from 'minecraft-data';
 import prismarineBlock from 'prismarine-block';
 import pf from 'mineflayer-pathfinder';
-import { guardMovements, guardWalkBreaks, setCollectFloor, clearCollectFloor, collectFloorY, surfaceTargetBelowFloor, noteCollectDig, WALK_GUARD, UNGUARDED } from './movements.js';
+import { guardMovements, guardWalkBreaks, setCollectFloor, clearCollectFloor, collectFloorY, surfaceTargetBelowFloor, noteCollectDig, walksBackToFloor, WALK_GUARD, UNGUARDED } from './movements.js';
 
 const at = (x, y, z) => new Vec3(x, y, z);
 const reg = minecraftData('1.12.2');
@@ -85,6 +85,31 @@ test('#665 round 1 (the surface exception): below the floor, a log on the valley
     noteCollectDig(b, at(5, 57, 0));
     assert.equal(surfaceTargetBelowFloor(b, at(5, 55, 0)), false, 'the valley column, dug in by this collect first');
     clearCollectFloor(b, f2);
+});
+
+test('#665 round 2 (blocker): a real Movements: no drop into a pit below the floor that has no walk back; a 1-drop and a walkable valley stay', () => {
+    // The reviewer's case: floor 68 (start 70), the bot at 0, 68, 0 on stone (y 67); a 1x1 pit at 1, 0 open down to its
+    // bottom at y 65 (stone up to 64 there), under open sky; no blocks to tower with.
+    const pit = (p) => {
+        const q = p.floored();
+        if (q.x === 1 && q.z === 0) return blockOf(q.y <= 64 ? 'stone' : 'air', q);
+        return blockOf(q.y <= 67 ? 'stone' : 'air', q);
+    };
+    const b = { ...bot(), blockAt: pit };
+    const ends = () => guardMovements(b, new pf.Movements(b), { floorY: null }).getNeighbors({ x: 0, y: 68, z: 0, remainingBlocks: 0 }).map(n => `${n.x},${n.y},${n.z}`);
+    const unguarded = new pf.Movements(b).getNeighbors({ x: 0, y: 68, z: 0, remainingBlocks: 0 }).map(n => `${n.x},${n.y},${n.z}`);
+    assert.ok(unguarded.includes('1,65,0'), `the pathfinder offers the 3-drop into the pit: ${unguarded.join(' ')}`);
+    setCollectFloor(b, 68, { startY: 70 });
+    assert.ok(!ends().includes('1,65,0'), 'with the collect floor: no drop into it (no walk back, and every break below the floor is barred)');
+    assert.equal(walksBackToFloor(b, at(1, 65, 0)), false);
+    assert.equal(surfaceTargetBelowFloor(b, at(1, 64, 0)), true, 'the pit\'s bottom block is under open sky at the start ...');
+    // ... so the collect also needs the walk back for it (skills.collectBlock wanted()): none here.
+    assert.equal(walksBackToFloor(b, at(1, 64, 0), { free: new Set(['1,64,0']) }), false);
+    // A valley reached by steps of one: walkable back.
+    const steps = (p) => { const q = p.floored(); const top = q.x <= 0 ? 67 : Math.max(60, 67 - q.x); return blockOf(q.y <= top ? 'stone' : 'air', q); };
+    const v = { ...bot(), blockAt: steps };
+    setCollectFloor(v, 68, { startY: 70 });
+    assert.equal(walksBackToFloor(v, at(5, 63, 0)), true, 'up the steps to the floor');
 });
 
 test('soak 17 T: within a collect a walk\'s own floor never goes below the collect\'s (goToPosition to a deep target)', () => {

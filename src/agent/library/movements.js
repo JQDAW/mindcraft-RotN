@@ -19,6 +19,7 @@ import pf from 'mineflayer-pathfinder';
 import { fallSafe, isTreePart } from './fall_safety.js';
 import { walkPickaxeOk } from './pickaxe.js';
 import { digRule } from './burrow.js';
+import { walkableExit } from './walk_exit.js';
 import { Vec3 } from 'vec3';
 
 /**
@@ -52,14 +53,15 @@ export function walkFloorY(bot, goal, { pickaxe = walkPickaxeOk(bot) } = {}) {
  * The collect floor's record: {y, startY, seq, top, dugCols}. seq: the action that set it (bot.rotnActionSeq, which the
  * action manager changes at each action's start and end, #665 review 7): it holds only while that action runs (an
  * abandoned collect's floor binds no later walk; no wall-clock lapse inside the run). top: the column memo for the sky
- * exception; dugCols: the columns this collect dug in (their top is never read after a dig: a shaft is no sky).
- * skyScan: how far above the start and below the floor a column is read.
+ * exception; dugCols: the columns this collect dug in (their top is never read after a dig: a shaft is no sky); back:
+ * the walk-back memo. skyScan: how far above the start and below the floor a column is read; backNodes: the walk-back
+ * search's bound (walk_exit.walkableExit).
  */
-export const COLLECT_FLOOR = { skyScan: 40 };
+export const COLLECT_FLOOR = { skyScan: 40, backNodes: 400 };
 
 /** Start a collect's floor at y (its start y - floorBelow); returns the record for clearCollectFloor. */
 export function setCollectFloor(bot, y, { startY = y + WALK_GUARD.floorBelow } = {}) {
-    const f = { y, startY, seq: bot?.rotnActionSeq, top: new Map(), dugCols: new Set() };
+    const f = { y, startY, seq: bot?.rotnActionSeq, top: new Map(), dugCols: new Set(), back: new Map() };
     bot.rotnCollectFloor = f;
     return f;
 }
@@ -133,11 +135,36 @@ function breakFloor(bot, m) {
     const ys = [own, c].filter(Number.isFinite);
     return ys.length ? Math.max(...ys) : null;
 }
-/** A cell a walk may be in during the collect: at or above the floor, or under open sky at the collect's start. */
-function cellAllowed(bot, pos) {
+/**
+ * #665 round 2 (blocker): a cell below the floor under open sky can be a small pit's bottom (an old pit shelter, an
+ * earlier dig hole), and with every break below the floor barred a bot that drops in cannot get out. Whether the bot can
+ * walk from `pos` (with `free` cells counted as dug) back up to a cell at or above the floor, by steps of one
+ * (walk_exit.walkableExit): memoized per collect.
+ */
+export function walksBackToFloor(bot, pos, { free = new Set() } = {}) {
+    const f = collectFloor(bot);
+    if (!f || !pos) return true;
+    const p = new Vec3(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
+    if (p.y >= f.y) return true;
+    const k = `${p.x},${p.y},${p.z}${free.size ? `+${[...free].join('|')}` : ''}`;
+    if (f.back.has(k)) return f.back.get(k);
+    let ok = false;
+    try { ok = !!walkableExit(bot, p, { maxNodes: COLLECT_FLOOR.backNodes, free, until: (n) => n.y >= f.y }); } catch { ok = false; }
+    f.back.set(k, ok);
+    return ok;
+}
+/**
+ * A cell a walk may pass during the collect: at or above the floor, or under open sky at the collect's start. A cell a
+ * move ends in (`from`: its start) below the floor must also be walkable back: a drop of at most 1 from `from`, or a
+ * walk back up to the floor from it (#665 round 2).
+ */
+function cellAllowed(bot, pos, { end = false, from = null } = {}) {
     const f = collectFloor(bot);
     if (!f || !pos || pos.y >= f.y) return true;
-    return skyCellAtStart(bot, f, pos);
+    if (!skyCellAtStart(bot, f, pos)) return false;
+    if (!end) return true; // a cell passed (a step's head or feet cell): the move's end is checked
+    if (from && Number.isFinite(from.y) && from.y - Math.floor(pos.y) <= 1) return true;
+    return walksBackToFloor(bot, pos);
 }
 
 /**
@@ -171,7 +198,7 @@ export function guardMovements(bot, movements, { floorY = null, keep = true } = 
         const landing = movements.getLandingBlock.bind(movements);
         movements.getLandingBlock = (node, dir) => {
             const land = landing(node, dir);
-            return land?.position && !cellAllowed(bot, land.position) ? null : land;
+            return land?.position && !cellAllowed(bot, land.position, { end: true, from: node }) ? null : land;
         };
     }
     // #665 review 5: every move's end cell (a diagonal drops one below its node with no landing or step check).
@@ -179,7 +206,7 @@ export function guardMovements(bot, movements, { floorY = null, keep = true } = 
         const neighbors = movements.getNeighbors.bind(movements);
         movements.getNeighbors = (node) => {
             const all = neighbors(node);
-            return collectFloor(bot) ? all.filter(m => !(m && Number.isFinite(m.y) && !cellAllowed(bot, m))) : all;
+            return collectFloor(bot) ? all.filter(m => !(m && Number.isFinite(m.y) && !cellAllowed(bot, m, { end: true, from: node }))) : all;
         };
     }
     return movements;
