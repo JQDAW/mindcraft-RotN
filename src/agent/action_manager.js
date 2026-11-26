@@ -34,6 +34,7 @@ export class ActionManager {
     }
 
     async stop() {
+        this.stopSeq = (this.stopSeq ?? 0) + 1; // #667 review 1: a waiting command sees that the escape was stopped
         if (!this.executing) return;
         const timeout = setTimeout(() => {
             this.agent.cleanKill('Code execution refused stop after 10 seconds. Killing process.');
@@ -95,11 +96,23 @@ export class ActionManager {
             // #668 review (soak 17, 18:07:35: the model's !craftRecipe cut the running escape): a command while the escape
             // climbs out (bot.rotnClimbing) waits for it to end (at most ESCAPE_WAIT.maxMs), then runs; reflexes ("mode:")
             // still interrupt, and !stop stops it at once (it does not come through here).
+            // #667 review 1: it runs only after an escape that ended by itself; a stop meanwhile (!stop, a death, the night
+            // routine, a reflex: each goes through stop()) or another action taking over returns it as interrupted.
             const climbing = () => this.agent.bot?.rotnClimbing === true;
             if (this.executing && climbing() && String(actionLabel).startsWith('action:')) {
-                console.log(`[action] "${actionLabel}" waits for the escape ("${this.currentActionLabel}") to end: getting out comes first`);
+                const escapeLabel = this.currentActionLabel;
+                console.log(`[action] "${actionLabel}" waits for the escape ("${escapeLabel}") to end: getting out comes first`);
                 const t0 = Date.now();
-                while (this.executing && climbing() && Date.now() - t0 < ESCAPE_WAIT.maxMs) await new Promise(r => setTimeout(r, ESCAPE_WAIT.stepMs));
+                const stops = this.stopSeq ?? 0;
+                const stoppedBy = () => ((this.stopSeq ?? 0) !== stops ? 'it was stopped'
+                    : this.executing && this.currentActionLabel !== escapeLabel ? `"${this.currentActionLabel}" took over` : null);
+                let why = null;
+                while (this.executing && climbing() && Date.now() - t0 < ESCAPE_WAIT.maxMs && !(why = stoppedBy())) await new Promise(r => setTimeout(r, ESCAPE_WAIT.stepMs));
+                why ??= stoppedBy() ?? (this.agent.bot?.health <= 0 ? 'the bot died' : null);
+                if (why) {
+                    console.log(`[action] "${actionLabel}" not run: the escape it waited for ended otherwise (${why})`);
+                    return { success: false, message: `Not run: it waited for the escape, which ended otherwise (${why}). Send it again if it still fits.`, interrupted: true, timedout: false };
+                }
             }
 
             // await current action to finish (executing=false), with 10 seconds timeout

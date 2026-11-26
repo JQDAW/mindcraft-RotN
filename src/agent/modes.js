@@ -128,9 +128,9 @@ export function holdsInPlace(bot) {
     if (bot?.rotnClimbing === true) return true;
     try { return !!stillTrapped(bot); } catch { return false; }
 }
-/** HOLD_SAY_MS: the "no flee walk" line at most this often. */
+/** HOLD_SAY_MS: each "no flee walk" line at most this often (#667 review 7: per line, not one time for all). */
 export const HOLD_SAY_MS = 30_000;
-let holdSaidAt = -Infinity;
+const holdSaidAt = new Map();
 /**
  * Soak 17 E(4)(i): in place of a flee walk or a pursuit while climbing out or trapped: a melee mob in reach
  * (threats.shelterTarget, skills.inShelterReach) is fought where the bot stands, as a cornered bot (no fight refusal);
@@ -139,9 +139,11 @@ let holdSaidAt = -Infinity;
 export function fightInPlace(mode, agent, plan) {
     const bot = agent.bot;
     const target = world.getNearestEntityWhere(bot, (e) => threats.shelterTarget(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
-    if (Date.now() - holdSaidAt >= HOLD_SAY_MS) {
-        holdSaidAt = Date.now();
-        console.log(`[survival] ${bot.rotnClimbing ? 'climbing out of a hole' : 'trapped'}: no ${plan.action === 'flee' ? 'flee walk' : 'chase'} from the ${mobName(plan.from)} (${plan.why}); ${target ? `fighting the ${mobName(target)} in reach, in place` : 'nothing in reach yet'}`);
+    const text = `[survival] ${bot.rotnClimbing ? 'climbing out of a hole' : 'trapped'}: no ${plan.action === 'flee' ? 'flee walk' : 'chase'} from the ${mobName(plan.from)} (${plan.why}); ${target ? `fighting the ${mobName(target)} in reach, in place` : 'nothing in reach yet'}`;
+    if (Date.now() - (holdSaidAt.get(text) ?? -Infinity) >= HOLD_SAY_MS) {
+        holdSaidAt.set(text, Date.now());
+        if (holdSaidAt.size > 32) holdSaidAt.delete(holdSaidAt.keys().next().value);
+        console.log(text);
     }
     if (!target || !claimThreat(mode.name)) return false;
     void execute(mode, agent, async () => {

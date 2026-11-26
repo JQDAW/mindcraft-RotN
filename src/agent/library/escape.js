@@ -16,8 +16,8 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { isEmpty, isLiquid, isFalling, hurtsOnContact, shelterItems, softItems, countOf, craftMore, buildShelter } from './shelter.js';
-import { placeableDirt, nightPhase } from './night.js';
+import { isEmpty, isLiquid, isFalling, hurtsOnContact, shelterItems, softItems, countOf, craftMore, buildShelter, siteNeeds } from './shelter.js';
+import { placeableDirt, nightPhase, isWall } from './night.js';
 import { shelterEnemy } from './threats.js';
 import { burrowDiggable, digEquip, digRule } from './burrow.js';
 import { toolLevels } from './rotn_sources.js';
@@ -360,7 +360,7 @@ export function nextStep(bot, target, state) {
     if (caveUp || (!stairs.length && state.cave)) return { why: `the way up opens into a cave at ${at(caveUp ?? state.cave)} (${caveWhy(bot)}): not dug into it`, cave: true };
     return { why: `no stair step, and no room to pillar up above ${at(p)}: ${blocked}${fallingNear(bot, p)}` };
 }
-const caveWhy = (bot) => (Number.isFinite(bot.time?.timeOfDay) && nightPhase(bot.time.timeOfDay) === 'night' ? 'at night' : `a hostile mob within ${CAVE.hostileRange} blocks`);
+const caveWhy = (bot) => (Number.isFinite(timeOfDay(bot)) && nightPhase(timeOfDay(bot)) === 'night' ? 'at night' : `a hostile mob within ${CAVE.hostileRange} blocks`);
 
 /** A sideways step: the side cell and the one above it dug (or empty), solid ground under it, and its headroom diggable. */
 function sideStep(bot, target, state, p) {
@@ -409,6 +409,14 @@ const needsPickaxe = (b) => { try { return digRule(b)?.type === 'pickaxe'; } cat
 async function remakeAtKeep(bot, state, { craft, say }) {
     const best = bestPickaxe(bot);
     if (!best || best.uses > best.keep || (state.remade ?? 0) >= ESCAPE.remakes || state.away.length || !craft) return false;
+    // #667 review 4 (the lead): a real scan for hostiles (not only the respawn escape's list): with one near, no table is
+    // placed and nothing is crafted (the reflexes defend in place); the re-make comes once it is clear, else the last uses
+    // are spent.
+    const mob = hostileNear(bot);
+    if (mob) {
+        if (state.remakeHeld !== mob.id) { state.remakeHeld = mob.id; say(`[escape] the ${best.item.name} has ${best.uses} uses left (keep ${best.keep}); not making another with a ${mob.name ?? 'hostile mob'} within ${CAVE.hostileRange} blocks (later, once it is clear)`); }
+        return false;
+    }
     const tableNear = tableNearOf(bot);
     const plan = pickaxePlan(bot, { tableNear });
     const tag = `${best.item.name}:${best.uses}`;
@@ -423,13 +431,22 @@ async function remakeAtKeep(bot, state, { craft, say }) {
     return !!r.made;
 }
 
+/** #667 review 6: the time of day by the night routine's freeze-aware clock (bot.rotnTimeOfDay), else the raw time. */
+function timeOfDay(bot) {
+    try { const t = bot.rotnTimeOfDay?.(); if (Number.isFinite(t)) return t; } catch { /* the raw time */ }
+    return bot.time?.timeOfDay;
+}
+/** A hostile mob (threats.shelterEnemy) within CAVE.hostileRange, or null. */
+function hostileNear(bot) {
+    const me = bot.entity?.position;
+    if (!me) return null;
+    return Object.values(bot.entities ?? {}).find(e => e !== bot.entity && e?.position && e.position.distanceTo(me) <= CAVE.hostileRange && shelterEnemy(e)) ?? null;
+}
 /** Soak 17 E(4)(ii): wary of caves: at night, or with a hostile mob within CAVE.hostileRange. */
 function caveWary(bot) {
-    const t = bot.time?.timeOfDay;
+    const t = timeOfDay(bot);
     if (Number.isFinite(t) && nightPhase(t) === 'night') return true;
-    const me = bot.entity?.position;
-    if (!me) return false;
-    return Object.values(bot.entities ?? {}).some(e => e !== bot.entity && e?.position && e.position.distanceTo(me) <= CAVE.hostileRange && shelterEnemy(e));
+    return !!hostileNear(bot);
 }
 
 /**
@@ -466,8 +483,8 @@ export function opensCave(bot, c, ours, dug = new Set()) {
  * climbing (18:09: it reached a cave full of zombies at dusk and died in its own shaft): why, or null.
  */
 export function duskSealDue(bot, state) {
-    if (state?.budget?.kind !== 'day') return null;
-    const t = bot.time?.timeOfDay;
+    if (state?.budget?.kind !== 'day' || state.duskTried) return null; // #667 review 2: tried once an escape
+    const t = timeOfDay(bot);
     if (!Number.isFinite(t)) return null;
     const phase = nightPhase(t);
     if (phase === 'day') return null;
@@ -625,7 +642,7 @@ async function byHand(bot, target, state, deadline, { moveTo, pillar, craft = nu
         if (Date.now() >= deadline) return { why: `the ${totalMs / 1000} s ran out` };
         // Soak 17 E(4)(iii): at dusk or night, deep under the surface: no more climbing toward the dark (sealed below).
         const dusk = duskSealDue(bot, state);
-        if (dusk) return { why: dusk, dusk: true };
+        if (dusk && await sealForNight(bot, state, dusk, say)) return { why: `${dusk}: sealed in at ${at(feetOf(bot))} for the night`, dusk: true };
         state.wary = caveWary(bot); // soak 17 E(4)(ii)
         const step = nextStep(bot, target, state);
         if (step.why) return { why: step.why, cave: !!step.cave };
@@ -681,7 +698,7 @@ export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = 
     const wasEscaping = bot.rotnEscaping;
     const wasClimbing = bot.rotnClimbing; // soak 17 E(4)(i): a climb out (not the respawn escape's walk): no flee walk
     // #562 review 5: interrupted: stopped by something else (a reflex, a command), not a failure.
-    const done = (out, how, why = null) => { const { budget: b, away: _away, dugSet: _dug, wary: _wary, cave: _cave, remakeSaid: _said, pillarRetried: _retried, ...counts } = state; return { out, how, why, interrupted: !out && (why === 'interrupted' || !!bot.interrupt_code), ...counts, budget: b?.kind ?? null, at: feetOf(bot), ms: Date.now() - t0 }; };
+    const done = (out, how, why = null) => { const { budget: b, away: _away, dugSet: _dug, wary: _wary, cave: _cave, remakeSaid: _said, remakeHeld: _held, pillarRetried: _retried, duskTried: _dt, ...counts } = state; return { out, how, why, interrupted: !out && (why === 'interrupted' || !!bot.interrupt_code), ...counts, budget: b?.kind ?? null, at: feetOf(bot), ms: Date.now() - t0 }; };
     try {
         if (isOut(bot, null, budget === 'day' || strict)) return done(true, 'already');
         // Soak 16 (E): a target given (!goToSurface: the ground under the sky in the bot's column), else the nearest dry
@@ -696,9 +713,10 @@ export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = 
             + (state.budget.kind === 'day' ? ` (up to ${state.budget.maxSteps} steps, ${state.budget.totalMs / 60_000} min)` : ''));
         bot.rotnEscaping = true;
         bot.rotnClimbing = true;
-        // Soak 17 E(4)(iii): at dusk or night, deep under the surface: sealed in here for the night, no climb.
+        // Soak 17 E(4)(iii): at dusk or night, deep under the surface: sealed in here for the night, no climb; #667 review 2:
+        // only when a seal is possible, and a seal that does not close goes on climbing.
         const duskFirst = duskSealDue(bot, state);
-        if (duskFirst) return report(await sealForNight(bot, state, duskFirst, done, say), say);
+        if (duskFirst && await sealForNight(bot, state, duskFirst, say)) return report(done(false, null, `${duskFirst}: sealed in at ${at(feetOf(bot))} for the night`), say);
         // Soak 16 (E, the lead's order): no dirt or planks to climb with, but dirt piles: dirt crafted from them first
         // (4 piles each), as many as the climb may need (the depth, at most pileCraftMax).
         if (state.budget.kind === 'day' && buildCount(bot, reserveOf(state)) < state.budget.maxSteps && placeableDirt(bot.inventory.items()) > countOf(softItems(bot))) {
@@ -714,7 +732,7 @@ export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = 
         say(`[escape] ${first.why}; digging out by hand`);
         const second = await byHand(bot, target, state, deadline, { moveTo, pillar, craft, say });
         if (second.out) return report(done(true, 'by hand'), say);
-        if (second.dusk) return report(await sealForNight(bot, state, second.why, done, say), say);
+        if (second.dusk) return report(done(false, null, second.why), say);
         // Soak 16 trap (21:20), #642 review 6: the way out is blocked for want of a pickaxe (used up by the walk that dug
         // the bot in: every stone cell is undiggable): one is made from what the bot carries, then the climb again.
         // Only after the pathfinder and the climb said so, and never with hostiles near (the respawn escape: no craft
@@ -726,7 +744,7 @@ export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = 
             say(r.made ? '[escape] no pickaxe: made a stone pickaxe; climbing again' : `[escape] no pickaxe, and none can be made here: ${r.why}`);
             if (!r.made) return report(done(false, null, `${second.why}; ${r.why}`), say);
             const third = await byHand(bot, target, state, deadline, { moveTo, pillar, craft, say });
-            if (third.dusk) return report(await sealForNight(bot, state, third.why, done, say), say);
+            if (third.dusk) return report(done(false, null, third.why), say);
             return report(third.out ? done(true, 'by hand') : done(false, null, third.why), say);
         }
         return report(done(false, null, second.why), say);
@@ -741,18 +759,38 @@ export async function escape(bot, { moveTo = stepInto, pillar = pillarUp, say = 
 
 /**
  * Soak 17 E(4)(iii) (the lead): sealed in for the night where the climb stopped: the night routine's shelter at the bot's
- * cells (buildShelter, as the hole shelter roofs a fresh hole: the flood check and the roof retry); the night routine
- * keeps it (its food check at dusk), and its morning climbs out with the escape. state.dusk and state.sealed are in the
- * result (escapeText says so).
+ * cells (buildShelter, as the hole shelter roofs a fresh hole: the flood check and the roof retry). #667 review 2: tried
+ * only when a seal is possible (sealPossible: a site, nothing to dig unsafely, every cell with a face, the blocks carried
+ * and a pickaxe or a side to dig out by hand), once an escape; a seal that does not close goes on climbing. Closed, the
+ * night routine adopts the cell (bot.rotnSealedIn: night_routine.sealedShaftHere) and its morning climbs out. True when
+ * sealed; state.dusk and state.sealed are in the result (escapeText says so).
  */
-async function sealForNight(bot, state, why, done, say) {
+async function sealForNight(bot, state, why, say) {
+    state.duskTried = true;
     const feet = feetOf(bot);
+    const possible = sealPossible(bot, feet);
+    if (!possible.ok) { say(`[escape] ${why} at ${at(feet)}, but no seal is possible here (${possible.why}): climbing on`); return false; }
     say(`[escape] ${why} at ${at(feet)}: sealing the shaft here for the night (the night routine keeps the shelter; the climb goes on in the morning)`);
-    state.dusk = true;
     let r = null;
     try { r = await (state.seal ?? buildShelter)(bot, { site: feet, keepSoft: true, floodCheck: true, roofRetry: true }); } catch (err) { r = { closed: false, line: err?.message ?? String(err) }; }
-    state.sealed = !!r?.closed;
-    return done(false, null, `${why}: ${state.sealed ? `sealed in at ${at(feet)} for the night` : `the seal at ${at(feet)} did not close (${r?.line ?? 'no result'})`}`);
+    if (!r?.closed) { say(`[escape] the seal at ${at(feet)} did not close (${r?.line ?? 'no result'}): climbing on`); return false; }
+    state.dusk = true;
+    state.sealed = true;
+    bot.rotnSealedIn = { pos: feet, at: Date.now() };
+    return true;
+}
+
+/** #667 review 2: whether a dusk seal can be built at feet now (siteNeeds with buildShelter's own rules), and why not. */
+export function sealPossible(bot, feet) {
+    let need = null;
+    try { need = siteNeeds(bot, feet, { accept: isWall, occupied: true }); } catch { need = null; }
+    if (!need) return { ok: false, why: 'no shelter fits these cells' };
+    if (need.unsafe) return { ok: false, why: need.unsafe };
+    if (need.unsupported.length) return { ok: false, why: `nothing to place against at ${at(need.unsupported[0])}` };
+    const blocks = countOf(shelterItems(bot)) + countOf(softItems(bot));
+    if (blocks < need.blocks) return { ok: false, why: `it needs ${need.blocks} blocks and you carry ${blocks}` };
+    if (!bestPickaxe(bot) && !need.handExit) return { ok: false, why: 'no pickaxe, and no side to dig out by hand' };
+    return { ok: true, blocks: need.blocks };
 }
 
 function report(r, say) {

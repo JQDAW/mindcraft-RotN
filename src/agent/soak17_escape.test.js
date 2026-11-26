@@ -23,16 +23,23 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 // 18:06:21's bag (the death list and the craft lines): rocks, 4 planks, 3 sticks, the stone axe; no table, no pickaxe.
 const BAG_1806 = { 36: ['stone_axe', 1], 9: ['pyrotech_compat:rock_metamorphic', 64], 10: ['pyrotech:rock', 64, 8], 11: ['planks', 4], 12: ['stick', 3], 13: ['dirt', 19] };
 
-test('soak 17 E(1): the table chain\'s numbers are rotn-data\'s (crude axe: a rock and 2 sticks; Crafting Tools: the crude axe, a rock and a stick; the table: a plank and the tools)', (t) => {
+test('soak 17 E(1), #667 review 5: the table chain\'s numbers are rotn-data\'s, both ways: exactly these fill each recipe, one less of any input does not', (t) => {
     quiet(t);
-    const has = (slots, name) => { const w = fakeWorld({ slots }); useRegistry(t, w.bot); return craftNeeds(w.bot, name); };
+    const ready = (slots, name) => { const w = fakeWorld({ slots }); useRegistry(t, w.bot); return craftNeeds(w.bot, name)?.ready; };
     const [axe, tools, table] = TABLE_CHAIN;
-    assert.equal(has({ 9: ['pyrotech:rock', axe.rocks], 10: ['stick', axe.sticks] }, axe.item)?.ready, true);
-    assert.equal(has({ 9: ['pyrotech:rock', axe.rocks], 10: ['stick', axe.sticks - 1] }, axe.item)?.ready, false);
-    assert.equal(has({ 9: ['pyrotech:crude_axe', 1], 10: ['pyrotech:rock', tools.rocks], 11: ['stick', tools.sticks] }, tools.item)?.ready, true);
+    // Each step's inputs: [item, count]; the previous step's result counts 1.
+    const inputs = {
+        [axe.item]: [['pyrotech:rock', axe.rocks], ['stick', axe.sticks]],
+        [tools.item]: [['pyrotech:crude_axe', 1], ['pyrotech:rock', tools.rocks], ['stick', tools.sticks]],
+        [table.item]: [['contenttweaker:crafting_tools', 1], ['planks', table.planks]],
+    };
+    for (const [item, list] of Object.entries(inputs)) {
+        const slots = (minus = -1) => Object.fromEntries(list.map(([n, c], i) => [9 + i, [n, c - (i === minus ? 1 : 0)]]).filter(([, [, c]]) => c > 0));
+        assert.equal(ready(slots(), item), true, `${item}: exactly the chain's inputs fill it`);
+        list.forEach(([n], i) => assert.equal(ready(slots(i), item), false, `${item}: one ${n} less does not`));
+    }
     // (Whether the server takes a stone axe for the tools, as rotn-data's recipe lists it, is soak 17's L4 question: the
     // chain always makes the crude axe, which soak 17's 18:06 craft showed works.)
-    assert.equal(has({ 9: ['contenttweaker:crafting_tools', 1], 10: ['planks', table.planks] }, table.item)?.ready, true);
 });
 
 test('soak 17 E(1): with 18:06:21\'s bag the plan makes the table itself: sticks, the crude axe, Crafting Tools, the table, then the pickaxe', (t) => {
@@ -247,4 +254,131 @@ test('#668 review: a command sent while the escape climbs out waits for it (no i
     await new Promise(r => setTimeout(r, 20));
     await Promise.all([again, manager.runAction('mode:self_preservation', () => { order.push('reflex'); return Promise.resolve(); }, { timeout: 0 })]);
     assert.deepEqual(order, ['escape interrupted', 'reflex']);
+});
+
+// ---- #667 review round 1 ----
+test('#667 review 1: a command waiting for the escape is not run when the escape is stopped (!stop, a death) or a reflex takes over', async (t) => {
+    const lines = [];
+    quiet(t, lines);
+    const { ActionManager } = await import('./action_manager.js');
+    for (const how of ['stop', 'death', 'reflex']) {
+        const bot = { interrupt_code: false, output: '', emit() {}, health: 20 };
+        const agent = { bot, clearBotLogs() {}, cleanKill() {}, requestInterrupt() { bot.interrupt_code = true; } };
+        const manager = new ActionManager(agent);
+        const order = [];
+        const escapeJob = async () => {
+            bot.rotnClimbing = true;
+            for (let i = 0; i < 40 && !bot.interrupt_code; i++) await new Promise(r => setTimeout(r, 25));
+            order.push(bot.interrupt_code ? 'escape stopped' : 'escape done');
+            bot.rotnClimbing = false;
+        };
+        const escapeRun = manager.runAction('action:escape (trapped)', escapeJob, { timeout: 0 });
+        await new Promise(r => setTimeout(r, 20));
+        const craft = manager.runAction('action:craftRecipe', () => { order.push('craft'); return Promise.resolve(); }, { timeout: 0 });
+        await new Promise(r => setTimeout(r, 60));
+        let reflex = null;
+        if (how === 'stop') await manager.stop(); // !stop, the night routine's dusk stop
+        else if (how === 'death') { bot.health = 0; await manager.stop(); } // agent.js: the death stops the action
+        else reflex = manager.runAction('mode:self_preservation', () => { order.push('reflex'); return Promise.resolve(); }, { timeout: 0 });
+        const [, cr] = await Promise.all([escapeRun, craft, reflex]);
+        assert.ok(!order.includes('craft'), `${how}: the queued craft did not run (${order.join(', ')})`);
+        assert.equal(cr.interrupted, true, how);
+        assert.match(cr.message, /^Not run: it waited for the escape, which ended otherwise \(.+\)\. Send it again if it still fits\.$/, how);
+    }
+});
+
+test('#667 review 2: the dusk seal only when one is possible; a seal that does not close goes on climbing', async (t) => {
+    const lines = [];
+    quiet(t, lines);
+    // No blocks to seal with (an empty-handed respawn) in a shaft open to the sky (its roof cell must be filled): no seal,
+    // the climb goes on.
+    const { openShaft } = await import('../../test/fixtures/fake-world.mjs');
+    const bare = openShaft(); // the fixture's 6000: dusk on RotN's clock; 12 deep
+    useRegistry(t, bare.bot);
+    let seals = 0;
+    const r = await escape(bare.bot, { budget: 'day', target: surfaceTarget(bare.bot), seal: () => { seals++; return Promise.resolve({ closed: true }); }, say: (l) => lines.push(l) });
+    assert.equal(seals, 0, 'not tried');
+    assert.ok(lines.some(l => /^\[escape\] it is dusk and the bot is still \d+ below the surface at 0, 52, 0, but no seal is possible here \(it needs \d+ blocks and you carry 0\): climbing on$/.test(l)), lines.join('\n'));
+    assert.notEqual(r.dusk, true);
+    assert.ok(bare.calls.dug.length > 0, 'it climbed');
+    // Possible but it does not close: said, and the climb goes on.
+    const lines2 = [];
+    const w = pocketUnderRock({ slots: { 36: ['stone_pickaxe', 1], 9: ['dirt', 16] } });
+    const r2 = await escape(w.bot, { budget: 'day', target: surfaceTarget(w.bot), seal: () => Promise.resolve({ closed: false, line: 'the roof did not stay' }), say: (l) => lines2.push(l) });
+    assert.ok(lines2.some(l => /^\[escape\] the seal at 0, 56, 0 did not close \(the roof did not stay\): climbing on$/.test(l)), lines2.join('\n'));
+    assert.notEqual(r2.dusk, true);
+    assert.ok(w.calls.dug.length > 0);
+    assert.equal(w.bot.rotnSealedIn ?? null, null);
+    // Closed: the cell is marked for the night routine.
+    const w3 = pocketUnderRock({ slots: { 36: ['stone_pickaxe', 1], 9: ['dirt', 16] } });
+    const r3 = await escape(w3.bot, { budget: 'day', target: surfaceTarget(w3.bot), seal: () => Promise.resolve({ closed: true }), say: () => {} });
+    assert.deepEqual([r3.dusk, r3.sealed], [true, true]);
+    assert.equal(w3.bot.rotnSealedIn.pos.toString(), '(0, 56, 0)');
+});
+
+test('#667 review 4: no pickaxe re-made with a hostile near (a real scan); once it is clear, it is', async (t) => {
+    const lines = [];
+    quiet(t, lines);
+    const used = 131 + 1 - walkKeep({ name: 'stone_pickaxe' });
+    const bag = { 36: ['stone_pickaxe', 1, used], 9: ['undergroundbiomes:metamorphic_cobble', 8], 11: ['planks', 4], 12: ['crafting_table', 1], 13: ['dirt', 6] };
+    const w = pocketUnderRock({ slots: bag, set: { '0,56,0': 'air', '0,57,0': 'air', '1,56,0': 'air' }, timeOfDay: MORNING });
+    useRegistry(t, w.bot);
+    const zombie = w.addEntity ? w.addEntity({ name: 'zombie', type: 'mob', position: V(4, 56, 0) }) : null;
+    if (!zombie) w.bot.entities[99] = { id: 99, name: 'zombie', type: 'mob', position: V(4, 56, 0), height: 1.95 };
+    const crafts = [];
+    const craft = (bot, item, n) => { crafts.push(item); w.give(item, item === 'stone_pickaxe' ? 1 : 4 * n); return Promise.resolve(true); };
+    await escape(w.bot, { budget: 'day', target: surfaceTarget(w.bot), craft, say: (l) => lines.push(l) });
+    assert.ok(!crafts.includes('stone_pickaxe'), `no craft with the zombie near: ${crafts.join(', ')}`);
+    assert.ok(lines.some(l => /not making another with a zombie within 16 blocks \(later, once it is clear\)/.test(l)), lines.join('\n'));
+});
+
+test('#667 review 3 (the lead): sealed in a 35-deep shaft at dusk: the night routine adopts the cell (no build, no food run), and the morning climbs out of the shaft', async (t) => {
+    const lines = [];
+    quiet(t, lines);
+    const { nightTick, nightState } = await import('./night_routine.js');
+    const { NIGHT_START, TICKS_PER_MIN } = await import('./library/night.js');
+    const DUSK = NIGHT_START - 3 * TICKS_PER_MIN;
+    // A 1x1 shaft in stone from the bot's cell (0, 29, 0) up to the surface (y 64); the seal's roof (dirt) over the head.
+    const set = {};
+    for (let y = 29; y < 64; y++) set[`0,${y},0`] = 'air';
+    set['0,31,0'] = 'dirt';
+    const w = fakeWorld({ ground: [{ below: 64, block: 'undergroundbiomes:metamorphic_stone' }], set, at: V(0, 29, 0), slots: { 36: ['stone_pickaxe', 1], 9: ['dirt', 20] }, timeOfDay: DUSK, food: 4 });
+    useRegistry(t, w.bot);
+    const bot = w.bot;
+    bot.rotnSealedIn = { pos: V(0, 29, 0), at: 0 };
+    bot.modes = { anyActive: () => false };
+    const chat = [];
+    const agent = {
+        bot, openChat: (l) => chat.push(l),
+        self_prompter: { active: false, loop_active: false, isActive() { return this.active; }, stop() { this.active = false; }, isPaused: () => false },
+        actions: { executing: false, currentActionLabel: '', stop() { return Promise.resolve(); }, async runAction(label, fn) { await fn(); return { message: '', interrupted: false }; } },
+        control: { blocking: () => null },
+    };
+    const builds = [], foodRuns = [], escapes = [];
+    const ops = {
+        buildShelter: (b, opts) => { builds.push(opts); return Promise.resolve({ closed: true, feet: V(0, 29, 0) }); },
+        foodRun: () => { foodRuns.push(1); return Promise.resolve({ points: 0, why: 'none' }); },
+        siteNeeds: () => ({ todo: [] }),
+        escape: (b, opts) => { escapes.push(opts); return escape(b, { ...opts, say: (l) => lines.push(l) }); },
+    };
+    const settle = async () => { while (nightState(agent).job) await nightState(agent).job; };
+    // The routine's own times (its clock reads them; the escape reads that clock at Date.now(), as in the bot).
+    assert.equal(nightTick(agent, { now: Date.now(), ops }), 'night:inside');
+    assert.ok(chat.some(l => /^\[night\] sunset is near: sealed in the shaft at 0, 29, 0 \(the escape's seal\): tonight's shelter as it is$/.test(l)), chat.join('\n'));
+    assert.ok(lines.some(l => /no food run out of the shaft; the morning climb comes first, then food/.test(l)), lines.join('\n'));
+    // The night: no build, no food run (food 4, none held).
+    bot.time.timeOfDay = 15000;
+    for (let i = 1; i <= 4; i++) { nightTick(agent, { now: Date.now(), ops }); await settle(); }
+    assert.deepEqual([builds.length, foodRuns.length], [0, 0], 'the seal is kept as it is; no food run leaves it');
+    assert.equal(nightState(agent).state, 'inside');
+    // The morning: the escape (the day budget) climbs out of the shaft.
+    bot.time.timeOfDay = 1000;
+    nightTick(agent, { now: Date.now(), ops });
+    await settle();
+    assert.equal(escapes.length, 1);
+    assert.equal(escapes[0].budget, 'day');
+    assert.ok(bot.entity.position.y >= 63, `out at ${bot.entity.position}: ${lines.filter(l => /\[escape\]/.test(l)).slice(-3).join(' / ')}`);
+    assert.ok(chat.some(l => /^\[night\] morning: climbed out of the shaft at 0, 29, 0 to /.test(l)), chat.join('\n'));
+    assert.equal(nightState(agent).state, 'day');
+    assert.equal(bot.rotnSealedIn, null);
 });

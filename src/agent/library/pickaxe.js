@@ -77,9 +77,10 @@ const isTable = (i) => /(^|:)crafting_table$/.test(i?.name ?? '');
 /**
  * Soak 17 E(1) (the lead): RotN's crafting table is a plank and Crafting Tools; the tools are a crude axe, a rock and a
  * stick (the crude axe is used up); the crude axe is a rock and 2 sticks, all in the 2x2 grid (rotn-data's recipes;
- * pickaxe_chain.test.js pins these numbers against them). Soak 17 escape 3: "no pickaxe, and none can be made here: a
- * stone pickaxe needs a crafting table (none carried or near)", with 4 planks, 3 sticks and 510 rocks; the model then
- * made the crude axe, the tools and the table itself.
+ * soak17_escape.test.js pins these numbers against them both ways: exactly these fill each recipe, one less of any input
+ * does not). Soak 17 escape 3: "no pickaxe, and none can be made here: a stone pickaxe needs a crafting table (none
+ * carried or near)", with 4 planks, 3 sticks and 510 rocks; the model then made the crude axe, the tools and the table
+ * itself.
  */
 export const TABLE_CHAIN = Object.freeze([
     { item: 'pyrotech:crude_axe', rocks: 1, sticks: 2, planks: 0 },
