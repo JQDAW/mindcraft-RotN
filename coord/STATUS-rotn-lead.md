@@ -1,6 +1,6 @@
 # Status: rotn-lead
 
-Updated: 2026-11-25 18:36 UTC (from `date -u`)
+Updated: 2026-11-26 02:08 UTC (from `date -u`)
 
 
 ## CX23 deploy record (ADR 0011)
@@ -19,6 +19,7 @@ Updated: 2026-11-25 18:36 UTC (from `date -u`)
 | 2026-11-24 06:58 | rotn-v0.1.20 | 8cdfae874c78 (8cdfae874c78e2ae388a0ebd5483657e2f9a94d9) | the lead, through the gate (GO G-DEPLOY-v0.1.20-20261124) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.20-8cdfae874c78, previous=rotn-v0.1.19-2e662a1b96f5; pruned rotn-v0.1.13; no bot restarted; deploy/cx23, package-lock and patches unchanged |
 | 2026-11-24 21:58 | rotn-v0.1.21 | 83011f506c72 (83011f506c72becf7ff1ed733b91191208e0beb3) | the lead, through the gate (GO G-DEPLOY-v0.1.21-20261124) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.21-83011f506c72, previous=rotn-v0.1.20-8cdfae874c78; pruned rotn-v0.1.14; no bot restarted; deploy/cx23 and package-lock unchanged; patches/mineflayer changed (#610: effects dropped on respawn), patch-package applied it |
 | 2026-11-25 18:36 | rotn-v0.1.22 | 043466a266af (043466a266aff66643f7307f2816d54d05b6aa70) | the lead, through the gate (GO G-DEPLOY-v0.1.22-20261125) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.22-043466a266af, previous=rotn-v0.1.21-83011f506c72; pruned rotn-v0.1.15; no bot restarted; deploy/cx23, package.json and package-lock unchanged; patches/mineflayer changed (#633: prismarine-windows built from bot.registry), patch-package applied it |
+| 2026-11-26 02:08 | rotn-v0.1.23 | 5d792d42e43d (5d792d42e43d308a9a41de0c3906d5381b8beb68) | the lead, through the gate (GO G-DEPLOY-v0.1.23-20261126) | FRCFLD inactive and disabled; deploy-check first; `release` after: current=rotn-v0.1.23-5d792d42e43d, previous=rotn-v0.1.22-043466a266af; pruned rotn-v0.1.16; no bot restarted; deploy/cx23, package.json and package-lock unchanged; patches/mineflayer changed (#638: bot.craft takes the server's crafting result; #649: comment only), patch-package applied it |
 
 ## Snapshot (2026-11-18 17:40 UTC): development resumed; the pause list is done; rotn-v0.1.5 next
 

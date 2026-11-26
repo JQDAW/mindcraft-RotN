@@ -415,6 +415,17 @@ mineflayer's `bot.dig` waits `block.digTime(heldItemType, …)` and then sends S
 - **When:** once a minute if the numbers changed since the last line, at every death, and at the end of the connection (a stop or a kick), zeros included.
 - **At the first spawn** one line says the counter is on: `[forge-bridge] attack counts: on (...)`.
 
+**Targets and callers** (soak 16 death 2: the hit that provoked a hen could not be attributed). The line ends with what was sent since the last line:
+- `...; targets animania:hen_rhode_island_red#1234 x2 (attackEntity skills.js:1023 via mineflayer-pvp), zombie#77 x1 (defendSelf skills.js:1143 via mineflayer-pvp), zombie#80 x1 (no caller: mineflayer); replaced attackEntity skills.js:1023 via mineflayer-pvp -> animania:hog_old_spot#90 by defendSelf skills.js:1143 via mineflayer-pvp -> zombie#77`
+- **targets:** each attack packet's entity (the Better Combat payload's id, or `use_entity`'s `target`), as `name#id` from `bot.entities` when the packet is written (`?#id` when the bot does not know it), counted, with its caller. `targets -` when none.
+- **The caller** (`src/attack-caller.js`, `callerOf`) is one of:
+  - the first two stack frames, innermost first, as `function file:line` (file names only), that are not forge-bridge's own `src`, mineflayer's or node's, and not a known pass-through wrapper of `bot.attack` above the bridge (`ATTACK_WRAPPERS`: #652's guard `guarded` in `hands.js`, survival_log's `marking`, defendSelf's swing stamp in `skills.js`). A frame in another package is named with it: `cb mineflayer-pvp/PVP.js:213`;
+  - for a hit mineflayer-pvp sends from its `physicsTick` loop (the `!attack` kill loop, defendSelf, the hunting reflex), whoever called `bot.pvp.attack` for that target, which `attachPvpCallers` remembers (`initBot`, after the plugin; the last 50 targets): `attackEntity skills.js:1023 via mineflayer-pvp`;
+  - `no caller: <package>` when no frame is the bot's own (`mineflayer` for its own timers and events, `node` for a bare timer). An unattributed hit always says so.
+- The Better Combat wrapper takes the caller when `bot.attack` is called and holds it while its packet is written, so a hit sent after its cooldown wait names that caller, not the timer (`bot.forge.bcAttack.firingCaller`). A packet written outside the wrapper (`bot.attackVanilla`, say) is named from the stack at the write.
+- **replaced:** each waiting call a newer one replaced (the `replaced` count), as `<caller> -> <target> by <caller> -> <target>` (`bot.forge.bcAttack.takeReplacements()`). Left out when none. The wrapper keeps at most 20 between two lines (the oldest are dropped).
+- At most 8 targets and 4 replacements are printed per line, then `+N more`. The numbers before them are unchanged.
+
 ## Soak 15: stack sizes, rejected clicks and refused digs
 
 **The server's stack sizes in `bot.registry`** (`src/stack-sizes.js`, in `initBot` right after `extendRegistry`, before any window arrives).
@@ -458,6 +469,7 @@ mineflayer's `bot.dig` waits `block.digTime(heldItemType, …)` and then sends S
 - **closing window 0** (`ContainerPlayer.onContainerClosed`): the cursor stack is dropped **with no packet** (`EntityPlayerMP.closeContainer` only closes and posts the Forge event), the crafting result is cleared with no packet, and each 2×2 grid stack goes through `InventoryPlayer.placeItemBackInInventory`: `storeItemStack` (the held slot, the off hand, then inventory 0–35, merging below both the item's and the slot's limit), else `getFirstEmptyStack` (0–35: the hotbar first), else dropped; each placed part is sent as `set_slot` window −2 (which mineflayer ignores), and the next tick's `detectAndSendChanges` sends the changed window-0 slots;
 - **closing the table** (`ContainerWorkbench.onContainerClosed`, from `ContainerFastBench`'s): the same, for its 3×3 grid: the cursor dropped with no packet, each grid stack put back, then window 0's slots changed since the table opened;
 - **a chest** (`startRotnWorld({ chest: true })`, at `CHEST`; #633 review 2): `ContainerChest`, window type `minecraft:chest`, slots 0–26 the chest and 27–62 the player's 9–44, opened with `open_window` and `window_items`; the same click rules; closing it drops the cursor and sends window 0's changed slots; its contents stay between openings;
+- **one container at a time** (#649 review): opening the chest closes an open table with `close_window` for its id (`displayGUIChest`'s `closeScreen`, bytecode 64–76); opening the table closes an open chest with no packet (FML's `openGui`). A `close_window` closes the open container whatever its id, as on the server; one with another id is recorded in `state.closedOther`;
 - **recipes** are matched first to last (the server's registry order); `setRecipes` replaces them, and `maxUses` (a test hook) makes one stop matching after that many crafts;
 - `inventoryDiff(window, state)` lists where mineflayer's view and the server's differ: the silent divergence no rejection shows.
 
