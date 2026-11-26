@@ -1,17 +1,29 @@
 # Status: rotn-data
 
-Updated: 2026-11-25T21:24Z (from `date -u`)
+Updated: 2026-11-26T00:51Z (from `date -u`)
 
-Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/recipe-collisions` (#639). Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/status-after-651` (this STATUS PR). Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
-## Now (2026-11-25)
+## Now (2026-11-26)
 
-- **Open PRs:** #639 (recipe collisions) and this STATUS PR. Nothing else of mine is open or in review.
-- **Open: #639 `agent/rotn-data/recipe-collisions`** (soak 16 recipe report item B; `/home/rv/soak16-net-forge-recipe.md` sections 4-5).
+- **Open PRs:** only this STATUS PR. Nothing else of mine is open or in review.
+- **Merged: #651 `agent/rotn-data/poultry-reactions`** (`b5ed9b27`; lead task 2026-11-26, the soak 16 death 2 follow-up).
+  - The hen and rooster `provoked` blocks gain `attackIntervalTicks` 20, `knockback` 1, `followRange` 16 and `loseSightTicks` 60.
+  - Their summaries say they panic, then chase with a hard knockback, and give up only past 16 blocks or after 3 s out of sight: fight one back rather than flee.
+  - The rest of the table already matched the hen report. Frogs and toads stay `ignore`: only a "Pepe"-named frog gets the attack AI, and the report's claim that frogs fight back is corrected.
+- **Merged: #647 `agent/rotn-data/collisions-tool-2`** (`21522ef6`; the #639 review follow-ups plus the #643 review nits; supersedes #643, closed unmerged because its rebased branch could not be force-pushed from this session).
+  - `packages/rotn-data/tools/build-recipe-collisions.mjs` regenerates `3.3.4/recipe-collisions.json` from the dump (net-forge's soak 16 scan; both of its lists reproduced byte for byte). `--check` and `--list first|any`; about 10 s to build or check, 5 s per list.
+  - A test checks that the committed file is the tool's output.
+  - `installRecipes(registry, { shadowed: undefined })` keeps the pack's collisions; the `acceptsItems` JSDoc says its match over-approximates on purpose.
+- **Merged: #639 `agent/rotn-data/recipe-collisions`** (`7ee6205b`; soak 16 recipe report item B).
   - It drops `dungeontactics:misc/convenience/planks_from_sticks` (the server's `ancientbeasts:stick_wall` always wins).
-  - New `3.3.4/recipe-collisions.json` (207 recipes another may shadow, from net-forge's scan). `installRecipes` puts the variants a shadowing recipe also accepts after every other variant of the result.
-  - On the dump, 687 variants move last and 4 results change their first variant.
-  - Full `npm test` 2954 pass, 0 fail, 2 skipped (after `npm ci`); lint 248.
+  - For the 207 recipes another may shadow, the variants a shadowing recipe also accepts go after every other variant of the result (687 variants move last; 4 results change their first variant).
+- **Research report for the lead, no code:** `/home/rv/soak16-rotn-data-hen.md` (soak 16 death 2, the Rhode Island Red hen; extracts `/home/rv/soak16-hen/`).
+  - Animania hens and roosters attack a player only after being hurt by them, for 2 damage plus knockback 1.0.
+  - The provoking hit could not be found in the logs: the club does not sweep, and Better Combat hits only the entity its packet names.
+  - Skills' `threatPlan` skips `ignore` mobs, so a pecking hen was never fought. skills-rotn takes that fix.
+  - Two corrections made on 2026-11-26: frogs do not fight back, and the rooster's melee task is at priority 3.
+
 - **Merged: #621 `agent/rotn-data/bc-sweep`** (`f681b3ee`, approved on re-review of `db0f1b1c`; lead task for skills-rotn's herd rule; soak 15 bull, soak 16 plan F5).
   - `3.3.4/weapon-sweep.json`, plus `weaponSweep(item, { path, enchantment, potion })` and `sweepRadius(level)`: Better Combat's per-weapon Sweep from `config/bettercombat.cfg`, read from its bytecode.
   - The first entry whose substring is in the registry path wins, for Better Combat weapons only.
@@ -26,7 +38,7 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
     - Call `weaponSweep` on the weapon the bot will attack with, after equipping it, not on whatever it holds now: food, sticks and blocks answer `sweeps: null`.
     - Use `radius` (1.6 for a sword, 2.1 for a greatsword: the 3D distance between the two mobs' positions) plus your margin.
 - **Merged: #611 `hunger-effects.json`** (`78378e9b`, soak 14 item D): Hunger Overhaul's low-food effects by food and difficulty, starvation, the constant drain (235 s per point at rest) and the regeneration floor.
-- **Merged since #319, one line:** #332, #339, #350, #368, #423, #426, #448, #496, #511, #513, #518, #528, #534, #542, #551, #611, #621.
+- **Merged since #319, one line:** #332, #339, #350, #368, #423, #426, #448, #496, #511, #513, #518, #528, #534, #542, #551, #611, #621, #622, #639, #640, #647, #651.
 - **Research reports for the lead, no code.** Each is in `/home/rv/`, with its extracts beside it under `/home/rv/`:
   - `soak13-rotn-data.md` (extracts `/home/rv/soak13-rd/`): dirt piles → dirt, hand-breakable wall blocks, dig times through a dirt door.
   - `soak13-rotn-data-2.md` (also `/home/rv/soak13-rd/`): entity tracking ranges.
@@ -368,6 +380,11 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
+- **The #651 review nits, for my next code PR** (`/home/rv/review-651.md`; lead, 2026-11-26):
+  - Record vanilla's 100-tick revenge timer as `revengeTicks: 100` in the hen and rooster `provoked` blocks (the hurt bird forgets its attacker after 100 ticks, which bounds the panic; the chase target survives it), with the file description and the `threatOf` JSDoc.
+  - Add a javap check that `EntityRoosterBase.<init>` adds the leap and melee tasks both at priority 3 (`iconst_3`), and the hen's leap at priority 9.
+  - The hen report's wrong "priorities 3 and 1" note for roosters is already corrected (`/home/rv/soak16-rotn-data-hen.md`).
+
 - **For the next dump run (lead, 2026-11-25; no dump now):** the dumper should record each crafting recipe's `CraftingManager.REGISTRY` id (`getIDForObject`, registration order).
   - With it, `installRecipes` can drop a variant whenever a different recipe with a lower id matches the grid mineflayer lays out. That is net-forge's scan, done with the server's own order.
   - It would replace #639's "put it last" ordering with a firm answer.
@@ -628,4 +645,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- Only #622 (this STATUS PR). The current list is in "Now" at the top.
+- Only this STATUS PR. The current list is in "Now" at the top.
