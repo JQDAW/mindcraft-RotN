@@ -48,7 +48,10 @@ const REAL_NEARBY = ['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS',
  * opt.unknownFrom/opt.unknownUntil (minutes the unit's state is 'unknown': status and metrics reads fail, alive() false,
  * stateUnknown set); opt.cutStart (the read lost the "Starting mindcraft-rotn@" line to the ctl's line cap);
  * opt.naming (the "[naming] ... near spawn" line at minute 0.9, NAMING_OK by default; null: none); opt.entities (the
- * entity line at minute 2, ENTITIES_OK by default; null: none).
+ * entity line at minute 2, ENTITIES_OK by default; null: none); opt.trap ({at, minutes, died}: a trap from minute `at`,
+ * a failed escape every minute for `minutes`, then the escape clears or the bot dies there). timedLines() gives the
+ * cached journal with each line's simulated time (lib/service.mjs). opt.enclosed ({at, minutes}: a `could not leave the
+ * shelter` morning at minute `at`, the bot elsewhere `minutes` later).
  */
 function sim(opt = {}) {
     let t = 0;
@@ -58,15 +61,17 @@ function sim(opt = {}) {
     let started = null;
     let online = false;
     const add = (msg) => log.push(line(t, msg));
-    const jr = (...msgs) => journal.push(...msgs);
+    const times = [];
+    const jr = (...msgs) => { journal.push(...msgs); times.push(...msgs.map(() => t)); };
     const done = new Set();
     let cache = [];
+    let cacheT = [];
     const sinceStart = () => (started === null ? -1 : (t - started) / MIN);
     const within = (from, until) => from !== undefined && sinceStart() >= from && (until === undefined || sinceStart() < until);
     const readOk = () => !within(opt.refreshFailAt, opt.refreshOkAt) && !within(opt.unknownFrom, opt.unknownUntil);
     const statusOk = () => !within(opt.unknownFrom, opt.unknownUntil);
     let stateUnknown = null;
-    const read = () => { if (readOk()) cache = opt.cutStart ? journal.slice(1) : [...journal]; return readOk(); };
+    const read = () => { if (readOk()) { cache = opt.cutStart ? journal.slice(1) : [...journal]; cacheT = opt.cutStart ? times.slice(1) : [...times]; } return readOk(); };
     // The bot's own lines, written as simulated time passes (once each).
     const at = (min, key, fn) => { if (started !== null && t - started >= min * MIN && !done.has(key)) { done.add(key); fn(); } };
     const advance = () => {
@@ -100,6 +105,20 @@ function sim(opt = {}) {
         for (const d of opt.deaths ?? []) at(d, `death${d}`, () => { jr('[death] died at 1, 64, 2; waiting for the respawn'); if (!(opt.unreported ?? []).includes(d)) jr('[death] died at 1, 64, 2 (Zombie); lost 3 minecraft:dirt:0'); });
         if (opt.agentRestartAt) at(opt.agentRestartAt, 'arestart', () => jr(`[agent_process] ${NAME}: network; restarting in 10 s.`));
         if (opt.nRestartsAt) at(opt.nRestartsAt, 'nrestart', () => { unit.nrestarts++; });
+        if (opt.trap) {
+            const { at: from, minutes, died } = opt.trap;
+            for (let k = 0; k <= minutes; k++) {
+                at(from + k, `trap${k}`, () => {
+                    if (k < minutes) jr(`[escape] stuck at 5, ${30 + k}, 5: getting out to 5, 80, 5 (dry ground under open sky) (up to 50 steps, 5 min)`, `[escape] still stuck at 5, ${31 + k}, 5 after 50.0 s (dug 3, placed 0): could not step up into 5, ${32 + k}, 5`);
+                    else if (died) jr(`[death] died at 5, ${30 + k}, 5; waiting for the respawn`, `[death] died at 5, ${30 + k}, 5 (Zombie); lost 3 minecraft:dirt:0`);
+                    else jr(`[escape] stuck at 5, ${30 + k}, 5: getting out to 5, 80, 5 (dry ground under open sky) (up to 50 steps, 5 min)`, `[escape] out at 5, 80, 5 (by hand; dug 9, placed 0) in 20.0 s`);
+                });
+            }
+        }
+        if (opt.enclosed) {
+            at(opt.enclosed.at, 'encl', () => jr('[night] morning: could not leave the shelter at 5, 60, 5 after 3 tries (no safe side of the shelter at 5, 60, 5 to open yet); back to work, still enclosed: dig a way out'));
+            at(opt.enclosed.at + opt.enclosed.minutes, 'enclEnd', () => jr('You have reached at 50, 64, 50.'));
+        }
         if (opt.leaveAt) at(opt.leaveAt, 'leave', () => { online = false; add(`${NAME} lost connection: Disconnected`); add(`${NAME} left the game`); unit.state = 'failed'; });
     };
     const server = {
@@ -120,6 +139,7 @@ function sim(opt = {}) {
         ...(opt.driver ? {} : { kind: 'service', bot: opt.unitBot ?? 'frcfld',
             refresh: () => { advance(); return read() ? Promise.resolve() : Promise.reject(new Error("service journal: 'journal frcfld' exited 255")); } }),
         start() { started = t; unit.state = 'active'; jr('Starting mindcraft-rotn@frcfld.service - Mindcraft RotN bot frcfld...'); return Promise.resolve(); },
+        ...(opt.driver ? {} : { timedLines: () => { advance(); read(); return cache.map((msg, i) => ({ n: i + 1, t: cacheT[i], msg })); } }),
         alive() { advance(); if (!opt.driver && !statusOk()) stateUnknown = stateUnknown ?? { since: `minute ${Math.round(sinceStart())}`, failures: 3 }; return statusOk() && unit.state === 'active'; },
         needsStop: () => unit.state === 'active',
         exitCode: () => null,
@@ -152,7 +172,9 @@ describe('g4-soak-2h: the module and the journal parsers', () => {
         assert.equal(soak.defaults.durationMinutes, 120);
         assert.equal(soak.defaults.sampleMinutes, 5);
         assert.equal(soak.runMinutes(soak.defaults), 125);
-        assert.deepEqual(Object.keys(soak.checks), ['login_online', 'naming', 'no_crash', 'peak_memory', 'usd_per_hour', 'agenda_done', 'food_floor', 'ate_when_low', 'deaths_reported']);
+        assert.deepEqual(Object.keys(soak.checks), ['login_online', 'naming', 'no_crash', 'peak_memory', 'usd_per_hour', 'agenda_done', 'food_floor', 'ate_when_low', 'deaths_reported', 'no_trap']);
+        assert.equal(soak.defaults.trapMaxMinutes, 5);
+        assert.equal(soak.gateParams.trapMaxMinutes, 'equal');
     });
 
     test('survivalEvents, deathEvents, nearbyBlocksResults, blockNameProblem, agentExits', () => {
@@ -263,8 +285,41 @@ describe('g4-soak-2h on a simulated service', () => {
         assert.match(c.usd_per_hour.detail, /^USD 0\.012\/h \(target 0\.05;/, 'T reads the same usage lines');
         for (const k of ['naming', 'agenda_done', 'food_floor', 'deaths_reported']) assert.equal(c[k].pass, true, `${k}: ${c[k].detail}`);
         assert.ok(r.weakenedParams.some((w) => /set-up T/.test(w)));
+        assert.equal(c.no_trap.detail, 'not reached: not the CX23 service (the journal\'s times are needed)');
     });
 
+});
+
+describe('no_trap (the lead, after soak 17): no trap span over 5 min, no death while trapped', () => {
+    test('no trap: a pass; a 3-min trap that clears: a pass with the span named', async () => {
+        assert.equal(byName(await run(sim())).no_trap.detail, 'no trap span or enclosed shelter');
+        const c = byName(await run(sim({ trap: { at: 20, minutes: 3 } })));
+        assert.equal(c.no_trap.pass, true, c.no_trap.detail);
+        assert.match(c.no_trap.detail, /^1 trap span\(s\), the longest \S+-\S+ at 5, 30, 5, 5 min, ended: cleared; no death while trapped$/); // the sim writes lines at the 5-min samples
+    });
+    test('a 7-min trap climbed a block a minute (one span, soak 17\'s shape; 10 min at the 5-min samples): a fail; a short trap ended by a death: a fail', async () => {
+        let c = byName(await run(sim({ trap: { at: 20, minutes: 7 } })));
+        assert.equal(c.no_trap.pass, false);
+        assert.match(c.no_trap.detail, /^1 trap span\(s\) over 5 min \(longest \S+ at 5, 30, 5, 10 min, ended: cleared\)$/);
+        c = byName(await run(sim({ trap: { at: 20, minutes: 2, died: true }, deaths: [] })));
+        assert.equal(c.no_trap.pass, false);
+        assert.match(c.no_trap.detail, /^1 death\(s\) while trapped \(\S+ at 5, 30, 5, 5 min, ended: died\)$/);
+    });
+    test('#662 review 3: an enclosed shelter (soak 15\'s `could not leave the shelter`) over 5 min fails; a short one passes', async () => {
+        let c = byName(await run(sim({ enclosed: { at: 30, minutes: 40 } })));
+        assert.equal(c.no_trap.pass, false);
+        assert.match(c.no_trap.detail, /^1 trap span\(s\) over 5 min \(longest enclosed in the shelter \S+ at 5, 60, 5, 40 min, ended: moved away\)$/);
+        c = byName(await run(sim({ enclosed: { at: 30, minutes: 4 } })));
+        assert.equal(c.no_trap.pass, true, c.no_trap.detail);
+        assert.match(c.no_trap.detail, /^1 trap span\(s\), the longest enclosed in the shelter \S+ at 5, 60, 5, 5 min, ended: moved away; no death while trapped$/);
+    });
+    test('a journal gap: a seen long trap stands; a pass is not reached (infra)', async () => {
+        let c = byName(await run(sim({ trap: { at: 20, minutes: 7 }, refreshFailAt: 70 })));
+        assert.equal(c.no_trap.pass, false);
+        assert.match(c.no_trap.detail, /^1 trap span\(s\) over 5 min/);
+        c = byName(await run(sim({ refreshFailAt: 70 })));
+        assert.match(c.no_trap.detail, /^not reached \(infra\): .*; on what was read: no trap span or enclosed shelter$/);
+    });
 });
 
 describe('#394 review: naming in the real format, a failed read is no crash, the naming window, USD from the usage lines', () => {
