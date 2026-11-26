@@ -103,6 +103,9 @@ test('PR 2 (4): the drowning reflex fired twice going for a block: it is refused
  */
 function pool(extra = {}, liquid = 'water', z0 = -5) {
     const set = { ...extra };
+    // Soak 17 T: a collect takes stone and ore only where it lies open, so each ore in the bed gets a 1-high air pocket
+    // under it (an open face, but no cell to stand in): the footing rule, not "buried", is what leaves it.
+    for (const [k, v] of Object.entries(extra)) if (v === 'iron_ore') { const [x, y, z] = k.split(',').map(Number); if (y < 64) set[`${x},${y - 1},${z}`] ??= 'air'; }
     for (let x = 0; x <= 10; x++) for (let z = z0; z <= z0 + 10; z++) for (const y of [64, 65]) set[`${x},${y},${z}`] = liquid;
     return set;
 }
@@ -165,7 +168,7 @@ test('PR 2 (4): the drowning reflex counts the swim-up against the block a colle
 
 // ---- #564 review 1: the footing rule only with a liquid near ----
 
-test('#564 review 1: a buried ore with no liquid near (24 down in solid stone) is collected, not skipped as "no dry footing"', async (t) => {
+test('#564 review 1: a buried ore with no liquid near (24 down in solid stone) is not skipped as "no dry footing" (soak 17 T: it is below the collect floor)', async (t) => {
     t.mock.method(console, 'log', () => {});
     const items = [{ name: 'stone_pickaxe', metadata: 0, count: 1, type: reg.itemsByName.stone_pickaxe.id }];
     const bot = fakeBot({ set: { '2,40,0': 'iron_ore' }, items });
@@ -173,8 +176,10 @@ test('#564 review 1: a buried ore with no liquid near (24 down in solid stone) i
     assert.equal(footingFor(bot, ore.position), null, 'no air cell within reach of it');
     assert.equal(liquidNear(bot, ore.position), null);
     assert.equal(wetOreRefusal(bot, ore), null);
+    // Soak 17 T: 24 down is below the collect floor (start y 64 - 2): left alone, said once; never "no dry footing".
     await skills.collectBlock(bot, 'iron_ore', 1);
-    assert.deepEqual(bot.calls.dug, ['2,40,0'], bot.output);
+    assert.deepEqual(bot.calls.dug, [], bot.output);
+    assert.match(bot.output, /Left 1 block for iron_ore below y 62 alone/);
     assert.doesNotMatch(bot.output, /Skipped/);
 });
 
@@ -209,7 +214,7 @@ test('#564 review 3: the skips yield to the event loop (no long block over many 
     // Twelve ores in a pool's bed, no dry one: each is looked at and skipped.
     const set = {};
     for (let x = -6; x <= 19; x++) for (let z = -6; z <= 6; z++) for (const y of [64, 65]) set[`${x},${y},${z}`] = 'water'; // wide: no footing at its edges
-    for (let x = 1; x <= 12; x++) set[`${x},62,0`] = 'iron_ore';
+    for (let x = 1; x <= 12; x++) { set[`${x},62,0`] = 'iron_ore'; set[`${x},61,0`] = 'air'; } // soak 17 T: open (a 1-high pocket)
     const bot = fakeBot({ set, at: new Vec3(6, 64, -8) });
     let turns = 0;
     const spin = setInterval(() => { turns++; }, 0);

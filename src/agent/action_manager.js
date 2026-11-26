@@ -111,6 +111,10 @@ export class ActionManager {
             this.executing = true;
             this.currentActionLabel = actionLabel;
             this.currentActionFn = actionFn;
+            // Soak 17 T (#665 review 7): which action is current, for state that holds only while it runs (the collect
+            // floor, library/movements.js): a new number at each start and at each end.
+            const seqBot = this.agent.bot;
+            if (seqBot) seqBot.rotnActionSeq = (seqBot.rotnActionSeq ?? 0) + 1;
 
             // timeout in minutes
             if (timeout > 0) {
@@ -125,7 +129,10 @@ export class ActionManager {
             const before = handsBefore(bot, actionLabel); // null: nothing to move (no await)
             if (before) await before;
             try { await actionFn(); }
-            finally { await handsAfter(bot, actionLabel, { interruptedBy: this.interruptedBy }); }
+            finally {
+                if (seqBot) seqBot.rotnActionSeq = (seqBot.rotnActionSeq ?? 0) + 1; // soak 17 T: this action is over
+                await handsAfter(bot, actionLabel, { interruptedBy: this.interruptedBy });
+            }
 
             // mark action as finished + cleanup
             this.executing = false;

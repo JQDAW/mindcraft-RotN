@@ -12,6 +12,7 @@ import { __setRegistryForTest } from '../../utils/mcdata.js';
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from './rotn_sources.js';
 import { countItem } from './rotn_names.js';
 import * as skills from './skills.js';
+import { setCollectFloor } from './movements.js';
 
 const vanilla = minecraftData('1.12.2');
 // The modded rocks the server's registry has (net-forge's registry extension); ids are made up.
@@ -187,12 +188,13 @@ test('without a pickaxe, stone is not a rock source, and the bot says what it ne
     assert.match(bot.output, /Mine stone with a pickaxe below Sturdy.*That needs a pickaxe of level 0 or lower\./);
 });
 
-test('"cobblestone" no longer digs stone (that gives rocks below Sturdy)', async (t) => {
+test('"cobblestone" never searches stone as cobblestone (it gives rocks below Sturdy); soak 17 T: it collects rocks for the cobble', async (t) => {
     t.mock.method(console, 'log', () => {});
-    const bot = fakeBot({ items: [tool('stone_pickaxe')], blocks: [block('stone', 0, at(2))] });
-    assert.equal(await skills.collectBlock(bot, 'cobblestone', 1), false);
-    assert.deepEqual([...bot.calls.collected, ...bot.calls.dug], []);
-    assert.match(bot.output, /No cobblestone nearby to collect\./);
+    const stone = block('stone', 0, at(2));
+    const bot = fakeBot({ items: [tool('stone_pickaxe')], blocks: [stone] });
+    await skills.collectBlock(bot, 'cobblestone', 1);
+    assert.deepEqual([...bot.calls.collected, ...bot.calls.dug], [stone], 'the stone, for its rocks (the rock route)');
+    assert.match(bot.output, /Stone here drops rocks with a pickaxe below Sturdy .*: collecting 4 rocks \(pyrotech:rock\) to craft 1 cobble/);
 });
 
 // Lead, before the first G3 batch: near the G3 spawn the only plain pyrotech:rock piles are dirt
@@ -423,13 +425,14 @@ test('soak 16 (R): a stone whose break leaves no walkable way out (the bottom of
     t.mock.method(console, 'log', () => {});
     const items = [tool('stone_pickaxe')];
     // A 1-wide shaft from the surface down to the stone at 0, 59, 0: open to the sky, but no room to walk out once in it.
-    const shaft = (pos) => (pos.x === 0 && pos.z === 0 && pos.y >= 60 && pos.y <= 63 ? { name: 'air', metadata: 0, type: 0, position: pos, boundingBox: 'empty', shapes: [], transparent: true } : ground(pos));
-    const deep = block('stone', 0, at(0, 59)), far = block('pyrotech:rock', 0, at(55));
+    // Soak 17 T: within the collect floor (start y 64 - 2), so the way-out rule, not the floor, skips it.
+    const shaft = (pos) => (pos.x === 0 && pos.z === 0 && pos.y === 63 ? { name: 'air', metadata: 0, type: 0, position: pos, boundingBox: 'empty', shapes: [], transparent: true } : ground(pos));
+    const deep = block('stone', 0, at(0, 62)), far = block('pyrotech:rock', 0, at(55));
     const bot = fakeBot({ items, blocks: [deep, far], world: shaft });
     bot.entity.position = new Vec3(1.5, 64, 0.5);
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), true);
     assert.ok(![...bot.calls.collected, ...bot.calls.dug].includes(deep));
-    assert.match(bot.output, /Skipped 1 block to mine \(stone at 0, 59, 0\): breaking it would leave no walkable way out\./);
+    assert.match(bot.output, /Skipped 1 block to mine \(stone at 0, 62, 0\): breaking it would leave no walkable way out\./);
     assert.equal(skills.COLLECT_LIMITS.mineHandRadius, 48);
 });
 
@@ -463,6 +466,7 @@ test('#630 re-review 1: bare stone 40 blocks away on dirt over stone is found pa
     const items = [tool('stone_pickaxe')];
     const boulder = block('stone', 0, at(40, 64));
     const bot = fakeBot({ items, blocks: [...buriedField(), boulder], world: dirtOverStone, palettePass: true });
+    setCollectFloor(bot, 0); // soak 17 T: an outer floor set low, so the exposure check (not the floor) meets the buried field
     let reads = 0;
     const sid = bot.world.getBlockStateId;
     bot.world.getBlockStateId = (p) => { reads++; return sid(p); };
@@ -480,6 +484,7 @@ test('#630 re-review 1: a stone search that hits the exposure cap ends "capped",
     const items = [tool('stone_pickaxe')];
     const boulder = block('stone', 0, at(40, 64));
     const bot = fakeBot({ items, blocks: [...buriedField(), boulder], world: dirtOverStone, palettePass: true });
+    setCollectFloor(bot, 0); // soak 17 T: as above, the cap is what this checks
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1, null, 64, { ...skills.COLLECT_LIMITS, exposeChecks: 100 }), false);
     assert.equal(bot.rotnCollectEnd.reason, 'capped');
 });

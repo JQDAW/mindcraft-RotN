@@ -348,7 +348,7 @@ const modes_list = [
                         }
                         console.warn(`[reflex] ${blockAbove.name} at the head in the shelter (${why}); getting out`);
                     }
-                    await skills.moveAway(bot, 2);
+                    await skills.moveAway(bot, 2, { keep: false }); // #665 round 1: a hazard walk may spend the pickaxe's last uses
                 });
             }
             // Molten metal (a modded fluid with forge.hazard 'lava', #259) is lethal like lava, and
@@ -381,7 +381,7 @@ const modes_list = [
                             if (success) say(agent, 'Found some water, ahhhh that\'s better!');
                             return;
                         }
-                        await skills.moveAway(bot, 5);
+                        await skills.moveAway(bot, 5, { keep: false }); // #665 round 1: a hazard walk
                     });
                 }
             }
@@ -985,7 +985,7 @@ export async function moveAwayWithin(bot, distance, timeoutMs) {
     // Every walk away is fall-safe too (skills.goToGoal).
     const free = standsOnTree(bot)
         ? skills.descendFromTree(bot, run).then((down) => { if (!down) throw new Error('no safe way down from the tree'); })
-        : fromFloor(bot).then(() => skills.moveAway(bot, distance, { offTrees: true })); // soak 5: never onto leaves that may not hold
+        : fromFloor(bot).then(() => skills.moveAway(bot, distance, { offTrees: true, keep: false })); // soak 5: never onto leaves that may not hold; #665 round 1: the unstuck walk may spend the pickaxe's last uses
     const moved = free.then(() => ({ outcome: 'freed' }), (error) => ({ outcome: 'failed', error }));
     try {
         return await Promise.race([moved, timedOut]);
