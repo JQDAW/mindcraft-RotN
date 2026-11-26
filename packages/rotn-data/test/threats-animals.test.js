@@ -171,6 +171,25 @@ test('the small Animania retaliators: hens and roosters, peafowl, ferrets, hedge
     }
 });
 
+test('soak 16 death 2: hens and roosters chase and knock back; the give-up rules and the hit rate are in provoked', () => {
+    // The chicken base: panic (priority 1) ahead of the hen's melee; no FOLLOW_RANGE set, so the vanilla 16 applies.
+    const chicken = section('Animania EntityAnimaniaChicken');
+    inOrder(method(chicken, 'EntityAnimaniaChicken(net.minecraft.world.World)'), 'iconst_1', 'GenericAIPanic', 'func_75776_a');
+    assert.ok(!method(chicken, 'func_110147_ax').includes('field_111265_b'), 'no FOLLOW_RANGE: the default 16');
+    inOrder(method(section('Animania EntityHenBase'), 'EntityHenBase(net.minecraft.world.World)'), 'bipush        10', 'EntityAIAttackMelee', 'dconst_1', 'iconst_1');
+    // Against a player each hit adds knockBack(this, 1.0f, dx, dz).
+    for (const title of ['Animania EntityHenBase', 'Animania EntityRoosterBase']) {
+        inOrder(method(section(title), 'func_70652_k'), 'fconst_2', 'func_70097_a', 'EntityPlayer', 'fconst_1', 'func_70653_a');
+    }
+    for (const n of ['animania:hen_rhode_island_red', 'animania:rooster_leghorn']) {
+        const p = pack.threatOf(n).provoked;
+        assert.deepEqual([p.damage, p.fightBack, p.attackIntervalTicks, p.knockback, p.followRange, p.loseSightTicks], [2, true, 20, 1, 16, 60], n);
+        assert.match(pack.threatOf(n).summary, /more than 16 blocks away or out of its sight for 3 s.*Fight it back at once rather than flee/, n);
+    }
+    // Chicks never attack: no provoked block (the next test checks they stay ignore).
+    assert.equal(pack.threatOf('animania:chick_rhode_island_red')?.provoked ?? null, null);
+});
+
 test('animals that do no damage to a player stay ignore (calves, chicks, toads, frogs, pigs, sheep, goats, rabbits, horses)', () => {
     for (const n of ['animania:calf_holstein', 'animania:chick_leghorn', 'animania:toad', 'animania:frog', 'animania:sow_large_white', 'animania:hog_large_white',
         'animania:ewe_suffolk', 'animania:ram_suffolk', 'animania:buck_alpine', 'animania:doe_alpine', 'animania:doe_dutch', 'minecraft:horse']) {
