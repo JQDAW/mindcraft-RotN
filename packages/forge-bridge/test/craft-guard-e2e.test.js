@@ -29,7 +29,11 @@ const lines = []; // the craft-refused lines, for both tests
 let restoreLog = null;
 after(() => { restoreLog?.(); return stopCraftWorld(world ?? {}); });
 
-test('soak 16: a grid the server makes into another item is never clicked; the sticks stay; the server\'s count is taken; an empty result throws (patches/mineflayer craft.js)', { timeout: 60000 }, async () => {
+// The world, started by whichever test runs first (#649 review: the second test also runs alone, e.g.
+// with --test-name-pattern); it starts with 21 sticks and the stick wall registered first. The second
+// test sets its own inventory and recipes, so it does not depend on what the first left.
+async function getWorld() {
+    if (world) return world;
     world = await startRotnWorld({
         itemNames: [STICK, PLANKS, WALL],
         inventory: { 36: { name: STICK, count: 21 } },
@@ -37,12 +41,16 @@ test('soak 16: a grid the server makes into another item is never clicked; the s
         recipes: [{ shaped: nine, result: WALL }, { shaped: nine, result: PLANKS }],
         captureFile: tmpFile('craft-guard.jsonl'),
     });
-    const { bot, ids } = world;
-    const c = world.containers();
-    const st = c.state;
     const realLog = console.log;
     console.log = (...a) => { if (typeof a[0] === 'string' && a[0].startsWith('[forge-bridge] craft refused:')) lines.push(a[0]); realLog(...a); };
     restoreLog = () => { console.log = realLog; };
+    return world;
+}
+
+test('soak 16: a grid the server makes into another item is never clicked; the sticks stay; the server\'s count is taken; an empty result throws (patches/mineflayer craft.js)', { timeout: 60000 }, async () => {
+    const { bot, ids } = await getWorld();
+    const c = world.containers();
+    const st = c.state;
     const { returnGrid } = await import('../../../src/agent/library/inventory_sync.js');
     const tableBlock = bot.blockAt(new Vec3(TABLE.x, TABLE.y, TABLE.z));
     const craft = (recipe, table) => within(20000, bot.craft(recipe, 1, table), 'craft').then(() => null, (e) => e);
@@ -72,7 +80,7 @@ test('soak 16: a grid the server makes into another item is never clicked; the s
     assert.doesNotMatch(String(err?.message), /Server rejected transaction|Server didn't respond to transaction/, 'not inventory_sync\'s REJECTED: no guard retry');
     await inStep();
     assert.equal(c.count(ids[WALL]), 0);
-    assert.equal(lines.length, 1);
+    assert.equal(lines.length, 1, 'this test runs first on its fresh world');
     assert.match(lines[0], /^\[forge-bridge\] craft refused: window \d+ \(minecraft:crafting[^)]*\): the server makes ancientbeasts:stick_wall x1 from this grid, not planks x1; nothing taken$/);
 
     // The recipe the server does make: accepted and taken as before.
@@ -106,8 +114,8 @@ test('soak 16: a grid the server makes into another item is never clicked; the s
     assert.deepEqual(st.rejected, []);
 });
 
-test('#638 review 2: bot.craft(recipe, 2) goes through the guard twice; a mismatch on the 2nd craft stops there with its grid back', { timeout: 30000 }, async () => {
-    const { bot, ids } = world;
+test('#638 review 2: bot.craft(recipe, 2) goes through the guard twice; a mismatch on the 2nd craft stops there with its grid back', { timeout: 60000 }, async () => {
+    const { bot, ids } = await getWorld();
     const c = world.containers();
     const st = c.state;
     const tableBlock = bot.blockAt(new Vec3(TABLE.x, TABLE.y, TABLE.z));
