@@ -3,6 +3,7 @@ import * as mc from '../../utils/mcdata.js';
 import { VILLAGER_PROFESSIONS_112 } from './names112.js';
 import { inventoryKey, blockMetasFor, blockMatcher, blockDisplayName } from './rotn_names.js';
 import { fallSafe, isTreePart } from './fall_safety.js';
+import { view, carried } from './inventory_view.js';
 
 /**
  * Blocks a tree on the surface can have above its wood: its own wood and leaves, snow, vines.
@@ -301,7 +302,8 @@ export function getVillagerProfession(entity) {
  */
 export function getInventoryTotals(bot) {
     let totals = {};
-    for (const slot of bot.inventory.slots) {
+    // Round 17 V: the usable stacks (slots 9-44), never the 2x2 grid, the crafting result or the armour.
+    for (const slot of view(bot).usable) {
         if (slot != null && slot.name) {
             totals[slot.name] = (totals[slot.name] ?? 0) + slot.count;
         }
@@ -320,7 +322,9 @@ export function getInventoryCounts(bot) {
      * let hasWoodenPickaxe = inventory['wooden_pickaxe'] > 0;
      **/
     let inventory = {};
-    for (const slot of bot.inventory.slots) {
+    // Round 17 V (Fable verdict 2): what the bot carries (slots 9-44 and the off hand), never the 2x2 grid, the
+    // crafting result (soak 15's phantom dirt) or the worn armour.
+    for (const slot of carried(bot)) {
         if (slot != null && slot.name) {
             // "log:1" for items with subtypes, plain names otherwise (rotn_names.js, B1b)
             const key = inventoryKey(slot) ?? slot.name;

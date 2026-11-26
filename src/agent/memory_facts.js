@@ -13,6 +13,7 @@ import { heldFoodPoints, nightFoodNeed } from './library/food.js';
 import { isSturdy, placeableDirt } from './library/night.js';
 import { carriedItems } from './library/rotn_names.js';
 import { isWeaponItem } from './library/threats.js';
+import { offHand } from './library/inventory_view.js';
 
 /**
  * The profile's "memory" key (history.js): "code" builds $MEMORY here; "summary" (or none: upstream's profiles) keeps
@@ -179,7 +180,7 @@ function reservesLine(bot) {
         const need = nightFoodNeed({ food: bot.food, saturation: bot.foodSaturation ?? 0 });
         parts.push(`food held ${held} points${need != null ? `, a night needs ${need} more than your bar` : ''}`);
     }
-    const off = bot?.inventory?.slots?.[45];
+    const off = offHand(bot);
     const tools = [];
     for (const i of carriedItems(bot)) {
         const kind = /pickaxe/.test(i.name) ? 'pickaxe' : /(^|[_:])axe$/.test(i.name) ? 'axe' : isWeaponItem(i) ? 'weapon' : null;
@@ -199,6 +200,7 @@ function failureLines(facts, here, now) {
     return ['Recent failures (newest first):', ...f.slice().reverse().map(e => {
         const suffix = ` (${ago(now - e.at)}${e.pos ? ` at ${at(e.pos)}${here ? `, ${bearing(here, e.pos)}` : ''}` : ''})`;
         const head = `${e.cmd}: `;
+        // #652 nit: at least 10 chars of why, so with a long command and place the line may pass failureLineMax a little.
         const room = Math.max(10, MEMORY_FACTS.failureLineMax - head.length - suffix.length);
         return `${head}${clip(e.why, room)}${suffix}`;
     })];

@@ -1112,7 +1112,9 @@ export function deeperRefusal(bot, ops, feet) {
     for (let dy = 2; dy <= 2 + PIT_DEEPER.columnUp; dy++) {
         const b = bot.blockAt(feet.offset(0, dy, 0));
         if (isFalling(b)) return `a falling ${b.name} in the column over the roof cell (at ${at(feet.offset(0, dy, 0))})`;
-        if (b && !isEmpty(b) && !isLiquid(b)) break; // a solid block holds what is above it
+        // A solid block holds what is above it. #652 nit: a liquid in the column is passed over here: the hole's flood
+        // check (buildShelter's floodCheck) covers water coming in.
+        if (b && !isEmpty(b) && !isLiquid(b)) break;
     }
     const floor = bot.blockAt(below.offset(0, -1, 0));
     if (!floor || isEmpty(floor) || isLiquid(floor) || floor.boundingBox !== 'block') return `nothing solid under ${at(below)} to stand on`;

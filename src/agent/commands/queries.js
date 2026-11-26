@@ -11,6 +11,7 @@ import { listTasks } from '../task_queue.js';
 import { describeAgenda } from '../agenda.js';
 import { agendaState } from '../agenda_driver.js';
 import { memoryMode, addNote, MEMORY_FACTS } from '../memory_facts.js';
+import { view } from '../library/inventory_view.js';
 
 const pad = (str) => {
     return '\n' + str + '\n';
@@ -79,14 +80,16 @@ export const queryList = [
             // in the 2x2 grid showed as held while crafting (inventory.items(), slots 9-44) found none, and the model
             // blamed its bundle. The main list is the inventory as crafting and the tools see it; the 2x2 grid, the
             // cursor and the off hand are named apart (armour stays under WEARING).
-            const slots = bot.inventory?.slots ?? [];
+            // Round 17 V: the one inventory view (library/inventory_view.js); the crafting result slot is named apart too
+            // (soak 15, 22:51:15: the phantom dirt mineflayer writes there before it clicks it).
+            const v = view(bot);
             const tally = (stacks) => {
                 const out = {};
                 for (const st of stacks) if (st?.name) { const key = inventoryKey(st) ?? st.name; out[key] = (out[key] ?? 0) + st.count; }
                 return out;
             };
             const listOf = (counts) => Object.entries(counts).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${k}`).join(', ');
-            let inventory = tally(slots.slice(9, 45));
+            let inventory = tally(v.usable);
             let res = 'INVENTORY';
             for (const item in inventory) {
                 if (inventory[item] && inventory[item] > 0)
@@ -98,17 +101,14 @@ export const queryList = [
             else if (agent.bot.game.gameMode === 'creative') {
                 res += '\n(You have infinite items in creative mode. You do not need to gather resources!!)';
             }
-            const grid = listOf(tally(slots.slice(1, 5)));
+            const grid = listOf(tally(v.grid));
             if (grid) res += `\nIN THE 2x2 CRAFTING GRID (not usable until moved back; the next craft returns them first): ${grid}`;
-            const cursor = bot.inventory?.selectedItem;
-            if (cursor?.name) res += `\nON THE CURSOR: ${cursor.count} ${inventoryKey(cursor) ?? cursor.name}`;
-            const off = slots[45];
-            if (off?.name) res += `\nIN THE OFF HAND: ${off.count} ${inventoryKey(off) ?? off.name}${/_pickaxe$/.test(off.name) ? ' (kept at a death; taken back when a dig needs it)' : ''}`;
+            if (v.result) res += `\nIN THE CRAFTING RESULT SLOT (not held: what the grid would make): ${v.result.count} ${inventoryKey(v.result) ?? v.result.name}`;
+            if (v.cursor) res += `\nON THE CURSOR: ${v.cursor.count} ${inventoryKey(v.cursor) ?? v.cursor.name}`;
+            const off = v.offHand;
+            if (off) res += `\nIN THE OFF HAND: ${off.count} ${inventoryKey(off) ?? off.name}${/_pickaxe$/.test(off.name) ? ' (kept at a death; taken back when a dig needs it)' : ''}`;
 
-            let helmet = bot.inventory.slots[5];
-            let chestplate = bot.inventory.slots[6];
-            let leggings = bot.inventory.slots[7];
-            let boots = bot.inventory.slots[8];
+            const { head: helmet, torso: chestplate, legs: leggings, feet: boots } = v.armor;
             res += '\nWEARING: ';
             if (helmet)
                 res += `\nHead: ${helmet.name}`;

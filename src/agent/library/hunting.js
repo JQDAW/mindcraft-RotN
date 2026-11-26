@@ -7,6 +7,7 @@ import { threatFor, isWeaponItem, weaponOrder, attackPath } from './threats.js';
 import * as rotnData from '../../../packages/rotn-data/index.js';
 import { OWNERSHIP, mayBelongToPlayer } from './ownership.js';
 import { logWeapon } from './survival_log.js';
+import { carried } from './inventory_view.js';
 
 /**
  * Soak 2 (rotn-v0.1.4): at food 4 or lower (Normal difficulty) Hunger Overhaul gives weakness
@@ -121,7 +122,7 @@ export function weaponSweepOf(bot, item) {
  */
 export function attackWeapon(bot) {
     const order = weaponOrder(attackPath(bot));
-    const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45], bot?.heldItem].filter(i => i && isWeaponItem(i));
+    const items = [...carried(bot), bot?.heldItem].filter(i => i && isWeaponItem(i));
     return items.sort(order)[0] ?? bot?.heldItem ?? null;
 }
 
