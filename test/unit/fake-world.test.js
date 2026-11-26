@@ -347,25 +347,29 @@ test('findBlocks: ids or a function; useExtraInfo as a second matcher; count nea
     assert.deepEqual(f.bot.findBlocks({ matching: (b) => b.name === 'gold_ore', maxDistance: 8, count: 3 }).map(String), ['(2, 10, 0)']);
 });
 
-test('the real collectBlock on pocketUnderRock: a stone collect with the pickaxe in the off hand, and in the hand', async (t) => {
+test('the real collectBlock on pocketUnderRock: a stone collect takes the rock route, and in the pocket no stone keeps a way out (soak 17 T)', async (t) => {
     quiet(t);
+    // Soak 15 (22:41:56) pinned the off-hand Tool Progression refusal here (#631 nit 4); since soak 17 T a stone that
+    // drops rocks with the carried pickaxe is collected as rocks, and the rock collect mines only stone whose break keeps
+    // a walkable way out. In this 1x2 pocket under rock none does: nothing is dug, placed or refused, with the pickaxe in
+    // the off hand or in the hand. The off-hand refusal itself stays covered by src/agent/library/collect_rotn.test.js
+    // (#595 review 2) and the off-hand dig tests.
+    for (const opts of [{}, { slots: { 36: ['stone_pickaxe', 1] } }]) { // the pickaxe in the off hand, then in the hand
+        const w = pocketUnderRock(opts);
+        useRegistry(t, w.bot);
+        assert.equal(await collectBlock(w.bot, 'undergroundbiomes:metamorphic_stone', 1), false);
+        assert.deepEqual(w.calls.refused, [], 'no dig is tried, so none is refused');
+        assert.equal(w.calls.dug.length, 0);
+        assert.equal(w.calls.placed.length, 0);
+        assert.match(w.bot.output, /undergroundbiomes:metamorphic_stone drops 4 rocks with your stone_pickaxe, never itself: collecting 4 rocks \(pyrotech:rock\) to craft 1 cobble/);
+        assert.match(w.bot.output, /Skipped 8 blocks to mine \(undergroundbiomes:metamorphic_stone at -1, 57, 0 and others\): breaking them would leave no walkable way out\./);
+        assert.match(w.bot.output, /Crafted 0 cobble from your rocks \(instead of undergroundbiomes:metamorphic_stone\), of 1 asked\./);
+    }
+    // The off-hand pickaxe stays where #614 keeps it.
     const off = pocketUnderRock();
     useRegistry(t, off.bot);
-    // Soak 15 (22:41:56), on develop after #630 (#631 nit 4: pinned, no longer either-or): the pickaxe stays in the off
-    // hand, out of items(); both stone cells next to the bot are refused with the planks held, nothing is dug, and
-    // the reply is the Tool Progression line. A collect that takes the pickaxe back first changes this on purpose.
-    assert.equal(await collectBlock(off.bot, 'undergroundbiomes:metamorphic_stone', 1), false);
-    assert.deepEqual(off.calls.refused.map(r => [r.cell, r.held]), [['0,55,0', 'planks'], ['0,56,1', 'planks']]);
-    assert.equal(off.calls.dug.length, 0);
+    await collectBlock(off.bot, 'undergroundbiomes:metamorphic_stone', 1);
     assert.equal(off.bot.inventory.slots[SLOT.OFF_HAND]?.name, 'stone_pickaxe');
-    assert.equal(off.bot.heldItem.name, 'planks');
-    assert.equal(off.bot.output, 'Failed to collect undergroundbiomes:metamorphic_stone: undergroundbiomes:metamorphic_stone needs a better tool (Tool Progression): the tool you have cannot break it; get a higher-tier one first.\nCollected 0 undergroundbiomes:metamorphic_stone.\n');
-    const inHand = pocketUnderRock({ slots: { 36: ['stone_pickaxe', 1] } });
-    useRegistry(t, inHand.bot);
-    assert.equal(await collectBlock(inHand.bot, 'undergroundbiomes:metamorphic_stone', 1), true, inHand.bot.output);
-    assert.equal(inHand.calls.dug.length, 1);
-    assert.equal(inHand.calls.dug[0].name, 'undergroundbiomes:metamorphic_stone');
-    assert.equal(inHand.calls.refused.length, 0);
 });
 
 test('#628 re-review nits: fill clears metadata; equip of the cursor stack says why; the layer blocks are in the registry at once; the stack sizes are computed once', async () => {
