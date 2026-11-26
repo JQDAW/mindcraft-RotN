@@ -294,7 +294,12 @@ export function initBot(username, { onMsaCode, loadRotnData: loadRd = () => load
     bot.once('spawn', () => { if (forge.bridge) console.log(`[forge-bridge] ${forge.bcAttack.status()}`); });
     // Soak 14: the attack packets sent and the wrapper's calls, numbers only (a minute with a change,
     // each death, the end); and the effects a respawn dropped (patches/mineflayer clears them).
-    forge.attackCounts = attachAttackCounts(bot, { stats: () => forge.bcAttack.stats });
+    // Soak 16 death 2: each line also names the packets' targets, their bot.attack callers and the replaced calls.
+    forge.attackCounts = attachAttackCounts(bot, {
+        stats: () => forge.bcAttack.stats,
+        caller: () => forge.bcAttack.firingCaller,
+        takeReplacements: () => forge.bcAttack.takeReplacements(),
+    });
     forge.respawnEffects = attachRespawnEffectsLog(bot);
     // Soak 15 (N2): each window click the server rejects, with the client's view and the server's resend.
     forge.clickDiagnostics = attachClickDiagnostics(bot);

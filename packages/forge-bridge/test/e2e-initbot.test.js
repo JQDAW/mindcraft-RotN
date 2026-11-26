@@ -283,7 +283,9 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     bot.quit();
     await sleep(300);
     // Soak 14: the end of the connection prints the attack counts, numbers only.
-    assert.ok(soak14Lines.includes('[forge-bridge] attacks (end): written bettercombat 0, use_entity 1; calls bettercombat 0, vanilla 1, waits 0, replaced 0, gone 0, cancelled 0, reach 0, sight 0, misses 0'), soak14Lines.join('\n'));
+    // Soak 16 death 2: the line names the packet's target (from bot.entities) and the bot.attack caller (this test).
+    const endLine = soak14Lines.find(l => l.startsWith('[forge-bridge] attacks (end): '));
+    assert.match(endLine ?? soak14Lines.join('\n'), /^\[forge-bridge\] attacks \(end\): written bettercombat 0, use_entity 1; calls bettercombat 0, vanilla 1, waits 0, replaced 0, gone 0, cancelled 0, reach 0, sight 0, misses 0; targets aether_legacy:cockatrice#78 x1 \(e2e-initbot\.test\.js:\d+\)$/);
     const cap = readCapture(captureFile);
     const kinds = new Set(cap.map(l => l.kind));
     for (const k of ['event', 'payload', 'packet']) assert.ok(kinds.has(k), `capture has ${k}`);
