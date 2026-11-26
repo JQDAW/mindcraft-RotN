@@ -12,7 +12,7 @@ import { pocketUnderRock, fakeWorld, openShaft, SLOT } from '../../test/fixtures
 import { __setRegistryForTest } from '../utils/mcdata.js';
 import { fillCell, FACE_RETRY } from './library/shelter.js';
 import { escape, isTrapped } from './library/escape.js';
-import { pitShelter, deeperRefusal, PIT_DEEPER } from './night_routine.js';
+import { pitShelter, deeperRefusal, PIT_DEEPER, tryEscape } from './night_routine.js';
 import { pickupKillDrops, killCounts, killDropsText, consume } from './library/skills.js';
 
 let nextId = 100;
@@ -134,7 +134,8 @@ test('night 3: a roof the server refuses on its first face is placed on another 
     const place = w.bot.placeBlock;
     const refs = [];
     w.bot.placeBlock = (ref, face) => { refs.push(`${ref.position}`); return refs.length <= 2 ? Promise.reject(new Error('refused')) : place.call(w.bot, ref, face); };
-    const mode = { accept: (b) => !!b && b.name === 'cobblestone', items: (bot) => bot.inventory.items().filter(i => i.name === 'cobblestone') };
+    // #652 review 3: only the hole's roof cell gets the other faces (buildShelter sets faceRetryCell for pitShelter).
+    const mode = { accept: (b) => !!b && b.name === 'cobblestone', items: (bot) => bot.inventory.items().filter(i => i.name === 'cobblestone'), faceRetryCell: '0,63,0' };
     const interior = new Set(['0,61,0', '0,62,0']);
     const t0 = Date.now();
     assert.equal(await fillCell(w.bot, roof, interior, mode, new Map()), true);
@@ -234,4 +235,64 @@ test('the pork in the 2x2 grid (a craft cut short): !consume puts the grid back 
     try { await consume(b2, 'animania:raw_prime_pork'); } catch { /* the stubbed equip */ }
     assert.match(b2.output, /Eating animania:raw_prime_pork \(from the off hand\)\./);
     assert.equal(lines.length, 0);
+});
+
+test('#652 review 3: a wall cell (not the hole\'s roof) gets no other-faces retry: two tries as before', async (t) => {
+    quietT(t);
+    const w = fakeWorld({ ground: [{ below: 64, block: 'dirt' }], set: { '0,61,0': 'air', '0,62,0': 'air', '0,63,0': 'air', '1,62,0': 'air' }, at: new Vec3(0, 61, 0), slots: { 36: ['cobblestone', 4] } });
+    useReg(t, w.bot);
+    let tries = 0;
+    w.bot.placeBlock = () => { tries++; return Promise.reject(new Error('refused')); };
+    const mode = { accept: (b) => !!b && b.name === 'cobblestone', items: (bot) => bot.inventory.items().filter(i => i.name === 'cobblestone'), faceRetryCell: '0,63,0' };
+    assert.equal(await fillCell(w.bot, new Vec3(1, 62, 0), new Set(['0,61,0', '0,62,0']), mode, new Map()), false);
+    assert.equal(tries, 2, `the two tries only (the roof gets up to ${2 + FACE_RETRY.faces})`);
+});
+
+test('#652 review 2: the night\'s escape is strict only after the walk to better ground found no way (not in the water)', async (t) => {
+    quietT(t);
+    const calls = [];
+    const n = {};
+    const agent = { bot: {}, chat: [], openChat() {}, actions: { runAction: (label, fn) => Promise.resolve(fn()) } };
+    const ops = { escape: (bot, opts) => { calls.push(opts); return Promise.resolve({ out: true, at: new Vec3(0, 64, 0) }); } };
+    tryEscape(agent, n, ops, 'the walk to better ground found no way out', () => {}, { strict: true });
+    for (let k = 0; k < 10 && calls.length < 1; k++) await new Promise(r => setTimeout(r, 10));
+    n.job = null;
+    tryEscape(agent, n, ops, 'water in the hole', () => {});
+    for (let k = 0; k < 10 && calls.length < 2; k++) await new Promise(r => setTimeout(r, 10));
+    assert.deepEqual(calls, [{ strict: true }, {}]);
+});
+
+test('#652 review 4: one guard layer per bot: survival_log\'s wrapper above it and a respawn re-install add no second guard', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
+    const { EventEmitter } = await import('node:events');
+    const b = new EventEmitter();
+    const sent = [];
+    b.attack = (target) => { sent.push(target.id); return Promise.resolve({ sent: true, path: 'bettercombat' }); };
+    installAttackGuard(b, { threatFor });
+    // survival_log's marking wrapper goes on top (bindSurvivalLog), as on the live bot.
+    const below = b.attack;
+    const marking = function (target, ...rest) { return below.call(this ?? b, target, ...rest); };
+    b.attack = marking;
+    b.emit('spawn'); // a respawn: the guard is in the chain already
+    b.emit('login');
+    assert.equal(b.attack, marking, 'no new layer on top');
+    const hen = mob('animania:hen_rhode_island_red', 2);
+    await b.attack(hen);
+    assert.equal(lines.filter(l => l.startsWith('[attack] refused:')).length, 1, 'one guard: one refusal line');
+    const hog = mob('animania:hog_old_spot', 2);
+    b.rotnAttackTarget = { id: hog.id, by: 'hunt', at: Date.now() };
+    await b.attack(hog);
+    assert.deepEqual(sent, [hog.id]);
+    assert.equal(lines.filter(l => l.startsWith('[attack] hunt -> ')).length, 1);
+});
+
+test('#652 review 7: a falling block in the column over the roof cell refuses one deeper; a solid block under it holds it', (t) => {
+    quietT(t);
+    const w = fakeWorld({ ground: [{ below: 64, block: 'dirt' }], set: { '0,61,0': 'air', '0,62,0': 'air', '0,63,0': 'air', '0,65,0': 'gravel' }, at: new Vec3(0, 61, 0) });
+    useReg(t, w.bot);
+    const feet = new Vec3(0, 61, 0);
+    assert.match(deeperRefusal(w.bot, { hostileNear: () => null }, feet), /a falling gravel in the column over the roof cell \(at 0, 65, 0\)/);
+    w.world.set(new Vec3(0, 64, 0), 'stone'); // held up by a solid block
+    assert.equal(deeperRefusal(w.bot, { hostileNear: () => null }, feet), null);
 });

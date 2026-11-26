@@ -596,7 +596,7 @@ export async function fillCell(bot, target, interior, mode, reasons = null) {
     // Soak 16 night 3: the roof at -7, 67, 30 was refused twice against the same dirt face (no entity over it, the
     // stack not used). After FACE_RETRY.waitMs (the server's view of the bot settles after a dig and a drop), each
     // other face with a solid block, up to FACE_RETRY.faces.
-    if (!mode.accept(bot.blockAt(target)) && note.at && !bot.interrupt_code && !mode.abort?.()) {
+    if (mode.faceRetryCell === key(target) && !mode.accept(bot.blockAt(target)) && note.at && !bot.interrupt_code && !mode.abort?.()) {
         const tried = new Set([key(note.at)]);
         await sleep(FACE_RETRY.waitMs);
         for (let k = 0; k < FACE_RETRY.faces && !bot.interrupt_code; k++) {
@@ -741,7 +741,7 @@ async function pickaxeFor(bot, level) {
  * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], soft: number, line: string}>}
  *   line: what it logged; soft: the dirt blocks in its walls and roof.
  */
-export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [], avoid = null, abort = null, floodCheck = false } = {}) {
+export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [], avoid = null, abort = null, floodCheck = false, roofRetry = false } = {}) {
     // #470 review 2: skip: cells a mob holds, left out of a repair (the bot has no weapon to hit it out).
     const skipKeys = new Set(skip.map(key));
     // Soak 8 (night 2): noPlace: the search found no site at all (not a site short of blocks or a
@@ -859,6 +859,9 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     const seenWall = new Set(); // soak 5 (01:27): cells that were a wall when the loop came to them
     // Building keeps the bot in its cell on purpose: unstuck leaves it alone meanwhile (modes.js).
     bot.rotnStationary = true;
+    // #652 review 3: the other-faces retry (FACE_RETRY) only for the hole's roof cell (pitShelter: roofRetry), not
+    // for every wall cell (each retry costs a second or more at dusk).
+    mode.faceRetryCell = roofRetry ? key(roof) : null;
     try {
         for (const pos of wallsAndRoof(feet)) {
             if (bot.interrupt_code) { reasons.stopped = true; break; }

@@ -995,7 +995,7 @@ async function attackEntityOnce(bot, entity, kill=true, { approach = true, still
     let pos = entity.position;
     // Soak 16 (the hog, 22:00:27): its pork was picked up at once (the bot stood over it), before the drop watch saw an
     // item, and the line said "no drop seen". What came in since the attack began counts too.
-    const sinceStart = killCounts(bot);
+    let sinceStart = killCounts(bot); // #652 review 6: taken again each round, so it is from just before the kill
     // Soak 16 death 2: the target this skill names, for the guard on bot.attack (hands.installAttackGuard).
     bot.rotnAttackTarget = { id: entity?.id, by: kill ? 'attack (pvp)' : 'attack (one hit)', at: Date.now() };
     await equipHighestAttack(bot)
@@ -1035,6 +1035,10 @@ async function attackEntityOnce(bot, entity, kill=true, { approach = true, still
         let lastAt = entity.position.clone?.() ?? entity.position; // soak 12 (E): where its drop falls
         while (world.getNearbyEntities(bot, 24).includes(entity)) {
             lastAt = entity.position.clone?.() ?? entity.position;
+            // #652 review 5: the named target restamped each round (a chase longer than ATTACK_GUARD.targetMs stays named);
+            // review 6: the inventory just before the kill (a fight's other pickups are not its drop).
+            bot.rotnAttackTarget = { id: entity.id, by: 'attack (pvp)', at: Date.now() };
+            sinceStart = killCounts(bot);
             await new Promise(resolve => setTimeout(resolve, ATTACK_PROGRESS.tickMs));
             if (bot.interrupt_code) {
                 bot.pvp.stop();

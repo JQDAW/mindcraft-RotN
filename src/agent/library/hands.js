@@ -211,7 +211,9 @@ export function installAttackGuard(bot, { threatFor = null } = {}) {
     let lastTarget = null;
     const wrap = () => {
         const original = bot.attack;
-        if (typeof original !== 'function' || original.rotnGuard) return;
+        // #652 review 4: one guard per bot: once in the chain (survival_log's marking wrapper may sit above it), a
+        // respawn's or a login's re-install adds no second layer.
+        if (typeof original !== 'function' || original.rotnGuard || bot.rotnAttackGuardOn) return;
         const guarded = function (target, ...rest) {
             const why = attackRefusal(bot, target, threatFor);
             if (why) {
@@ -227,6 +229,7 @@ export function installAttackGuard(bot, { threatFor = null } = {}) {
             return original.call(this ?? bot, target, ...rest);
         };
         guarded.rotnGuard = true;
+        bot.rotnAttackGuardOn = guarded;
         // Keep the marks the wrappers below set (survival_log's rotnMarks sits above; the bridge's own fields).
         bot.attack = guarded;
     };

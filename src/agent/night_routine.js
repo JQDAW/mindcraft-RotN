@@ -1071,7 +1071,7 @@ export async function pitShelter(bot, ops, progress, n = progress) {
     const feet = await ops.digPit(bot, { progress });
     // #431 review 4: a dig that timed out says so (not "no place"). Soak 8: noPlace, no cell for a hole.
     if (!feet) return { closed: false, feet: null, line: progress.why ?? 'found no place to dig a hole shelter', noPlace: !!progress.noPlace };
-    const r = await ops.buildShelter(bot, { site: feet, keepSoft: true, floodCheck: true }); // #586 review 2: a fresh hole only
+    const r = await ops.buildShelter(bot, { site: feet, keepSoft: true, floodCheck: true, roofRetry: true }); // #586 review 2: a fresh hole only; #652 review 3
     // Soak 16 night 3 (the lead's answer 3): the roof two above the feet did not stay (refused on every face): once a
     // night, one deeper, and the roof one lower (the old head cell, walled by the hole's own sides), so 2 cells stay.
     const roof = feet.offset(0, 2, 0);
@@ -1085,14 +1085,14 @@ export async function pitShelter(bot, ops, progress, n = progress) {
         const ms = Math.max(PIT_DEEPER.minDigMs, PIT_DEEPER.digMs);
         const dug = await (ops.digDeeper ?? digDeeper)(bot, below, ms);
         if (!dug) return { ...r, line: `${r.line} The hole could not be dug one deeper at ${at(below)}.` };
-        const r2 = await ops.buildShelter(bot, { site: below, keepSoft: true, floodCheck: true });
+        const r2 = await ops.buildShelter(bot, { site: below, keepSoft: true, floodCheck: true, roofRetry: true });
         return r2?.closed ? r2 : { ...r2, stuck: [...(r.stuck ?? []), ...(r2?.stuck ?? [])] };
     }
     return r;
 }
 
 /** Soak 16 night 3: the one dig deeper's bounds (its own dig time, the fall into the cell). */
-export const PIT_DEEPER = { digMs: 8000, minDigMs: 2000, fallMs: 1500, hostileRange: 8 };
+export const PIT_DEEPER = { digMs: 8000, minDigMs: 2000, fallMs: 1500, hostileRange: 8, columnUp: 4 };
 
 /**
  * Why the hole must not go one deeper now, or null (the lead's answer 3): a hostile within PIT_DEEPER.hostileRange, or
@@ -1107,7 +1107,13 @@ export function deeperRefusal(bot, ops, feet) {
     const ours = new Set([feet, feet.offset(0, 1, 0), below].map(key3));
     const w = digWhy(bot, below, ours);
     if (w) return w;
-    if (isFalling(bot.blockAt(feet.offset(0, 2, 0)))) return `a falling ${bot.blockAt(feet.offset(0, 2, 0)).name} over the roof cell`;
+    // #652 review 7: the column over the new roof cell (the old roof cell and up to PIT_DEEPER.columnUp above it): a
+    // falling block there would come down on the new roof's cell once the hole is open.
+    for (let dy = 2; dy <= 2 + PIT_DEEPER.columnUp; dy++) {
+        const b = bot.blockAt(feet.offset(0, dy, 0));
+        if (isFalling(b)) return `a falling ${b.name} in the column over the roof cell (at ${at(feet.offset(0, dy, 0))})`;
+        if (b && !isEmpty(b) && !isLiquid(b)) break; // a solid block holds what is above it
+    }
     const floor = bot.blockAt(below.offset(0, -1, 0));
     if (!floor || isEmpty(floor) || isLiquid(floor) || floor.boundingBox !== 'block') return `nothing solid under ${at(below)} to stand on`;
     return null;
@@ -1198,7 +1204,8 @@ function moveToGround(agent, n, ops, phase, refused, onNone) {
         // water; not one a mob, the night or a reflex stopped) gets the escape first.
         const noWay = !r?.arrived && !ret?.interrupted && !['hostile', 'night'].includes(r?.stopped)
             && (inWater(bot) || (!!from && !!bot.entity?.position && from.distanceTo(bot.entity.position) < 1.5));
-        if (noWay && tryEscape(agent, n, ops, 'the walk to better ground found no way out', () => buildAgain(n))) return;
+        // #652 review 2: strict for the walk that ended where it began (a hole), the water case as before.
+        if (noWay && tryEscape(agent, n, ops, 'the walk to better ground found no way out', () => buildAgain(n), { strict: !inWater(bot) })) return;
         buildAgain(n);
     });
     return 'started';
@@ -1214,14 +1221,15 @@ function buildAgain(n) {
  * Soak 8 (the flooded pit), the lead's escape plan: out of a pit or the water first (library/
  * escape.js), at most NIGHT_ESCAPES a night. then(result) runs after it. False when none is left.
  */
-function tryEscape(agent, n, ops, why, then) {
+export function tryEscape(agent, n, ops, why, then, { strict = false } = {}) {
     if (!ops.escape || (n.escapes ?? 0) >= NIGHT_ESCAPES) return false;
     n.escapes = (n.escapes ?? 0) + 1;
     const bot = agent.bot;
     line(agent, `[night] ${why}: getting out first (escape ${n.escapes} of ${NIGHT_ESCAPES})`);
-    // Soak 16 night 3: strict: out means open ground with a walkable way on (escape.isOut strict), not the sky over the
-    // bottom of an open hole (the night's escape "got out at -7, 65, 30" without a step, and the bot stayed in it).
-    startJob(agent, n, ESCAPE_LABEL, () => ops.escape(bot, { strict: true }), (r) => {
+    // Soak 16 night 3: strict (#652 review 2: only for the walk to better ground that found no way out): out means open
+    // ground with a walkable way on (escape.isOut strict), not the sky over the bottom of an open hole (the night's
+    // escape "got out at -7, 65, 30" without a step). The flooded pit's escape stays as it was.
+    startJob(agent, n, ESCAPE_LABEL, () => ops.escape(bot, strict ? { strict: true } : {}), (r) => {
         console.log(`[night] the escape ${r?.out ? `got out at ${at(r.at)}` : `failed (${r?.why ?? 'no result'})`}`);
         then(r);
     });

@@ -301,6 +301,8 @@ const shortName = (e) => (typeof e?.name === 'string' ? e.name.replace(/^minecra
  * a weapon, while above its hit (the rule for every mob). Stronger animals keep the existing rules.
  */
 export const WEAK_PROVOKED = { maxHit: 2, noWeaponHealth: 6 };
+/** The callers that name a hunt (hunting.huntAnimal) or the model's !attack (skills.attackEntity, kill): bot.rotnAttackTarget.by. */
+const HUNT_BY = new Set(['hunt', 'attack (pvp)']);
 export function isWeakProvoked(mob) {
     const t = mob ? threatFor(mob) : null;
     return !!t?.provoked && t.provoked.fightBack === true && Number.isFinite(t.provoked.damage) && maxHitOf(mob) <= WEAK_PROVOKED.maxHit;
@@ -767,7 +769,10 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
     // WEAK_PROVOKED). One that may be a player's: backed off from, as the others.
     const foodHitter = food.filter(x => x.d <= PROVOKED_DIST).find(x => x.t.provoked?.fightBack === true && fightsBack(bot, x, now));
     // The hunt's own target hitting back: the hunt fights it already (no second plan, no interrupted hunt).
-    if (foodHitter && bot.pvp?.target && bot.pvp.target.id === foodHitter.e.id) return null;
+    // #652 review 1 (BLOCKER): only a hunt's or !attack's target (the skill named it), never defendSelf's own fight:
+    // its keepFighting reads this plan every round, and a null ended the fight after each swing.
+    const named = bot.rotnAttackTarget;
+    if (foodHitter && named?.id === foodHitter.e.id && HUNT_BY.has(named.by) && bot.pvp?.target?.id === foodHitter.e.id) return null;
     if (foodHitter) {
         const id = foodHitter.e.id;
         if (ownedMaybe(bot, foodHitter.e)) return { action: 'flee', why: 'provoked, and it may be a player\'s', from: foodHitter.e, away: RANGES.fight.away, isEnemy: (e) => e.id === id };
