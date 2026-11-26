@@ -416,11 +416,15 @@ mineflayer's `bot.dig` waits `block.digTime(heldItemType, …)` and then sends S
 - **At the first spawn** one line says the counter is on: `[forge-bridge] attack counts: on (...)`.
 
 **Targets and callers** (soak 16 death 2: the hit that provoked a hen could not be attributed). The line ends with what was sent since the last line:
-- `...; targets animania:hen_rhode_island_red#1234 x2 (attackEntity skills.js:1234 < huntAnimal skills.js:980), zombie#77 x1 (selfDefense modes.js:410); replaced attackEntity skills.js:1234 -> animania:hog_old_spot#90 by selfDefense modes.js:410 -> zombie#77`
+- `...; targets animania:hen_rhode_island_red#1234 x2 (attackEntity skills.js:1023 via mineflayer-pvp), zombie#77 x1 (defendSelf skills.js:1143 via mineflayer-pvp), zombie#80 x1 (no caller: mineflayer); replaced attackEntity skills.js:1023 via mineflayer-pvp -> animania:hog_old_spot#90 by defendSelf skills.js:1143 via mineflayer-pvp -> zombie#77`
 - **targets:** each attack packet's entity (the Better Combat payload's id, or `use_entity`'s `target`), as `name#id` from `bot.entities` when the packet is written (`?#id` when the bot does not know it), counted, with its caller. `targets -` when none.
-- **The caller** is the first two stack frames outside forge-bridge's `src`, mineflayer and node, innermost first, as `function file:line` (file names only; `src/attack-caller.js`). The Better Combat wrapper takes it when `bot.attack` is called and holds it while its packet is written, so a hit sent after its cooldown wait names the caller, not the timer (`bot.forge.bcAttack.firingCaller`). A packet written outside the wrapper (`bot.attackVanilla`, say) is named from the stack at the write.
-- **replaced:** each waiting call a newer one replaced (the `replaced` count), as `<caller> -> <target> by <caller> -> <target>` (`bot.forge.bcAttack.takeReplacements()`). Left out when none.
-- At most 8 targets and 4 replacements per line, then `+N more`. The numbers before them are unchanged.
+- **The caller** (`src/attack-caller.js`, `callerOf`) is one of:
+  - the first two stack frames, innermost first, as `function file:line` (file names only), that are not forge-bridge's own `src`, mineflayer's or node's, and not a known pass-through wrapper of `bot.attack` above the bridge (`ATTACK_WRAPPERS`: #652's guard `guarded` in `hands.js`, survival_log's `marking`, defendSelf's swing stamp in `skills.js`). A frame in another package is named with it: `cb mineflayer-pvp/PVP.js:213`;
+  - for a hit mineflayer-pvp sends from its `physicsTick` loop (the `!attack` kill loop, defendSelf, the hunting reflex), whoever called `bot.pvp.attack` for that target, which `attachPvpCallers` remembers (`initBot`, after the plugin; the last 50 targets): `attackEntity skills.js:1023 via mineflayer-pvp`;
+  - `no caller: <package>` when no frame is the bot's own (`mineflayer` for its own timers and events, `node` for a bare timer). An unattributed hit always says so.
+- The Better Combat wrapper takes the caller when `bot.attack` is called and holds it while its packet is written, so a hit sent after its cooldown wait names that caller, not the timer (`bot.forge.bcAttack.firingCaller`). A packet written outside the wrapper (`bot.attackVanilla`, say) is named from the stack at the write.
+- **replaced:** each waiting call a newer one replaced (the `replaced` count), as `<caller> -> <target> by <caller> -> <target>` (`bot.forge.bcAttack.takeReplacements()`). Left out when none. The wrapper keeps at most 20 between two lines (the oldest are dropped).
+- At most 8 targets and 4 replacements are printed per line, then `+N more`. The numbers before them are unchanged.
 
 ## Soak 15: stack sizes, rejected clicks and refused digs
 

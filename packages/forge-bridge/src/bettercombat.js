@@ -30,7 +30,7 @@
 import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
 import { Reader, Writer, WireError } from './wire.js';
-import { callerOf, targetName } from './attack-caller.js';
+import { callerOf, targetName, pvpCallerFor } from './attack-caller.js';
 
 export const BC_MODID = 'bettercombat';
 export const BC_CHANNEL = 'bettercombat';
@@ -429,7 +429,7 @@ export function installBetterCombatAttack(bot, {
     }
 
     function attack(target, swing = true) {
-        const caller = callerOf(new Error().stack);
+        const caller = callerOf(new Error().stack, { pvpCaller: pvpCallerFor(bot), targetId: target?.id });
         if (!st.enabled) return Promise.resolve(withCaller(caller, () => vanilla(target, swing)));
         if (st.pending) {
             const old = st.pending;

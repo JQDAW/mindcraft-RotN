@@ -15,16 +15,19 @@
 // Soak 16 death 2 (a hen provoked by a hit no log could attribute): each line also names the targets
 // of the attack packets written since the last line, with the bot.attack caller that sent them, and
 // the waiting calls a newer call replaced (both callers and targets):
-//   ...; targets animania:hen_rhode_island_red#1234 x2 (attackEntity skills.js:1234 < huntAnimal
-//   skills.js:980), minecraft:zombie#77 x1 (selfDefense modes.js:410); replaced attackEntity
-//   skills.js:1234 -> animania:hog_old_spot#90 by selfDefense modes.js:410 -> minecraft:zombie#77
+//   ...; targets animania:hen_rhode_island_red#1234 x2 (attackEntity skills.js:1023 via mineflayer-pvp),
+//   zombie#77 x1 (defendSelf skills.js:1143 via mineflayer-pvp), zombie#80 x1 (no caller: mineflayer);
+//   replaced attackEntity skills.js:1023 via mineflayer-pvp -> animania:hog_old_spot#90 by defendSelf
+//   skills.js:1143 via mineflayer-pvp -> zombie#77
 // A target is "name#id" from bot.entities when the packet is written ("?#id" when the bot does not
-// know it). The caller is the Better Combat wrapper's (bettercombat.js firingCaller), else the stack
-// at the write (a direct bot.attackVanilla, say), else none. "targets -" when nothing was sent.
+// know it). The caller (attack-caller.js callerOf: two frames, a package's frames named with it,
+// known wrappers skipped, a mineflayer-pvp hit named by its bot.pvp.attack caller) is the Better Combat
+// wrapper's (bettercombat.js firingCaller), else the stack at the write (a direct bot.attackVanilla,
+// say); "no caller: <package>" when no frame is the bot's own. "targets -" when nothing was sent.
 // At most TARGETS_SHOWN targets and REPLACED_SHOWN replacements per line, then "+N more".
 
 import { decodeMainhandAttack } from './bettercombat.js';
-import { callerOf, targetName } from './attack-caller.js';
+import { callerOf, targetName, pvpCallerFor } from './attack-caller.js';
 
 const ATTACHED = Symbol.for('mindcraft-rotn.attackCounts');
 export const TARGETS_SHOWN = 8;
@@ -49,9 +52,9 @@ export function attackCountsLine(why, packets, calls = {}, detail = null) {
     if (!detail) return base;
     const targets = [...(detail.targets ?? new Map())].map(([k, n]) => {
         const [target, caller] = JSON.parse(k);
-        return `${target} x${n}${caller ? ` (${caller})` : ''}`;
+        return `${target} x${n} (${caller ?? 'no caller: ?'})`;
     });
-    const one = (x) => `${x?.caller ?? '?'} -> ${x?.target ?? '?'}`;
+    const one = (x) => `${x?.caller ?? 'no caller: ?'} -> ${x?.target ?? '?'}`;
     const replaced = (detail.replaced ?? []).map((r) => `${one(r.replaced)} by ${one(r.by)}`);
     return `${base}; targets ${targets.length ? more(targets, TARGETS_SHOWN).join(', ') : '-'}`
         + (replaced.length ? `; replaced ${more(replaced, REPLACED_SHOWN).join(', ')}` : '');
@@ -75,7 +78,7 @@ export function attachAttackCounts(bot, {
     let targets = new Map(); // JSON [target, caller] -> count, since the last line
     const note = (id) => {
         let who = null;
-        try { who = caller() ?? callerOf(new Error().stack); } catch { who = null; }
+        try { who = caller() ?? callerOf(new Error().stack, { pvpCaller: pvpCallerFor(bot), targetId: id }); } catch { who = 'no caller: error'; }
         const k = JSON.stringify([targetName(bot, id), who]);
         targets.set(k, (targets.get(k) ?? 0) + 1);
     };

@@ -7,8 +7,9 @@ import { Buffer } from 'node:buffer';
 import { EventEmitter } from 'node:events';
 import { attachAttackCounts, attackCountsLine, ATTACK_COUNTS_STATUS } from '../src/attack-counts.js';
 import { installBetterCombatAttack } from '../src/bettercombat.js';
-import { callerOf, parseFrame, targetName } from '../src/attack-caller.js';
+import { callerOf, parseFrame, targetName, attachPvpCallers, packageOf, ATTACK_WRAPPERS, PVP_CALLERS_KEPT } from '../src/attack-caller.js';
 import { Vec3 } from 'vec3';
+import { setImmediate } from 'node:timers';
 
 function fakeBot() {
     const bot = new EventEmitter();
@@ -112,7 +113,9 @@ function bcRig() {
     const clock = { t: 10_000, timers: [] };
     bot.writes = [];
     bot._client = { write: (name, params) => bot.writes.push({ name, params }) };
-    bot.attack = (target) => bot._client.write('use_entity', { target: target.id, mouse: 1 });
+    // mineflayer's vanilla attack, compiled with a sourceURL under node_modules/mineflayer so its frame is
+    // mineflayer's (skipped), as the real one is.
+    bot.attack = new Function('bot', 'return function attack(target) { bot._client.write(\'use_entity\', { target: target.id, mouse: 1 }); };\n//# sourceURL=/w/node_modules/mineflayer/lib/plugins/entities.js')(bot);
     bot.heldItem = { name: 'stone_sword' };
     bot.entity = { position: new Vec3(0, 64, 0), eyeHeight: 1.62, attributes: { 'generic.attackSpeed': { value: 4, modifiers: [{ amount: -2.4, operation: 0 }] } } };
     const bridge = { serverMods: [{ modid: 'bettercombat', version: 'x' }], serverChannels: ['FML|HS', 'bettercombat'] };
@@ -167,11 +170,10 @@ test('soak 16 death 2: each Better Combat packet\'s target and caller, a hit sen
 
 test('a packet written outside the wrapper (bot.attackVanilla) is named from the stack at the write; an unknown entity is ?#id', () => {
     const r = bcRig();
-    // (The rig's stand-in for mineflayer's attack is in this file, so it is named first; mineflayer's own is skipped.)
     function directSwing() { r.bot.attackVanilla({ id: 5 }); }
     directSwing();
     r.bot.emit('death');
-    assert.match(r.logs[0], /; targets \?#5 x1 \((?:bot\.attack attack-counts\.test\.js:\d+ < )?directSwing attack-counts\.test\.js:\d+\)$/);
+    assert.match(r.logs[0], /; targets \?#5 x1 \(directSwing attack-counts\.test\.js:\d+(?: < [^)]+)?\)$/);
 });
 
 test('at most 8 targets and 4 replacements on a line, then "+N more"', () => {
@@ -179,10 +181,11 @@ test('at most 8 targets and 4 replacements on a line, then "+N more"', () => {
     for (let i = 0; i < 10; i++) detail.targets.set(JSON.stringify([`zombie#${i}`, null]), 1);
     for (let i = 0; i < 6; i++) detail.replaced.push({ replaced: { caller: 'a x.js:1', target: `zombie#${i}` }, by: { caller: null, target: 'zombie#9' } });
     const line = attackCountsLine('minute', { bettercombat: 10, use_entity: 0 }, {}, detail);
-    assert.match(line, /; targets zombie#0 x1, (?:zombie#\d x1, ){6}zombie#7 x1, \+2 more; replaced a x\.js:1 -> zombie#0 by \? -> zombie#9, (?:[^,]+, ){2}a x\.js:1 -> zombie#3 by \? -> zombie#9, \+2 more$/);
+    // A target or replacement with no caller recorded says so ("no caller: ?"), never nothing.
+    assert.match(line, /; targets zombie#0 x1 \(no caller: \?\), (?:zombie#\d x1 \(no caller: \?\), ){6}zombie#7 x1 \(no caller: \?\), \+2 more; replaced a x\.js:1 -> zombie#0 by no caller: \? -> zombie#9, (?:[^,]+, ){2}a x\.js:1 -> zombie#3 by no caller: \? -> zombie#9, \+2 more$/);
 });
 
-test('callerOf: the first two frames outside forge-bridge\'s src, mineflayer and node; file names only', () => {
+test('callerOf: the first two frames outside forge-bridge\'s src, mineflayer and node; file names only; another package named with it; known wrappers skipped', () => {
     const stack = [
         'Error',
         '    at attack (file:///home/u/w/packages/forge-bridge/src/bettercombat.js:430:24)',
@@ -193,13 +196,83 @@ test('callerOf: the first two frames outside forge-bridge\'s src, mineflayer and
         '    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)',
     ].join('\n');
     assert.equal(callerOf(stack), 'attackEntity skills.js:1234 < huntAnimal skills.js:980');
-    assert.equal(callerOf(stack, 3), 'attackEntity skills.js:1234 < huntAnimal skills.js:980 < execute actions.js:77');
-    assert.equal(callerOf('Error\n    at Timeout._onTimeout (node:internal/timers:1:1)'), null, 'a timer: no caller');
-    assert.equal(callerOf(undefined), null);
+    assert.equal(callerOf(stack, { depth: 3 }), 'attackEntity skills.js:1234 < huntAnimal skills.js:980 < execute actions.js:77');
+    assert.equal(callerOf('Error\n    at Timeout._onTimeout (node:internal/timers:1:1)'), 'no caller: node', 'a timer: said, not nothing');
+    assert.equal(callerOf(undefined), 'no caller: node');
     assert.deepEqual(parseFrame('    at file:///x/y/modes.js:410:7'), { fn: null, file: '/x/y/modes.js', line: 410 });
     assert.deepEqual(parseFrame('    at TestContext.<anonymous> (/x/t.test.js:5:1)'), { fn: null, file: '/x/t.test.js', line: 5 });
     assert.equal(parseFrame('not a frame'), null);
     assert.equal(targetName({ entities: { 3: { name: 'animania:hog_old_spot' } } }, 3), 'animania:hog_old_spot#3');
     assert.equal(targetName({ entities: { 4: { type: 'player' } } }, 4), 'player#4');
     assert.equal(targetName({}, null), '?#?');
+});
+
+test('#653 review 1: package frames are named (mineflayer-pvp), mineflayer\'s and node\'s are not; the guard, the provoked marks and defendSelf\'s stamp are skipped', () => {
+    const at = (fn, file, line = 1) => `    at ${fn ? `${fn} (${file}:${line}:1)` : `${file}:${line}:1`}`;
+    const S = (...frames) => ['Error', ...frames].join('\n');
+    const own = at('attack', 'file:///w/packages/forge-bridge/src/bettercombat.js', 430);
+    // mineflayer-pvp's attack loop with nothing remembered: its own frame, with the package.
+    const pvp = S(own, at('cb', '/w/node_modules/mineflayer-pvp/lib/PVP.js', 213), at('emit', 'node:events', 519), at('tick', '/w/node_modules/mineflayer/lib/plugins/physics.js', 80));
+    assert.equal(callerOf(pvp), 'cb mineflayer-pvp/PVP.js:213');
+    // With bot.pvp.attack's caller remembered for that target.
+    assert.equal(callerOf(pvp, { pvpCaller: (id) => (id === 9 ? 'attackEntity skills.js:1023' : null), targetId: 9 }), 'attackEntity skills.js:1023 via mineflayer-pvp');
+    assert.equal(callerOf(pvp, { pvpCaller: () => null, targetId: 8 }), 'cb mineflayer-pvp/PVP.js:213', 'not remembered: the pvp frame');
+    // Only mineflayer and node below the bridge: said, with the package.
+    assert.equal(callerOf(S(own, at('tick', '/w/node_modules/mineflayer/lib/plugins/physics.js', 80), at('emit', 'node:events', 519))), 'no caller: mineflayer');
+    assert.equal(packageOf('/w/node_modules/@scope/pkg/x.js'), '@scope/pkg');
+    assert.equal(packageOf('/w/src/agent/x.js'), null);
+    // The three pass-through wrappers above the bridge, as V8 prints them on mineflayer's bot (a plain
+    // EventEmitter): EventEmitter.marking, EventEmitter.guarded, bot.attack (defendSelf's, an inferred name).
+    const wrapped = S(own, at('EventEmitter.marking', 'file:///w/src/agent/library/survival_log.js', 405), at('EventEmitter.guarded', 'file:///w/src/agent/library/hands.js', 230),
+        at('bot.attack', 'file:///w/src/agent/library/skills.js', 1125), at('cb', '/w/node_modules/mineflayer-pvp/lib/PVP.js', 213));
+    assert.equal(callerOf(wrapped, { pvpCaller: () => 'defendSelf skills.js:1143', targetId: 3 }), 'defendSelf skills.js:1143 via mineflayer-pvp');
+    assert.equal(callerOf(S(own, at('EventEmitter.guarded', 'file:///w/src/agent/library/hands.js', 230), at('huntAnimal', 'file:///w/src/agent/library/hunting.js', 80))), 'huntAnimal hunting.js:80');
+    assert.equal(ATTACK_WRAPPERS.length, 3);
+    // A function of the same name elsewhere is not skipped.
+    assert.equal(callerOf(S(own, at('guarded', 'file:///w/src/agent/other.js', 5))), 'guarded other.js:5');
+});
+
+test('#653 review 1: a hit mineflayer-pvp sends from its tick names who called bot.pvp.attack for that target ("via mineflayer-pvp")', async () => {
+    const r = bcRig();
+    const hen = r.at(1234, 'animania:hen_rhode_island_red');
+    const zombie = r.at(77, 'zombie');
+    // A stand-in for mineflayer-pvp: attack(target) only sets the target; its physicsTick listener calls
+    // bot.attack. Its code is compiled with a sourceURL under node_modules/mineflayer-pvp, so its frames are
+    // that package's, as the real PVP.js's are.
+    r.bot.pvp = { target: null, attack(target) { this.target = target; } };
+    const pvpTick = new Function('bot', 'return function update() { if (bot.pvp.target) bot.attack(bot.pvp.target); };\n//# sourceURL=/w/node_modules/mineflayer-pvp/lib/PVP.js')(r.bot);
+    r.bot.on('physicsTick', pvpTick);
+    const pvp = attachPvpCallers(r.bot);
+    assert.equal(attachPvpCallers(r.bot), pvp, 'once per bot');
+    function attackEntity(e) { r.bot.pvp.attack(e); }
+    attackEntity(hen);
+    assert.match(pvp.callerFor(1234), /^attackEntity attack-counts\.test\.js:\d+/);
+    r.bot.emit('physicsTick'); // mineflayer-pvp's hit on the hen
+    await r.advance(700);
+    // The zombie: mineflayer-pvp hits it with no bot.pvp.attack call remembered (set directly).
+    r.bot.pvp.target = zombie;
+    r.bot.emit('physicsTick');
+    await r.advance(700);
+    // And a hit from mineflayer's own code (a sourceURL under node_modules/mineflayer): no caller of the bot's.
+    const mineflayerTick = new Function('bot', 't', 'return function swing() { bot.attackVanilla(t); };\n//# sourceURL=/w/node_modules/mineflayer/lib/plugins/entities.js')(r.bot, { id: 80 });
+    await new Promise((resolve) => { setImmediate(mineflayerTick); setImmediate(resolve); }); // from a timer: no frame of this test
+    r.t.tick();
+    assert.match(r.logs[0], /; targets animania:hen_rhode_island_red#1234 x1 \(attackEntity attack-counts\.test\.js:\d+(?: < [^)]+)? via mineflayer-pvp\), zombie#77 x1 \(update mineflayer-pvp\/PVP\.js:\d+ < attack-counts\.test\.js:\d+\), \?#80 x1 \(no caller: mineflayer\)$/, 'the zombie: the pvp frame (then this test, which emitted the tick)');
+});
+
+test('attachPvpCallers: wraps bot.pvp.attack once mineflayer-pvp is injected, keeps the last 50 targets, passes the call through', () => {
+    const bot = new EventEmitter();
+    const pvp = attachPvpCallers(bot); // no bot.pvp yet
+    const calls = [];
+    bot.pvp = { attack(target, x) { calls.push([target.id, x, this === bot.pvp]); return 'r'; } };
+    bot.emit('inject_allowed');
+    function fight(id) { return bot.pvp.attack({ id }, 'x'); }
+    assert.equal(fight(1), 'r');
+    assert.deepEqual(calls, [[1, 'x', true]]);
+    bot.emit('spawn'); // a second wrap is a no-op
+    fight(1);
+    assert.equal(calls.length, 2, 'wrapped once');
+    for (let i = 2; i <= PVP_CALLERS_KEPT + 1; i++) fight(i);
+    assert.equal(pvp.callerFor(1), null, 'the oldest dropped');
+    assert.match(pvp.callerFor(PVP_CALLERS_KEPT + 1), /^fight attack-counts\.test\.js:\d+/);
 });
