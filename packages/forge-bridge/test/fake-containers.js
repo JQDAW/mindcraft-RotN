@@ -154,6 +154,7 @@ export function attachFakeContainers(client, opts) {
         chest: chest ? { ...chest } : null, chestSlots: Array(27).fill(null), // the chest's contents
         chestWindow: null, // { id, invAtOpen } while the chest is open
         resultRecipe: {}, // windowId -> the recipe behind the result slot (for maxUses)
+        closedOther: [], // close_window packets whose id was not the open window's ({ sent, open })
         pending: null, // { windowId, action } after a rejected click
         clicks: [], rejected: [], ignored: [], unsupported: [], placed: [], uses: [], closed: [],
         swaps: [], dropped: [], returned: [], // mode-2 clicks; stacks dropped and grid stacks put back by a close of window 0
@@ -286,6 +287,7 @@ export function attachFakeContainers(client, opts) {
         state.clicks.push(p);
         // processClickWindow only acts on the open container: while the table is open, a
         // window-0 click is dropped silently (no transaction), as on a real server.
+        // At most one container is open besides window 0: opening one closes the other (openTable, openChest).
         const openId = state.tableWindow?.id ?? state.chestWindow?.id ?? 0;
         const open = p.windowId === openId;
         if (!open || (state.pending && state.pending.windowId === p.windowId)) { state.ignored.push(p); return; }
@@ -320,20 +322,19 @@ export function attachFakeContainers(client, opts) {
 
     client.on('held_item_slot', (p) => { state.held = p.slotId; });
 
+    // EntityPlayerMP.closeContainer (oq.r) on the open container, the table or the chest; false when none is open.
+    function closeOpenContainer() {
+        if (state.tableWindow) { closeTableWindow(); return true; }
+        if (state.chestWindow) { closeChestWindow(); return true; }
+        return false;
+    }
+    // processCloseWindow closes the open container whatever the packet's window id (#649 review: on
+    // purpose, for the table and the chest alike); a close with another id is recorded in closedOther.
     client.on('close_window', (p) => {
         state.closed.push(p.windowId);
-        if (state.tableWindow) { // closeContainer closes the open container, whatever the packet's id
-            closeTableWindow();
-            return;
-        }
-        if (state.chestWindow) {
-            const { invAtOpen } = state.chestWindow;
-            state.chestWindow = null;
-            if (state.cursor) { state.dropped.push({ ...state.cursor, why: 'cursor' }); state.cursor = null; }
-            sendChangedNextTick(invAtOpen);
-            return;
-        }
-        closePlayerWindow();
+        const openId = state.tableWindow?.id ?? state.chestWindow?.id ?? 0;
+        if (p.windowId !== openId) state.closedOther.push({ sent: p.windowId, open: openId });
+        if (!closeOpenContainer()) closePlayerWindow();
     });
 
     // The window slot of an InventoryPlayer index (0-8 hotbar, 9-35 main, 40 off hand).
@@ -390,6 +391,14 @@ export function attachFakeContainers(client, opts) {
         for (const g of stacks) placeBack(g);
         sendChangedNextTick(invAtOpen);
     }
+    // The chest's close: Container.onContainerClosed drops the cursor (no packet); the chest's closeInventory
+    // sends no slot; then window 0's changed slots.
+    function closeChestWindow() {
+        const { invAtOpen } = state.chestWindow;
+        state.chestWindow = null;
+        if (state.cursor) { state.dropped.push({ ...state.cursor, why: 'cursor' }); state.cursor = null; }
+        sendChangedNextTick(invAtOpen);
+    }
     function sendChangedNextTick(before) {
         setTimeout(() => {
             for (let s = 1; s < 46; s++) if (!same(before[s], inv[s])) client.write('set_slot', { windowId: 0, slot: s, item: toWire(inv[s]) });
@@ -400,6 +409,8 @@ export function attachFakeContainers(client, opts) {
         const at = p.location;
         const table = state.table;
         if (table && at.x === table.x && at.y === table.y && at.z === table.z) { // BlockFastBench.onBlockActivated
+            // FML's openGui closes the open container first, with no packet (closeContainer).
+            closeOpenContainer();
             nextWindowId = (nextWindowId % 100) + 1;
             state.tableWindow = { id: nextWindowId, grid: Array(10).fill(null), invAtOpen: inv.map(copy) };
             client.write('custom_payload', { channel: 'FML', data: encodeOpenGui({ windowId: nextWindowId, modId: 'fastbench', modGuiId: 0, ...table }) });
@@ -409,6 +420,10 @@ export function attachFakeContainers(client, opts) {
         }
         const ch = state.chest;
         if (ch && at.x === ch.x && at.y === ch.y && at.z === ch.z) { // BlockChest.onBlockActivated -> displayGUIChest
+            // displayGUIChest (oq.a(tv), bytecode 64-76): another open container is closed first with closeScreen
+            // (oq.p): close_window for its id, then closeContainer.
+            const other = state.tableWindow?.id ?? state.chestWindow?.id;
+            if (other !== undefined) { client.write('close_window', { windowId: other }); closeOpenContainer(); }
             nextWindowId = (nextWindowId % 100) + 1;
             state.chestWindow = { id: nextWindowId, invAtOpen: inv.map(copy) };
             client.write('open_window', { windowId: nextWindowId, inventoryType: 'minecraft:chest', windowTitle: JSON.stringify({ translate: 'container.chest' }), slotCount: 27 });
