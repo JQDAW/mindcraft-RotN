@@ -30,6 +30,7 @@
 import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
 import { Reader, Writer, WireError } from './wire.js';
+import { callerOf, targetName, pvpCallerFor } from './attack-caller.js';
 
 export const BC_MODID = 'bettercombat';
 export const BC_CHANNEL = 'bettercombat';
@@ -229,6 +230,9 @@ function defaultLineOfSight(bot, eye, target) {
     return false;
 }
 
+/** At most this many replacements are kept between two attack-counts lines (the oldest are dropped). */
+const MAX_REPLACEMENTS = 20;
+
 /**
  * Replaces bot.attack with Better Combat's attack when it is on and the server has the
  * channel; keeps the original as bot.attackVanilla.
@@ -272,6 +276,10 @@ export function installBetterCombatAttack(bot, {
         enabled: !!enabled, tripped: false, misses: 0,
         lastSwingAt: -Infinity, itemKey: undefined, itemChangedAt: -Infinity,
         pending: null,
+        // Soak 16 death 2: who sends the hit. firing is the bot.attack caller while its packet is written
+        // (attack-counts.js reads it, also for a call that waited out its cooldown); replacements are the
+        // waiting calls a newer call replaced, with both callers and targets, until attack-counts takes them.
+        firing: null, replacements: [],
         stats: { bettercombat: 0, vanilla: 0, waits: 0, replaced: 0, gone: 0, cancelled: 0, reach: 0, sight: 0, misses: 0 },
     };
     const checks = new Map(); // target id -> [{ timer, done }]
@@ -407,27 +415,39 @@ export function installBetterCombatAttack(bot, {
                 p.resolve({ sent: false, path: null, waitedMs: now() - p.since, reason: 'gone' });
                 return;
             }
-            const r = fire(p.target, p.swing, now() - p.since);
+            const r = withCaller(p.caller, () => fire(p.target, p.swing, now() - p.since));
             if (r === null) { schedule(); return; }
             st.pending = null;
             p.resolve(r);
         }, delay);
     }
 
+    // fn() with st.firing = caller, so a packet it writes is attributed to that caller.
+    function withCaller(caller, fn) {
+        st.firing = caller;
+        try { return fn(); } finally { st.firing = null; }
+    }
+
     function attack(target, swing = true) {
-        if (!st.enabled) return Promise.resolve(vanilla(target, swing));
+        const caller = callerOf(new Error().stack, { pvpCaller: pvpCallerFor(bot), targetId: target?.id });
+        if (!st.enabled) return Promise.resolve(withCaller(caller, () => vanilla(target, swing)));
         if (st.pending) {
             const old = st.pending;
             clearTimer(old.timer);
             st.pending = null;
             st.stats.replaced++;
+            st.replacements.push({
+                replaced: { caller: old.caller, target: targetName(bot, old.target?.id) },
+                by: { caller, target: targetName(bot, target?.id) },
+            });
+            if (st.replacements.length > MAX_REPLACEMENTS) st.replacements.shift();
             old.resolve({ sent: false, path: null, waitedMs: now() - old.since, reason: 'replaced' });
         }
-        const r = fire(target, swing, 0);
+        const r = withCaller(caller, () => fire(target, swing, 0));
         if (r) return Promise.resolve(r);
         st.stats.waits++;
         return new Promise((resolve) => {
-            st.pending = { target, swing, resolve, since: now(), timer: null };
+            st.pending = { target, swing, resolve, since: now(), timer: null, caller };
             schedule();
         });
     }
@@ -463,6 +483,10 @@ export function installBetterCombatAttack(bot, {
         get enabled() { return st.enabled; },
         get tripped() { return st.tripped; },
         get stats() { return { ...st.stats }; },
+        /** The bot.attack caller whose packet is being written now (callerOf), or null. */
+        get firingCaller() { return st.firing; },
+        /** The replacements since the last call ({ replaced, by }: { caller, target: "name#id" }), oldest first. */
+        takeReplacements() { const r = st.replacements; st.replacements = []; return r; },
         serverHasIt,
         /** The ticks the held item is paced at (Better Combat's, or UNKNOWN_SPEED_TICKS), for skills' pacing. */
         cooldownTicks,

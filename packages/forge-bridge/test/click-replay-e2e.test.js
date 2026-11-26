@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { tmpFile } from './helpers.js';
 import { createRequire } from 'node:module';
-import { startRotnWorld, stopCraftWorld, within, CHEST } from './craft-world.js';
+import { once } from 'node:events';
+import { startRotnWorld, stopCraftWorld, within, CHEST, TABLE } from './craft-world.js';
 import { inventoryDiff } from './fake-containers.js';
 
 const require = createRequire(import.meta.url);
@@ -201,7 +202,17 @@ test('a chest deposit and withdraw of part of a modded stack (mineflayer transfe
     const rejectedBefore = st.rejected.length;
     const chestBlock = bot.blockAt(new Vec3(CHEST.x, CHEST.y, CHEST.z));
     assert.equal(chestBlock?.name, 'chest');
+    // The table first (#649 review): opening the chest closes it, as displayGUIChest's closeScreen does
+    // (close_window for the table's id), so one container is open at a time.
+    const tableOpen = once(bot, 'windowOpen');
+    bot.activateBlock(bot.blockAt(new Vec3(TABLE.x, TABLE.y, TABLE.z)));
+    const [table] = await within(5000, tableOpen, 'open the table');
+    assert.ok(st.tableWindow, 'the table is open on the server');
+    const tableClosed = once(bot, 'windowClose');
     const chest = await within(5000, bot.openContainer(chestBlock), 'open the chest');
+    const [closedWindow] = await within(5000, tableClosed, 'the server closed the table');
+    assert.equal(closedWindow?.id, table.id, 'the server\'s close_window was for the table');
+    assert.deepEqual([st.tableWindow, st.chestWindow?.id, bot.currentWindow?.id], [null, chest.id, chest.id]);
     assert.equal(chest.type, 'minecraft:chest');
     assert.equal(chest.inventoryStart, 27);
     const chestView = () => Object.fromEntries(chest.slots.slice(0, 27).map((it, i) => [i, it && { id: it.type, count: it.count, meta: it.metadata ?? 0 }]).filter(([, v]) => v));
@@ -226,6 +237,7 @@ test('a chest deposit and withdraw of part of a modded stack (mineflayer transfe
     chest.close();
     for (let w = 0; (st.chestWindow || inventoryDiff(bot.inventory, st).length) && w < 3000; w += 20) await sleep(20);
     assert.equal(st.chestWindow, null);
+    assert.deepEqual(st.closedOther, [], 'every close_window named the open window');
     assert.deepEqual(inventoryDiff(bot.inventory, st), [], 'window 0 in step after the close');
     assert.equal(bot.inventory.slots.reduce((n, it) => n + (it?.type === P ? it.count : 0), 0), 30);
     assert.deepEqual(st.dropped.filter(d => d.why === 'cursor' && d.id === P), [], 'nothing on the cursor at the close');

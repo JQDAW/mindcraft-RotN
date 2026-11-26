@@ -31,6 +31,7 @@ export { buildStateIdRemap, attachStateIdRemap, stateIdRemapStatus } from './src
 export { installGracefulQuit, GRACEFUL_STOP_SIGNALS, STOP_SIGNAL_CATEGORY } from './src/graceful-quit.js';
 export { installBetterCombatAttack, encodeMainhandAttack, decodeMainhandAttack, bcCooldownTicks, bcReach, bcAttackSetting, attributeValue, isBcWeaponName, ticksForSpeed, reachDistance, UNKNOWN_SPEED_TICKS, BC_MODID, BC_CHANNEL, BC_DISC, BC_CONFIG } from './src/bettercombat.js';
 export { attachAttackCounts, attackCountsLine, ATTACK_COUNTS_EVERY_MS, ATTACK_COUNTS_STATUS } from './src/attack-counts.js';
+export { callerOf, attachPvpCallers, pvpCallerFor, targetName, ATTACK_WRAPPERS, PVP_CALLERS_KEPT } from './src/attack-caller.js';
 export { attachRespawnEffectsLog, effectList } from './src/respawn-effects.js';
 export { applyStackSizes, dumpStackSizes } from './src/stack-sizes.js';
 export { attachClickDiagnostics, rejectedClickLine, describeItem, CLICK_DIAG } from './src/click-diagnostics.js';
