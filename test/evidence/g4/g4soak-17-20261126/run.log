@@ -1,0 +1,13 @@
+[scenario 17:16:43] g4-soak-2h (G4) run 20261126t171642-5faeb4; git 5d792d42e43d308a9a41de0c3906d5381b8beb68; driver: service frcfld via cx23-ctl; out: captures/raw/g4-soak-17-20261126
+[scenario 17:16:45] G4 step 7: no ROTN_G4_ACCEPT marker; fresh: no earlier run, join or scenario; started once; world 3270 of at most 6861 ticks
+[scenario 17:17:07] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 19:17:13] PASS naming: [naming]: 3 kinds, unknown 0, all real; entities: 1 kinds, unknown 0
+[scenario 19:17:13] PASS no_crash: 120 min up, 25 samples, NRestarts 0 throughout, no agent exit
+[scenario 19:17:13] PASS peak_memory: peak 697 MiB (target 850 MiB)
+[scenario 19:17:13] PASS usd_per_hour: USD 0.014567/h (target 0.05; USD 0.029157 over 120 min, 123 completions)
+[scenario 19:17:14] PASS agenda_done: "agenda done" within the soak
+[scenario 19:17:14] PASS food_floor: lowest food 8 (floor 6; 122 food lines)
+[scenario 19:17:14] PASS ate_when_low: ate after each of 6 low food line(s)
+[scenario 19:17:14] PASS deaths_reported: each of 1 death(s) reported
+[scenario 19:17:16] G4 step 7: not a G4 acceptance run: (a) no ROTN_G4_ACCEPT marker (only the six step-7 runs, under the lead's written acceptance GO, set it); (d) no gate/ctl hash confirmation (it is part of ROTN_G4_ACCEPT)
+[scenario 19:17:17] g4-soak-2h: SMOKE-PASS (not a gate pass); 9 passed, 0 failed (captures/raw/g4-soak-17-20261126/result.json)
