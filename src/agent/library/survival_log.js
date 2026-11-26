@@ -270,7 +270,7 @@ export function hurtCheck(state, bot, now = Date.now()) {
     const since = state.seen && state.seen.health - w.from >= 0.5 ? ` since ${num(state.seen.health)} at ${new Date(state.seen.at).toISOString().slice(11, 19)}` : '';
     state.seen = { health: h, at: now };
     const text = hurtLine(w.from - h, w.from, h, sourcesOf(state.drops ?? []) ?? hurtSource(bot, { swings: state.swings, now })) + since;
-    const detail = hurtDetail(bot, state.drops ?? [], { swings: state.swings, now, start: w.at });
+    const detail = hurtDetail(bot, state.drops ?? [], { swings: state.swings, now, start: w.at, firstSeen: state.firstSeen });
     state.hurt = { from: h, at: now };
     state.drops = [];
     console.log(text);
@@ -284,14 +284,30 @@ export function hurtCheck(state, bot, now = Date.now()) {
  * the ground or not, the damage record's cause), and the HURT.detailMobs nearest entities that can
  * hurt within HURT.detailRange (type, distance, the last arm swing). Tokens only: never a name.
  */
-export function hurtDetail(bot, drops, { swings = null, now = Date.now(), start = now } = {}) {
+/**
+ * Soak 16 death 2: the killing hit's detail listed zombie_players:zombie_player@0m, the Zombie Player the death itself
+ * spawns at the bot's spot (its spawn packet can come before the health packet). An entity first seen at or after the
+ * window's last drop (firstSeen: entitySpawn times, noteSpawn) did not deal it: left out. FIRST_SEEN.slackMs: the order
+ * of the two packets.
+ */
+export const FIRST_SEEN = { slackMs: 100, keepMs: 60_000 };
+export function noteSpawn(state, e, now = Date.now()) {
+    if (e?.id == null) return;
+    const m = state.firstSeen ??= new Map();
+    m.set(e.id, now);
+    for (const [id, at] of m) if (now - at > FIRST_SEEN.keepMs) m.delete(id);
+}
+
+export function hurtDetail(bot, drops, { swings = null, now = Date.now(), start = now, firstSeen = null } = {}) {
+    const lastDrop = drops.length ? drops.at(-1).at : now;
+    const newcomer = (e) => { const t = firstSeen?.get?.(e.id); return Number.isFinite(t) && t >= lastDrop - FIRST_SEEN.slackMs; };
     const p = bot?.entity?.position;
     const where = p ? `${num(p.x)},${num(p.y)},${num(p.z)}` : 'unknown';
     const vy = bot?.entity?.velocity?.y;
     const ground = bot?.entity?.onGround === true ? 'ground' : bot?.entity?.onGround === false ? 'air' : 'unknown';
     const ds = drops.length ? drops.map(d => `${num(d.amount)}@+${num((d.at - start) / 1000)}s${d.source ? `=${token(d.source)}` : ''}`).join(',') : 'none';
     const near = p ? Object.values(bot.entities ?? {})
-        .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(p) <= HURT.detailRange
+        .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(p) <= HURT.detailRange && !newcomer(e)
             && (mayHurt(e) || FALLING.test(e.name ?? '') || (living(e) && now - (swings?.get(e.id) ?? -Infinity) <= HURT.swingMs)))
         .sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))
         .slice(0, HURT.detailMobs)
@@ -377,7 +393,7 @@ export function bindSurvivalLog(bot, { eatAt }) {
     bot.on('respawn', () => { try { noteBotSpawn(state); } catch { /* never breaks the bot */ } });
     bot.on('login', () => { try { noteBotSpawn(state); } catch { /* never breaks the bot */ } });
     bot.on('spawn', () => { try { noteBotSpawn(state, Date.now(), { fallback: true }); } catch { /* never breaks the bot */ } });
-    bot.on('entitySpawn', (e) => { try { noteArrowSpawn(state, e); } catch { /* never breaks the bot */ } }); // soak 12 (G)
+    bot.on('entitySpawn', (e) => { try { noteArrowSpawn(state, e); noteSpawn(state, e); } catch { /* never breaks the bot */ } }); // soak 12 (G); soak 16 death 2
     bot.on('entityGone', (e) => { try { noteArrowGone(state, bot, e); } catch { /* never breaks the bot */ } });
     bot.on('health', () => { try { hurtCheck(state, bot, Date.now()); } catch { /* never breaks the bot */ } });
     // Soak 14 (F3, the lead): every target of the bot's own attack is provoked for its chase (markProvoked).

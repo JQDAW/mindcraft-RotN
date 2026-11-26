@@ -195,3 +195,11 @@ test('round 17 P: the scroll\'s use is saved with the history in both memory mod
         assert.deepEqual(h3.scrollUsed?.pos, { x: 4, y: 66, z: -8 }, `${memory}: not overwritten with null`);
     }
 });
+
+test('#645 nits: a scroll on the cursor counts as held (one test everywhere); a non-lifescroll "spawnscroll" does not', async () => {
+    const skills = await import('./library/skills.js');
+    const cursor = { ...botWith([]), inventory: { items: () => [], slots: [], selectedItem: SCROLL } };
+    assert.equal(skills.scrollUsedOn(cursor), null, 'on the cursor: held, not used');
+    const other = { ...botWith([]), inventory: { items: () => [], slots: [], selectedItem: { name: 'othermod:spawnscroll', count: 1 } } };
+    assert.match(skills.scrollUsedOn(other)?.by ?? '', /no Scroll of New Life held/);
+});

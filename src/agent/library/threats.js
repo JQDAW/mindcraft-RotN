@@ -294,8 +294,27 @@ const shortName = (e) => (typeof e?.name === 'string' ? e.name.replace(/^minecra
  * Why the bot must not start or go on with a fight against `mob` now ('no weapon', 'health 12, a
  * zombie hits up to 12.5'), or null. Without a mob, the unknown mob's UNKNOWN_MELEE.
  */
+/**
+ * Soak 16 death 2 (rotn-data's hen analysis, the lead's rule): a provoked animal that hits for at most maxHit (a hen,
+ * a rooster, a peafowl, a ferret, a hedgehog: 2 a peck) cannot be fled from (a hen is faster than a zombie and keeps its
+ * target to 16 blocks). With no weapon it is fought while health is above noWeaponHealth (three pecks of margin); with
+ * a weapon, while above its hit (the rule for every mob). Stronger animals keep the existing rules.
+ */
+export const WEAK_PROVOKED = { maxHit: 2, noWeaponHealth: 6 };
+/** The callers that name a hunt (hunting.huntAnimal) or the model's !attack (skills.attackEntity, kill): bot.rotnAttackTarget.by. */
+const HUNT_BY = new Set(['hunt', 'attack (pvp)']);
+export function isWeakProvoked(mob) {
+    const t = mob ? threatFor(mob) : null;
+    return !!t?.provoked && t.provoked.fightBack === true && Number.isFinite(t.provoked.damage) && maxHitOf(mob) <= WEAK_PROVOKED.maxHit;
+}
+
 export function fightRefusal(bot, mob = null) {
-    if (!hasWeapon(bot)) return 'no weapon';
+    if (!hasWeapon(bot)) {
+        if (!isWeakProvoked(mob)) return 'no weapon';
+        const h = bot?.health;
+        if (Number.isFinite(h) && h > WEAK_PROVOKED.noWeaponHealth) return null;
+        return `no weapon, and health ${round1(h)}, at most ${WEAK_PROVOKED.noWeaponHealth}`;
+    }
     const h = bot?.health, max = maxHitOf(mob);
     if (!Number.isFinite(h) || h > max) return null;
     const name = shortName(mob);
@@ -395,6 +414,8 @@ export const ATTACK_WATCH = { pollMs: 100 };
  * await. The callers still check right after it resolves (the backstop).
  */
 export async function attackWatched(bot, target, stopWhy = () => null) {
+    // Soak 16 death 2: the target this reflex names, for the guard on bot.attack (hands.installAttackGuard).
+    if (target?.id != null) bot.rotnAttackTarget = { id: target.id, by: 'reflex', at: Date.now() };
     const call = Promise.resolve(bot.attack(target));
     if (typeof bot?.forge?.cancelAttack !== 'function') return await call;
     const timer = setInterval(() => {
@@ -651,13 +672,18 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
     const me = bot.entity?.position;
     if (!me) return null;
     const near = [];
+    // Soak 16 death 2: food animals ('ignore') that fight back when hit (a hen, a cow: rotn-data's provoked block) are
+    // kept apart: never a threat by themselves, only the one that just hit the bot (below, after the herd rule).
+    const food = [];
     for (const e of Object.values(bot.entities ?? {})) {
         if (e === bot.entity || !e?.position) continue;
         const t = threatFor(e);
-        if (!t || t.reaction === 'ignore') continue;
+        if (!t) continue;
+        if (t.reaction === 'ignore') { if (t.provoked) food.push({ e, t, d: e.position.distanceTo(me) }); continue; }
         near.push({ e, t, d: e.position.distanceTo(me) });
     }
     near.sort((a, b) => a.d - b.d);
+    food.sort((a, b) => a.d - b.d);
     // A player zombie (round 2): fought like a zombie only with a weapon and health above half;
     // otherwise avoided from the avoid range (#227 review 1).
     const zombies = near.filter(x => isPlayerZombie(x.e) && x.d <= RANGES.avoid.near);
@@ -737,6 +763,20 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
             const name = mob[0].name;
             return { action: 'flee', why: 'a herd fights back', from: mob[0], away: RANGES.fight.away, isEnemy: (e) => e.name === name };
         }
+    }
+    // Soak 16 death 2 (the hen): a food animal that just hit the bot (its own hit, in its reach: fightsBack) and fights
+    // back is fought at once (fleeing does not shake a hen); a weak one even with no weapon (fightRefusal,
+    // WEAK_PROVOKED). One that may be a player's: backed off from, as the others.
+    const foodHitter = food.filter(x => x.d <= PROVOKED_DIST).find(x => x.t.provoked?.fightBack === true && fightsBack(bot, x, now));
+    // The hunt's own target hitting back: the hunt fights it already (no second plan, no interrupted hunt).
+    // #652 review 1 (BLOCKER): only a hunt's or !attack's target (the skill named it), never defendSelf's own fight:
+    // its keepFighting reads this plan every round, and a null ended the fight after each swing.
+    const named = bot.rotnAttackTarget;
+    if (foodHitter && named?.id === foodHitter.e.id && HUNT_BY.has(named.by) && bot.pvp?.target?.id === foodHitter.e.id) return null;
+    if (foodHitter) {
+        const id = foodHitter.e.id;
+        if (ownedMaybe(bot, foodHitter.e)) return { action: 'flee', why: 'provoked, and it may be a player\'s', from: foodHitter.e, away: RANGES.fight.away, isEnemy: (e) => e.id === id };
+        return unlessRefused(bot, { action: 'fight', why: 'provoked', from: foodHitter.e, isEnemy: (e) => e.id === id });
     }
     return null;
 }

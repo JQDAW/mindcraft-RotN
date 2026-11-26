@@ -195,7 +195,13 @@ function reservesLine(bot) {
 function failureLines(facts, here, now) {
     const f = facts?.failures ?? [];
     if (!f.length) return [];
-    return ['Recent failures (newest first):', ...f.slice().reverse().map(e => clip(`${e.cmd}: ${e.why} (${ago(now - e.at)}${e.pos ? ` at ${at(e.pos)}${here ? `, ${bearing(here, e.pos)}` : ''}` : ''})`, MEMORY_FACTS.failureLineMax))];
+    // #650 review (the lead): the why is clipped, never the "(N min ago at ...)" suffix: the model keeps the time.
+    return ['Recent failures (newest first):', ...f.slice().reverse().map(e => {
+        const suffix = ` (${ago(now - e.at)}${e.pos ? ` at ${at(e.pos)}${here ? `, ${bearing(here, e.pos)}` : ''}` : ''})`;
+        const head = `${e.cmd}: `;
+        const room = Math.max(10, MEMORY_FACTS.failureLineMax - head.length - suffix.length);
+        return `${head}${clip(e.why, room)}${suffix}`;
+    })];
 }
 
 function deathsLine(facts, here, now) {

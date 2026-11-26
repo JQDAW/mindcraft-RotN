@@ -476,7 +476,10 @@ export function mobIn(bot, cell) {
  * One placement at target against a solid neighbour outside the 1x2 space. mode.items(bot): the
  * stacks to place, best first; mode.accept(block): what counts as a wall.
  */
-async function placeOnce(bot, target, interior, mode, why = () => {}, note = null) {
+/** Soak 16 night 3: a refused cell's other faces: after waitMs, up to `faces` of them. */
+export const FACE_RETRY = { waitMs: 1000, faces: 3 };
+
+async function placeOnce(bot, target, interior, mode, why = () => {}, note = null, exclude = null) {
     const item = mode.items(bot)[0];
     if (!item) { mode.outOfBlocks = true; why('no block left to place'); return false; } // #586 nit 3: a flag, not the text
     const mob = mobIn(bot, target);
@@ -486,7 +489,8 @@ async function placeOnce(bot, target, interior, mode, why = () => {}, note = nul
         why(`a ${mob.name ?? mob.displayName ?? 'mob'} stands in it`);
         return false;
     }
-    const refPos = supportFor(target, interior, (q) => holds(bot.blockAt(q)));
+    // Soak 16 night 3: exclude: faces the server already refused for this cell (another face is tried).
+    const refPos = supportFor(target, interior, (q) => holds(bot.blockAt(q)) && !exclude?.has(key(q)));
     if (!refPos) { why('nothing to place a block against'); return false; }
     const ref = bot.blockAt(refPos);
     const face = target.minus(refPos);
@@ -589,6 +593,24 @@ export async function fillCell(bot, target, interior, mode, reasons = null) {
         note.held = { name: bot.heldItem?.name ?? 'nothing', slot: bot.heldItem?.slot ?? null, before, after: heldCount(bot, bot.heldItem) };
         if (attempt === 0 && before > 0 && note.held.after >= before && await resyncStack(bot, bot.heldItem)) note.resynced = true;
     }
+    // Soak 16 night 3: the roof at -7, 67, 30 was refused twice against the same dirt face (no entity over it, the
+    // stack not used). After FACE_RETRY.waitMs (the server's view of the bot settles after a dig and a drop), each
+    // other face with a solid block, up to FACE_RETRY.faces.
+    if (mode.faceRetryCell === key(target) && !mode.accept(bot.blockAt(target)) && note.at && !bot.interrupt_code && !mode.abort?.()) {
+        const tried = new Set([key(note.at)]);
+        await sleep(FACE_RETRY.waitMs);
+        for (let k = 0; k < FACE_RETRY.faces && !bot.interrupt_code; k++) {
+            if (mode.accept(bot.blockAt(target))) return true;
+            if (botBoxIn(bot, target) || mobIn(bot, target)) break;
+            const other = {};
+            if (await placeOnce(bot, target, interior, mode, () => {}, other, tried)) { note.faces = [...tried].length; return true; }
+            if (!other.at) break; // no other face
+            tried.add(key(other.at));
+            await sleep(LATE_UPDATE_MS);
+            if (mode.accept(bot.blockAt(target))) return true;
+        }
+        note.faces = tried.size;
+    }
     // Soak 5: say what is there now and any body over the cell (a troll's wide box stops a placement).
     if (reasons && !reasons.has(key(target))) {
         const now = bot.blockAt(target)?.name ?? 'unknown';
@@ -600,7 +622,15 @@ export async function fillCell(bot, target, interior, mode, reasons = null) {
         const h = note.held;
         const held = h ? `; held ${h.name} in slot ${h.slot ?? '?'}: ${h.before} before, ${h.after} after${note.resynced ? ' (the slot was resynced between the tries)' : ''}` : '';
         (reasons.stuck ??= new Set()).add(key(target));
-        why(`the block did not stay (placed twice; now ${now}${over.length ? `; ${over.join(', ')} over the cell` : ''}; ${face}; ${where}${held})`);
+        // Soak 16 night 3: the other faces tried, and the living entities within 2 blocks of the cell (not over it), at the
+        // end of the line, for the evidence.
+        const overSet = new Set(overlapping(bot, target));
+        const near2 = Object.values(bot.entities ?? {}).filter(e => e && e !== bot.entity && e.position && !overSet.has(e)
+            && !/experience_orb|arrow|(^|:)item$/.test(e.name ?? e.type ?? '') && e.type !== 'object'
+            && e.position.distanceTo(target.offset(0.5, 0.5, 0.5)) <= 2)
+            .map(e => `${e.name ?? e.type ?? 'entity'} at ${e.position.x.toFixed(2)}, ${e.position.y.toFixed(2)}, ${e.position.z.toFixed(2)}`);
+        const more = `${note.faces > 1 ? `; then ${note.faces - 1} other face${note.faces > 2 ? 's' : ''} tried` : ''}${near2.length ? `; near it: ${near2.join(', ')}` : ''}`;
+        why(`the block did not stay (placed twice; now ${now}${over.length ? `; ${over.join(', ')} over the cell` : ''}; ${face}; ${where}${held}${more})`);
     }
     return false;
 }
@@ -711,7 +741,7 @@ async function pickaxeFor(bot, level) {
  * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], soft: number, line: string}>}
  *   line: what it logged; soft: the dirt blocks in its walls and roof.
  */
-export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [], avoid = null, abort = null, floodCheck = false } = {}) {
+export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe, skip = [], avoid = null, abort = null, floodCheck = false, roofRetry = false } = {}) {
     // #470 review 2: skip: cells a mob holds, left out of a repair (the bot has no weapon to hit it out).
     const skipKeys = new Set(skip.map(key));
     // Soak 8 (night 2): noPlace: the search found no site at all (not a site short of blocks or a
@@ -829,6 +859,9 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     const seenWall = new Set(); // soak 5 (01:27): cells that were a wall when the loop came to them
     // Building keeps the bot in its cell on purpose: unstuck leaves it alone meanwhile (modes.js).
     bot.rotnStationary = true;
+    // #652 review 3: the other-faces retry (FACE_RETRY) only for the hole's roof cell (pitShelter: roofRetry), not
+    // for every wall cell (each retry costs a second or more at dusk).
+    mode.faceRetryCell = roofRetry ? key(roof) : null;
     try {
         for (const pos of wallsAndRoof(feet)) {
             if (bot.interrupt_code) { reasons.stopped = true; break; }

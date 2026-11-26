@@ -175,3 +175,68 @@ export async function idleHands(agent) {
         return state;
     } finally { agent.rotnIdleHandsBusy = false; }
 }
+
+/**
+ * Soak 16 death 2 (the lead's go): a hen was hit by the bot (rotn-data: Better Combat attacks exactly the entity id it is
+ * sent, so some bot.attack call named the hen) and pecked it to death; the bridge counted a second caller in that
+ * minute ("replaced 1"). A guard on bot.attack, installed above the bridge's Better Combat replacement like the dig
+ * wrapper: a passive animal or a player is hit only when it is the target the calling skill named
+ * (bot.rotnAttackTarget: attackEntity, defendSelf, the reflex's attackWatched); hostile mobs are never refused. Each
+ * first swing at a new target names its caller, for the evidence.
+ */
+export const ATTACK_GUARD = { targetMs: 120_000 };
+const PASSIVE = new Set(['ignore', 'ignore-unless-provoked']);
+
+/** The skill about to hit `entity` names it (and itself) for the guard. */
+export function noteAttackTarget(bot, entity, by) {
+    if (bot && entity?.id != null) bot.rotnAttackTarget = { id: entity.id, by, at: Date.now() };
+}
+
+/** Why the guard refuses a hit on `target` now, or null. */
+export function attackRefusal(bot, target, threatFor, now = Date.now()) {
+    if (!target || target.id == null) return null;
+    const player = target.type === 'player';
+    let reaction = null;
+    try { reaction = threatFor?.(target)?.reaction ?? null; } catch { reaction = null; }
+    if (!player && !PASSIVE.has(reaction)) return null; // hostile or unknown: never refused
+    const t = bot.rotnAttackTarget;
+    if (t && t.id === target.id && now - t.at <= ATTACK_GUARD.targetMs) return null;
+    const what = player ? 'a player' : reaction === 'ignore' ? 'a food animal' : 'an animal left alone unless provoked';
+    return `${what}, not the target the skill named${t ? ` (${t.by} named #${t.id})` : ''}`;
+}
+
+export function installAttackGuard(bot, { threatFor = null } = {}) {
+    if (!bot) return;
+    const said = new Set();
+    let lastTarget = null;
+    const wrap = () => {
+        const original = bot.attack;
+        // #652 review 4: one guard per bot: once in the chain (survival_log's marking wrapper may sit above it), a
+        // respawn's or a login's re-install adds no second layer.
+        if (typeof original !== 'function' || original.rotnGuard || bot.rotnAttackGuardOn) return;
+        const guarded = function (target, ...rest) {
+            const why = attackRefusal(bot, target, threatFor);
+            if (why) {
+                const key = `${target.id}`;
+                if (!said.has(key)) { said.add(key); console.log(`[attack] refused: ${target.name ?? 'entity'}#${target.id} is ${why}`); }
+                return Promise.resolve({ sent: false, path: null, waitedMs: 0, reason: 'guard' });
+            }
+            if (target?.id != null && target.id !== lastTarget) {
+                lastTarget = target.id;
+                const t = bot.rotnAttackTarget;
+                console.log(`[attack] ${t && t.id === target.id ? t.by : 'unnamed'} -> ${target.name ?? 'entity'}#${target.id}`);
+            }
+            return original.call(this ?? bot, target, ...rest);
+        };
+        guarded.rotnGuard = true;
+        bot.rotnAttackGuardOn = guarded;
+        // Keep the marks the wrappers below set (survival_log's rotnMarks sits above; the bridge's own fields).
+        bot.attack = guarded;
+    };
+    wrap();
+    if (typeof bot.on === 'function' && !bot.rotnAttackGuardHooked) {
+        bot.rotnAttackGuardHooked = true;
+        bot.on('login', wrap);
+        bot.on('spawn', wrap);
+    }
+}
