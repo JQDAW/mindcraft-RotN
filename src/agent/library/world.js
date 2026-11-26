@@ -2,7 +2,8 @@ import pf from 'mineflayer-pathfinder';
 import * as mc from '../../utils/mcdata.js';
 import { VILLAGER_PROFESSIONS_112 } from './names112.js';
 import { inventoryKey, blockMetasFor, blockMatcher, blockDisplayName } from './rotn_names.js';
-import { fallSafe, isTreePart } from './fall_safety.js';
+import { isTreePart } from './fall_safety.js';
+import { guardedMovements } from './movements.js';
 import { view, carried } from './inventory_view.js';
 
 /**
@@ -462,7 +463,7 @@ export async function isClearPath(bot, target, limits = CLEAR_PATH_LIMITS) {
     if (!target?.position || !bot.entity?.position) return false;
     if (bot.entity.position.distanceTo(target.position) > maxDistance) return false;
     // The safe movements (#264 nit): a path over molten metal, a trap or a drop over 3 is not clear.
-    let movements = fallSafe(new pf.Movements(bot));
+    let movements = guardedMovements(bot, { floorY: null }); // soak 17 T (movements.js): fall-safe and guarded; no digging here
     movements.canDig = false;
     movements.canPlaceOn = false;
     movements.canOpenDoors = false;
