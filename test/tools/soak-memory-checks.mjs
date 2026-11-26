@@ -94,7 +94,8 @@ export function serverChat(serverText, firstT) {
 
 const near = (list, t, s) => list.filter(x => Math.abs(x.t - t) <= s * 1000);
 const before = (list, t) => { let r = null; for (const x of list) { if (x.t <= t) r = x; else break; } return r; };
-const norm = (s) => String(s).toLowerCase().replace(/^[a-z0-9_]+:/, '').replace(/:\d+$/, '').replace(/_/g, ' ').trim();
+// The metadata first (#650 round 2: "dirt:0" is dirt, not "0"), then the namespace.
+const norm = (s) => String(s).toLowerCase().replace(/:\d+$/, '').replace(/^[a-z0-9_]+:/, '').replace(/_/g, ' ').trim();
 const sing = (w) => (/ss$/.test(w) ? w : w.replace(/(ie)?s$/, (m, ie) => (ie ? 'y' : '')));
 /** A claimed item phrase ("metamorphic cobble", "rocks") names a state item id ("undergroundbiomes:metamorphic_cobble"). */
 export function itemMatches(phrase, id) {
@@ -216,8 +217,9 @@ export function memoryFactsCheck(lines, chat = []) {
     const st = stateOf(lines, chat);
     const cmds = executedCommands(lines);
     // #650 review 9: "Deaths: N since this memory began" counts from a fresh memory.json; the lead resets the bot's state
-    // before a soak (`[state] … memory=absent`). A memory carried over makes the count unverifiable.
-    const carried = lines.some(l => /^\[state\] .*\bmemory=present\b/.test(l.msg));
+    // before a soak (`[state] … memory=absent`). A memory carried over (state_report.js writes the turns, or `corrupt`:
+    // anything but `absent`; #650 round 2) makes the count unverifiable.
+    const carried = lines.some(l => { const m = /^\[state\] .*\bmemory=(\S+)/.exec(l.msg); return m && m[1] !== 'absent'; });
     const res = { factsLines: facts.length, fields: 0, matches: 0, misses: 0, unverifiable: 0, byField: {}, missesFirst: [] };
     const judge = (field, ok, l, detail, trivial = false) => {
         const b = (res.byField[field] ??= { match: 0, miss: 0, unverifiable: 0, trivial: 0 });
@@ -428,7 +430,12 @@ export function wrongClaims(lines, chat = []) {
             const inv = invAt(l);
             let state = null;
             if (have) state = have.count;
-            else if (inv) { const hits = inv.items.filter(x => itemMatches(c.phrase, x.item) && !closer(x.item)); if (hits.length) state = hits.reduce((s, x) => s + x.count, 0); }
+            else if (inv) {
+                // The item the phrase names exactly wins over word matches ("16 dirt": dirt, not the dirt piles).
+                const exact = inv.items.filter(x => sameItem(c.phrase, x.item));
+                const hits = exact.length ? exact : inv.items.filter(x => itemMatches(c.phrase, x.item) && !closer(x.item));
+                if (hits.length) state = hits.reduce((s, x) => s + x.count, 0);
+            }
             // "got N": a collect's yield in the window agrees too; "have / so far / now / total": the inventory only.
             const got = c.mode === 'got' && st.collected.some(x => x.n < l.n && l.t - x.t <= W * 1000 && x.count === c.n && itemMatches(c.phrase, x.item));
             judge('count', state == null && !got ? null : state === c.n || got, l, { said: `${c.n} ${c.phrase}`, state });

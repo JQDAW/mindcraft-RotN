@@ -127,8 +127,13 @@ test('#650 review 4, 5, 8, 9, 10: the shelter lines and nights, the scripted-job
     assert.deepEqual(r.gateByField.deaths, { samples: 0, verdict: 'too few' });
     assert.equal(r.gate, 'fail'); // the shelter miss
     // A memory carried over from before the soak: the death count is unverifiable.
-    const carried = memoryFactsCheck(J([REL, L('10:00:01', '[state] <bot> at start: tasks=absent agenda=absent memory=present'), facts('10:01:00', 'Deaths: 3 since this memory began')]), []);
-    assert.deepEqual(carried.byField.deaths, f(0, 0, 1));
+    // #650 round 2: state_report.js writes absent, the turns, or corrupt; anything but absent is carried over.
+    for (const v of ['12', 'corrupt']) {
+        const carried = memoryFactsCheck(J([REL, L('10:00:01', `[state] <bot> at start: tasks=absent agenda=absent memory=${v}`), facts('10:01:00', 'Deaths: 3 since this memory began')]), []);
+        assert.deepEqual(carried.byField.deaths, f(0, 0, 1), v);
+    }
+    const fresh = memoryFactsCheck(J([REL, L('10:00:01', '[state] <bot> at start: tasks=absent agenda=absent memory=absent'), facts('10:01:00', 'Deaths: 3 since this memory began')]), []);
+    assert.deepEqual(fresh.byField.deaths, f(0, 1, 0));
     // Enough samples and no miss: pass.
     const ok = memoryFactsCheck(J([REL, ...[1, 2, 3, 4, 5].map(k => L(`10:0${k}:00`, `received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): x'`)),
         ...[1, 2, 3, 4, 5].map(k => facts(`10:0${k}:05`, 'Agenda: active, step rocks (collect 6 rocks); done: none'))]), []);
@@ -186,6 +191,10 @@ test('countClaims (#650 review 6): lists, "on hand", "now", "(N total now)"; not
     assert.deepEqual(c('Up to y=60 with 16 piles.'), ['16 piles got']);
     assert.deepEqual(c('Got 4 rocks so far.'), ['4 rocks held']);
     assert.equal(sameItem('sticks', 'stick'), true);
+    // #650 round 2: the metadata goes before the namespace ("dirt:0" is dirt).
+    assert.equal(sameItem('dirt', 'dirt:0'), true);
+    assert.equal(sameItem('dirt', 'minecraft:dirt:0'), true);
+    assert.equal(itemMatches('dirt', 'dirt:0'), true);
     assert.equal(sameItem('axes', 'pyrotech:crude_axe'), false);
 });
 
@@ -254,6 +263,17 @@ test('I15 repeated failures: the same command and args failing again within 10 m
     // #650 review 3: a command with no args is in the memory as "!goToSurface: why".
     assert.deepEqual([r.count, r.failures, r.inMemory, r.perHour, r.within30, r.within60], [4, 9, 2, 4, 5, 5]);
     assert.deepEqual(r.first.map(x => [x.t, x.inMemory]), [['10:05:00', false], ['10:08:00', true], ['10:41:00', false], ['10:47:00', true]]);
+});
+
+test('soak 15 (#650 rounds 1 and 2): 3 wrong claims, at lines 115, 1294 and 1574; 1391 "16 dirt" is right (dirt, not the piles)', () => {
+    const E15 = path.join(ROOT, 'test/evidence/g4/g4soak-15-20261124');
+    const lines = J([fs.readFileSync(path.join(E15, 'driver.log'), 'utf8')]);
+    const r = wrongClaims(lines, serverChat(fs.readFileSync(path.join(E15, 'server.log'), 'utf8'), lines[0].t));
+    assert.deepEqual(r.wrongFirst.map(w => [w.line, w.said, String(w.state)]), [[115, '4 rocks', '5'], [1294, 'y 60', '56,57'], [1574, '13 cobble', '10']]);
+    assert.ok(r.handSample.some(h => h.line === 1391));
+    const inv = lines.filter(l => l.n > 1391 && l.n < 1420 && /^- (dirt:0|betterwithmods:dirt_pile:0?): \d+$/.test(l.msg)).map(l => l.msg);
+    assert.ok(inv.length >= 1, 'the listing that 1391 is checked against');
+    assert.equal(r.byKind.count[1], 2);
 });
 
 test('soak 16: the M baseline (no facts lines: I13 n/a; I14 and I15 counted; check 5 the share and USD per hour)', () => {
