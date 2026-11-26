@@ -1,0 +1,71 @@
+## Server 1 (unused): test-server.sh up (run from the rotn-v0.1.23 checkout, 2026-11-26)
+[test-server 14:22:19] sweeper OK: scheduled run 45823402608 on JQDAW/mindcraft-RotN succeeded 91 min ago (limit 120 min)
+[test-server 14:22:19] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 4h, sweeper deletes it) ~5 billed hours, EUR 0.69 plus Primary IPv4
+[test-server 14:22:19] creating mcr-test-20261126-142215: delete-after 2026-11-26T18:22:19Z (TTL 4h)
+Server <server-id> created
+[test-server 14:22:37] server mcr-test-20261126-142215 is at <ip>
+[test-server 14:22:37] waiting for SSH and the build (up to 120 min)
+[test-server 14:22:47] phase: unreachable
+[test-server 14:23:04] phase: booting:running
+[test-server 14:23:52] phase: pack
+[test-server 14:24:08] phase: unpack
+[test-server 14:24:24] phase: starting
+[test-server 14:27:49] phase: mod-director
+[test-server 14:28:04] phase: ready
+[test-server 14:28:05] mod-director: pinned mods/esmtweaks-1.12.2-0.4.5.jar sha256 b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 OK
+[test-server 14:28:05] mod-director: OK: 1 pinned download(s) match; 337 jars of the pinned zip match; 0 extra mod(s)
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 14:28:07] READY: mcr-test-20261126-142215 at <ip>:25565 (delete-after 2026-11-26T18:22:19Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261126-142215
+
+## Server 1: test-server.sh starts (14:28, right after up)
+starts=1 files=1
+
+## Server 1: soak 17 postponed by the lead (the human's host check had not come and a 2-h run no longer fit before the 18:22Z watchdog); run.mjs never started on it; test-server.sh down
+[test-server 16:04:52] deleting batch mcr-test-20261126-142215 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261126-142215)
+[test-server 16:05:05] batch mcr-test-20261126-142215: ran 102 min, billed ~2h, est. EUR 0.2762 (excl. IPv4)
+[test-server 16:05:05] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261126-142215
+
+## Hetzner counts after the server 1 delete (2026-11-26T16:05:10Z; its SSH key: the down's "verified gone" line)
+server=0
+volume=0
+primary-ip=0
+
+## Server 2 (the soak): test-server.sh up
+[test-server 17:10:59] sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 14.6, 15.5 min, newest 45864000361 9.8 min ago
+[test-server 17:10:59] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 4h, sweeper deletes it) ~5 billed hours, EUR 0.69 plus Primary IPv4
+[test-server 17:11:00] creating mcr-test-20261126-171053: delete-after 2026-11-26T21:10:59Z (TTL 4h)
+Server <server-id> created
+[test-server 17:11:10] server mcr-test-20261126-171053 is at <ip>
+[test-server 17:11:10] waiting for SSH and the build (up to 120 min)
+[test-server 17:11:20] phase: unreachable
+[test-server 17:11:36] phase: booting:running
+[test-server 17:12:08] phase: starting
+[test-server 17:14:13] phase: ready
+[test-server 17:14:13] mod-director: pinned mods/esmtweaks-1.12.2-0.4.5.jar sha256 b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 OK
+[test-server 17:14:13] mod-director: OK: 1 pinned download(s) match; 337 jars of the pinned zip match; 0 extra mod(s)
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 17:14:14] READY: mcr-test-20261126-171053 at <ip>:25565 (delete-after 2026-11-26T21:10:59Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261126-171053
+
+## Server 2: test-server.sh starts (17:14, right after up)
+starts=1 files=1
+
+## Server 2: test-server.sh log 200000 since-start: header (19:17, after the run)
+##rotn-test since-start files=latest.log found=1 lines=21218 over=0 nonempty=21210
+
+## Server 2: test-server.sh starts (19:17, after the run and the since-start read, before the save and down)
+starts=1 files=1
+
+## Server 2: test-server.sh console save-all flush (19:17:29, before the world fetch of the two trap regions for offline analysis; the files stay off the repo)
+[19:17:29] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Flushing completed
+[19:17:29] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Saved the world
+
+## Server 2: test-server.sh down
+[test-server 19:17:44] deleting batch mcr-test-20261126-171053 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261126-171053)
+[test-server 19:17:57] batch mcr-test-20261126-171053: ran 126 min, billed ~3h, est. EUR 0.4143 (excl. IPv4)
+[test-server 19:17:57] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261126-171053
+
+## Hetzner counts after the server 2 delete (2026-11-26T19:17:57Z)
+server=0
+volume=0
+primary-ip=0
+mcr_test_keys=0
