@@ -23,11 +23,13 @@ const Vec3 = require('vec3');
 const STICK = 'minecraft:stick';
 const PLANKS = 'minecraft:planks';
 const WALL = 'ancientbeasts:stick_wall';
+const nine = Array.from({ length: 3 }, () => [STICK, STICK, STICK]);
 let world;
-after(() => stopCraftWorld(world ?? {}));
+const lines = []; // the craft-refused lines, for both tests
+let restoreLog = null;
+after(() => { restoreLog?.(); return stopCraftWorld(world ?? {}); });
 
 test('soak 16: a grid the server makes into another item is never clicked; the sticks stay; the server\'s count is taken; an empty result throws (patches/mineflayer craft.js)', { timeout: 60000 }, async () => {
-    const nine = Array.from({ length: 3 }, () => [STICK, STICK, STICK]);
     world = await startRotnWorld({
         itemNames: [STICK, PLANKS, WALL],
         inventory: { 36: { name: STICK, count: 21 } },
@@ -38,10 +40,9 @@ test('soak 16: a grid the server makes into another item is never clicked; the s
     const { bot, ids } = world;
     const c = world.containers();
     const st = c.state;
-    const lines = [];
     const realLog = console.log;
     console.log = (...a) => { if (typeof a[0] === 'string' && a[0].startsWith('[forge-bridge] craft refused:')) lines.push(a[0]); realLog(...a); };
-    after(() => { console.log = realLog; });
+    restoreLog = () => { console.log = realLog; };
     const { returnGrid } = await import('../../../src/agent/library/inventory_sync.js');
     const tableBlock = bot.blockAt(new Vec3(TABLE.x, TABLE.y, TABLE.z));
     const craft = (recipe, table) => within(20000, bot.craft(recipe, 1, table), 'craft').then(() => null, (e) => e);
@@ -103,4 +104,47 @@ test('soak 16: a grid the server makes into another item is never clicked; the s
     await inStep();
     assert.equal(c.count(ids[STICK]), 3, 'the 2 sticks are back from the 2x2 grid');
     assert.deepEqual(st.rejected, []);
+});
+
+test('#638 review 2: bot.craft(recipe, 2) goes through the guard twice; a mismatch on the 2nd craft stops there with its grid back', { timeout: 30000 }, async () => {
+    const { bot, ids } = world;
+    const c = world.containers();
+    const st = c.state;
+    const tableBlock = bot.blockAt(new Vec3(TABLE.x, TABLE.y, TABLE.z));
+    const grid9 = nine.map(row => row.map(n => ids[n]));
+    const resultClicks = () => st.clicks.filter(k => k.slot === 0 && k.mode === 0).length;
+    const inStep = async () => {
+        for (let w = 0; (st.tableWindow || inventoryDiff(bot.inventory, st).length) && w < 3000; w += 20) await sleep(20);
+        assert.equal(st.tableWindow, null, 'the table window is closed');
+        assert.deepEqual(inventoryDiff(bot.inventory, st), [], 'the bot\'s view matches the server');
+    };
+    c.setInventory({ 36: { id: ids[STICK], count: 40 } });
+    for (let w = 0; bot.inventory.slots[36]?.count !== 40 && w < 2000; w += 20) await sleep(20);
+    // The client's recipe built here, as in the first test (whatever rotn-data offers).
+    const { Recipe } = require('prismarine-recipe')(bot.registry);
+    const wall = new Recipe({ inShape: grid9, result: { id: ids[WALL], count: 1, metadata: 0 } });
+    const rejectedBefore = st.rejected.length;
+    const linesBefore = lines.length;
+
+    // Two crafts in one window, both the server's stick wall: 18 sticks used, two result clicks, no rejection.
+    let clicks = resultClicks();
+    await within(20000, bot.craft(wall, 2, tableBlock), 'craft 2 stick walls');
+    await inStep();
+    assert.deepEqual([c.count(ids[STICK]), c.count(ids[WALL])], [22, 2]);
+    assert.equal(resultClicks() - clicks, 2);
+    assert.equal(st.rejected.length, rejectedBefore);
+
+    // The server's result changes after the first craft (its stick-wall recipe matches once: a test hook for
+    // a result that differs between crafts): the 1st craft is taken, the 2nd is refused with no click, and
+    // its 9 sticks come back with the table's close.
+    c.setRecipes([{ shaped: grid9, result: { id: ids[WALL] }, maxUses: 1 }, { shaped: grid9, result: { id: ids[PLANKS] } }]);
+    clicks = resultClicks();
+    const err = await within(20000, bot.craft(wall, 2, tableBlock), 'craft 2 more').then(() => null, (e) => e);
+    assert.match(String(err?.message), /crafting: the server makes planks x1 from this grid, not ancientbeasts:stick_wall x1/);
+    await inStep();
+    assert.deepEqual([c.count(ids[STICK]), c.count(ids[WALL]), c.count(ids[PLANKS])], [13, 3, 0], 'one more wall; the 2nd grid\'s 9 sticks back');
+    assert.equal(resultClicks() - clicks, 1, 'only the 1st craft clicked slot 0');
+    assert.equal(st.rejected.length, rejectedBefore);
+    assert.deepEqual(st.dropped, []);
+    assert.deepEqual(lines.slice(linesBefore).map(l => l.replace(/window \d+/, 'window N')), ['[forge-bridge] craft refused: window N (minecraft:crafting_table): the server makes planks x1 from this grid, not ancientbeasts:stick_wall x1; nothing taken']);
 });
