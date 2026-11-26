@@ -10,6 +10,7 @@ import { findItem, countItem, carriedItems } from './rotn_names.js';
 import { getInventoryCounts, getInventoryTotals } from './world.js';
 import { heldFoodPoints } from './food.js';
 import { armsWrong, idleHands, handsAfter, installDigHands, HANDS } from './hands.js';
+import { rearmNeeds, rearmWeapon } from './skills.js';
 import { SETTLE_MS } from './death_report.js';
 
 const st = (name, count, slot, metadata = 0) => ({ name, count, slot, metadata, type: 1 });
@@ -120,6 +121,8 @@ export function slotReads(src, { loc = true } = {}) {
     visit(ast);
     return found;
 }
+/** The modules allowed to take the view's SLOTS and click slots themselves: the window click layer only. */
+const SLOTS_USERS = ['library/inventory_sync.js'];
 const takesViewSlots = (src) => /import\s*\{[^}]*\bSLOTS\b[^}]*\}\s*from\s*'\.\/inventory_view\.js'/.test(src);
 
 test('#657 review 4: the slot-read check sees destructuring, computed keys and aliases of the inventory', () => {
@@ -142,7 +145,9 @@ test('round 17 V: no module under src/agent reads inventory slots itself (only t
         const rel = relative(root, f);
         if (rel === 'library/inventory_view.js') continue;
         const src = readFileSync(f, 'utf8');
-        if (takesViewSlots(src)) continue; // the click layer: its slot numbers come from the view
+        // #657 round 2 (c): the click layer (inventory_sync.js) is the one intended importer of the view's SLOTS, and
+        // only it skips the check; another module that imports SLOTS is named here (a loophole otherwise).
+        if (takesViewSlots(src)) { if (!SLOTS_USERS.includes(rel)) bad.push(`${rel}: imports the view's SLOTS (only ${SLOTS_USERS.join(', ')} may)`); continue; }
         for (const r of slotReads(src)) bad.push(`${rel}:${r}`);
     }
     assert.deepEqual(bad, []);
@@ -228,6 +233,13 @@ test('#657 review 2: no idle repair while dead, nor until death_report.SETTLE_MS
     bot.health = 20;
     bot.rotnSpawnedAt = 10_000;
     assert.equal(await idleHands({ bot, actions: { executing: false } }, { now: 10_000 + SETTLE_MS - 1 }), null);
+    // #657 round 2 (d): once SETTLE_MS has passed, the repair runs again.
+    let clicks = 0;
+    bot.equip = () => { clicks++; return Promise.resolve(); };
+    const agent = { bot, actions: { executing: false } };
+    assert.ok(idleHands(agent, { now: 10_000 + SETTLE_MS }), 'repairs once the respawn has settled');
+    await new Promise(res => setTimeout(res, 0));
+    assert.equal(clicks, 1);
 });
 
 test('#657 review 3: the idle re-arm is not awaited (the update loop goes on) and is freed after HANDS.afterMs', async (t) => {
@@ -245,8 +257,48 @@ test('#657 review 3: the idle re-arm is not awaited (the update loop goes on) an
     assert.ok(r, 'started');
     assert.ok(Date.now() - t0 < 40, 'returned at once');
     assert.equal(agent.rotnIdleHandsBusy, true);
+    // #657 round 2 (d): a second idleHands while the click hangs does nothing.
+    assert.equal(await idleHands(agent), null, 'busy: no second repair');
     await new Promise(res => setTimeout(res, 80));
     assert.equal(agent.rotnIdleHandsBusy, false, 'freed after HANDS.afterMs');
+});
+
+test('#657 round 2 (b): a held pickaxe with the weapon in the off hand: one move (the swap holds the weapon), no weapon line', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
+    const pick = { name: 'stone_pickaxe', count: 1, metadata: 0 }, club = { name: 'spartanweaponry:club_wood', count: 1, metadata: 0 };
+    const bot = idleBot({ off: club, items: [pick] });
+    bot.heldItem = bot.inventory.slots[9]; // the pickaxe is the held stack
+    const need = rearmNeeds(bot);
+    assert.deepEqual(need.moves.map(m => [m.what, m.dest]), [['pickaxe', 'off-hand']]);
+    assert.equal(need.ok, true);
+    const w = armsWrong(bot);
+    assert.deepEqual([w.pickWrong, w.weaponWrong], [true, false]);
+    const clicks = [];
+    bot.equip = (item, dest) => { clicks.push([item.name, dest]); return Promise.resolve(); };
+    await idleHands({ bot, actions: { executing: false } });
+    await new Promise(res => setTimeout(res, 0));
+    assert.deepEqual(clicks, [['stone_pickaxe', 'off-hand']]);
+    assert.ok(lines.some(l => /^\[hands\] idle: the pickaxe is not in the off hand: re-arming$/.test(l)), lines.join('\n'));
+    assert.ok(!lines.some(l => /weapon is not/.test(l)), lines.join('\n'));
+});
+
+test('#657 round 2 (a): after the pickaxe\'s move, rearmWeapon equips the stack weaponOrder ranked, not another of the same name', async () => {
+    const pick = { name: 'stone_pickaxe', count: 1, metadata: 0 };
+    const clubA = { name: 'spartanweaponry:club_wood', count: 1, metadata: 0, nbt: { a: 1 } };
+    const clubB = { name: 'spartanweaponry:club_wood', count: 1, metadata: 0, nbt: { b: 2 } };
+    const bot = idleBot({ off: clubA, items: [pick, clubB] });
+    const need = rearmNeeds(bot);
+    assert.deepEqual(need.moves.map(m => [m.what, m.dest, m.item.slot]), [['pickaxe', 'off-hand', 9], ['weapon', 'hand', 10]]);
+    const equipped = [];
+    // bot.equip to the off hand swaps: the off hand's club A lands in the pickaxe's old slot 9, before club B (slot 10).
+    bot.equip = (item, dest) => {
+        equipped.push([item.slot, JSON.stringify(item.nbt ?? null), dest]);
+        if (dest === 'off-hand') { const s = bot.inventory.slots; const was = s[45]; s[45] = { ...s[item.slot], slot: 45 }; s[item.slot] = was ? { ...was, slot: item.slot } : null; }
+        return Promise.resolve();
+    };
+    assert.equal(await rearmWeapon(bot), true);
+    assert.deepEqual(equipped, [[9, 'null', 'off-hand'], [10, JSON.stringify({ b: 2 }), 'hand']], 'club B, the ranked stack (a name lookup took club A in slot 9)');
 });
 
 test('#657 review 7: the model\'s !equip does not outlive a death or a spawn', async () => {

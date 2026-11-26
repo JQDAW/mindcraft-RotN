@@ -82,5 +82,9 @@ export const windowCursor = (win) => (ok(win?.selectedItem) ? win.selectedItem :
 /** The count of slots in window 0 (the report's totalSlots). */
 export const slotCount = (bot) => slotsOf(bot).length;
 
+/** #657 round 2 (a): the same kind of stack (name, metadata, NBT): a stack found again after a window click moved it. */
+export const sameStack = (a, b) => !!a && !!b && a.name === b.name && (a.metadata ?? 0) === (b.metadata ?? 0)
+    && JSON.stringify(a.nbt ?? null) === JSON.stringify(b.nbt ?? null);
+
 /** The first stack among `stacks` the predicate takes, or null. */
 export const findIn = (stacks, pred) => stacks.find(s => ok(s) && pred(s)) ?? null;

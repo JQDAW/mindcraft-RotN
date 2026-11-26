@@ -130,7 +130,11 @@ export function rearmNeeds(bot) {
         // The off hand's own stack comes into the inventory when the pickaxe takes its place.
         const after = pickMoves && off && isWeaponItem(off) ? [...items, off] : items;
         const weapons = after.filter(i => isWeaponItem(i)).sort(order);
-        const held = bot.heldItem && isWeaponItem(bot.heldItem) ? bot.heldItem : null;
+        // #657 round 2 (b): the held item after that move: when the pickaxe is the held stack, the off hand's stack
+        // takes its slot (bot.equip swaps them), so a weapon there is then held (no extra equip, no false line).
+        const pickHeld = pickMoves && !!bot.heldItem && (bot.heldItem === pick || (bot.heldItem.slot != null && bot.heldItem.slot === pick?.slot));
+        const heldAfter = pickHeld ? off : bot.heldItem;
+        const held = heldAfter && isWeaponItem(heldAfter) ? heldAfter : null;
         if (held && !(weapons[0] && order(weapons[0], held) < 0)) return { moves, ok: true };
         if (!weapons[0]) return { moves, ok: !!held };
         moves.push({ item: weapons[0], dest: 'hand', what: 'weapon' });
@@ -151,11 +155,23 @@ export function rearmNeeds(bot) {
     return { moves, ok: true };
 }
 
+/**
+ * #657 round 2 (a): the stack weaponOrder ranked, found again after the pickaxe's move: the off hand's weapon is now in
+ * the pickaxe's old slot, any other weapon in its own slot. Failing that (the window changed), the weapons ranked again.
+ */
+function sameWeaponAfter(bot, ranked, movedPick) {
+    const items = bot.inventory.items?.() ?? [];
+    const slot = ranked.slot === inv.OFF_HAND ? movedPick?.slot : ranked.slot;
+    return items.find(i => i.slot === slot && inv.sameStack(i, ranked))
+        ?? items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0]
+        ?? ranked;
+}
+
 export async function rearmWeapon(bot) {
     const { moves, ok } = rearmNeeds(bot);
     for (const m of moves) {
         // The weapon taken after the pickaxe's move: as the window has it now (the swap may have moved it).
-        const item = m.what === 'weapon' && moves[0] !== m ? ((bot.inventory.items?.() ?? []).find(i => i.name === m.item.name && (i.metadata ?? 0) === (m.item.metadata ?? 0)) ?? m.item) : m.item;
+        const item = m.what === 'weapon' && moves[0] !== m ? sameWeaponAfter(bot, m.item, moves[0].item) : m.item;
         await bot.equip(item, m.dest);
     }
     return ok;
