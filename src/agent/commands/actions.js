@@ -1034,7 +1034,8 @@ export const actionsList = [
         // Bounded inside useToolOn (60 s); ACTION_LIMITS_MIN (2 min) is the backstop (G3 batch A: it hung).
         perform: function (agent, tool_name, target, ...rest) {
             // #645 review 6: right-clicking a bed sets the spawn too: refused once the Scroll of New Life is used.
-            if (/(^|:|_)bed$/.test(String(target ?? '')) && scrollUsed(agent)) return skills.bedRefusalText(scrollUsed(agent));
+            const used = /(^|:|_)bed$/.test(String(target ?? '')) ? scrollUsed(agent) : null; // #645 nit: asked once
+            if (used) return skills.bedRefusalText(used);
             return useOnAction(agent, tool_name, target, ...rest);
         }
     },

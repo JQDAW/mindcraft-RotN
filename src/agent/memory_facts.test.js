@@ -321,3 +321,12 @@ test('round 17 M: a death report adds to the Deaths record with a cause word, ne
     assert.equal(facts.deathCount, 1);
     assert.deepEqual(facts.deaths[0], { at: 101, cause: 'a mob', pos: { x: 10, y: 64, z: 5 } });
 });
+
+test('#650 review (the lead): a long why is clipped, never the "(N min ago at ...)" suffix', () => {
+    const facts = emptyFacts();
+    recordFailure(facts, { cmd: '!collectBlocks("undergroundbiomes:metamorphic_stone", 8)', why: 'Stopped collecting undergroundbiomes:metamorphic_stone: time limit of 600 s reached after 3 targets.', pos: { x: -123, y: 64, z: -456 }, at: 0 });
+    const line = buildMemory({ bot: { entity: { position: new Vec3(-100, 64, -450) } } }, { facts, now: 4 * 60_000 }).split('\n').find(l => l.startsWith('!collectBlocks'));
+    assert.ok(line.length <= MEMORY_FACTS.failureLineMax, `${line.length}: ${line}`);
+    assert.match(line, / \(4 min ago at -123, 64, -456, 24 W\)$/);
+    assert.match(line, /^!collectBlocks\("undergroundbiomes:metamorphic_stone", 8\): Stopped collecting .*\.\.\. \(4 min ago/);
+});
