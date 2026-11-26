@@ -120,6 +120,8 @@ export function agendaState(bot, clock = null) {
         forageable: () => { try { return nearbyForage(bot, { bases: bot.rotnBases?.() ?? [] }); } catch { return []; } },
         // Soak 16 (E4): where a failed escape left the bot trapped (escape.stillTrapped), or null.
         trapped: () => { try { return stillTrapped(bot); } catch { return null; } },
+        // #668 review (soak 17 E): the escape is climbing out now (library/escape.js sets bot.rotnClimbing).
+        escaping: () => bot.rotnClimbing === true,
     };
 }
 
@@ -132,10 +134,15 @@ export function agendaGoal(agenda, step, state = null) {
     }
     let when = step.when ?? 'before night';
     if (state && typeof step.whenNow === 'function') { try { when = step.whenNow(state) || when; } catch { /* the plain label */ } }
-    // Soak 16 (E4): trapped after a failed escape: the way out first, whatever the step.
+    // Soak 16 (E4): trapped after a failed escape: the way out first, whatever the step. #668 review (soak 17, 18:07:34:
+    // "... Then: ... craft it with !craftRecipe("cobblestone", 5)"; the model sent that craft a second later and it cut
+    // the running escape): while trapped or escaping, only the way out; the step's own text comes back once out.
     let trap = null;
     try { trap = state?.trapped?.() ?? null; } catch { trap = null; }
-    if (trap) text = `You are trapped at ${trap.x}, ${trap.y}, ${trap.z} (no walkable way to open ground): get out first with !goToSurface (it goes on from where you are). Then: ${text}`;
+    let escaping = false;
+    try { escaping = !!state?.escaping?.(); } catch { escaping = false; }
+    if (escaping) text = `The escape is getting you out${trap ? ` of ${trap.x}, ${trap.y}, ${trap.z}` : ''} right now: let it finish. Send no command that digs, crafts, collects or walks until it says you are out (such a command waits for it). This step comes back once you are out.`;
+    else if (trap) text = `You are trapped at ${trap.x}, ${trap.y}, ${trap.z} (no walkable way to open ground): get out first with !goToSurface (it goes on from where you are). Only that until you are out; this step comes back then.`;
     if (step.reserve) return `RotN agenda, step ${step.id} (${when}): ${text} When you hold enough, the agenda moves on by itself.`;
     return `RotN agenda, step ${n} of ${agenda.steps.length} (${step.id}): ${text} `
         + 'When this step is done, the agenda moves on by itself.';

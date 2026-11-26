@@ -202,3 +202,49 @@ test('soak 17 E(4)(i): climbing out, outnumbered: no flee walk; the zombie in re
     free.agent.bot.rotnClimbing = false;
     assert.equal(holdsInPlace(free.agent.bot), false);
 });
+
+// ---- #668 review (soak 17, 18:07:34-35): the standing goal while trapped, and a command during the escape ----
+test('#668 review: trapped or escaping, the standing goal offers only the way out (18:07:34 also said "craft it with !craftRecipe(\\"cobblestone\\", 5)")', async () => {
+    const { agendaGoal } = await import('./agenda_driver.js');
+    const step = { id: 'shelter_blocks', goal: 'Night is near: craft it with !craftRecipe("cobblestone", 5).' };
+    const agenda = { steps: [step] };
+    const trapped = agendaGoal(agenda, step, { trapped: () => V(80, 46, 71), escaping: () => false });
+    assert.match(trapped, /You are trapped at 80, 46, 71 .*get out first with !goToSurface .*Only that until you are out; this step comes back then\./);
+    assert.doesNotMatch(trapped, /craftRecipe|collectBlocks|Then:/);
+    const escaping = agendaGoal(agenda, step, { trapped: () => V(80, 46, 71), escaping: () => true });
+    assert.match(escaping, /The escape is getting you out of 80, 46, 71 right now: let it finish\. Send no command that digs, crafts, collects or walks until it says you are out \(such a command waits for it\)\./);
+    assert.doesNotMatch(escaping, /craftRecipe|!goToSurface/);
+    assert.match(agendaGoal(agenda, step, { trapped: () => null, escaping: () => false }), /craftRecipe\("cobblestone", 5\)/, 'out: the step as before');
+});
+
+test('#668 review: a command sent while the escape climbs out waits for it (no interrupt), then runs; a reflex still interrupts', async (t) => {
+    const lines = [];
+    quiet(t, lines);
+    const { ActionManager, ESCAPE_WAIT } = await import('./action_manager.js');
+    const { ESCAPE_DAY } = await import('./library/escape.js');
+    assert.ok(ESCAPE_WAIT.maxMs >= ESCAPE_DAY.totalMs, 'the wait covers a whole day escape');
+    const bot = { interrupt_code: false, output: '', emit() {} };
+    const agent = { bot, clearBotLogs() {}, cleanKill() {}, requestInterrupt() { bot.interrupt_code = true; } };
+    const manager = new ActionManager(agent);
+    const order = [];
+    const escapeJob = async () => {
+        bot.rotnClimbing = true;
+        for (let i = 0; i < 6 && !bot.interrupt_code; i++) await new Promise(r => setTimeout(r, 25));
+        order.push(bot.interrupt_code ? 'escape interrupted' : 'escape done');
+        bot.rotnClimbing = false;
+    };
+    const escapeRun = manager.runAction('action:escape (trapped)', escapeJob, { timeout: 0 });
+    await new Promise(r => setTimeout(r, 20));
+    const craft = manager.runAction('action:craftRecipe', () => { order.push('craft'); return Promise.resolve(); }, { timeout: 0 });
+    const [er] = await Promise.all([escapeRun, craft]);
+    assert.deepEqual(order, ['escape done', 'craft']);
+    assert.equal(er.interrupted, false);
+    assert.ok(lines.some(l => /^\[action\] "action:craftRecipe" waits for the escape \("action:escape \(trapped\)"\) to end: getting out comes first$/.test(l)), lines.join('\n'));
+    // A reflex (mode:) interrupts as before.
+    order.length = 0;
+    bot.interrupt_code = false;
+    const again = manager.runAction('action:escape (trapped)', escapeJob, { timeout: 0 });
+    await new Promise(r => setTimeout(r, 20));
+    await Promise.all([again, manager.runAction('mode:self_preservation', () => { order.push('reflex'); return Promise.resolve(); }, { timeout: 0 })]);
+    assert.deepEqual(order, ['escape interrupted', 'reflex']);
+});

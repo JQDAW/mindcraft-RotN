@@ -2,6 +2,9 @@ import { safeStack } from './safe_error.js';
 import { clearReplan } from './replan.js';
 import { handsBefore, handsAfter } from './library/hands.js';
 
+/** #668 review: how long a command waits for a running escape (escape.ESCAPE_DAY.totalMs and a margin; a test pins it). */
+export const ESCAPE_WAIT = { maxMs: 5 * 60_000 + 10_000, stepMs: 200 };
+
 export class ActionManager {
     constructor(agent) {
         this.agent = agent;
@@ -88,6 +91,16 @@ export class ActionManager {
             }
             this.last_action_time = Date.now();
             console.log('executing code...\n');
+
+            // #668 review (soak 17, 18:07:35: the model's !craftRecipe cut the running escape): a command while the escape
+            // climbs out (bot.rotnClimbing) waits for it to end (at most ESCAPE_WAIT.maxMs), then runs; reflexes ("mode:")
+            // still interrupt, and !stop stops it at once (it does not come through here).
+            const climbing = () => this.agent.bot?.rotnClimbing === true;
+            if (this.executing && climbing() && String(actionLabel).startsWith('action:')) {
+                console.log(`[action] "${actionLabel}" waits for the escape ("${this.currentActionLabel}") to end: getting out comes first`);
+                const t0 = Date.now();
+                while (this.executing && climbing() && Date.now() - t0 < ESCAPE_WAIT.maxMs) await new Promise(r => setTimeout(r, ESCAPE_WAIT.stepMs));
+            }
 
             // await current action to finish (executing=false), with 10 seconds timeout
             // also tell agent.bot to stop various actions
