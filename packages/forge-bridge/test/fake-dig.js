@@ -28,6 +28,11 @@
 // #629 review 5: forgeDigTime gives the client's tick-rounded time (ceil(1 / delta) ticks), and this model
 // takes relHardness = 50 ms / that time, slightly below the server's real value; so a case that sits right
 // at f = 0.7 or 1.0 is not trustworthy here, only ones clearly on one side.
+// With the server tick (opts.tick 'external', fake-tick.js; soak 17) the delayed destroy runs in that tick
+// (update(), as EntityPlayerMP.onUpdate runs or.a() before detectAndSendChanges, `B_` bytecode 4 and 38), and with
+// opts.toolDamage a block the player breaks damages the held item by one when it has a tool class (ItemTool.
+// onBlockDestroyed); the change is not sent here, the tick's detectAndSendChanges sends it. opts.multiBlockChange:
+// a broken block is sent as a multi_block_change of one record, not a block_change (state.multiBlockChange, changeable).
 // Not modelled: the reach check, spawn protection, Forge's LeftClickBlock event, drops and their pickup,
 // neighbour updates, block break progress packets.
 
@@ -45,12 +50,15 @@ const posKey = (p) => `${p.x},${p.y},${p.z}`;
  * @param {object[]} opts.blocks [{ x, y, z, name, meta, id }] the blocks the server knows (id: the block id)
  * @param {number} [opts.tickMs] one server tick (50)
  * @param {object} [opts.effects] the server player's effects, { id: { amplifier } }
+ * @param {string} [opts.tick] 'external': no timer of its own; the server tick calls update()
+ * @param {boolean} [opts.toolDamage] a broken block damages the held tool by one (not sent here)
+ * @param {boolean} [opts.multiBlockChange] send a broken block as a multi_block_change
  */
-export function attachFakeDig(client, { containers, rd, registry, itemNames, blocks, tickMs = 50, effects = {} }) {
+export function attachFakeDig(client, { containers, rd, registry, itemNames, blocks, tickMs = 50, effects = {}, tick: tickMode = null, toolDamage = false, multiBlockChange = false }) {
     const world = new Map(blocks.map((b) => [posKey(b), { ...b }]));
     // destroy: destroyPos and its START (kept after a STOP or an ABORT); destroying: isDestroyingBlock;
     // delayed: the held delayed destroy (h, i, j), or null.
-    const state = { world, digs: [], destroy: null, destroying: false, delayed: null, effects };
+    const state = { world, digs: [], destroy: null, destroying: false, delayed: null, effects, multiBlockChange };
 
     const heldTool = () => {
         const it = containers.state.inv[36 + containers.state.held];
@@ -71,7 +79,12 @@ export function attachFakeDig(client, { containers, rd, registry, itemNames, blo
     function breakBlock(pos) {
         const b = world.get(posKey(pos));
         world.set(posKey(pos), { ...b, name: 'minecraft:air', meta: 0, id: 0 });
-        client.write('block_change', { location: pos, type: 0 });
+        const { item, tool } = heldTool();
+        if (toolDamage && item && tool) containers.state.inv[36 + containers.state.held] = { ...item, meta: (item.meta ?? 0) + 1 };
+        if (state.multiBlockChange) {
+            const cx = Math.floor(pos.x / 16), cz = Math.floor(pos.z / 16);
+            client.write('multi_block_change', { chunkX: cx, chunkZ: cz, records: [{ horizontalPos: ((pos.x - cx * 16) << 4) | (pos.z - cz * 16), y: pos.y, blockId: 0 }] });
+        } else client.write('block_change', { location: pos, type: 0 });
     }
     const sendBack = (pos) => { // processPlayerDigging, offset 446: the block when it is not air
         const b = world.get(posKey(pos));
@@ -80,7 +93,7 @@ export function attachFakeDig(client, { containers, rd, registry, itemNames, blo
     const ticksSince = (t) => Math.floor((Date.now() - t) / tickMs);
 
     // The tick's delayed destroy (or.a(), bytecode 10-160): with the held item now, every tick.
-    const tick = setInterval(() => {
+    function update() {
         const d = state.delayed;
         if (!d) return;
         if (isAir(d.pos)) { state.delayed = null; return; }
@@ -90,8 +103,9 @@ export function attachFakeDig(client, { containers, rd, registry, itemNames, blo
             breakBlock(d.pos);
             state.digs.push({ status: 'tick', pos: { ...d.pos }, f, outcome: 'broken by the delayed destroy' });
         }
-    }, tickMs);
-    tick.unref?.();
+    }
+    const tick = tickMode === 'external' ? null : setInterval(update, tickMs);
+    tick?.unref?.();
     client.once('end', () => clearInterval(tick));
 
     client.on('block_dig', (p) => {
@@ -136,6 +150,8 @@ export function attachFakeDig(client, { containers, rd, registry, itemNames, blo
         state,
         /** The server's block at a position: { name, meta, id }, or undefined. */
         blockAt: (pos) => world.get(posKey(pos)),
+        /** One tick's delayed destroy (with opts.tick 'external', the server tick calls it). */
+        update,
         stop() { clearInterval(tick); state.delayed = null; },
     };
 }
