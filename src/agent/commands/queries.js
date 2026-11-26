@@ -12,6 +12,22 @@ import { describeAgenda } from '../agenda.js';
 import { agendaState } from '../agenda_driver.js';
 import { memoryMode, addNote, MEMORY_FACTS } from '../memory_facts.js';
 import { view } from '../library/inventory_view.js';
+import { isGenericCobble, cobbleChoices, ROCKS_PER_COBBLE } from '../library/cobble.js';
+import { craftNeeds, describeNeeds } from '../library/craft_needs.js';
+
+/**
+ * Soak 17 L3 (18:07:32: "cobblestone is a base item, you need to find 1 more in the world", with 420 rocks carried):
+ * cobblestone is 4 rocks of one kind in the 2x2 grid on RotN (each rock kind makes its own cobble: cobble.js), which
+ * mcdata's planner does not know. The plan from the rocks the bot carries, or what to collect.
+ */
+function cobblePlanText(bot, quantity) {
+    const choices = cobbleChoices(bot);
+    const can = choices.reduce((n, c) => n + Math.floor(c.have / ROCKS_PER_COBBLE), 0);
+    const kinds = choices.slice(0, 3).map(c => `${c.have} ${c.rock} make ${Math.floor(c.have / ROCKS_PER_COBBLE)} ${c.gives}`).join('; ');
+    if (can >= quantity) return `Cobblestone comes from ${ROCKS_PER_COBBLE} rocks of one kind in your inventory grid (each rock kind makes its own cobble). You have enough: ${kinds}. Craft it with !craftRecipe("cobblestone", ${quantity}).`;
+    const short = quantity - can;
+    return `Cobblestone comes from ${ROCKS_PER_COBBLE} rocks of one kind in your inventory grid (each rock kind makes its own cobble). ${can ? `You can make ${can} now (${kinds}); ` : 'You have no 4 rocks of one kind; '}for ${short} more, collect ${short * ROCKS_PER_COBBLE} rocks with !collectBlocks("pyrotech:rock", ${short * ROCKS_PER_COBBLE}), then !craftRecipe("cobblestone", ${quantity}).`;
+}
 
 const pad = (str) => {
     return '\n' + str + '\n';
@@ -359,9 +375,19 @@ export const queryList = [
                 prefixMessage = `You already have ${existingCount} ${target_item} in your inventory. If you need to craft more,\n`;
             }
 
+            // Soak 17 L3: cobblestone from rocks (the planner calls it a base item).
+            if (isGenericCobble(targetItem) || isGenericCobble(target_item)) return pad(prefixMessage + cobblePlanText(bot, quantity));
             // Generate crafting plan
             try {
                 let craftingPlan = mc.getDetailedCraftingPlan(target_item, quantity, curr_inventory);
+                // Soak 17 L3 (18:07:18: "missing 3 pyrotech:rock:0" for a stone pickaxe with 420 metamorphic rocks held): the
+                // planner counts one rock variant; RotN's recipe takes any rock (rotn-data's ore). When rotn-data's recipe is
+                // filled by what the bot carries, the reply says so (for one craft).
+                if (/missing/i.test(craftingPlan)) {
+                    let needs = null;
+                    try { needs = craftNeeds(bot, target_item); } catch { needs = null; }
+                    if (needs?.ready) craftingPlan = `You have all items required to craft ${target_item} once (an input like "rock" takes any of its kinds): ${describeNeeds(target_item, needs)} Craft it with !craftRecipe("${target_item}", 1).`;
+                }
                 craftingPlan = prefixMessage + craftingPlan;
                 return pad(craftingPlan);
             } catch (error) {

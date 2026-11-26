@@ -1,4 +1,20 @@
 import { takeReplanNote } from './replan.js';
+import { freshGoalText } from './agenda_driver.js';
+
+/**
+ * Soak 17 S6: a turn's goal text is built after the inventory settles: once no slot has changed for quietMs (a forage's
+ * pickup lands a moment after its "Foraged" line), at most maxMs. No wait when nothing changed lately.
+ */
+export const INVENTORY_SETTLE = { quietMs: 400, maxMs: 1500 };
+export async function inventorySettled(bot, { quietMs = INVENTORY_SETTLE.quietMs, maxMs = INVENTORY_SETTLE.maxMs, now = Date.now } = {}) {
+    if (!bot?.inventory) return;
+    if (!bot.rotnInvWatch && typeof bot.inventory.on === 'function') {
+        bot.rotnInvWatch = true;
+        bot.inventory.on('updateSlot', () => { bot.rotnInvChangedAt = Date.now(); });
+    }
+    const t0 = now();
+    while (now() - (bot.rotnInvChangedAt ?? -Infinity) < quietMs && now() - t0 < maxMs) await new Promise(r => setTimeout(r, 50));
+}
 
 const STOPPED = 0
 const ACTIVE = 1
@@ -78,6 +94,8 @@ export class SelfPrompter {
             }
             if (this.interrupt) break;
             note = takeReplanNote(this.agent) ?? note; // a reflex's re-plan request, if any
+            // Soak 17 S6: the standing goal's held-food figure read now, after the inventory settles.
+            try { await inventorySettled(this.agent?.bot); this.prompt = freshGoalText(this.agent, this.prompt); } catch { /* the text as set */ }
             let msg = `You are self-prompting with the goal: '${this.prompt}'. Your next response MUST contain a command with this syntax: !commandName. Respond:`;
             if (note) msg = `${note} ${msg}`;
 

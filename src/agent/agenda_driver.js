@@ -24,7 +24,7 @@ import { nearbyHuntable } from './library/hunting.js';
 import { nearbyForage } from './library/foraging.js';
 import { stillTrapped } from './library/escape.js';
 import { hasWeapon, WEAPON } from './library/threats.js';
-import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT, foodTargetNow, SHELTER_HOLD } from './agenda.js';
+import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT, foodTargetNow, SHELTER_HOLD, STANDING_GOAL_PREFIX } from './agenda.js';
 import { SHELTER_LEAD_MIN } from './library/night.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
@@ -139,6 +139,25 @@ export function agendaGoal(agenda, step, state = null) {
     if (step.reserve) return `RotN agenda, step ${step.id} (${when}): ${text} When you hold enough, the agenda moves on by itself.`;
     return `RotN agenda, step ${n} of ${agenda.steps.length} (${step.id}): ${text} `
         + 'When this step is done, the agenda moves on by itself.';
+}
+
+/**
+ * Soak 17 S6 (driver.log:2838, :2923): the standing goal's "(you hold H)" was built when the goal was set, before a
+ * forage's pickup was counted (2.3 and 19.9 while the facts line a second later said 4.3 and 20.9), and the model
+ * repeated the old figure. At each self-prompt turn the figure is read again (heldFoodPoints, the facts line's own read);
+ * the drivers' identity fields follow the new text (ownsPrompt compares texts).
+ */
+export function freshGoalText(agent, prompt) {
+    if (typeof prompt !== 'string' || !prompt.startsWith(STANDING_GOAL_PREFIX) || !agent?.bot) return prompt;
+    let held;
+    try { held = heldFoodPoints(agent.bot); } catch { return prompt; }
+    if (!Number.isFinite(held)) return prompt;
+    const next = prompt.replace(/\(you hold [0-9.]+\)/, `(you hold ${held})`);
+    if (next === prompt) return prompt;
+    if (agent._autonomy_prompt === prompt) agent._autonomy_prompt = next;
+    if (agent._agenda_open_goal === prompt) agent._agenda_open_goal = next;
+    if (agent._open_goal_prompt === prompt) agent._open_goal_prompt = next; // priority.openGoalTick's identity
+    return next;
 }
 
 /** The prompt prefixes the agenda and tasks write; a model's !goal may not use them (#174 re-review). */

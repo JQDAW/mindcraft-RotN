@@ -75,7 +75,7 @@ test('round 17 M: an empty state gives only the lines it has; no notes, no notes
     const agent = fakeAgent(t);
     agent.agenda.stop();
     const text = buildMemory(agent, { facts: emptyFacts(), notes: '', now: 0 });
-    assert.equal(text, `${FACTS_HEAD}\nAgenda: stopped, all steps done; done: none\nReserves: shelter blocks 0 of 14 (stone or cobble); food held 0 points, a night needs ${nightFoodNeed({ food: 10 })} more than your bar; no pickaxe, axe or weapon`);
+    assert.equal(text, `${FACTS_HEAD}\nAgenda: stopped, no step chosen yet; done: none\nReserves: shelter blocks 0 of 14 (stone or cobble); food held 0 points, a night needs ${nightFoodNeed({ food: 10 })} more than your bar; no pickaxe, axe or weapon`);
     assert.equal(buildMemory({}, { notes: 'x' }), `${NOTES_HEAD} x`);
 });
 
@@ -87,16 +87,19 @@ test('round 17 M: tonight\'s shelter while sheltered, the scroll\'s respawn poin
     assert.equal(places, 'Places: tonight\'s shelter 1, 64, 0 (here); respawn point (Scroll of New Life) 1, 64, 0 (here)');
 });
 
-test('round 17 M: the records are bounded: 3 failures, 2 deaths shown (the count kept), 4 collect kinds, one line per item', () => {
+test('round 17 M, soak 17 S7: the records are bounded: failures by chars (the newest first), 2 deaths shown (the count kept), 4 collect kinds, one line per item', () => {
     const facts = emptyFacts();
-    for (let i = 0; i < 5; i++) recordFailure(facts, { cmd: `!craftRecipe("x${i}", 1)`, why: 'y'.repeat(300), at: i });
-    assert.deepEqual(facts.failures.map(f => f.cmd), ['!craftRecipe("x2", 1)', '!craftRecipe("x3", 1)', '!craftRecipe("x4", 1)']);
+    for (let i = 0; i < 15; i++) recordFailure(facts, { cmd: `!craftRecipe("x${i}", 1)`, why: 'y'.repeat(300), at: i });
+    assert.equal(facts.failures.length, MEMORY_FACTS.failuresStored, 'the record keeps the newest failuresStored');
+    assert.equal(facts.failures.at(-1).cmd, '!craftRecipe("x14", 1)');
     assert.equal(facts.failures[0].why.length, MEMORY_FACTS.failureWhyMax);
-    // #637 review 2: one line each, all three shown, each at most failureLineMax chars.
+    // #637 review 2: one line each, each at most failureLineMax chars; S7: the newest first, within failuresChars.
     const shown = buildMemory({}, { facts, now: 10 }).split('\n');
     const i = shown.indexOf('Recent failures (newest first):');
-    assert.deepEqual(shown.slice(i + 1, i + 4).map(l => l.slice(0, 20)), ['!craftRecipe("x4", 1', '!craftRecipe("x3", 1', '!craftRecipe("x2", 1']);
-    assert.ok(shown.slice(i + 1, i + 4).every(l => l.length <= MEMORY_FACTS.failureLineMax), shown.join('\n'));
+    const lines = shown.slice(i + 1).filter(l => l.startsWith('!craftRecipe'));
+    assert.deepEqual(lines.slice(0, 3).map(l => l.split(':')[0]), ['!craftRecipe("x14", 1)', '!craftRecipe("x13", 1)', '!craftRecipe("x12", 1)']);
+    assert.ok(lines.length >= 4 && lines.reduce((n, l) => n + l.length + 1, 0) <= MEMORY_FACTS.failuresChars, `${lines.length} lines`);
+    assert.ok(lines.every(l => l.length <= MEMORY_FACTS.failureLineMax), shown.join('\n'));
     for (let i = 0; i < 4; i++) recordDeath(facts, { at: i, cause: 'X fell from a high place' });
     assert.equal(facts.deathCount, 4);
     assert.equal(facts.deaths.length, 2);
