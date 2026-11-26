@@ -78,6 +78,11 @@
 //   I10 death-loop           at least `minDeaths` deaths, each within `windowMin` and `radius` blocks of the one before.
 //   I11 summary-cost         memory summaries (test/tools/soak-spend.mjs's pairing) with more than `bigReasoning`
 //                            reasoning tokens, and the summaries' share of the spend.
+//   I13-I15                  round 17 M's evidence checks 1-3 (code-built memory, #637): soak-memory-checks.mjs has
+//                            their rules. I13 memory-facts: each `[memory] facts` field against the state lines (n/a
+//                            with no facts line); I14 wrong-state claims in the model's replies; I15 repeated failures
+//                            (the same command and args failing again within 10 min). M4 check 5 is I11's share with
+//                            its USD per hour of journal (`usdPerHour`).
 //   I12 unattributed-hurt    `(by unknown)` hurt lines; deaths the server puts on a mob (`was slain by`, `was shot
 //                            by`) whose last hurt line within `hurtS` before it names no mob (or none came). n/a before
 //                            rotn-v0.1.5 (no hurt lines; M1 and soak 2). Deaths pair with server.log's in order; when the
@@ -87,6 +92,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parseJournal as spendJournal, calls as spendCalls } from './soak-spend.mjs';
+import { memoryFactsCheck, wrongClaims, repeatedFailures, serverChat, MEMORY_CHECKS } from './soak-memory-checks.mjs';
 
 export const INVARIANTS = {
     trapped: { minAttempts: 3, gapMin: 10, attemptGapS: 2, escapeJoinS: 30, spanCells: 3 },
@@ -203,8 +209,9 @@ const BOT_AT = [
     /^\[respawn\] (?:now .* at|escape done: .* at) (-?\d+), (-?\d+), (-?\d+)/,
 ];
 const cellOf = (m) => `${Math.floor(Number(m[1]))}, ${Math.floor(Number(m[2]))}, ${Math.floor(Number(m[3]))}`;
+// null when a cell is not known (#648 re-review: never taken as the same place).
 const dist = (a, b) => {
-    if (!a || !b) return 0; // a cell not known: taken as the same place
+    if (!a || !b) return null;
     const [x1, y1, z1] = a.split(', ').map(Number), [x2, y2, z2] = b.split(', ').map(Number);
     return Math.hypot(x1 - x2, y1 - y2, z1 - z2);
 };
@@ -290,14 +297,16 @@ export function trapSpans(lines) {
         for (const re of BOT_AT) { const m = re.exec(l.msg); if (m) { events.push({ n: l.n, t: l.t, kind: 'pos', at: cellOf(m) }); break; } }
     }
     events.sort((a, b) => a.n - b.n);
+    const within = (a, b) => { const d = dist(a, b); return d != null && d <= cells; };
     const spans = [];
     let span = null;
     let pend = null; // interrupted escapes not yet a span
     const close = (ev, why) => { if (span) spans.push({ ...span, until: ev.t, untilLine: ev.n, end: why }); span = null; };
     const fail = (ev, at, fromL, extra = {}) => {
-        if (span && dist(at, span.at) <= cells) { span.fails++; if (!span.at) span.at = at; if (extra.gaveUp) span.gaveUp = true; return; }
-        if (span) close(ev, 'moved away');
-        const p = pend && dist(at, pend.at) <= cells ? pend : null;
+        if (span && within(at, span.at)) { span.fails++; if (extra.gaveUp) span.gaveUp = true; return; }
+        // The old span ends where the new escape starts.
+        if (span) close({ n: fromL.n, t: fromL.t }, at && span.at ? 'moved away' : 'another escape (a cell not known)');
+        const p = pend && within(at, pend.at) ? pend : null;
         span = { fromT: p ? p.fromT : fromL.t, fromN: p ? p.fromN : fromL.n, at: p ? p.at : at, fails: 1, interrupted: p ? p.interrupted : 0, gaveUp: !!extra.gaveUp };
         pend = null;
     };
@@ -306,8 +315,8 @@ export function trapSpans(lines) {
             const r = ev.e.result;
             if (r === 'cleared') { close(ev, 'cleared'); pend = null; continue; }
             if (r === 'interrupted') {
-                if (span && dist(ev.e.at, span.at) <= cells) span.interrupted++;
-                else if (pend && dist(ev.e.at, pend.at) <= cells) pend.interrupted++;
+                if (span && within(ev.e.at, span.at)) span.interrupted++;
+                else if (pend && within(ev.e.at, pend.at)) pend.interrupted++;
                 else pend = { fromT: ev.e.from.t, fromN: ev.e.from.n, at: ev.e.at, interrupted: 1 };
                 continue;
             }
@@ -321,8 +330,8 @@ export function trapSpans(lines) {
             close(ev, 'died');
             continue;
         }
-        if (span && dist(ev.at, span.at) > cells) close(ev, 'moved away');
-        if (pend && dist(ev.at, pend.at) > cells) pend = null;
+        if (span && span.at && dist(ev.at, span.at) > cells) close(ev, 'moved away');
+        if (pend && pend.at && dist(ev.at, pend.at) > cells) pend = null;
     }
     if (span && lines.length) close({ n: lines.at(-1).n, t: lines.at(-1).t }, 'open');
     return spans.map(s => ({ t: hms(s.fromT), line: s.fromN, at: s.at, until: hms(s.until), untilLine: s.untilLine, minutes: Math.round((s.until - s.fromT) / 6000) / 10, end: s.end, fails: s.fails, interrupted: s.interrupted, gaveUp: s.gaveUp }));
@@ -529,7 +538,14 @@ function summaryCost(text) {
     const big = mem.filter(c => (c.reasoning ?? 0) > INVARIANTS.summaryCost.bigReasoning);
     const usd = list.reduce((s, c) => s + (c.usd ?? 0), 0);
     const memUsd = mem.reduce((s, c) => s + (c.usd ?? 0), 0);
-    return { count: big.length, summaries: mem.length, maxReasoning: mem.reduce((m, c) => Math.max(m, c.reasoning ?? 0), 0), share: usd ? Math.round(1000 * memUsd / usd) / 10 : null, first: firsts(big.map(c => ({ t: hms(c.t), reasoning: c.reasoning }))) };
+    // M4 check 5 (the lead's addition): the absolute spend too, per hour of journal.
+    const lines = readJournal(text);
+    const hours = lines.length > 1 ? (lines.at(-1).t - lines[0].t) / 3_600_000 : 0;
+    const skipped = lines.filter(l => /^\[memory\] summary skipped \(no player turn\)/.test(l.msg)).length;
+    return {
+        count: big.length, summaries: mem.length, maxReasoning: mem.reduce((m, c) => Math.max(m, c.reasoning ?? 0), 0), share: usd ? Math.round(1000 * memUsd / usd) / 10 : null,
+        usd: Math.round(usd * 1e6) / 1e6, usdPerHour: hours ? Math.round(1e5 * usd / hours) / 1e5 : null, skipped, first: firsts(big.map(c => ({ t: hms(c.t), reasoning: c.reasoning }))),
+    };
 }
 
 function unattributed(lines, serverText, rel) {
@@ -573,6 +589,10 @@ export function soakInvariants(text, { serverText = null } = {}) {
         I10: deathLoops(lines),
         I11: summaryCost(text),
         I12: unattributed(lines, serverText, rel),
+        ...(() => {
+            const chat = serverChat(serverText, lines[0]?.t);
+            return { I13: memoryFactsCheck(lines, chat), I14: wrongClaims(lines, chat), I15: repeatedFailures(lines) };
+        })(),
     };
 }
 
@@ -593,6 +613,10 @@ export function baselineRow(r) {
         I10_deathLoops: c(r.I10), I10_deaths: c(r.I10, 'deaths'), I10_loopDeaths: c(r.I10, 'loopDeaths'),
         I11_bigSummaries: c(r.I11), I11_summaries: c(r.I11, 'summaries'), I11_shareOfSpend: c(r.I11, 'share'),
         I12_unknownHurt: c(r.I12), I12_deathsUnnamed: c(r.I12, 'deathsUnnamed'),
+        I11_usdPerHour: c(r.I11, 'usdPerHour'),
+        I13_factsLines: c(r.I13, 'factsLines'), I13_misses: c(r.I13, 'misses'), I13_fields: c(r.I13, 'fields'), I13_gate: c(r.I13, 'gate'),
+        I14_claims: c(r.I14, 'claims'), I14_wrong: c(r.I14, 'wrong'), I14_unverifiable: c(r.I14, 'unverifiable'),
+        I15_repeats: c(r.I15), I15_perHour: c(r.I15, 'perHour'), I15_inMemory: c(r.I15, 'inMemory'),
     };
 }
 
@@ -644,12 +668,20 @@ export function render(r, name = 'soak') {
     row('I9', 'false-collect', r.I9, r.I9 && `${r.I9.count} false "Broke …" lines`);
     row('I10', 'death-loop', r.I10, `${r.I10.count} loops (${r.I10.loopDeaths} of ${r.I10.deaths} deaths)`);
     row('I11', 'summary-cost', r.I11, `${r.I11.count} of ${r.I11.summaries} memory summaries over ${INVARIANTS.summaryCost.bigReasoning} reasoning tokens (max ${r.I11.maxReasoning}); summaries ${cell(r.I11.share)}% of the spend`);
+    o.push(`    M4 check 5: summaries ${cell(r.I11.share)}% of USD ${r.I11.usd} (USD ${cell(r.I11.usdPerHour)}/h of journal); ${r.I11.skipped} chunks cut with no summary call`);
     row('I12', 'unattributed-hurt', r.I12, r.I12 && `${r.I12.count} "(by unknown)" hurt lines; ${cell(r.I12.deathsUnnamed)} deaths by a mob with no mob named before them${r.I12.deathsUnnamed == null ? ` (${r.I12.note ?? 'no server.log'})` : ''}`);
     for (const d of r.I12?.deathsFirst ?? []) o.push(`    death ${d.t} (driver.log:${d.line}), server: ${d.server} (server.log:${d.serverLine})`);
+    row('I13', 'memory-facts', r.I13, r.I13 && `gate ${r.I13.gate} (0 misses and at least ${MEMORY_CHECKS.minSamples} non-trivial samples per field); ${r.I13.misses} of ${r.I13.fields} verifiable fields wrong in ${r.I13.factsLines} facts lines (${r.I13.unverifiable} unverifiable)`);
+    for (const [k, v] of Object.entries(r.I13?.byField ?? {})) o.push(`    field ${k}: ${v.match} match, ${v.miss} miss, ${v.unverifiable} unverifiable${v.trivial ? ` (${v.trivial} of the matches trivial)` : ''}; ${r.I13.gateByField[k].samples} samples: ${r.I13.gateByField[k].verdict}`);
+    for (const m of r.I13?.missesFirst ?? []) o.push(`    miss ${m.t} (driver.log:${m.line}) ${m.field}: said ${m.said}, state ${m.state ?? '?'}`);
+    row('I14', 'wrong-state claims', r.I14, `${r.I14.wrong} of ${r.I14.claims} claims wrong (${r.I14.unverifiable} unverifiable) in ${r.I14.claimReplies} of ${r.I14.replies} replies; y ${r.I14.byKind.y.join('/')}, count ${r.I14.byKind.count.join('/')}, step ${r.I14.byKind.step.join('/')} (right/wrong/unverifiable)`);
+    for (const w of r.I14.wrongFirst) o.push(`    wrong ${w.t} (driver.log:${w.line}) ${w.kind}: said ${w.said}, state ${w.state ?? '?'}`);
+    o.push(`    hand-check sample (${r.I14.handSample.length}): ${r.I14.handSample.map(h => h.line).join(', ') || '–'}`);
+    row('I15', 'repeated failures', r.I15, `${r.I15.count} repeats within ${MEMORY_CHECKS.repeatMin} min of the same failure (${cell(r.I15.perHour)}/h; ${r.I15.inMemory} after a facts line named it) of ${r.I15.failures} failed commands; within 30 min ${r.I15.within30}, within 60 min ${r.I15.within60}`);
     return o.join('\n');
 }
 
-const COLS = [['I1_trapped', 'I1 trap'], ['I1_longestMin', 'min'], ['I1_escapes', 'esc'], ['I1_escapesNotCleared', 'esc fail'], ['I2_couldNotLeave', 'I2'], ['I3_rejectedClicks', 'I3 clicks'], ['I4_digRefusedWithTool', 'I4'], ['I5_nightFoodShort', 'I5 short'], ['I5_nightFoodLines', 'night food'], ['I6_lowestFood', 'I6 low'], ['I6_noSafeFoodRuns', 'nsf runs'], ['I7_gateThenAct', 'I7'], ['I8_refusedCommands', 'I8'], ['I8_neverRan', 'never ran'], ['I9_falseCollects', 'I9'], ['I10_deathLoops', 'I10 loops'], ['I10_deaths', 'deaths'], ['I11_bigSummaries', 'I11 big'], ['I11_shareOfSpend', 'sum %'], ['I12_unknownHurt', 'I12 unk'], ['I12_deathsUnnamed', 'unnamed']];
+const COLS = [['I1_trapped', 'I1 trap'], ['I1_longestMin', 'min'], ['I1_escapes', 'esc'], ['I1_escapesNotCleared', 'esc fail'], ['I2_couldNotLeave', 'I2'], ['I3_rejectedClicks', 'I3 clicks'], ['I4_digRefusedWithTool', 'I4'], ['I5_nightFoodShort', 'I5 short'], ['I5_nightFoodLines', 'night food'], ['I6_lowestFood', 'I6 low'], ['I6_noSafeFoodRuns', 'nsf runs'], ['I7_gateThenAct', 'I7'], ['I8_refusedCommands', 'I8'], ['I8_neverRan', 'never ran'], ['I9_falseCollects', 'I9'], ['I10_deathLoops', 'I10 loops'], ['I10_deaths', 'deaths'], ['I11_bigSummaries', 'I11 big'], ['I11_shareOfSpend', 'sum %'], ['I12_unknownHurt', 'I12 unk'], ['I12_deathsUnnamed', 'unnamed'], ['I11_usdPerHour', 'USD/h'], ['I13_misses', 'M1 miss'], ['I14_claims', 'M2 claims'], ['I14_wrong', 'M2 wrong'], ['I15_repeats', 'M3 rep'], ['I15_perHour', 'M3 /h']];
 
 /** The table across soaks, as Markdown. */
 export function renderTable(rows) {

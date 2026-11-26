@@ -30,7 +30,18 @@
     "I11_summaries": 49,
     "I11_shareOfSpend": 13.2,
     "I12_unknownHurt": null,
-    "I12_deathsUnnamed": null
+    "I12_deathsUnnamed": null,
+    "I11_usdPerHour": 0.01155,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 9,
+    "I14_wrong": 0,
+    "I14_unverifiable": 3,
+    "I15_repeats": 5,
+    "I15_perHour": 2.49,
+    "I15_inMemory": 0
   },
   "g4soak-2-20261108": {
     "release": null,
@@ -63,7 +74,18 @@
     "I11_summaries": 57,
     "I11_shareOfSpend": 13,
     "I12_unknownHurt": null,
-    "I12_deathsUnnamed": null
+    "I12_deathsUnnamed": null,
+    "I11_usdPerHour": 0.01283,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 5,
+    "I14_wrong": 0,
+    "I14_unverifiable": 1,
+    "I15_repeats": 1,
+    "I15_perHour": 0.5,
+    "I15_inMemory": 0
   },
   "g4soak-3-20261118": {
     "release": "rotn-v0.1.5",
@@ -96,7 +118,18 @@
     "I11_summaries": 32,
     "I11_shareOfSpend": 12.1,
     "I12_unknownHurt": 0,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.00889,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 5,
+    "I14_wrong": 0,
+    "I14_unverifiable": 2,
+    "I15_repeats": 1,
+    "I15_perHour": 0.5,
+    "I15_inMemory": 0
   },
   "g4soak-4-20261119": {
     "release": "rotn-v0.1.7",
@@ -129,7 +162,18 @@
     "I11_summaries": 25,
     "I11_shareOfSpend": 9.1,
     "I12_unknownHurt": 0,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.00786,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 9,
+    "I14_wrong": 0,
+    "I14_unverifiable": 4,
+    "I15_repeats": 2,
+    "I15_perHour": 1,
+    "I15_inMemory": 0
   },
   "g4soak-5-20261120": {
     "release": "rotn-v0.1.11",
@@ -162,7 +206,18 @@
     "I11_summaries": 82,
     "I11_shareOfSpend": 11.9,
     "I12_unknownHurt": 3,
-    "I12_deathsUnnamed": 1
+    "I12_deathsUnnamed": 1,
+    "I11_usdPerHour": 0.02325,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 4,
+    "I14_wrong": 0,
+    "I14_unverifiable": 1,
+    "I15_repeats": 6,
+    "I15_perHour": 2.99,
+    "I15_inMemory": 0
   },
   "g4soak-6-20261120": {
     "release": "rotn-v0.1.12",
@@ -195,7 +250,18 @@
     "I11_summaries": 78,
     "I11_shareOfSpend": 10.4,
     "I12_unknownHurt": 1,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.02263,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 7,
+    "I14_wrong": 0,
+    "I14_unverifiable": 4,
+    "I15_repeats": 28,
+    "I15_perHour": 13.95,
+    "I15_inMemory": 0
   },
   "g4soak-7-20261120": {
     "release": "rotn-v0.1.13",
@@ -228,7 +294,18 @@
     "I11_summaries": 69,
     "I11_shareOfSpend": 35.2,
     "I12_unknownHurt": 0,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.03367,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 13,
+    "I14_wrong": 0,
+    "I14_unverifiable": 8,
+    "I15_repeats": 14,
+    "I15_perHour": 6.98,
+    "I15_inMemory": 0
   },
   "g4soak-8-20261121": {
     "release": "rotn-v0.1.14",
@@ -261,7 +338,18 @@
     "I11_summaries": 57,
     "I11_shareOfSpend": 51.9,
     "I12_unknownHurt": 0,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.04363,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 15,
+    "I14_wrong": 0,
+    "I14_unverifiable": 4,
+    "I15_repeats": 4,
+    "I15_perHour": 1.99,
+    "I15_inMemory": 0
   },
   "g4soak-9-20261122": {
     "release": "rotn-v0.1.15",
@@ -294,7 +382,18 @@
     "I11_summaries": 21,
     "I11_shareOfSpend": 31.3,
     "I12_unknownHurt": 0,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.13678,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 14,
+    "I14_wrong": 0,
+    "I14_unverifiable": 9,
+    "I15_repeats": 0,
+    "I15_perHour": 0,
+    "I15_inMemory": 0
   },
   "g4soak-10-20261122": {
     "release": "rotn-v0.1.16",
@@ -327,7 +426,18 @@
     "I11_summaries": 30,
     "I11_shareOfSpend": 42.6,
     "I12_unknownHurt": 1,
-    "I12_deathsUnnamed": 2
+    "I12_deathsUnnamed": 2,
+    "I11_usdPerHour": 0.02555,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 7,
+    "I14_wrong": 0,
+    "I14_unverifiable": 4,
+    "I15_repeats": 0,
+    "I15_perHour": 0,
+    "I15_inMemory": 0
   },
   "g4soak-11-20261122": {
     "release": "rotn-v0.1.17",
@@ -360,7 +470,18 @@
     "I11_summaries": 58,
     "I11_shareOfSpend": 50.5,
     "I12_unknownHurt": 0,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.0476,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 7,
+    "I14_wrong": 0,
+    "I14_unverifiable": 3,
+    "I15_repeats": 5,
+    "I15_perHour": 2.49,
+    "I15_inMemory": 0
   },
   "g4soak-12-20261123": {
     "release": "rotn-v0.1.18",
@@ -393,7 +514,18 @@
     "I11_summaries": 54,
     "I11_shareOfSpend": 32,
     "I12_unknownHurt": 0,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.03415,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 11,
+    "I14_wrong": 0,
+    "I14_unverifiable": 8,
+    "I15_repeats": 8,
+    "I15_perHour": 3.98,
+    "I15_inMemory": 0
   },
   "g4soak-13-20261124": {
     "release": "rotn-v0.1.19",
@@ -426,7 +558,18 @@
     "I11_summaries": 69,
     "I11_shareOfSpend": 42.2,
     "I12_unknownHurt": 0,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.05503,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 9,
+    "I14_wrong": 1,
+    "I14_unverifiable": 4,
+    "I15_repeats": 17,
+    "I15_perHour": 8.47,
+    "I15_inMemory": 0
   },
   "g4soak-14-20261124": {
     "release": "rotn-v0.1.20",
@@ -459,7 +602,18 @@
     "I11_summaries": 22,
     "I11_shareOfSpend": 46.1,
     "I12_unknownHurt": 3,
-    "I12_deathsUnnamed": 1
+    "I12_deathsUnnamed": 1,
+    "I11_usdPerHour": 0.03723,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 6,
+    "I14_wrong": 0,
+    "I14_unverifiable": 2,
+    "I15_repeats": 4,
+    "I15_perHour": 1.99,
+    "I15_inMemory": 0
   },
   "g4soak-15-20261124": {
     "release": "rotn-v0.1.21",
@@ -492,7 +646,18 @@
     "I11_summaries": 29,
     "I11_shareOfSpend": 33.7,
     "I12_unknownHurt": 0,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.04362,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 25,
+    "I14_wrong": 3,
+    "I14_unverifiable": 11,
+    "I15_repeats": 8,
+    "I15_perHour": 3.99,
+    "I15_inMemory": 0
   },
   "g4soak-16-20261125": {
     "release": "rotn-v0.1.22",
@@ -525,6 +690,17 @@
     "I11_summaries": 20,
     "I11_shareOfSpend": 33.6,
     "I12_unknownHurt": 0,
-    "I12_deathsUnnamed": 0
+    "I12_deathsUnnamed": 0,
+    "I11_usdPerHour": 0.02814,
+    "I13_factsLines": null,
+    "I13_misses": null,
+    "I13_fields": null,
+    "I13_gate": null,
+    "I14_claims": 7,
+    "I14_wrong": 0,
+    "I14_unverifiable": 2,
+    "I15_repeats": 0,
+    "I15_perHour": 0,
+    "I15_inMemory": 0
   }
 }
