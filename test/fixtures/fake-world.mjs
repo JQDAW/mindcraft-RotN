@@ -32,7 +32,10 @@
 //   (soak 15's refused collect in the pocket). Not modelled from the real plugin (#631 review 1): its safeToBreak and
 //   canHarvest skips (with requireHarvest), drops as item entities and the pickup walk (drops go straight to the
 //   inventory through onDig), the nearest-first queue over several targets (targets are taken in the order given),
-//   and its events (collectBlock_finished, the errors it emits).
+//   and its events (collectBlock_finished, the errors it emits). Like the real plugin, it calls the pathfinder's goto only
+//   when the block is out of reach (more than 4.5 blocks from the eyes); a block in reach is dug from where the bot is.
+// - The 'teleport' pathfinder stub meets a ranged goal (GoalNear's rangeSq) at the goal's cell or the nearest cell
+//   within the range the bot can stand in, never inside a block (#631 re-review); it does not path.
 // Not here (yet): the real mineflayer-pathfinder (stubs: 'noPath', 'teleport', or a test's own), crafting and other
 // windows (net-forge's fake-containers.js models the server side), moving mobs.
 //
@@ -507,15 +510,40 @@ export function noPath() {
  * The nearest to the bot; null if none.
  */
 function standNextTo(bot, b) {
-    const free = (q) => { const x = bot.blockAt(q); return x.boundingBox === 'empty' && !x.liquid; };
-    const solidQ = (q) => bot.blockAt(q).boundingBox === 'block';
     const from = bot.entity.position.floored();
     const cands = [];
     for (const d of [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)]) for (const dy of [0, 1, -1]) cands.push(b.plus(d).offset(0, dy, 0));
-    return cands.filter(q => free(q) && free(q.offset(0, 1, 0)) && solidQ(q.offset(0, -1, 0))).sort((a, c) => a.distanceTo(from) - c.distanceTo(from))[0] ?? null;
+    return cands.filter(q => standable(bot, q)).sort((a, c) => a.distanceTo(from) - c.distanceTo(from))[0] ?? null;
 }
 
-/** A pathfinder whose goto puts the bot on the goal's cell (goals with x, y, z), or next to the block for a look-at-block goal; recorded. */
+/** A cell the bot can stand in: feet and head passable (not a liquid), a solid floor. */
+function standable(bot, q) {
+    const free = (c) => { const x = bot.blockAt(c); return x.boundingBox === 'empty' && !x.liquid; };
+    return free(q) && free(q.offset(0, 1, 0)) && bot.blockAt(q.offset(0, -1, 0)).boundingBox === 'block';
+}
+
+/**
+ * Where a ranged goal (GoalNear: x, y, z and rangeSq; or a `range`) is met (#631 re-review): the goal's cell when the
+ * bot can stand there, else the nearest standable cell within the range (nearest the goal, then the bot); null if
+ * none. Never inside a solid block.
+ */
+function standWithin(bot, g, range) {
+    if (standable(bot, g)) return g;
+    const from = bot.entity.position.floored();
+    const r = Math.ceil(range);
+    const cands = [];
+    for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) for (let dz = -r; dz <= r; dz++) {
+        const q = g.offset(dx, dy, dz);
+        if (q.distanceTo(g) <= range && standable(bot, q)) cands.push(q);
+    }
+    return cands.sort((a, c) => a.distanceTo(g) - c.distanceTo(g) || a.distanceTo(from) - c.distanceTo(from))[0] ?? null;
+}
+
+/**
+ * A pathfinder whose goto puts the bot on the goal's cell (goals with x, y, z), within a ranged goal's range (GoalNear's
+ * rangeSq: the cell itself or the nearest standable one, never inside a block), or next to the block for a look-at-block
+ * goal; recorded. It does not path: walls between do not matter.
+ */
 export function teleport(bot, calls = { gotos: [] }) {
     return {
         movements: null, setMovements(m) { this.movements = m; }, setGoal() {}, stop() {}, isMoving: () => false,
@@ -523,7 +551,9 @@ export function teleport(bot, calls = { gotos: [] }) {
         goto: (goal) => {
             calls.gotos.push(goal);
             if (goal?.x === undefined) return Promise.resolve();
-            const at = goal.lookAtBlock ? standNextTo(bot, new Vec3(goal.x, goal.y, goal.z)) : new Vec3(goal.x, goal.y, goal.z);
+            const g = new Vec3(Math.floor(goal.x), Math.floor(goal.y), Math.floor(goal.z));
+            const range = goal.rangeSq != null ? Math.sqrt(goal.rangeSq) : goal.range;
+            const at = goal.lookAtBlock ? standNextTo(bot, g) : range != null ? standWithin(bot, g, range) : g;
             if (!at) return Promise.reject(new Error('No path to the goal!'));
             bot.entity.position = at.offset(0.5, 0, 0.5);
             return Promise.resolve();
