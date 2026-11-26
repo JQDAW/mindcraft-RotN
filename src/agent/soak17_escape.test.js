@@ -98,20 +98,20 @@ test('soak 17 E(3): pillarUp says why it failed; the climb tries a failed pillar
     const w = fakeWorld({ ground: [{ below: 64, block: 'bedrock' }], set, at: V(0, 56, 0), slots: { 9: ['dirt', 16] }, timeOfDay: MORNING });
     useRegistry(t, w.bot);
     let calls = 0;
-    const pillar = async (bot, item, deadline, info) => {
+    const pillar = (bot, item, deadline, info) => {
         calls++;
-        if (calls === 1) { info.why = 'the jump did not lift the feet out of the cell'; return false; }
+        if (calls === 1) { info.why = 'the jump did not lift the feet out of the cell'; return Promise.resolve(false); }
         const p = bot.entity.position.floored();
         w.world.set(p, item.name);
         bot.entity.position = V(p.x + 0.5, p.y + 1, p.z + 0.5);
-        return true;
+        return Promise.resolve(true);
     };
     const r = await escape(w.bot, { budget: 'day', pillar, say: (l) => lines.push(l) });
     assert.ok(lines.some(l => /^\[escape\] the pillar at 0, 56, 0 did not take \(the jump did not lift the feet out of the cell\): once more$/.test(l)), lines.join('\n'));
     assert.equal(r.out, true, r.why);
     // Twice in a row: the why says which part failed.
     const w2 = fakeWorld({ ground: [{ below: 64, block: 'bedrock' }], set, at: V(0, 56, 0), slots: { 9: ['dirt', 16] }, timeOfDay: MORNING });
-    const r2 = await escape(w2.bot, { budget: 'day', pillar: async (b, i, d, info) => { info.why = 'the dirt did not stay at 0, 56, 0'; return false; }, say: () => {} });
+    const r2 = await escape(w2.bot, { budget: 'day', pillar: (b, i, d, info) => { info.why = 'the dirt did not stay at 0, 56, 0'; return Promise.resolve(false); }, say: () => {} });
     assert.match(r2.why, /could not pillar up from 0, 56, 0 \(the dirt did not stay at 0, 56, 0\)/);
     // The real pillarUp: no block, and nothing solid under the feet, are named.
     const info = {};
@@ -120,7 +120,7 @@ test('soak 17 E(3): pillarUp says why it failed; the climb tries a failed pillar
     // A dirt pile is an item, not a block: never what a pillar places.
     const piles = fakeWorld({ ground: [{ below: 64, block: 'bedrock' }], set, at: V(0, 56, 0), slots: { 9: ['betterwithmods:dirt_pile', 40], 10: ['dirt', 2] }, timeOfDay: MORNING });
     const placed = [];
-    await escape(piles.bot, { budget: 'day', pillar: async (b, item) => { placed.push(item?.name); return false; }, say: () => {} });
+    await escape(piles.bot, { budget: 'day', pillar: (b, item) => { placed.push(item?.name); return Promise.resolve(false); }, say: () => {} });
     assert.ok(placed.length > 0 && placed.every(n => n === 'dirt'), JSON.stringify(placed));
 });
 
