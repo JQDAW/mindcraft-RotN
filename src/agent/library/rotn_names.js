@@ -17,6 +17,7 @@
 // not (their metadata is damage) and neither does the crafting table.
 import { resolveName } from '../../utils/mcdata.js';
 import { getItem, toNew, blockToNew, blockToOld, parseOld, botName, registryName } from '../../../packages/rotn-data/index.js';
+import { carried } from './inventory_view.js';
 
 const subtypeCache = new Map();
 
@@ -109,9 +110,7 @@ export function variantMeta(name) {
  * count lookup reads this, so an off-hand pickaxe is a held pickaxe.
  */
 export function carriedItems(bot) {
-    const items = bot?.inventory?.items?.() ?? [];
-    const off = bot?.inventory?.slots?.[45];
-    return off && typeof off.name === 'string' && !items.includes(off) ? [...items, off] : items;
+    return carried(bot); // round 17 V: the one inventory view
 }
 
 /**

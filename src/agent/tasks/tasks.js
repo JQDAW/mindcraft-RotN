@@ -4,6 +4,7 @@ import { getPosition } from '../library/world.js';
 import { ConstructionTaskValidator, Blueprint } from './construction_tasks.js';
 import { CookingTaskInitiator } from './cooking_tasks.js';
 import { taskFilesAllowed, taskRefusalMessage, taskOptInWarning } from './task_guard.js';
+import { everyStack } from '../library/inventory_view.js';
 
 const PROGRESS_FILE = './hells_kitchen_progress.json';
 
@@ -181,7 +182,7 @@ function checkItemForSingleAgent(data, agent) {
 
     // Count items in inventory
     const inventoryCount = {};
-    agent.bot.inventory.slots.forEach((slot) => {
+    everyStack(agent.bot).forEach((slot) => { // round 17 V: the inventory view (every stack, as before)
         if (slot) {
             const itemName = slot.name.toLowerCase();
             inventoryCount[itemName] = (inventoryCount[itemName] || 0) + slot.count;

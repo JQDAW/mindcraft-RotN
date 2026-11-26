@@ -25,6 +25,7 @@
 import { threatOf, nightThreats, UNKNOWN_MELEE, weaponStats, getItem, registryName } from '../../../packages/rotn-data/index.js';
 import * as mc from '../../utils/mcdata.js';
 import { mayBelongToPlayer } from './ownership.js';
+import { carried } from './inventory_view.js';
 
 /** How far each reaction's mob is watched, and how far the bot moves away from it. */
 export const RANGES = {
@@ -241,7 +242,7 @@ export function weaponHitsLeft(item) {
 
 /** The bot's best attack damage among the weapons it carries (isWeaponItem, weaponAttack), or 0. */
 export function bestAttack(bot) {
-    const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]];
+    const items = carried(bot); // round 17 V: the inventory and the off hand
     return Math.max(0, ...items.map(i => (isWeaponItem(i) ? weaponAttack(i.name) ?? 0 : 0)));
 }
 /** A slime's size (1.12 EntitySlime metadata index 12), or null when it cannot be read. */
@@ -255,7 +256,7 @@ export const canFightSlime = (bot) => bestAttack(bot) >= SLIME.minAttack && bot?
  * with at least that many hits left (weaponHitsLeft; soak 10: the before-night reserve asks for a kill's worth).
  */
 export function hasWeapon(bot, { minHits = 0 } = {}) {
-    const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]];
+    const items = carried(bot); // round 17 V: the inventory and the off hand
     return items.some(i => isWeaponItem(i) && (minHits <= 0 || weaponHitsLeft(i) >= minHits));
 }
 
@@ -493,7 +494,7 @@ export function weaponOrder(path = 'vanilla') {
 
 /** The bot's best weapon (a sword or an axe, in the inventory or the off hand) by weaponOrder on its attack path, or null. */
 function bestWeapon(bot) {
-    const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]].filter(i => typeof i?.name === 'string' && /sword|(^|[:_])axe$/.test(i.name));
+    const items = carried(bot).filter(i => typeof i?.name === 'string' && /sword|(^|[:_])axe$/.test(i.name));
     return items.sort(weaponOrder(attackPath(bot)))[0] ?? null;
 }
 

@@ -8,6 +8,7 @@
 
 import * as rotnData from '../../../packages/rotn-data/index.js';
 import { logAte } from './survival_log.js';
+import { carried } from './inventory_view.js';
 
 /**
  * Eat at this food level or lower when idle. Soak 14 (F1, the lead): 12 ate every find at once (food 9 to 12),
@@ -253,7 +254,8 @@ export function nightFoodNeed({ food, saturation = 0 }) {
 /** Soak 14 (F1): the points (hunger + saturation) of the safe food held (never avoided food). */
 export function heldFoodPoints(bot) {
     let total = 0;
-    for (const item of bot?.inventory?.items?.() ?? []) {
+    // Round 17 V: what the bot carries, the off hand too (a stack there is eaten as well: equip takes it from 45).
+    for (const item of carried(bot)) {
         if (isAvoided(item)) continue;
         const f = foodValue(item);
         if (f) total += (f.hunger + f.saturation) * (item.count ?? 1);

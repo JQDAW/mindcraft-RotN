@@ -5,6 +5,7 @@
 // No RotN block names are hard-coded here.
 import { howToGet, getItem, registryName, botName } from '../../../packages/rotn-data/index.js';
 import { formatName, parseName, carriedItems } from './rotn_names.js';
+import { view, windowCursor } from './inventory_view.js';
 
 // rotn-data's howToGet for a canonical name, or null for an unknown item.
 function lookup(name) {
@@ -92,13 +93,8 @@ export function toolLevels(bot, type) {
 
 /** Where the bot's stacks are: the inventory (slots 9-44), the off hand (slot 45), the cursor. */
 function carriedPlaces(bot) {
-    const inv = bot?.inventory;
-    const ok = (i) => i && typeof i.name === 'string';
-    return {
-        inventory: (inv?.items?.() ?? []).filter(ok),
-        offHand: ok(inv?.slots?.[45]) ? inv.slots[45] : null,
-        cursor: ok(inv?.selectedItem) ? inv.selectedItem : null,
-    };
+    const v = view(bot); // round 17 V
+    return { inventory: v.usable, offHand: v.offHand, cursor: v.cursor };
 }
 
 /**
@@ -144,7 +140,7 @@ export async function stowCarried(bot, want = () => true, { resyncMs = RESYNC_MS
     try {
         const open = bot?.currentWindow;
         if (open && open !== inv) {
-            const held = open.selectedItem;
+            const held = windowCursor(open);
             const slot = open.firstEmptyInventorySlot?.() ?? null;
             if (held && slot == null) {
                 // Closing now would drop the stack on the ground: leave the window and the stack alone.

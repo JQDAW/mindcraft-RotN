@@ -24,6 +24,7 @@ import { logWeapon } from './survival_log.js';
 import { eatToHeal } from './food.js';
 import { shelterEnemy, shelterTarget, threatFor, attackCooldownMs, attackSent, attackWatched, BLOCKED_REASONS } from './threats.js';
 import { isTreePart } from './fall_safety.js';
+import { freeUsableSlot } from './inventory_view.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const SIX = [new Vec3(0, -1, 0), ...HORIZONTAL, new Vec3(0, 1, 0)];
@@ -75,10 +76,8 @@ const heldCount = (bot, item) => (item ? (bot.inventory?.items?.() ?? []).filter
  */
 export async function resyncStack(bot, item) {
     if (!item || !Number.isInteger(item.slot) || typeof bot.moveSlotItem !== 'function') return false;
-    const slots = bot.inventory?.slots ?? [];
-    let dest = -1;
-    for (let i = 9; i < 45; i++) if (i !== item.slot && !slots[i]) { dest = i; break; }
-    if (dest < 0) return false;
+    const dest = freeUsableSlot(bot, item.slot); // round 17 V: a free slot 9-44 other than its own
+    if (dest === null) return false;
     try { await bot.moveSlotItem(item.slot, dest); return true; } catch { return false; }
 }
 

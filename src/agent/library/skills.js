@@ -34,6 +34,7 @@ import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRe
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
+import * as inv from './inventory_view.js';
 
 const blockPlaceDelay = settings.block_place_delay == null ? 0 : settings.block_place_delay;
 const useDelay = blockPlaceDelay > 0;
@@ -82,7 +83,7 @@ const pickLevel = (item) => { try { return rotnItem(rotnRegistryName(item.name))
  * back after. True when one was moved.
  */
 export async function offHandToolBack(bot) {
-    const off = bot?.inventory?.slots?.[45] ?? null;
+    const off = inv.offHand(bot);
     if (!off || !isPickaxeItem(off)) return false;
     const slot = bot.inventory?.firstEmptyInventorySlot?.();
     const empty = Number.isInteger(slot) && slot >= 0 ? slot : null; // null (mineflayer) or -1: no free slot
@@ -100,10 +101,18 @@ export async function offHandToolBack(bot) {
         return false;
     }
 }
-export async function rearmWeapon(bot) {
+/**
+ * #657 review 1: what rearmWeapon would do now, without a click: {moves: [{item, dest, what}], ok}, from its own
+ * branches (the pickaxe to the off hand and the weapon to the main hand from the stone pickaxe on; with no pickaxe the
+ * weapon in the off hand; a shield in the off hand stays; WEAPON_HAND.offHand). rearmWeapon carries out exactly these
+ * moves, so the idle repair (hands.armsWrong) can never disagree with it.
+ */
+export function rearmNeeds(bot) {
     const items = bot?.inventory?.items?.() ?? [];
-    const best = items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0] ?? null;
-    const off = bot?.inventory?.slots?.[45] ?? null;
+    const order = weaponOrder(attackPath(bot));
+    const best = items.filter(i => isWeaponItem(i)).sort(order)[0] ?? null;
+    const off = inv.offHand(bot);
+    const canEquip = typeof bot?.equip === 'function';
     // #584 re-review (a): a full-inventory fight swaps the club into a hotbar slot and that slot's item
     // (dirt, say) into the off hand; equipping the weapon to the off hand swaps them back. Only a
     // shield there is kept (then the weapon goes to the main hand).
@@ -114,28 +123,58 @@ export async function rearmWeapon(bot) {
     // weapon in the off hand, as before.
     const pick = items.filter(isPickaxeItem).sort((a, b) => pickLevel(b) - pickLevel(a))[0] ?? null;
     const offPick = !!off && isPickaxeItem(off);
-    if (WEAPON_HAND.offHand && !shield && (pick || offPick) && typeof bot.equip === 'function') {
-        if (!offPick || (pick && pickLevel(pick) > pickLevel(off))) await bot.equip(pick, 'off-hand');
-        const weapons = (bot.inventory.items?.() ?? []).filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)));
-        const held = bot.heldItem && isWeaponItem(bot.heldItem) ? bot.heldItem : null;
-        if (held && !(weapons[0] && weaponOrder(attackPath(bot))(weapons[0], held) < 0)) return true;
-        if (!weapons[0]) return !!held;
-        await bot.equip(weapons[0], 'hand');
-        return true;
+    const moves = [];
+    if (WEAPON_HAND.offHand && !shield && (pick || offPick) && canEquip) {
+        const pickMoves = !offPick || (pick && pickLevel(pick) > pickLevel(off));
+        if (pickMoves) moves.push({ item: pick, dest: 'off-hand', what: 'pickaxe' });
+        // The off hand's own stack comes into the inventory when the pickaxe takes its place.
+        const after = pickMoves && off && isWeaponItem(off) ? [...items, off] : items;
+        const weapons = after.filter(i => isWeaponItem(i)).sort(order);
+        // #657 round 2 (b): the held item after that move: when the pickaxe is the held stack, the off hand's stack
+        // takes its slot (bot.equip swaps them), so a weapon there is then held (no extra equip, no false line).
+        const pickHeld = pickMoves && !!bot.heldItem && (bot.heldItem === pick || (bot.heldItem.slot != null && bot.heldItem.slot === pick?.slot));
+        const heldAfter = pickHeld ? off : bot.heldItem;
+        const held = heldAfter && isWeaponItem(heldAfter) ? heldAfter : null;
+        if (held && !(weapons[0] && order(weapons[0], held) < 0)) return { moves, ok: true };
+        if (!weapons[0]) return { moves, ok: !!held };
+        moves.push({ item: weapons[0], dest: 'hand', what: 'weapon' });
+        return { moves, ok: true };
     }
     if (WEAPON_HAND.offHand && !shield) {
         const offWeapon = !!off && isWeaponItem(off);
         // #584 nit 5: a better weapon in the inventory takes the off hand's place.
-        if (offWeapon && !(best && weaponOrder(attackPath(bot))(best, off) < 0)) return true;
-        if (!best || typeof bot.equip !== 'function') return offWeapon;
-        await bot.equip(best, 'off-hand');
-        return true;
+        if (offWeapon && !(best && order(best, off) < 0)) return { moves, ok: true };
+        if (!best || !canEquip) return { moves, ok: offWeapon };
+        moves.push({ item: best, dest: 'off-hand', what: 'weapon' });
+        return { moves, ok: true };
     }
     // The main hand (with the flag off, or a shield in the off hand, which stays).
-    if (bot?.heldItem && isWeaponItem(bot.heldItem)) return true;
-    if (!best || typeof bot.equip !== 'function') return false;
-    await bot.equip(best, 'hand');
-    return true;
+    if (bot?.heldItem && isWeaponItem(bot.heldItem)) return { moves, ok: true };
+    if (!best || !canEquip) return { moves, ok: false };
+    moves.push({ item: best, dest: 'hand', what: 'weapon' });
+    return { moves, ok: true };
+}
+
+/**
+ * #657 round 2 (a): the stack weaponOrder ranked, found again after the pickaxe's move: the off hand's weapon is now in
+ * the pickaxe's old slot, any other weapon in its own slot. Failing that (the window changed), the weapons ranked again.
+ */
+function sameWeaponAfter(bot, ranked, movedPick) {
+    const items = bot.inventory.items?.() ?? [];
+    const slot = ranked.slot === inv.OFF_HAND ? movedPick?.slot : ranked.slot;
+    return items.find(i => i.slot === slot && inv.sameStack(i, ranked))
+        ?? items.filter(i => isWeaponItem(i)).sort(weaponOrder(attackPath(bot)))[0]
+        ?? ranked;
+}
+
+export async function rearmWeapon(bot) {
+    const { moves, ok } = rearmNeeds(bot);
+    for (const m of moves) {
+        // The weapon taken after the pickaxe's move: as the window has it now (the swap may have moved it).
+        const item = m.what === 'weapon' && moves[0] !== m ? sameWeaponAfter(bot, m.item, moves[0].item) : m.item;
+        await bot.equip(item, m.dest);
+    }
+    return ok;
 }
 
 export async function equipHighestAttack(bot, fight = null) {
@@ -158,7 +197,7 @@ export async function equipHighestAttack(bot, fight = null) {
         if (!fight.noWeaponSaid) { fight.noWeaponSaid = why; console.log(`[survival] no weapon in hand: ${why}; holding ${bot.heldItem?.name ?? 'nothing'}`); }
         return false;
     };
-    const off = bot.inventory.slots?.[45];
+    const off = inv.offHand(bot);
     const inInventory = best(bot.inventory.items());
     if (isWeapon(off) && (!inInventory || order(off, inInventory) < 0)) {
         const full = (bot.inventory.firstEmptyInventorySlot?.() ?? null) === null;
@@ -2016,8 +2055,7 @@ export async function stopHolding(bot, tool) {
 /** stopHolding for any item the predicate matches (shears, which have no tool class). */
 export async function stopHoldingWhere(bot, isUnwanted) {
     if (!bot.heldItem || !isUnwanted(bot.heldItem)) return true;
-    const slots = bot.inventory?.slots ?? [];
-    const hotbar = Array.from({ length: 9 }, (_, i) => slots[HOTBAR_START + i] ?? null);
+    const hotbar = inv.hotbar(bot); // HOTBAR_START + i
     let i = hotbar.findIndex(it => !it);
     if (i < 0) i = hotbar.findIndex(it => !isUnwanted(it));
     if (i >= 0 && typeof bot.setQuickBarSlot === 'function') {
@@ -3212,7 +3250,8 @@ export async function equip(bot, itemName) {
         log(bot, `Unequipped hand.`);
         return true;
     }
-    let item = bot.inventory.slots.find(slot => slot && itemMatches(slot, itemName));
+    // Round 17 V: what the bot carries, or wears already (never the 2x2 grid or the crafting result).
+    let item = inv.findIn([...inv.carried(bot), ...inv.wornArmor(bot)], slot => itemMatches(slot, itemName));
     if (!item) {
         if (bot.game.gameMode === "creative") {
             await bot.creative.setInventorySlot(36, mc.makeItem(itemName, 1));
@@ -3410,7 +3449,7 @@ export function spawnScrollRefused(bot, item) {
     const isScroll = (n) => /(^|:)spawnscroll$/.test(String(n ?? '').trim().toLowerCase().replace(/:\d+$/, ''));
     const name = typeof item === 'string' ? item : item?.name;
     let slot = null;
-    if (typeof item === 'string') { try { slot = (bot?.inventory?.slots ?? []).find(s => s && itemMatches(s, item.trim())) ?? null; } catch { slot = null; } }
+    if (typeof item === 'string') { try { slot = inv.findIn(inv.everyStack(bot), s => itemMatches(s, item.trim())); } catch { slot = null; } }
     if (!isScroll(name) && !isScroll(slot?.name)) return false;
     log(bot, 'Not using the Scroll of New Life (lifescroll:spawnscroll): it sets your respawn point where you stand and does not teleport. '
         + 'The night routine uses it once, at a closed shelter far from the spawn and every place you died; never use it yourself.');
@@ -3434,13 +3473,13 @@ export async function consume(bot, itemName="") {
     // Soak 16 (22:01:16): "You do not have any animania:raw_prime_pork to eat" with 3 held: not in slots 9-44 (the
     // hen's pecks had cut a craft short). The off hand, then the 2x2 grid and the cursor (put back first).
     if (!item && itemName) {
-        const off = bot.inventory?.slots?.[45];
+        const off = inv.offHand(bot);
         if (off && itemMatches(off, itemName)) { item = off; where = ' (from the off hand)'; }
     }
     if (!item && itemName) {
-        const inv = bot.inventory;
-        const inGrid = [1, 2, 3, 4].some(k => inv?.slots?.[k] && itemMatches(inv.slots[k], itemName));
-        const onCursor = !!inv?.selectedItem && itemMatches(inv.selectedItem, itemName);
+        const v = inv.view(bot); // round 17 V
+        const inGrid = v.grid.some(st => itemMatches(st, itemName));
+        const onCursor = !!v.cursor && itemMatches(v.cursor, itemName);
         if (inGrid || onCursor) {
             try { if (onCursor) await clearCursor(bot); if (inGrid) await returnGrid(bot, 'consume'); } catch { /* looked for again below */ }
             item = findItem(bot, itemName);
@@ -4332,7 +4371,7 @@ export function scrollUsedOn(bot) {
     if (bot?.rotnScrollUsed) return bot.rotnScrollUsed;
     // #645 nit: one test for every place it may be (the inventory, the off hand, the cursor).
     const isScroll = (i) => /(^|:)spawnscroll$/.test(i?.name ?? '') && /lifescroll/.test(i?.name ?? '');
-    const held = carriedItems(bot).some(isScroll) || isScroll(bot?.inventory?.selectedItem);
+    const held = carriedItems(bot).some(isScroll) || isScroll(inv.cursorStack(bot));
     if (!bot?.inventory || held) return null;
     return { pos: null, at: null, by: 'no Scroll of New Life held' };
 }
@@ -4992,7 +5031,7 @@ function stopWalking(bot) {
 /** {name[:meta]: count} over every inventory slot. */
 function slotCounts(bot) {
     const counts = {};
-    for (const it of bot.inventory?.slots || []) {
+    for (const it of inv.everyStack(bot)) {
         if (!it || !it.name || !(it.count > 0)) continue;
         const key = it.metadata ? `${it.name}:${it.metadata}` : it.name;
         counts[key] = (counts[key] || 0) + it.count;
@@ -5073,7 +5112,7 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
     const start = Date.now();
     const left = () => L.totalMs - (Date.now() - start);
     if (toolName !== 'hand' && bot.game.gameMode !== 'creative'
-        && !bot.inventory.slots.find(slot => slot && itemMatches(slot, toolName))) {
+        && !inv.findIn(inv.carried(bot), slot => itemMatches(slot, toolName))) {
         log(bot, `You do not have any ${toolName} to use.`);
         return false;
     }

@@ -9,8 +9,10 @@
 //   the block, takes the pickaxe in hand first;
 // - between actions (the agent's update loop): the cursor and the grid are repaired, said once.
 
-import { offHandToolBack, rearmWeapon, isPickaxeItem } from './skills.js';
-import { clearCursor, returnGrid, GRID_SLOTS } from './inventory_sync.js';
+import { offHandToolBack, rearmWeapon, rearmNeeds, isPickaxeItem } from './skills.js';
+import { clearCursor, returnGrid } from './inventory_sync.js';
+import * as inv from './inventory_view.js';
+import { SETTLE_MS } from './death_report.js';
 import { usesLeft } from './pickaxe.js';
 
 /**
@@ -24,7 +26,7 @@ function watchToolBreak(bot, tool, block) {
     setTimeout(() => {
         try {
             // #642 review 5: moved, not broken: any slot (the off hand too) or the cursor holding that tool, as worn or less.
-            const held = [...(bot.inventory?.slots ?? []), bot.inventory?.selectedItem].some(i => i?.name === tool.name && (i.metadata ?? 0) >= (tool.metadata ?? 0));
+            const held = inv.everyStack(bot).some(i => i?.name === tool.name && (i.metadata ?? 0) >= (tool.metadata ?? 0));
             if (held) return;
             const p = block?.position;
             bot.rotnToolBroke = { name: tool.name, at: Date.now(), on: block?.name ?? null };
@@ -42,11 +44,11 @@ function watchToolBreak(bot, tool, block) {
  * for every action.
  */
 export function handsBefore(bot, label = 'an action') {
-    const inv = bot?.inventory;
-    if (!Array.isArray(inv?.slots)) return null;
-    const off = inv.slots[45];
+    if (!inv.slotCount(bot)) return null;
+    const v = inv.view(bot); // round 17 V
+    const off = v.offHand;
     const takePick = !String(label).startsWith('mode:') && !!(off && isPickaxeItem(off));
-    if (!takePick && !inv.selectedItem && !GRID_SLOTS.some(k => inv.slots[k]) && !bot.rotnHandsBusy) return null;
+    if (!takePick && !v.cursor && !v.grid.length && !bot.rotnHandsBusy) return null;
     return withHandsLock(bot, () => handsBeforeNow(bot, label, takePick));
 }
 
@@ -81,8 +83,10 @@ async function handsBeforeNow(bot, label, takePick) {
  * item). Returns 'skipped', 'timeout' or 'done'.
  */
 export async function handsAfter(bot, label = 'an action', { interruptedBy = null, afterMs = HANDS.afterMs } = {}) {
-    if (!bot?.inventory?.slots) return 'skipped';
-    if (NO_REARM_AFTER.has(label)) return 'skipped';
+    if (!inv.slotCount(bot)) return 'skipped';
+    // Round 17 V2: the model's !equip holds until its next action; the idle repair leaves the hands alone till then.
+    if (NO_REARM_AFTER.has(label)) { bot.rotnModelEquip = true; return 'skipped'; }
+    if (!interruptedBy) bot.rotnModelEquip = false;
     if (interruptedBy && !NO_REARM_AFTER.has(interruptedBy)) return 'skipped';
     let timer;
     const bound = new Promise(resolve => { timer = setTimeout(() => resolve('timeout'), afterMs); });
@@ -115,7 +119,7 @@ export function installDigHands(bot) {
         const dig = async function (block, ...rest) {
             // Soak 16 (C, #632 review 2): a dig watcher (the collect: "it gave" counts from its target's own dig).
             try { bot.rotnDigHook?.(block); } catch { /* the dig goes on */ }
-            const off = bot.inventory?.slots?.[45];
+            const off = inv.offHand(bot);
             if (off && isPickaxeItem(off) && !heldCanDig(bot, block)) {
                 await offHandToolBack(bot);
                 const pick = (bot.inventory.items?.() ?? []).find(i => i.name === off.name) ?? (bot.heldItem?.name === off.name ? bot.heldItem : null);
@@ -143,6 +147,9 @@ export function installDigHands(bot) {
         bot.rotnDigHooked = true;
         bot.on('login', wrap);
         bot.on('spawn', wrap);
+        // #657 review 7: the model's !equip does not outlive a death (the respawned bot re-arms when idle).
+        bot.on('death', () => { bot.rotnModelEquip = false; });
+        bot.on('spawn', () => { bot.rotnModelEquip = false; });
     }
 }
 
@@ -150,16 +157,22 @@ export function installDigHands(bot) {
  * Between actions (the update loop): a stack left on the cursor or in the 2x2 grid is put back, said once for each
  * state (a repair that cannot be done is not tried again until the state changes).
  */
-export async function idleHands(agent) {
+export async function idleHands(agent, { now = Date.now() } = {}) {
     const bot = agent?.bot;
-    const inv = bot?.inventory;
     // #619 review 4: never beside an action's clicks, a mode acting, or another repair.
-    if (!inv?.slots || agent.actions?.executing || agent.rotnIdleHandsBusy || bot.rotnHandsBusy) return null;
+    if (!inv.slotCount(bot) || agent.actions?.executing || agent.rotnIdleHandsBusy || bot.rotnHandsBusy) return null;
+    // #657 review 2: never while dead, nor until the respawn has settled (death_report.SETTLE_MS after the spawn: the
+    // server resends the window then, and a click before it would be on the old one).
+    if ((Number.isFinite(bot.health) && bot.health <= 0) || bot.isAlive === false) return null;
+    if (Number.isFinite(bot.rotnSpawnedAt) && now - bot.rotnSpawnedAt < SETTLE_MS) return null;
     try { if (bot.modes?.anyActive?.()) return null; } catch { return null; }
-    const grid = GRID_SLOTS.filter(k => inv.slots[k]);
-    const cursor = inv.selectedItem?.name ?? null;
-    if (!grid.length && !cursor) { agent.rotnIdleHandsSaid = null; return null; }
-    const state = `${cursor ?? '-'}|${grid.map(k => `${k}:${inv.slots[k].name}`).join(',')}`;
+    // Round 17 V2: never while a container window is open (its clicks are not window 0's; Fable N3 iii).
+    if (bot.currentWindow && bot.currentWindow !== bot.inventory) return null;
+    const grid = inv.gridSlotsHeld(bot);
+    const cursor = inv.cursorStack(bot)?.name ?? null;
+    if (!grid.length && !cursor) { agent.rotnIdleHandsSaid = null; return idleArms(agent); }
+    const stacks = inv.view(bot).grid;
+    const state = `${cursor ?? '-'}|${stacks.map(st => `${st.slot}:${st.name}`).join(',')}`;
     if (agent.rotnIdleHandsSaid === state) return null;
     agent.rotnIdleHandsSaid = state;
     agent.rotnIdleHandsBusy = true;
@@ -174,6 +187,45 @@ export async function idleHands(agent) {
         console.warn(`[hands] idle repair failed: ${err?.message ?? err}`);
         return state;
     } finally { agent.rotnIdleHandsBusy = false; }
+}
+
+/**
+ * Round 17 V2 (Fable S2 iii, the lead's plan): the other two idle invariants: the pickaxe in the off hand and the weapon
+ * in the main hand (rearmWeapon, as after every action), when no action, reflex, repair or container window is about,
+ * and not while the model's own !equip holds (until its next action). Each state is repaired and said once (a repair
+ * that cannot be done is not tried again until the state changes). Also right after a respawn (the loop is idle then).
+ */
+export function armsWrong(bot) {
+    // #657 review 1: rearmWeapon's own branches (skills.rearmNeeds): no pickaxe, the weapon stays in the off hand; a
+    // shield stays; WEAPON_HAND.offHand. Wrong only when rearmWeapon would move something.
+    let need;
+    try { need = rearmNeeds(bot); } catch { return null; }
+    if (!need?.moves?.length) return null;
+    const pickWrong = need.moves.some(m => m.what === 'pickaxe');
+    const weaponWrong = need.moves.some(m => m.what === 'weapon');
+    return { pickWrong, weaponWrong, moves: need.moves, state: need.moves.map(m => `${m.what}:${m.item?.name}@${m.item?.slot}->${m.dest}`).join('|') + `|held:${bot.heldItem?.name ?? '-'}|off:${inv.offHand(bot)?.name ?? '-'}` };
+}
+
+/**
+ * #657 review 3: the idle re-arm runs on its own (the update loop does not wait for it, so the modes keep updating),
+ * bounded by HANDS.afterMs: past it the repair state is freed (the clicks may still finish).
+ */
+function idleArms(agent) {
+    const bot = agent.bot;
+    if (bot.rotnModelEquip) return null;
+    const wrong = armsWrong(bot);
+    if (!wrong) { agent.rotnIdleArmsSaid = null; return null; }
+    if (agent.rotnIdleArmsSaid === wrong.state) return null;
+    agent.rotnIdleArmsSaid = wrong.state;
+    agent.rotnIdleHandsBusy = true;
+    console.log(`[hands] idle: ${[wrong.pickWrong ? 'the pickaxe is not in the off hand' : null, wrong.weaponWrong ? `the weapon is not in the ${wrong.moves.find(m => m.what === 'weapon')?.dest === 'off-hand' ? 'off hand' : 'main hand'}` : null].filter(Boolean).join(' and ')}: re-arming`);
+    let timer;
+    const bound = new Promise(resolve => { timer = setTimeout(() => resolve('timeout'), HANDS.afterMs); timer.unref?.(); });
+    const run = withHandsLock(bot, () => rearmWeapon(bot)).then(() => 'done', (err) => { console.warn(`[hands] idle re-arm failed: ${err?.message ?? err}`); return 'failed'; });
+    Promise.race([run, bound]).then((r) => {
+        if (r === 'timeout') console.warn(`[hands] idle re-arm took over ${HANDS.afterMs / 1000} s; going on (it may still finish)`);
+    }).finally(() => { clearTimeout(timer); agent.rotnIdleHandsBusy = false; });
+    return wrong.state;
 }
 
 /**
