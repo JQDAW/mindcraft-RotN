@@ -4,12 +4,15 @@
 - **SMOKE-PASS, 9 of 9 checks** with the ADR 0010 targets (850 MiB, USD 0.05/h). `result.json` marks it not-gate (`gateValid: false`). The reasons are the S-run reason from #436 and the step-7 runner's reasons: there is no `ROTN_G4_ACCEPT` marker, so conditions (a) and (d) fail, while (b), (c) and (e) hold.
 - **The first soak on rotn-v0.1.23**, the first release with round 17 M's code-built memory (#637). It ran 17:16:41 to 19:17:17 UTC on the second test server of the day. The first server was deleted unused; see the set-up table.
 - **The memory checks (item (b), the human's condition):**
-  - **I13 reports a FAIL, with 26 misses in 746 checkable fields. I checked all 26 by hand, and every one is a checker artefact. No wrong fact was found.**
-  - Two fields, `pickaxe` and `food held`, had **0 samples** the checker could use. I checked both by hand against other code-built lines. pickaxe: right on every change. food held: 5 of 7 comparisons equal; 2 differ by the food a forage had just picked up (below).
+  - **I13 reports a FAIL, with 26 misses in 746 checkable fields. I checked all 26 by hand, and every one is a checker artefact.**
+  - **But 3 facts lines carry a real wrong agenda fact, and the checker missed all 3** (#661 review 1, plus 2 found while re-checking). All three are about the agenda step, and the other fields in those lines are right:
+    - `driver.log:45` (17:17:05) says `Agenda: active, all steps done; done: none`, before the first step (weapon) started at 17:17:12 (`server.log:49`). The checker cannot parse `active, all steps done`, so it left the field unverifiable.
+    - `driver.log:681` (17:22:20) and `:697` (17:22:23) say `active, step stone_pickaxe …` while their own done list ends in `stone_pickaxe`. They come 5 s and 8 s after `agenda step stone_pickaxe done` (`server.log:300`, 17:22:15), and the `!agenda` reply at 17:22:21 (`driver.log:690`) already said `step shelter_blocks`. The checker's ±30-s window took them as matches.
+  - Two fields, `pickaxe` and `food held`, had **0 samples** the checker could use. I checked both by hand against other code-built lines. pickaxe: right on every change. food held: 5 of 7 comparisons equal. In the other 2, the standing goal's `you hold` is the stale figure, not the facts (below).
   - **I14:** 1 claim marked wrong of 15, which is also a checker artefact, so 0 of 15 by hand.
   - **I15:** 4 repeated failures, each with line refs below.
   - **Memory summaries: 0 calls**, so 0% of the spend. All 25 summary points logged `[memory] summary skipped (no player turn)`.
-- **Trapped underground from 18:03:31 to 18:09:45 (6.2 min), and killed on the way out.**
+- **Trapped underground from 18:03:31 to 18:09:45 (6.2 min from the first trap line), and killed on the way out.** The bot was already down at y 25–26 during the collect that began at 18:01:53 (`2094`), so it was underground for about 8 min.
   - `!collectBlocks("cobblestone", 7)` took the bot to cobblestone at 81, 26, 67, 55 blocks under the sky.
   - The escape climbed from y 25 to y 61. On the way its stone pickaxe broke, and it made a new one.
   - The escape was interrupted twice: once by the model's own `!craftRecipe` and once by the cowardice reflex.
@@ -59,7 +62,7 @@ There were 102 facts lines. Of the 1,053 fields in them, the checker could check
 
 | Field | Match | Miss (checker) | Unverifiable | Non-trivial samples | Checker verdict | **By hand** |
 | --- | --- | --- | --- | --- | --- | --- |
-| agenda | 61 | 20 | 21 | 81 | fail | **0 wrong**: all 20 misses are checker artefacts (A1–A4) |
+| agenda | 61 | 20 | 21 | 81 | fail | all 20 misses are checker artefacts (A1–A4); **3 real wrong facts the checker missed**: `45` (unverifiable to it), `681` and `697` (matches to it) |
 | shelter blocks | 14 | 6 | 82 | 20 | fail | **0 wrong**: all 6 misses are checker artefacts (S1) |
 | deaths | 102 | 0 | 0 | 20 (82 trivial `0 = 0`) | pass | – |
 | last death | 19 | 0 | 0 | 19 | pass | – |
@@ -109,11 +112,17 @@ There were 102 facts lines. Of the 1,053 fields in them, the checker could check
 | 18:39:22 (`2923`) | 19.9 | 18:39:23 (`2929`) | **20.9** | differs: right after `Foraged 2 blocks: got 4 ginseng, 1 radishitem` (`2922`, 18:39:22) |
 | 19:17:13 (`3293`) | 17 | 19:17:13 (`3299`) | 17 | equal |
 
-**Unresolved:** the two differences each come 1 s after a forage pickup. The facts line is the later one and is higher. That fits the facts counting the pickup and the goal text not yet counting it, but the log does not show which of the two is stale. The model's next reply used the goal's figure: `Food's stocked (19.9 pts)` (18:39:27). It is for skills-rotn to say whether the two computations count the same items.
+**The two differences: the standing goal is the stale one** (#661 review 2).
+- Both figures come from the same function, `heldFoodPoints` (`memory_facts.js` `reservesLine`; `agenda.js` `standingGoal` through `agenda_driver.js` `foodHeld`).
+- The goal text was built in the forage's second, before the pickup counted.
+- The facts figure stays the same in the lines after: 4.3 in `2844`–`2881`; 20.9 in `2929`–`3002`; 19.9 after the bot ate (`3005`, `3045`).
+- **The model repeated the stale figure** twice: `Garden food picked up (2.3 pts)` (`2850`, 18:38:41) and `Food's stocked (19.9 pts)` (18:39:27).
+- So food held has 0 wrong facts. Two of the seven goal lines lagged a pickup.
 
 **The causes, for the checker fix (a follow-up PR after this one):**
 - **A1/A3:** the agenda source should be the state at the facts line's time: the latest source at or before it, with only a few seconds of slack after it, not any source within ±30 s.
 - **A2:** a `scripted job (run …)` line is a step only while the agenda is active.
+- **The 3 real wrong facts:** the checker must parse `active, all steps done` (`45`). It must also count a step named as current as a miss when the facts line's own done list names that step, or a `step X done` line came before it (`681`, `697`).
 - **A4:** parse `agenda: done (…), step X (…)` as step X.
 - **S1:** take the latest job-end count at or before the facts line, or a later job's end count minus its gain.
 - **P and F:** add the standing goal's `you hold H` / `you have N` and the tool events (`[tool] … broke`, `crafted … pickaxe`, `[pickaxe] made`, death keeps) as sources. That gives both fields their samples by day.
@@ -156,7 +165,7 @@ There were 4 repeats within 10 min of the same failure, out of 20 failed command
 | **agenda done** | **21:15:12 (45.7)** | **17:29:42 (12.7)** |
 
 ## (a) The traps, and every `[escape]` / `[trapped]` line
-**Trap 1, reported as one trap: 18:03:31 to 18:09:45, 6.2 min. It never reached the sky and ended with the death** (the lead's call).
+**Trap 1, reported as one trap: 18:03:31 to 18:09:45, 6.2 min. It never reached the sky and ended with the death** (the lead's call). The 6.2 min runs from the first trap line. The collect that took the bot down began at 18:01:53 (`2094`), and the bot was at y 25–26 by the time the collect gave up (#661 review 5).
 - **How it started:** at 18:01:53 (`2094`) the model sent `!collectBlocks("cobblestone", 7)` for the standing goal's shelter blocks. The collect ran for 98 s with no lines of its own. Its output (`2108`–`2110`) begins `Gave up on cobblestone at 81, 26, 67: time limit of 90 s reached`, so its target was cobblestone 55 blocks under the sky (the surface there is at y 78–80). The shortened output does not show the way down. The region file is saved for skills-rotn.
 - **The lines:**
 
@@ -287,13 +296,13 @@ There were **no roof retries**: no `roof` line, no other-side or one-lower try. 
 | I10 death loop | 0 loops (1 death) | – |
 | I11 summary cost | 0 summaries; 0% of the spend (M4 check 5: 25 chunks cut with no summary call) | – |
 | I12 unattributed hurt | 0 `(by unknown)` lines; 0 deaths with no mob named | – |
-| I13 memory facts | checker gate **fail**, 26 misses in 746 fields; **by hand 0 wrong; pickaxe and food held have 0 checker samples** | above |
+| I13 memory facts | checker gate **fail**, 26 misses in 746 fields, all 26 artefacts; **by hand 3 real wrong agenda facts the checker missed** (`45`, `681`, `697`); pickaxe and food held have 0 checker samples (hand checks: 0 wrong) | above |
 | I14 wrong-state claims | checker 1 of 15; **by hand 0 of 15** | `2187` |
 | I15 repeated failures | 4 (1.99/h), 4 after a facts line named the first | `344`, `901`, `1539`, `1995` |
 
 The live checks during the run (every ~20 min on the partial journal, at 17:37, 17:57, 18:16, 18:37 and 18:57) all showed I2, I6 and I10 at 0. I1 fired at 18:03:31, and I reported it to the lead at once.
 
-The baseline (`test/evidence/g4/invariants-baseline.json`) gets the soak 17 row. The diff adds only that row.
+The baseline (`test/evidence/g4/invariants-baseline.json`) gets the soak 17 row. The diff adds only that row. **That row understates the fatal trap** (#661 review 3). It holds the tool's output today, `I1_trapped` 3 and `I1_longestMin` 2.8, which describes the same single trap of 6.2 min. The span-fix follow-up PR regenerates the row.
 
 ## Owners' notes
 - **skills-rotn:**
@@ -304,13 +313,17 @@ The baseline (`test/evidence/g4/invariants-baseline.json`) gets the soak 17 row.
   - The two food-held differences in (F).
   - A side note: at 18:00:20 `!searchForEntity("cow", 64)` found no cow (`1808`). A line 4 later, `Could not find any pig in 32 blocks. Animals in sight: animania:cow_holstein, animania:cow_holstein, …` (`1812`), is not this command's output, and its "in sight" list is different.
 - **net-forge:** the two rejected clicks (e), both a pickaxe whose damage rose by one during a dig.
-- **harness-ops (follow-ups after this PR):** the I1 span fix (the lead's call); the I13 fixes A1–A4, S1, and the new sources for P and F; and I14's `from y=A to y=B` (take the last y as where the bot is now).
+- **harness-ops (follow-ups after this PR):** the I1 span fix (the lead's call), which regenerates this soak's baseline row; the I13 fixes A1–A4 and S1; parsing `active, all steps done`; the stale-step check (`681`, `697`); the new sources for P and F; I14's `from y=A to y=B` (take the last y as where the bot is now); and the lead's new `no_trap` scenario check.
+- **skills-rotn:** the facts' agenda step comes from `agent._agenda_step` (`memory_facts.js` `agendaLine`), the step the agenda driver last started.
+  - It lags a step that is already done until the driver moves on (`681`, `697`).
+  - With no step set yet, `describeAgenda` writes `active, all steps done; done: none` (`45`, 17:17:05).
 
 ## Files
-- `README.md`: this file.
-- `driver.log`: the bot's journal for the run (`ssh cx23-ctl journal frcfld`), 3,311 lines, redacted (`redact-evidence.mjs … --bot FRCFLD`; the `--check` leak check is clean). The line numbers above are this file's lines.
-- `server.log`: the test server's log as the runner read it, redacted the same way.
-- `result.json`: the runner's result, with every sample.
-- `run.log`: the runner's console output.
-- `server-lifecycle.txt`: both servers. Server 1: `up`, `starts`, the postponement, `down`, and the Hetzner counts. Server 2: `up`, `starts` (twice), the since-start header, `save-all flush`, `down`, and the Hetzner counts.
-- `step7-starts.txt`: `test-server.sh starts` right after server 2's `up`.
+Every file except `README.md` and `step7-starts.txt` went through `test/tools/redact-evidence.mjs <in> <out> --bot FRCFLD`. The redactor replaces addresses with `<ip>`, the bot's name with `<bot>`, UUIDs with `<uuid-v4>`, server ids with `<server-id>` and local paths with `<local>`. `redact-evidence.mjs --check` on this folder is clean, and so is `test/tools/secret-scan.mjs` after `git add`.
+- `README.md`: this file, written by hand; it names no address, path or key.
+- `driver.log`: the bot's journal for the run (`ssh cx23-ctl journal frcfld`), 3,311 lines. **Redacted** as above, with the line count unchanged, so the line numbers in this README are this file's lines.
+- `server.log`: the test server's log as the runner read it. **Redacted** as above.
+- `result.json`: the runner's result, with every sample. **Redacted** as above.
+- `run.log`: the runner's console output. **Redacted** as above.
+- `server-lifecycle.txt`: both servers. Server 1: `up`, `starts`, the postponement, `down`, and the Hetzner counts. Server 2: `up`, `starts` (twice), the since-start header, `save-all flush`, `down`, and the Hetzner counts. **Redacted** as above: addresses, server ids and the local state path. The `Waiting for …` progress lines of `up` and `down` are left out.
+- `step7-starts.txt`: `test-server.sh starts` right after server 2's `up`, written by hand (two lines, no address).
