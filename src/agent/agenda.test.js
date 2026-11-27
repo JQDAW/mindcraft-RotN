@@ -267,7 +267,7 @@ test('commands: !agenda describes it; !agendaStop/!agendaStart only when a giver
     assert.equal(agent.agenda.active, true);
 
     assert.deepEqual(parseCommandMessage('!collectBlocks("stick", 2)').args, ['stick', 2]);
-    assert.equal(describeAgenda({ steps: ROTN_EARLY_GAME, active: false, done_at: {} }, null), 'agenda: stopped, all steps done; done: none');
+    assert.equal(describeAgenda({ steps: ROTN_EARLY_GAME, active: false, done_at: {} }, null), 'agenda: stopped, no step chosen yet; done: none');
 });
 
 test('a step once done stays done: crafting the crude axe uses up sticks, the agenda does not go back', (t) => {

@@ -112,6 +112,16 @@ test('#665 round 2 (blocker): a real Movements: no drop into a pit below the flo
     assert.equal(walksBackToFloor(v, at(5, 63, 0)), true, 'up the steps to the floor');
 });
 
+test('#665 round 3 nit: a dig during the collect clears the walk-back memo (what is walkable changed)', () => {
+    const b = bot();
+    const f = setCollectFloor(b, 68, { startY: 70 });
+    walksBackToFloor(b, at(5, 56, 0));
+    assert.ok(f.back.size > 0);
+    noteCollectDig(b, at(9, 66, 0));
+    assert.equal(f.back.size, 0);
+    clearCollectFloor(b, f);
+});
+
 test('soak 17 T: within a collect a walk\'s own floor never goes below the collect\'s (goToPosition to a deep target)', () => {
     const b = bot();
     const m = guardWalkBreaks(b, fakeMovements(), 24); // a walk to a target at y 26: its own floor 24

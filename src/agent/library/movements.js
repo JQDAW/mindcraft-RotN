@@ -80,7 +80,9 @@ export const collectFloorY = (bot) => collectFloor(bot)?.y ?? null;
 /** A dig during the collect (the bot.dig hook): its column's top is no longer read as the start's. */
 export function noteCollectDig(bot, pos) {
     const f = collectFloor(bot);
-    if (f && pos) f.dugCols.add(`${Math.floor(pos.x)},${Math.floor(pos.z)}`);
+    if (!f || !pos) return;
+    f.dugCols.add(`${Math.floor(pos.x)},${Math.floor(pos.z)}`);
+    f.back.clear(); // #665 round 3 nit: a dig changes what is walkable: the walk-back memo starts again
 }
 
 const treeLike = (b) => !!b && (isTreePart(b) || /(^|:)log2?$|_log$/.test(b.name ?? ''));
@@ -141,6 +143,10 @@ function breakFloor(bot, m) {
  * walk from `pos` (with `free` cells counted as dug) back up to a cell at or above the floor, by steps of one
  * (walk_exit.walkableExit): memoized per collect.
  */
+// #665 round 3 nit: the walk back is walk_exit's walk (steps of one, no digging), and it does not apply the sky rule:
+// it may pass a cell below the floor under rock, which a guarded walk does not step into while the collect runs. Such a
+// way back is real (nothing to dig), so once the collect ends (no floor) the bot can walk it; during the collect the
+// pathfinder may find no way back up and the collect's walk then ends there.
 export function walksBackToFloor(bot, pos, { free = new Set() } = {}) {
     const f = collectFloor(bot);
     if (!f || !pos) return true;

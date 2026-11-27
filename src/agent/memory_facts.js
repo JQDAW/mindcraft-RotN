@@ -26,7 +26,11 @@ export function memoryMode(agent) {
 
 /** Bounds: records kept, lines shown, chars per line. */
 export const MEMORY_FACTS = {
-    failuresKept: 3, failureWhyMax: 100, failureCmdMax: 60, failureLineMax: 120, // #637 review 2: a line each
+    // Soak 17 S7 (R4, the ewe): failuresStored kept in the record; the list shows every failure younger than failureHoldMs
+    // (a refusal's leave-alone: !attack on a mob it could not reach, 5 min) first, then older ones, newest first, at most
+    // failuresChars in all (not a count: three newer search misses pushed the ewe out of a 3-entry list).
+    failuresStored: 12, failuresChars: 600, failureHoldMs: 5 * 60_000,
+    failureWhyMax: 100, failureCmdMax: 60, failureLineMax: 120, // #637 review 2: a line each
     deathsShown: 2,
     collectsKept: 4, collectsMs: 30 * 60_000,
     placesMax: 4,
@@ -59,13 +63,13 @@ export function emptyFacts() {
 
 /**
  * A failed command (commands/index.js): what, why (the result's last line until round 17 K gives a structured why),
- * where and when. Only the last MEMORY_FACTS.failuresKept.
+ * where and when. The last MEMORY_FACTS.failuresStored (the list shown is chosen by failureLines).
  */
 export function recordFailure(facts, { cmd, why, pos = null, at: when = Date.now() }) {
     if (!facts || !cmd) return;
     const entry = { cmd: clip(String(cmd).trim(), MEMORY_FACTS.failureCmdMax), why: clip(String(why ?? 'no reason given').trim(), MEMORY_FACTS.failureWhyMax), at: when };
     if (isPos(pos)) entry.pos = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
-    facts.failures = [...(facts.failures ?? []), entry].slice(-MEMORY_FACTS.failuresKept);
+    facts.failures = [...(facts.failures ?? []), entry].slice(-MEMORY_FACTS.failuresStored);
 }
 
 /** The action manager's marker for a skill that threw (action_manager.js), followed by "Error: <message>" and frames. */
@@ -197,13 +201,27 @@ function failureLines(facts, here, now) {
     const f = facts?.failures ?? [];
     if (!f.length) return [];
     // #650 review (the lead): the why is clipped, never the "(N min ago at ...)" suffix: the model keeps the time.
-    return ['Recent failures (newest first):', ...f.slice().reverse().map(e => {
+    const line = (e) => {
         const suffix = ` (${ago(now - e.at)}${e.pos ? ` at ${at(e.pos)}${here ? `, ${bearing(here, e.pos)}` : ''}` : ''})`;
         const head = `${e.cmd}: `;
         // #652 nit: at least 10 chars of why, so with a long command and place the line may pass failureLineMax a little.
         const room = Math.max(10, MEMORY_FACTS.failureLineMax - head.length - suffix.length);
         return `${head}${clip(e.why, room)}${suffix}`;
-    })];
+    };
+    // Soak 17 S7: the failures still in their leave-alone window first (newest first), then older ones, within
+    // failuresChars; shown newest first.
+    const newest = f.slice().reverse();
+    const held = newest.filter(e => now - e.at < MEMORY_FACTS.failureHoldMs);
+    const older = newest.filter(e => now - e.at >= MEMORY_FACTS.failureHoldMs);
+    const chosen = new Set();
+    let chars = 0;
+    for (const e of [...held, ...older]) {
+        const n = line(e).length + 1;
+        if (chosen.size && chars + n > MEMORY_FACTS.failuresChars) continue;
+        chosen.add(e);
+        chars += n;
+    }
+    return ['Recent failures (newest first):', ...newest.filter(e => chosen.has(e)).map(line)];
 }
 
 function deathsLine(facts, here, now) {
