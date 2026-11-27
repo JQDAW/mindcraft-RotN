@@ -316,18 +316,39 @@ test('#665 round 1 (decision 6): a hazard walk (keep: false) may dig with a pick
     assert.equal(stoneCost(seen[1]), 0, 'and it may break stone with that pickaxe');
 });
 
-test('#670 nit 2: the way-out checks below the floor have their own cap; past it the target is left with the others below the floor, never "capped"', async (t) => {
-    t.mock.method(console, 'log', () => {});
+/** #670/#671: the hill (stone up to 69 for x <= 2), steps of one down east to the valley floor (y 63), boulders on it. */
+function valley(boulders) {
     const extra = [];
     const hill = (x) => (x <= 2 ? 69 : Math.max(63, 71 - x));
     for (let x = -8; x <= 8; x++) for (let z = -8; z <= 8; z++) for (let y = 64; y <= hill(x); y++) extra.push([STONE, V(x, y, z)]);
-    extra.push(['cobblestone', V(9, 64, 0)], ['cobblestone', V(9, 64, 4)]);
-    const world = stoneWorld({ surfaceY: 63, half: 10, extra });
-    const items = [{ ...stack('iron_pickaxe', 0, 1) }];
-    const bot = fakeBot({ world, items, start: V(0.5, 70, 0.5) });
-    await skills.collectBlock(bot, 'cobblestone', 2, null, 64, { ...skills.COLLECT_LIMITS, wayChecks: 1 });
-    assert.equal(bot.calls.dug.length, 1, bot.output);
+    for (const p of boulders) extra.push(['cobblestone', p]);
+    return stoneWorld({ surfaceY: 63, half: 12, extra });
+}
+
+test('#671 review 1: more valley targets than the way-out cap, at the default cap: every one asked is taken (the cap is a search\'s, the verdicts memoized)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const boulders = [];
+    for (let x = 9; x <= 12 && boulders.length < 70; x++) for (let z = -8; z <= 8 && boulders.length < 70; z++) boulders.push(V(x, 64, z));
+    assert.ok(boulders.length > skills.COLLECT_LIMITS.wayChecks, `${boulders.length} targets`);
+    const bot = fakeBot({ world: valley(boulders), items: [{ ...stack('iron_pickaxe', 0, 1) }], start: V(0.5, 70, 0.5) });
+    await skills.collectBlock(bot, 'cobblestone', 20);
+    assert.equal(bot.calls.dug.length, 20, bot.output);
     assert.notEqual(bot.rotnCollectEnd.reason, 'capped');
-    assert.match(bot.output, /Left 1 block for cobblestone below y 68 alone/);
+    assert.doesNotMatch(bot.output, /below y 68 alone/);
+});
+
+test('#671 review 1: a cap of 1 check a search: each search checks one more, so both valley boulders are taken; one left unchecked is said apart', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [{ ...stack('iron_pickaxe', 0, 1) }];
+    const two = fakeBot({ world: valley([V(9, 64, 0), V(9, 64, 4)]), items, start: V(0.5, 70, 0.5) });
+    await skills.collectBlock(two, 'cobblestone', 2, null, 64, { ...skills.COLLECT_LIMITS, wayChecks: 1 });
+    assert.equal(two.calls.dug.length, 2, two.output);
+    // Three boulders, one asked: the first search checks one, the other two are left unchecked (their own line).
+    const three = fakeBot({ world: valley([V(9, 64, 0), V(9, 64, 4), V(9, 64, -4)]), items: [{ ...stack('iron_pickaxe', 0, 1) }], start: V(0.5, 70, 0.5) });
+    await skills.collectBlock(three, 'cobblestone', 1, null, 64, { ...skills.COLLECT_LIMITS, wayChecks: 1 });
+    assert.equal(three.calls.dug.length, 1);
+    assert.match(three.output, /Left 2 blocks for cobblestone below y 68 unchecked: more than 1 way-out checks in one search\. Collect again from nearer them\./);
+    assert.doesNotMatch(three.output, /below y 68 alone/);
+    assert.notEqual(three.rotnCollectEnd.reason, 'capped');
     assert.equal(skills.COLLECT_LIMITS.wayChecks, 64);
 });
