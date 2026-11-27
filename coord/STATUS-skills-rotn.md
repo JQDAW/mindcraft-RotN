@@ -1,6 +1,54 @@
 # Status: skills-rotn
 
-Updated: 2026-11-26T01:28Z (from `date -u`)
+Updated: 2026-11-27T02:04Z (from `date -u`)
+
+## 2026-11-27: round 17 V, soak 17 T, E, S and S2 (summary, 2026-11-27T02:04Z by `date -u`)
+
+### Merged since the 2026-11-26 summary
+| PR | What | In tag |
+| --- | --- | --- |
+| #657 | Round 17 V: one inventory view (`library/inventory_view.js`), every reader through it (no phantom crafting-result dirt, no grid stacks, no worn armour in the counts); the idle re-arm of the hands (`rearmNeeds` is `rearmWeapon`'s own decision; never while dead or before the respawn settles; not awaited) | none yet (rotn-v0.1.24 next) |
+| #665 | Soak 17 T (trap 1 and the 18:40 trap): every collect has a floor (its start y − 2, held only while its action runs): no break, step, drop landing or other move below it, no target below it, except a surface target under open sky at the start that walks back up; mineflayer-collectblock's own walk guarded; cobblestone below Sturdy and a stone block that drops rocks take the rock route (cobble from the rocks carried first); pickaxe targets only where their break keeps a way out; `library/movements.js` (`guardedMovements`, the seed of round 17 W) builds or guards every pathfinder Movements under `src/agent`, with a static test and an allow-list | none yet |
+| #667 | Soak 17 E: the escape makes its own crafting table (crude axe, Crafting Tools, table), re-makes a pickaxe at its keep (no hostile near), says why a pillar failed and tries once more, never digs into a cave when wary; at dusk a deep day escape seals in for the night when a seal is possible and the food covers the night (the night routine adopts the sealed cell, climbs out for a food emergency, and climbs out in the morning with the day budget); no flee walk or chase while climbing out (fight in place); while trapped the standing goal offers only the way out, and a command sent during the escape waits for it (run only after an escape that ended by itself) | none yet |
+| #670 | Soak 17 S: the agenda line never says "all steps done" before a step is picked nor names a done step; the standing goal's held food read at the turn; the failures list keeps a failure while its leave-alone holds (by chars); the craft text names an off-hand input and `!craftRecipe` moves it into the inventory; by-hand digs hold nothing that wears; #665's round 3 nits | none yet |
+| #671 | Soak 17 S2 (the #670 nits): the off-hand craft text (what will do, its count); the way-out checks below the floor capped a search, memoized, with their own line; the settle wait only for the standing goal; `!getCraftingPlan`'s workarounds removed (#669's planner answers) | none yet |
+
+### Open
+- None of mine.
+
+### Next (the lead's order)
+- **Z:** the morning wait for a stationary zombie: break the shelter's own wall on the side away from it (the lead's answer 5).
+- **K:** command preconditions and structured results; soak 16/17's failure counts pick the first commands.
+- **W:** one movements factory, on top of #665's `library/movements.js` (W adds the kinds: walk, dig, escape, night).
+
+### Follow-ups (noted, not scheduled)
+- **L4's open question:** rotn-data lists the stone axe as a choice for Crafting Tools. Soak 17 never sent that craft (the pre-check refused it), so whether the server takes it is not known. The escape's table chain (#667) always makes the crude axe.
+- **The two #657 round 3 test follow-ups** (`inventory_view.test.js`): the SETTLE_MS re-run test should await `idleHands` and check its result; the hung-click test should call `idleHands` again after the wait (the held lock still blocks it). For the next PR that touches that file.
+- **Night 3's refused roof** (soak 16), the memory with `load_memory` false on the CX23, the fake-dig C1 end-to-end test, and "No place 64 blocks … within 160": as in the 2026-11-26 summary.
+
+### Requests
+- **(lead) The prompter's example selection** (#670 review item 5): at 18:00:20 an old action output ("Could not find any pig … Animals in sight: animania:cow_holstein …") was shown to the model as an `Example:` under `selected examples:`, with animals from minutes before. That was soak 17's L2 (the cow search itself was right). The example selection is lead-owned.
+- **The crafting planner request** (`/home/rv/s17S-planner-request.md`, items 1-3): done in rotn-data's #669. Nothing of it is open.
+
+### To check in soak 18 (offline-tested only; rotn-v0.1.24)
+- **T (#665):**
+  - "Left N blocks for X below y F alone" and "… unchecked: more than 64 way-out checks in one search";
+  - "Crafted N cobble from your rocks …" for `!collectBlocks("cobblestone")`;
+  - "… drops 4 rocks with your stone_pickaxe, never itself: collecting …" for a stone block;
+  - no collect that ends 3 or more below its start (I1 trap spans).
+- **E (#667):**
+  - `[escape] the stone_pickaxe has N uses left (keep K): making another first`, or "not making another with a … within 16 blocks";
+  - `[escape] the pillar at X did not take (…): once more`;
+  - "the way up opens into a cave at X …";
+  - at dusk: "sealing the shaft here for the night", or "no seal is possible here (…): climbing on";
+  - `[night] … sealed in the shaft at X (the escape's seal): tonight's shelter as it is`, and the morning "climbed out of the shaft";
+  - `[survival] climbing out of a hole: no flee walk …`;
+  - `[action] "…" waits for the escape (…) to end`, then the command, or "Not run: it waited for the escape, which ended otherwise".
+- **S (#670, #671):**
+  - the agenda field never "all steps done" with steps left, never a done step as current (I13);
+  - the standing goal's "(you hold H)" equal to the facts line's food held (F);
+  - a failure kept in the facts while its 5-min leave-alone holds (I15 R4);
+  - no weapon or tool worn on a rock pile (`[tool] … broke … on pyrotech…rock`).
 
 ## 2026-11-26: soak 16 fixes, round 17 M and P, the soak 16 trap and failures (summary, 2026-11-26T01:28Z by `date -u`)
 
@@ -11,10 +59,10 @@ Updated: 2026-11-26T01:28Z (from `date -u`)
 | #627 | Soak 16 F: the day food reserve by script (forage within 48, hunt within 64), hogs huntable, the herd rule by same-breed cows, re-checked during the chase | rotn-v0.1.22 |
 | #630 | Soak 16 R: the rock collect stays out of holes (exposed stone first, a walkable way out kept, loose rocks within 48), the `shelter_blocks` text, a scripted `shelter_blocks` job, the agenda job watchdog | rotn-v0.1.22 |
 | #632 | Soak 16 C: truthful Broke/Collected lines ("was not broken", the walk's digs named apart, drops that craft into the item) | rotn-v0.1.22 |
-| #637 | Round 17 M: code-built memory (agenda, reserves, the last 3 failures, deaths, places, collects; the bot's notes); the summary model only for a task giver's chunk; `!note`; the profile's `"memory": "code"` switch | none yet (soak 17's tag) |
-| #642 | Soak 16 trap: the escape names the blocking cell, makes a stone pickaxe when the climb needs one, steps sideways; walks never dig below both ends or with the pickaxe's last 20%; "Unable to reach" is a failed walk; the update-loop trapped job and due re-plan; the post-agenda pickaxe reserve; `[tool] <item> broke` | none yet |
-| #645 | Round 17 P: RotN conversation examples, the hidden docs commands, the five long descriptions shortened, `!goToBed` and `!useOn` on a bed refused once the Scroll of New Life is used (none held counts as used), only real commands in the model's texts (a contract test); #642's nits | none yet |
-| #652 | Soak 16 failures: a pecking hen (any food animal that fights back) fought back, a weak one even with no weapon above health 6; a guard on `bot.attack` (a passive animal or a player only when the calling skill named it); the hurt detail without the death's own Zombie Player; a refused hole roof tried on its other faces, then one deeper; a strict night escape from an open hole; the kill's drop from the inventory gain; `!consume` finds food in the off hand, the grid and the cursor | none yet |
+| #637 | Round 17 M: code-built memory (agenda, reserves, the last 3 failures, deaths, places, collects; the bot's notes); the summary model only for a task giver's chunk; `!note`; the profile's `"memory": "code"` switch | rotn-v0.1.23 |
+| #642 | Soak 16 trap: the escape names the blocking cell, makes a stone pickaxe when the climb needs one, steps sideways; walks never dig below both ends or with the pickaxe's last 20%; "Unable to reach" is a failed walk; the update-loop trapped job and due re-plan; the post-agenda pickaxe reserve; `[tool] <item> broke` | rotn-v0.1.23 |
+| #645 | Round 17 P: RotN conversation examples, the hidden docs commands, the five long descriptions shortened, `!goToBed` and `!useOn` on a bed refused once the Scroll of New Life is used (none held counts as used), only real commands in the model's texts (a contract test); #642's nits | rotn-v0.1.23 |
+| #652 | Soak 16 failures: a pecking hen (any food animal that fights back) fought back, a weak one even with no weapon above health 6; a guard on `bot.attack` (a passive animal or a player only when the calling skill named it); the hurt detail without the death's own Zombie Player; a refused hole roof tried on its other faces, then one deeper; a strict night escape from an open hole; the kill's drop from the inventory gain; `!consume` finds food in the off hand, the grid and the cursor | rotn-v0.1.23 |
 
 ### Open
 - **#657 (draft): round 17 V.** One inventory view, every reader through it, and the idle re-arm of the hands. It merges after the soak 17 tag (the lead).
@@ -23,13 +71,11 @@ Updated: 2026-11-26T01:28Z (from `date -u`)
 - **Z:** the morning wait for a stationary zombie: break the shelter's own wall on the side away from it (the lead's answer 5).
 - **K:** command preconditions and structured results; soak 16/17's failure counts pick the first commands.
 - **W:** one movements factory (after soak 17 shows the escape works live).
-- **A hen threat-data follow-up,** if rotn-data's frogs/toads/chicks entries land.
 
 ### Follow-ups (noted, not scheduled)
 - **Night 3's refused roof:** the cause is not settled. #652 logs the other faces tried and the living entities within 2 blocks; read them in soak 17 if it happens again.
 - **The memory with `load_memory` false on the CX23:** the notes and the fact records (failures, deaths since start, collects) are not reloaded after a restart, and the first save writes them empty. Nothing breaks: "Deaths: N since this memory began" counts since the start. The Scroll of New Life's use is kept (#645).
 - **The fake-dig C1 end-to-end test** (`packages/forge-bridge/test/fake-dig.js`) for the collect's "was not broken" line.
-- **The fake world's `findBlocks` with the palette pass,** so the collect can run whole on the soak 15 pocket (harness-ops).
 - **"No place 64 blocks … within 160"** (`respawn_relocate.js:142`): the relocation search finding no target on open ground.
 - **Soak 16 watch items still open:** about 1.7-2 s of CPU per rock-collect pick on stone-poor terrain (watch for "Can't keep up"); snow-layer and tall-grass faces not counted as exposed.
 
@@ -62,7 +108,7 @@ Updated: 2026-11-26T01:28Z (from `date -u`)
 | #604 | Soak 13 scroll: per-side "no way out" lines, the kept-items rule, the morning scroll from the opened shelter with its roof taken down | rotn-v0.1.20 |
 | #612 | Soak 14 food (F1): eat at 8, the night's need in points, the sunset food run, the night emergency at food 4, provoked marks | rotn-v0.1.21 |
 | #614 | Soak 14 shelter (F2): the dig budget after the equip, the stall limit, the `[dig]` line with effects, Mining Fatigue in dig estimates, shelter blocks first after a daytime respawn, the stone pickaxe in the off hand | rotn-v0.1.21 |
-| #619 | Soak 15: the hands rule at the action boundary (the off-hand pickaxe into the inventory before an action, reflexes excepted; re-armed after, not after `!equip`, bounded to 4 s), a `bot.dig` wrapper, the 2x2 grid returned (cursor first, then `close_window` 0; "dropped" when the server had no room), between-action repairs, `!inventory` sections, no `!newAction` in the docs when insecure coding is off | none yet (after rotn-v0.1.21) |
+| #619 | Soak 15: the hands rule at the action boundary (the off-hand pickaxe into the inventory before an action, reflexes excepted; re-armed after, not after `!equip`, bounded to 4 s), a `bot.dig` wrapper, the 2x2 grid returned (cursor first, then `close_window` 0; "dropped" when the server had no room), between-action repairs, `!inventory` sections, no `!newAction` in the docs when insecure coding is off | rotn-v0.1.22 |
 
 ### Doing
 - **Soak 16 item E** (branch `agent/skills-rotn/soak16-escape`): one escape, wired everywhere. Plan `/home/rv/soak16-plan-skills.md`, lead decisions `/home/rv/soak16-lead-decisions.md`.
@@ -70,7 +116,7 @@ Updated: 2026-11-26T01:28Z (from `date -u`)
 
 ### Follow-ups (noted, not scheduled)
 - **"No place 64 blocks … within 160"** (`respawn_relocate.js:142`, soak 14 respawn 2): the relocation search found no target, with the bot on open ground. E adds only the trapped check there (the lead's decision 4); why the search found nothing is a separate follow-up.
-- **`profiles/defaults/_default.json` examples still show `!newAction`** (#619 review 8): RotN `conversation_examples` in `profiles/`, in a later PR.
+- **`profiles/defaults/_default.json` examples still show `!newAction`** (#619 review 8): covered by #645 (round 17 P: the RotN conversation examples in `profiles/rotn-bot.json`).
 - **#619 re-review notes (wording only):** any interrupting action (not only a reflex) skips the interrupted one's re-arm, except `!equip`; the "dropped" count can be skewed by a pickup during the 1 s wait.
 
 ### To check in the next soak (all tested offline only; only in a tag that has #619)
