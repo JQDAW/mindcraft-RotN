@@ -11,6 +11,7 @@ import { craftNeeds, describeNeeds } from '../library/craft_needs.js';
 import { isGenericCobble, cobbleChoices, ROCKS_PER_COBBLE } from '../library/cobble.js';
 import { TABLE_CHAIN } from '../library/pickaxe.js';
 import { safeError } from '../safe_error.js';
+import * as inv from '../library/inventory_view.js';
 
 /** How far craftRecipe looks for a crafting table (skills.craftRecipe's craftingTableRange). */
 export const CRAFT_TABLE_RANGE = 16;
@@ -21,6 +22,9 @@ export const CRAFT_TABLE_RANGE = 16;
  */
 export function checkCanRun(command, agent, args, context) {
     if (typeof command?.canRun !== 'function') return null;
+    // K1 review 3: during an escape climb the state is about to change (a stair cell dug, a table made); the command
+    // waits for the climb (action_manager ESCAPE_WAIT) as before and its skill judges the state after it.
+    if (agent?.bot?.rotnClimbing === true) return null;
     let r = null;
     try {
         r = command.canRun(agent, ...(args ?? []), context);
@@ -46,7 +50,8 @@ export function noteResult(context, r) {
 /**
  * !craftRecipe's canRun, in craftRecipe's own order (skills.craftRecipe), so it refuses only what craftRecipe would:
  * 1. no crafting recipe on this pack (dl16:2090 wooden_pickaxe, dl17:3038 metamorphic_stone), with a hint;
- * 2. an input only the off hand holds: never refused, craftRecipe moves it (#670 L4, dl17:2273);
+ * 2. an input only the off hand holds: never refused, craftRecipe moves it (#670 L4, dl17:2273); nor anything while a
+ *    stack sits in the 2x2 grid or on the cursor (K1 review 1: craftRecipe returns them first);
  * 3. no registry recipe at all and rotn-data's fill not ready: what is missing (dl16:819, dl17:2217), the table's way
  *    too when none is near or held;
  * 4. a table recipe, no table within 16 blocks and none held (dl16:776, 1017): the whole way to a table, said once.
@@ -56,6 +61,9 @@ export function craftRecipeCanRun(agent, name) {
     const bot = agent?.bot;
     if (!bot || typeof name !== 'string' || isGenericCobble(name)) return null;
     if ((mc.getItemCraftingRecipes(name)?.length ?? 0) === 0) return { code: 'no-recipe', why: noRecipeText(bot, name) };
+    // K1 review 1: stacks in the 2x2 grid or on the cursor are not counted here (craftNeeds and recipesFor read items()),
+    // and craftRecipe returns them to the inventory first (returnGrid, soak 15 N3): the craft judges.
+    if (inv.gridSlotsHeld(bot).length || inv.cursorStack(bot)) return null;
     const needs = craftNeeds(bot, name);
     if (needs && !needs.ready && craftNeeds(bot, name, { offHand: true })?.ready) return null;
     const id = mc.getItemId(name);

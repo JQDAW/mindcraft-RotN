@@ -582,7 +582,7 @@ export async function placeHere(bot, type, { pillar = pillarUp, place = placeBlo
     const item = findItem(bot, type);
     if (!item || !fullBlockItem(bot, item)) return place(bot, type, p.x, p.y, p.z);
     const refused = jumpPlaceRefusal(bot, type, p);
-    if (refused) return fail(bot, refused.code, refused.why, p);
+    if (refused) return fail(bot, refused.code, refused.why, p, 'placeHere');
     // Round 17 K (dl16:1635, dl17:344): pillarUp's own reason (#667) is said, not dropped.
     const info = {};
     if (await pillar(bot, item, Infinity, info)) {
@@ -590,12 +590,13 @@ export async function placeHere(bot, type, { pillar = pillarUp, place = placeBlo
         return true;
     }
     return fail(bot, 'jump-failed', `Could not place ${type} at ${at(p)}: you are in that cell, and the jump-and-place did not take (still at ${at(feetOf(bot))})`
-        + `${info.why ? `: ${info.why}` : ''}.`, p);
+        + `${info.why ? `: ${info.why}` : ''}.`, p, 'placeHere');
 }
 
 /** Round 17 K: placeHere's result, {ok, code, why, where}, for the command layer; placeHere stays boolean. */
 export function placeHereResult(bot, type, opts = {}) {
-    return resultOf(bot, () => placeHere(bot, type, opts));
+    // Its own failures, and placeBlock's for the items placeHere hands to it (torches and the like, no full block).
+    return resultOf(bot, () => placeHere(bot, type, opts), ['placeHere', 'placeBlock']);
 }
 
 /**

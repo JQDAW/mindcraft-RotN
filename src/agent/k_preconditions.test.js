@@ -109,7 +109,7 @@ test('K1: resultOf gives the last tagged failure of the call, else code "failed"
 });
 
 // ---- The static rules ----
-test('K1: every canRun is synchronous (no async function); the ...Result siblings are called only by the command layer and their own files, never as a condition', () => {
+test('K1: every canRun is synchronous (no async function); in src/ the ...Result siblings are called only in commands/actions.js, never read as a boolean', () => {
     const src = readFileSync(new URL('./commands/actions.js', import.meta.url), 'utf8');
     const ast = espree.parse(src, { ecmaVersion: 'latest', sourceType: 'module' });
     const found = [];
@@ -122,19 +122,66 @@ test('K1: every canRun is synchronous (no async function); the ...Result sibling
     for (const f of found) assert.equal(f.async, false, `an async canRun at ${src.slice(f.start, f.start + 60)}`);
     for (const c of actionsList.filter(c => c.canRun)) assert.notEqual(c.canRun.constructor.name, 'AsyncFunction', c.name);
 
-    const RESULT = /\b(craftRecipeResult|placeBlockResult|placeHereResult)\s*\(/;
-    const allowed = new Set(['commands/actions.js', 'library/skills.js', 'library/escape.js']);
-    const root = new URL('.', import.meta.url).pathname;
+    // K1 review 6: every ...Result call in src/ (not only src/agent) is in the allow-list's file, and its value is never
+    // read as a boolean (resultUseProblems).
+    const srcRoot = new URL('..', import.meta.url).pathname; // src/
     const files = [];
-    (function list(d) { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) list(p); else if (p.endsWith('.js') && !p.endsWith('.test.js')) files.push(p); } })(root);
+    (function list(d) { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) list(p); else if (p.endsWith('.js') && !p.endsWith('.test.js')) files.push(p); } })(srcRoot);
+    let calls = 0;
     for (const p of files) {
-        const rel = p.slice(root.length);
+        const rel = p.slice(srcRoot.length);
         const text = readFileSync(p, 'utf8');
-        if (!allowed.has(rel)) assert.doesNotMatch(text, RESULT, `${rel} calls a ...Result sibling`);
-        // Never read as a boolean: no `if (await xResult(`, `!await xResult(`, `&& await xResult(` and the like.
-        assert.doesNotMatch(text, /(\bif\s*\(\s*|!\s*|&&\s*|\|\|\s*|\?\s*)(await\s+)?(skills\.)?(craftRecipeResult|placeBlockResult|placeHereResult)\s*\(/, `${rel} reads a result object as a boolean`);
+        if (![...RESULT_NAMES].some(n => text.includes(n))) continue;
+        const { count, problems } = resultUseProblems(text);
+        calls += count;
+        if (count) assert.ok(RESULT_FILES.has(rel), `...Result calls outside the allow-list (${[...RESULT_FILES]}): ${rel}`);
+        assert.deepEqual(problems, [], rel);
     }
+    assert.equal(calls, 2, 'actions.js: !craftRecipe and !placeHere');
 });
+
+test('K1 review 6: the static check refuses `const r = await xResult(...); if (r)`, a returned result and a let; it takes noteResult and r.<field>', () => {
+    for (const bad of [
+        'async function f(bot) { const r = await placeBlockResult(bot, "dirt", 0, 0, 0); if (r) return true; }',
+        'async function f(bot) { return await placeBlockResult(bot, "dirt", 0, 0, 0); }',
+        'async function f(bot) { if (await skills.placeHereResult(bot, "dirt")) return 1; }',
+        'async function f(bot) { let r = await skills.craftRecipeResult(bot, "x"); return r.ok; }',
+    ]) assert.equal(resultUseProblems(bad).problems.length, 1, bad);
+    const good = 'async function f(bot, context) { noteResult(context, await skills.craftRecipeResult(bot, "x")); const r = await skills.placeHereResult(bot, "d"); noteResult(context, r); return r.ok; }';
+    assert.deepEqual(resultUseProblems(good), { count: 2, problems: [] });
+});
+
+/** The ...Result siblings, and the one file that may call them (the command layer). */
+const RESULT_NAMES = new Set(['craftRecipeResult', 'placeBlockResult', 'placeHereResult']);
+const RESULT_FILES = new Set(['agent/commands/actions.js']);
+/**
+ * A ...Result call is fine as noteResult's argument, or as the init of a const whose every other use is a property
+ * (r.ok, r.why) or noteResult's argument. Anything else (a condition, a return, a let) is a problem.
+ */
+function resultUseProblems(text) {
+    const ast = espree.parse(text, { ecmaVersion: 'latest', sourceType: 'module' });
+    const parents = new Map(), refs = new Map(), calls = [];
+    const nameOf = (c) => (c?.type === 'Identifier' ? c.name : c?.type === 'MemberExpression' && !c.computed ? c.property?.name : null);
+    (function walk(n, parent) {
+        if (!n || typeof n.type !== 'string') return;
+        parents.set(n, parent);
+        if (n.type === 'CallExpression' && RESULT_NAMES.has(nameOf(n.callee))) calls.push(n);
+        if (n.type === 'Identifier') { if (!refs.has(n.name)) refs.set(n.name, []); refs.get(n.name).push({ id: n, up: parent }); }
+        for (const k of Object.keys(n)) { const v = n[k]; if (Array.isArray(v)) v.forEach(c => walk(c, n)); else if (v && typeof v === 'object' && typeof v.type === 'string') walk(v, n); }
+    })(ast, null);
+    const noteArg = (node, up) => up?.type === 'CallExpression' && nameOf(up.callee) === 'noteResult' && up.arguments.includes(node);
+    const problems = [];
+    for (const call of calls) {
+        const at = text.slice(call.start, call.start + 60);
+        let node = call, up = parents.get(call);
+        if (up?.type === 'AwaitExpression') { node = up; up = parents.get(up); }
+        if (noteArg(node, up)) continue;
+        if (!(up?.type === 'VariableDeclarator' && up.init === node && up.id.type === 'Identifier' && parents.get(up)?.kind === 'const')) { problems.push(`a result used as a value or condition: ${at}`); continue; }
+        const bad = (refs.get(up.id.name) ?? []).filter(({ id, up: u }) => id !== up.id && !(u?.type === 'MemberExpression' && u.object === id) && !noteArg(id, u));
+        if (bad.length) problems.push(`${up.id.name} used other than ${up.id.name}.<field> or noteResult(…, ${up.id.name}): ${at}`);
+    }
+    return { count: calls.length, problems };
+}
 
 // ---- !craftRecipe ----
 test('K1 dl16:776/1017: a stone axe with no table near and none held: one reply names the table and the whole way to it (was "requires a crafting table", one link per failed call)', (t) => {
@@ -257,10 +304,14 @@ test('K1: placeBlock\'s failure keeps the error, and names a mob in the cell', a
     w.bot.entities[99] = { id: 99, type: 'mob', name: 'zombie', position: new Vec3(3.5, 64, 0.5), width: 0.6, height: 1.95 };
     const mob = await skills.placeBlockResult(w.bot, 'dirt', 3, 64, 0);
     assert.deepEqual([mob.ok, mob.code, mob.where], [false, 'place-error', '3,64,0']);
-    assert.match(mob.why, /^Failed to place dirt at \(3, 64, 0\): zombie is in that cell\.$/);
+    // K1 review 4: the real error is kept; the mob is added.
+    assert.match(mob.why, /^Failed to place dirt at \(3, 64, 0\): (Error: )?blockUpdate did not fire; zombie is in that cell\.$/, mob.why);
     const err = await skills.placeBlockResult(w.bot, 'dirt', 3, 64, 2);
     assert.match(err.why, /^Failed to place dirt at \(3, 64, 2\): .*blockUpdate did not fire\.$/);
     assert.equal(await skills.placeBlock(w.bot, 'dirt', 3, 64, 2), false, 'placeBlock stays boolean');
+    // The bot's own cell (placeHere's torch): never "you stand in that cell", only the error.
+    const own = await skills.placeBlockResult(w.bot, 'dirt', 0, 64, 0, 'bottom', false);
+    assert.doesNotMatch(own.why ?? '', /you stand|in that cell/, own.why);
 });
 
 // ---- !placeHere ----
@@ -306,6 +357,58 @@ test('K1: !placeHere through the command: a refusal is said before perform, with
     assert.deepEqual(runs, []);
     assert.equal(reply, 'Cannot place crafting_table: you hold none (blocks you hold: dirt).');
     assert.equal(agent.history.facts.failures[0].code, 'not-held');
+});
+
+// ---- K1 review round 1 ----
+test('K1 review 1: stacks in the 2x2 grid or on the cursor: no refusal (craftRecipe returns them to the inventory first); the same craft with none anywhere is refused', (t) => {
+    quiet(t);
+    const grid = fakeWorld({ slots: { 1: ['planks', 4] }, extra: { recipesFor: () => [] } });
+    useRegistry(t, grid.bot);
+    withRecipes(grid.bot, ['stick']);
+    assert.equal(craftRecipeCanRun({ bot: grid.bot }, 'stick'), null, 'the planks in slot 1');
+    const none = fakeWorld({ slots: { 5: ['planks', 1] }, extra: { recipesFor: () => [] } }); // slot 5 (armour) only names planks in the registry
+    __setRegistryForTest(none.bot.registry);
+    withRecipes(none.bot, ['stick']);
+    none.bot.inventory.slots[5] = null;
+    assert.equal(craftRecipeCanRun({ bot: none.bot }, 'stick')?.code, 'missing');
+    none.bot.inventory.selectedItem = grid.bot.inventory.slots[1]; // a stack on the cursor
+    assert.equal(craftRecipeCanRun({ bot: none.bot }, 'stick'), null, 'a cursor stack');
+});
+
+test('K1 review 3: while the escape climbs (bot.rotnClimbing), canRun is skipped: the command runs (and waits, ESCAPE_WAIT) and its skill judges after the climb', async (t) => {
+    const lines = [];
+    quiet(t, lines);
+    const w = fakeWorld({ slots: { 9: ['pyrotech:rock', 3], 10: ['stick', 4], 11: ['planks', 4] }, extra: { recipesFor: tableOnly() } });
+    useRegistry(t, w.bot);
+    withRecipes(w.bot, ['stone_axe']);
+    const runs = [];
+    const agent = agentFor(w.bot, runs);
+    w.bot.rotnClimbing = true;
+    assert.equal(checkCanRun(cmd('!craftRecipe'), agent, ['stone_axe', 1]), null);
+    const reply = await executeCommand(agent, '!craftRecipe("stone_axe", 1)');
+    assert.deepEqual(runs, ['action:craftRecipe'], 'perform ran');
+    assert.match(reply, /Crafting stone_axe requires a crafting table\./, 'the skill\'s own line');
+    assert.equal(agent.history.facts.failures[0].code, 'no-table', 'from the skill\'s result');
+    w.bot.rotnClimbing = false;
+    assert.equal(checkCanRun(cmd('!craftRecipe'), agent, ['stone_axe', 1])?.code, 'no-table');
+});
+
+test('K1 review 5: resultOf takes the failure the skill itself tagged, never a nested skill\'s or a reflex\'s during the call', async () => {
+    const bot = { output: '' };
+    const r = await resultOf(bot, () => {
+        fail(bot, 'place-error', 'Failed to place crafting_table at (1, 64, 0): Error: x.', null, 'placeBlock'); // nested
+        bot.output += 'Stopped before the table was reached.\n';
+        return Promise.resolve(false);
+    }, ['craftRecipe']);
+    assert.deepEqual(r, { ok: false, code: 'failed', why: 'Stopped before the table was reached.', where: null });
+    const own = await resultOf(bot, () => {
+        fail(bot, 'no-table', 'Crafting x requires a crafting table.', null, 'craftRecipe');
+        fail(bot, 'not-held', 'Don\'t have any torch to place.', null, 'placeBlock'); // a reflex's, later
+        return Promise.resolve(false);
+    }, ['craftRecipe']);
+    assert.deepEqual([own.code, own.why], ['no-table', 'Crafting x requires a crafting table.']);
+    const before = await resultOf(bot, () => Promise.resolve(false), ['craftRecipe']);
+    assert.equal(before.code, 'failed', 'a failure tagged before the call is not this call\'s');
 });
 
 // ---- Recent failures: a repeat updates its entry (the lead's answer 4) ----
