@@ -27,6 +27,7 @@ import { combatOf, weaponStats, meleeHitDamage, hitsToKill } from './combat.js';
 import { forageFood, forageSources, forageHazard } from './forage.js';
 import { weaponSweep } from './sweep.js';
 import { canFill } from './craft-fill.js';
+import { planRecipes, inOre, fillShortfall, cobbleFromRocks } from './plan-recipes.js';
 import { parseOld, registryName, WILDCARD_META } from './names.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -366,6 +367,26 @@ export class RotnData {
         if (!this._recipesById) this._recipesById = new Map((this.dump.recipes?.recipes ?? []).map((r) => [r.id, r]));
         const r = this._recipesById.get(id);
         return r ? this._shape(r) : null;
+    }
+
+    /** An item's recipes with each ingredient's full member list, for mcdata's planner (src/plan-recipes.js). */
+    planRecipes(item, opts) {
+        return planRecipes(this, item, opts);
+    }
+
+    /** The slots of a recipe the inventory-keyed pools cannot fill for `times` crafts (src/plan-recipes.js). */
+    fillShortfall(recipe, pools, opts) {
+        return fillShortfall(this, recipe, pools, opts);
+    }
+
+    /** The cobble the most held rocks make, from `have(inventoryKey)` (src/plan-recipes.js). */
+    cobbleFromRocks(have) {
+        return cobbleFromRocks(this, have);
+    }
+
+    /** Whether an item (meta null: any meta) is in an ore dictionary entry (src/plan-recipes.js). */
+    inOre(ore, name, meta) {
+        return inOre(this, ore, name, meta);
     }
 
     /** Whether inventory stacks can fill a recipe or howToGet craft way (src/craft-fill.js). */
