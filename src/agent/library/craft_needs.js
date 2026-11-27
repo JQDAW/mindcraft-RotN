@@ -10,7 +10,8 @@
 // Cobblestone still needs 4 rocks of one type because rotn-data has one recipe
 // per rock type.
 import { howToGet, canFill, loadRotnData, PACK_VERSION, registryName, botName, WILDCARD_META } from '../../../packages/rotn-data/index.js';
-import { countItem, formatName, parseName } from './rotn_names.js';
+import { countItem, formatName, parseName, itemMatches } from './rotn_names.js';
+import { offHand as offHandStack } from './inventory_view.js';
 
 const memberName = (m) => (m.meta == null ? botName(m.name) : formatName(botName(m.name), m.meta));
 
@@ -61,8 +62,12 @@ function inputMembers(input, cells) {
     return Array.isArray(input.choices) ? input.choices : [];
 }
 
-// The inventory as canFill wants it.
-const stacksOf = (bot) => bot.inventory.items().map(i => ({ name: i.name, meta: i.metadata ?? 0, count: i.count }));
+// The inventory as canFill wants it. offHand: the off hand's stack too (craftRecipe takes it into the inventory first).
+const stacksOf = (bot, { offHand = false } = {}) => {
+    const items = bot.inventory.items();
+    const off = offHand ? offHandStack(bot) : null;
+    return [...items, ...(off && !items.includes(off) ? [off] : [])].map(i => ({ name: i.name, meta: i.metadata ?? 0, count: i.count }));
+};
 
 /**
  * How close the bot is to crafting the item once: the RotN craft way canFill finds the
@@ -71,7 +76,7 @@ const stacksOf = (bot) => bot.inventory.items().map(i => ({ name: i.name, meta: 
  *           count: number, label: string, kinds: Array<{name: string, have: number}>, short: number,
  *           more: string|null}>, short: number, ready: boolean}|null} null when the item has no RotN craft way
  */
-export function craftNeeds(bot, name) {
+export function craftNeeds(bot, name, { offHand = false } = {}) {
     const p = parseName(name);
     if (!p) return null;
     let result = null;
@@ -82,7 +87,10 @@ export function craftNeeds(bot, name) {
     }
     const ways = (result?.ways ?? []).filter(w => w.kind === 'craft' && Array.isArray(w.inputs));
     if (ways.length === 0) return null;
-    const stacks = stacksOf(bot);
+    const stacks = stacksOf(bot, { offHand });
+    // Soak 17 L4: kinds are what a craft takes (the inventory); an off-hand stack is named apart (18:06:34: "you have 1
+    // stone_axe, so get 1 more stone_axe": the stone axe was in the off hand, which canFill never counted).
+    const off = offHand ? null : offHandStack(bot);
     const evaluated = ways.map(way => {
         const fill = canFill(way, stacks); // the whole recipe: the verdict
         const cells = recipeCells(way.recipeId);
@@ -91,18 +99,21 @@ export function craftNeeds(bot, name) {
             const c0 = input.choices?.[0] ?? members[0];
             // This input alone, for the message: how many of its slots the inventory can fill.
             const part = canFill({ ingredients: Array(input.count).fill({ stacks: members }) }, stacks);
-            const kinds = members.map(m => ({ name: memberName(m), have: countItem(bot, memberName(m)) }))
+            const kinds = members.map(m => ({ name: memberName(m), have: countItem(bot, memberName(m), { offHand }) }))
                 .filter(k => k.have > 0)
                 .sort((a, b) => b.have - a.have);
+            const inOffHand = off && members.some(m => itemMatches(off, memberName(m))) ? off.name : null;
             const short = part ? part.missing : input.count;
             const label = input.ore ?? (c0 ? memberName(c0) : '?');
             // What to get: rotn-data's top-ranked choice, not the ore list's first entry (that gave
             // betterwithmods:shaft for sticks, #151 re-review). For an ore any member does
             // ("pyrotech:rock (any rock)", what collecting a bare pyrotech:rock gathers).
+            // Soak 17 L4: what to get is the input's own choice when the held kinds do not fill it (never "1 more" of a
+            // kind already counted as held).
             const more = short > 0 && c0
-                ? (input.ore ? `${botName(c0.name)} (any ${input.ore})` : (kinds[0]?.name ?? memberName(c0)))
+                ? (input.ore ? `${botName(c0.name)} (any ${input.ore})` : (kinds.length && kinds.reduce((n, k) => n + k.have, 0) < input.count ? kinds[0].name : memberName(c0)))
                 : null;
-            return { ore: input.ore ?? null, count: input.count, label, kinds, short, more };
+            return { ore: input.ore ?? null, count: input.count, label, kinds, short, more, inOffHand };
         });
         const short = fill ? fill.missing : inputs.reduce((n, i) => n + i.short, 0);
         return { requiresTable: !!way.requiresTable, gives: way.gives, recipeId: way.recipeId ?? null, inputs, short, ready: !!fill?.ok };
@@ -121,7 +132,8 @@ export function describeNeeds(name, needs) {
     if (!needs?.inputs?.length) return '';
     const parts = needs.inputs.map(i => {
         const held = i.kinds.length ? `you have ${i.kinds.map(k => `${k.have} ${k.name}`).join(', ')}` : 'you have none';
-        const verdict = i.short > 0 ? `, so get ${i.short}${i.kinds.length ? ' more' : ''} ${i.more}` : ' (enough)';
+        const off = i.inOffHand && i.short > 0 ? ` (1 ${i.inOffHand} in the off hand, which a craft does not take: !craftRecipe moves it into the inventory first)` : '';
+        const verdict = i.short > 0 ? `${off}, so get ${i.short}${i.kinds.length ? ' more' : ''} ${i.more}` : ' (enough)';
         return `${i.count} ${i.label}: ${held}${verdict}`;
     });
     const where = needs.requiresTable ? ' (at a crafting table)' : '';

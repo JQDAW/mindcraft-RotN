@@ -233,7 +233,9 @@ test('soak 16 (E4): after a failed escape the agenda\'s prompt says to get out f
     const step = { id: 'stone_axe', goal: 'Make a stone axe.' };
     const agenda = { steps: [step] };
     const goal = agendaGoal(agenda, step, { trapped: () => stillTrapped(bot) });
-    assert.match(goal, /^RotN agenda, step 1 of 1 \(stone_axe\): You are trapped at 0, 56, 0 \(no walkable way to open ground\): get out first with !goToSurface \(it goes on from where you are\)\. Then: Make a stone axe\./);
+    // #668 review (soak 17 E): only the way out while trapped; the step's own text comes back once out.
+    assert.match(goal, /^RotN agenda, step 1 of 1 \(stone_axe\): You are trapped at 0, 56, 0 \(no walkable way to open ground\): get out first with !goToSurface \(it goes on from where you are\)\. Only that until you are out; this step comes back then\./);
+    assert.doesNotMatch(goal, /Make a stone axe/);
     bot.entity.position = new Vec3(5.5, 64, 5.5); // out
     bot.rotnTrapped.checkedAt = 0;
     assert.equal(stillTrapped(bot), null);

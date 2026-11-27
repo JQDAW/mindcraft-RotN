@@ -925,7 +925,12 @@ export function describeAgenda(agenda, current, newlyDone = []) {
     const stuck = Object.entries(agenda.stuck ?? {}).map(([id, e]) => (!e.cooling ? `${id} on retry ${e.retries}`
         : e.capped ? `${id} waits for its retry at the next full day (${STUCK_RETRY.max} retries spent)`
         : `${id} waits for retry ${(e.retries ?? 0) + 1} of ${STUCK_RETRY.max}`));
-    const waitingAll = !current && stuck.length > 0 && agenda.steps.some(s => !(agenda.done_at[s.id] || newlyDone.includes(s)));
-    const now = current ? `step ${current.id} (${current.short})` : waitingAll ? 'the steps left wait' : 'all steps done';
+    // Soak 17 L1 (driver.log:681, :697): a step already in the done list is never named as the current one (the driver's
+    // step lags its done mark by a few seconds); (driver.log:45) "all steps done" only when they are, else no step is
+    // chosen yet (before the driver's first pick, or between two steps).
+    if (current && done.includes(current.id)) current = null;
+    const left = agenda.steps.some(s => !(agenda.done_at[s.id] || newlyDone.includes(s)));
+    const waitingAll = !current && stuck.length > 0 && left;
+    const now = current ? `step ${current.id} (${current.short})` : waitingAll ? 'the steps left wait' : left ? 'no step chosen yet' : 'all steps done';
     return `agenda: ${state}, ${now}; done: ${done.length ? done.join(', ') : 'none'}${stuck.length ? `; stuck: ${stuck.join(', ')} (a giver's !agendaStart retries at once)` : ''}`;
 }

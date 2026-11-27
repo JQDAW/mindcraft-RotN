@@ -301,6 +301,17 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
     if (grid?.dropped?.length) log(bot, `${grid.dropped.map(g => `${g.count} ${g.name}`).join(', ')} that were left in the crafting grid were dropped on the ground (no room in your inventory): pick them up.`);
     // "cobblestone": the kind the bot's rocks make (G3 round 3 A: sedimentary rocks make chalk cobble).
     if (isGenericCobble(itemName)) return await craftCobbleFromRocks(bot, num, ops);
+    // Soak 17 L4 (18:06:34): with no pickaxe the weapon is kept in the off hand (rearmWeapon), and a craft that needs it
+    // (the stone axe for Crafting Tools) was refused: a craft takes only the inventory's stacks. An input only the off
+    // hand holds is moved into the inventory first (the action's re-arm puts the weapon back after it).
+    try {
+        const off = inv.offHand(bot);
+        const needs0 = off ? craftNeeds(bot, itemName) : null;
+        if (needs0 && !needs0.ready && craftNeeds(bot, itemName, { offHand: true })?.ready) {
+            const moved = await stowCarried(bot, (i) => i?.name === off.name, { resyncMs: 0 });
+            if (moved.length) log(bot, `Took the ${off.name} from the off hand into the inventory for this craft.`);
+        }
+    } catch { /* the craft says what is missing */ }
     const run = currentRun(bot); // checked after each await (#225 review)
     let placedTable = false;
     // The variant to craft: "planks:1" asks for spruce planks; a bare "planks" any (B1b).
@@ -1562,6 +1573,12 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
     const floorY = collectFloorY(bot);
     const belowFloor = new Set();
     let belowFloorSaid = false;
+    const wayTop = esc.topMemo(bot);
+    let wayChecks = 0;
+    const belowFloorWayOut = (block) => {
+        if (++wayChecks > CL.exposeChecks) { exposeCapped = true; return false; }
+        return esc.keepsWayOut(bot, block, wayTop) && walksBackToFloor(bot, block.position, { free: new Set([leafKey(block.position)]) });
+    };
     const buried = new Set(); // soak 17 T: pickaxe targets with no air face (the plain search), said once
     const noWayOut = [];
     let noWayOutSaid = 0;
@@ -1723,8 +1740,9 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             // collect began (#665 round 1: a log or dirt in a valley under open sky) is taken there.
             // #665 round 2 (blocker): and, whatever its tool, its break keeps a walkable way out (escape.keepsWayOut) and a
             // walk back up to the floor (a pit's bottom under open sky passes neither).
+            // #665 round 3 nit: the way-out check with one column memo for the collect, and within the exposeChecks cap.
             if (block.position && floorY !== null && block.position.y < floorY
-                && !(surfaceTargetBelowFloor(bot, block.position) && esc.keepsWayOut(bot, block) && walksBackToFloor(bot, block.position, { free: new Set([leafKey(block.position)]) }))) {
+                && !(surfaceTargetBelowFloor(bot, block.position) && belowFloorWayOut(block))) {
                 belowFloor.add(leafKey(block.position));
                 return false;
             }
@@ -1899,6 +1917,10 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             const preferred = preferredTools.find(([matches]) => matches(block))?.[1];
             const prefItem = preferred ? allowedTool(bot, preferred) : null;
             if (prefItem) await bot.equip(prefItem, 'hand');
+            // Soak 17 L5 (17:29:25: "[tool] spartanweaponry:club_wood broke (used up) on pyrotech_compat:rock_metamorphic"):
+            // a by-hand target (a rock pile) is broken holding nothing that wears (the weapon the re-arm keeps in the main
+            // hand, or a tool), as the leaf collect does; the action's re-arm takes the weapon back after it.
+            else if (isHand(block)) await stopHoldingWhere(bot, wearsOnBreak).catch(() => false);
             else await bot.tool.equipForBlock(block); // (the off-hand pickaxe: the action boundary, library/hands.js)
         }
         if (run.aborted) break;
