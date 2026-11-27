@@ -433,7 +433,8 @@ test('PR 2 (3): the !placeHere command uses placeHere', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync(new URL('../commands/actions.js', import.meta.url), 'utf8');
     const cmd = src.slice(src.indexOf("name: '!placeHere'"), src.indexOf("name: '!buildShelter'"));
-    assert.match(cmd, /await placeHere\(agent\.bot, type\);/);
+    // Round 17 K: through placeHere's result sibling (placeHere stays boolean for the escape's own callers).
+    assert.match(cmd, /await placeHereResult\(agent\.bot, type\)/);
     assert.match(cmd, /goes under you by a jump/);
 });
 

@@ -65,11 +65,20 @@ export function emptyFacts() {
  * A failed command (commands/index.js): what, why (the result's last line until round 17 K gives a structured why),
  * where and when. The last MEMORY_FACTS.failuresStored (the list shown is chosen by failureLines).
  */
-export function recordFailure(facts, { cmd, why, pos = null, at: when = Date.now() }) {
+export function recordFailure(facts, { cmd, why, code = null, pos = null, at: when = Date.now() }) {
     if (!facts || !cmd) return;
     const entry = { cmd: clip(String(cmd).trim(), MEMORY_FACTS.failureCmdMax), why: clip(String(why ?? 'no reason given').trim(), MEMORY_FACTS.failureWhyMax), at: when };
+    if (code) entry.code = String(code);
     if (isPos(pos)) entry.pos = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
-    facts.failures = [...(facts.failures ?? []), entry].slice(-MEMORY_FACTS.failuresStored);
+    // Round 17 K (the lead): the same command with the same code within failureHoldMs updates its entry (the time, the
+    // why, the place, a count) instead of adding one, so a repeated miss does not push the others out. A failure with no
+    // code (a regex-judged one) is the same when its why is.
+    const list = facts.failures ?? [];
+    const key = (e) => `${e.cmd}\u0000${e.code ? `code:${e.code}` : `why:${e.why}`}`;
+    const i = list.findLastIndex(e => key(e) === key(entry) && when - e.at < MEMORY_FACTS.failureHoldMs);
+    if (i >= 0) entry.count = (list[i].count ?? 1) + 1;
+    const rest = i >= 0 ? [...list.slice(0, i), ...list.slice(i + 1)] : list;
+    facts.failures = [...rest, entry].slice(-MEMORY_FACTS.failuresStored);
 }
 
 /** The action manager's marker for a skill that threw (action_manager.js), followed by "Error: <message>" and frames. */
@@ -203,7 +212,7 @@ function failureLines(facts, here, now) {
     // #650 review (the lead): the why is clipped, never the "(N min ago at ...)" suffix: the model keeps the time.
     const line = (e) => {
         const suffix = ` (${ago(now - e.at)}${e.pos ? ` at ${at(e.pos)}${here ? `, ${bearing(here, e.pos)}` : ''}` : ''})`;
-        const head = `${e.cmd}: `;
+        const head = `${e.cmd}${e.count > 1 ? ` x${e.count}` : ''}: `; // round 17 K: a repeat within 5 min
         // #652 nit: at least 10 chars of why, so with a long command and place the line may pass failureLineMax a little.
         const room = Math.max(10, MEMORY_FACTS.failureLineMax - head.length - suffix.length);
         return `${head}${clip(e.why, room)}${suffix}`;

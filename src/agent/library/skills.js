@@ -36,6 +36,7 @@ import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
 import * as inv from './inventory_view.js';
+import { fail, resultOf, cellText } from './results.js';
 
 const blockPlaceDelay = settings.block_place_delay == null ? 0 : settings.block_place_delay;
 const useDelay = blockPlaceDelay > 0;
@@ -265,9 +266,8 @@ async function craftCobbleFromRocks(bot, num, ops) {
     const choices = cobbleChoices(bot);
     if (choices.length === 0) {
         const held = cobbleRocksHeld(bot).map(c => `${c.have} ${c.rock}`);
-        log(bot, `Cobblestone takes ${ROCKS_PER_COBBLE} rocks of one kind, and each kind makes its own cobblestone; `
-            + `you have ${held.length ? held.join(', ') : 'no such rocks'}. Collect more with !collectBlocks("pyrotech:rock", 8).`);
-        return false;
+        return fail(bot, 'missing', `Cobblestone takes ${ROCKS_PER_COBBLE} rocks of one kind, and each kind makes its own cobblestone; `
+            + `you have ${held.length ? held.join(', ') : 'no such rocks'}. Collect more with !collectBlocks("pyrotech:rock", 8).`, null, 'craftRecipe');
     }
     let made = 0;
     for (const c of choices) {
@@ -320,8 +320,7 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
 
     // getItemCraftingRecipes gives null for an item without recipes (#151 re-review).
     if ((mc.getItemCraftingRecipes(itemName)?.length ?? 0) == 0) {
-        log(bot, `${itemName} is either not an item, or it does not have a crafting recipe!`);
-        return false;
+        return fail(bot, 'no-recipe', `${itemName} is either not an item, or it does not have a crafting recipe!`, null, 'craftRecipe');
     }
 
     // get recipes that don't require a crafting table
@@ -347,8 +346,7 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
                 recipes = bot.recipesFor(mc.getItemId(itemName), craftMeta, 1, craftingTable);
             }
             else {
-                log(bot, `Crafting ${itemName} requires a crafting table.`)
-                return false;
+                return fail(bot, 'no-table', `Crafting ${itemName} requires a crafting table.`, null, 'craftRecipe');
             }
         }
         else {
@@ -363,7 +361,7 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
         // independent, so mixed rocks are fine; cobblestone has one recipe per rock type.
         const needs = craftNeeds(bot, itemName);
         if (needs && !needs.ready)
-            log(bot, `You do not have the resources to craft ${itemName}. ${describeNeeds(itemName, needs)}`);
+            fail(bot, 'missing', `You do not have the resources to craft ${itemName}. ${describeNeeds(itemName, needs)}`, null, 'craftRecipe');
         else if (needs) {
             // canFill says the items fit a RotN recipe, but bot.registry has no variant for this mix
             // (its variants are capped): craft from the bot's own stacks (C1).
@@ -376,7 +374,7 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
             let first = null;
             try { first = mc.getItemCraftingRecipes(itemName)?.[0]?.[0] ?? null; } catch { first = null; }
             const requires = first ? ` It requires: ${Object.entries(first).map(([key, value]) => `${key}: ${value}`).join(', ')}.` : '';
-            log(bot, `You do not have the resources to craft a ${itemName}.${requires}`);
+            fail(bot, 'missing', `You do not have the resources to craft a ${itemName}.${requires}`, null, 'craftRecipe');
         }
         return false;
     }
@@ -410,9 +408,28 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
 
     //Equip any armor the bot may have crafted.
     //There is probablly a more efficient method than checking the entire inventory but this is all mineflayer-armor-manager provides. :P
-    bot.armorManager.equipAll(); 
+    bot.armorManager.equipAll();
 
     return true;
+}
+
+/**
+ * Round 17 K: craftRecipe's result for the command layer, {ok, code, why, where}; craftRecipe itself stays boolean
+ * for its callers (the night routine, the escape's table chain, the collect route, burrow, shelter).
+ * Soak 16 (dl16:627): bot.craft threw "missing ingredient" after the server rejected the grid clicks twice, and the
+ * model read the raw stack as the table's fault. That one error becomes a result (server-rejected) that says what to
+ * do; any other throw goes on as before.
+ */
+export async function craftRecipeResult(bot, itemName, num = 1, ops = CRAFT_TABLE_OPS) {
+    try {
+        return await resultOf(bot, () => craftRecipe(bot, itemName, num, ops), ['craftRecipe']);
+    } catch (err) {
+        if (!/missing ingredient/i.test(safeError(err))) throw err;
+        const why = `The server refused the craft of ${itemName} (the inventory was out of step with it). `
+            + 'Anything left in the crafting grid goes back to your inventory at the next craft: send the same craft again.';
+        fail(bot, 'server-rejected', why, null, 'craftRecipe');
+        return { ok: false, code: 'server-rejected', why, where: null };
+    }
 }
 
 /**
@@ -556,14 +573,22 @@ async function boundedCraft(bot, recipe, count, table, limits) {
 /** How long a crafting table's block update may come late before it counts as not placed. */
 export const TABLE_LATE_UPDATE_MS = 1200;
 
-/** Place a crafting table near the bot for a craft: the table block, or null (logged). */
-async function placeTableNear(bot, itemName, lateMs = TABLE_LATE_UPDATE_MS) {
-    const pos = world.getNearestFreeSpace(bot, 1, 6);
+/** Round 17 K (dl17:823, 901): a cell where a table placement just failed is left out for avoidMs; the next free cell is taken. */
+export const TABLE_PLACE = { avoidMs: 2 * 60_000 };
+
+/** Place a crafting table near the bot for a craft: the table block, or null (logged, with its code). */
+export async function placeTableNear(bot, itemName, lateMs = TABLE_LATE_UPDATE_MS, now = Date.now) {
+    // Soak 17 (dl17:823, 901): "Failed to place crafting_table at (-8, 70, -3)" twice, the same cell both times.
+    const failed = (bot.rotnTableFails ?? []).filter(f => now() - f.at < TABLE_PLACE.avoidMs);
+    bot.rotnTableFails = failed;
+    const avoided = (p) => failed.some(f => f.x === p.x && f.y === p.y && f.z === p.z);
+    const pos = world.getNearestFreeSpace(bot, 1, 6, failed.length ? avoided : null);
     if (!pos) {
-        log(bot, `Could not place a crafting table to craft ${itemName}: no free space nearby.`);
+        fail(bot, 'no-space', `Could not place a crafting table to craft ${itemName}: no free space nearby`
+            + `${failed.length ? ` (left out: ${failed.length === 1 ? 'the cell' : `${failed.length} cells`} where a placement just failed)` : ''}.`, null, 'craftRecipe');
         return null;
     }
-    await placeBlock(bot, 'crafting_table', pos.x, pos.y, pos.z);
+    const placed = await resultOf(bot, () => placeBlock(bot, 'crafting_table', pos.x, pos.y, pos.z), ['placeBlock']);
     let table = world.getNearestBlock(bot, 'crafting_table', 16);
     if (!table) {
         // The block update can come late (P1: up to 1158 ms), and placeBlock then reports a failure
@@ -571,7 +596,14 @@ async function placeTableNear(bot, itemName, lateMs = TABLE_LATE_UPDATE_MS) {
         await new Promise(resolve => setTimeout(resolve, lateMs));
         table = world.getNearestBlock(bot, 'crafting_table', 16);
     }
-    if (!table) log(bot, `Could not place a crafting table to craft ${itemName}.`);
+    if (!table) {
+        bot.rotnTableFails = [...failed, { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z), at: now() }];
+        // placeBlock's own line is already said; its reason only (dl17:823 said no reason at all).
+        const reason = placed.ok ? 'it did not appear there'
+            : (placed.why ?? 'the place failed').replace(/^Failed to place \S+ at \([^)]*\):\s*/, '').replace(/\.$/, '');
+        fail(bot, 'table-not-placed', `Could not place a crafting table to craft ${itemName} at ${Math.floor(pos.x)}, ${Math.floor(pos.y)}, ${Math.floor(pos.z)} (${reason}); `
+            + `the next try takes another cell for ${TABLE_PLACE.avoidMs / 60_000} min.`, pos, 'craftRecipe');
+    }
     return table;
 }
 
@@ -3348,24 +3380,17 @@ export async function placeBlock(bot, blockType, x, y, z, placeOn='bottom', dont
         await bot.creative.setInventorySlot(36, mc.makeItem(item_name, 1)); // 36 is first hotbar slot
         block_item = findItem(bot, item_name);
     }
-    if (!block_item) {
-        log(bot, `Don't have any ${item_name} to place.`);
-        return false;
-    }
+    if (!block_item) return fail(bot, 'not-held', `Don't have any ${item_name} to place.`, target_dest, 'placeBlock');
 
     const targetBlock = bot.blockAt(target_dest);
     if (blockMatcher([blockType])(targetBlock) || (targetBlock.name === names112.GRASS_BLOCK && parseName(blockType)?.name === 'dirt')) {
-        log(bot, `${blockType} already at ${targetBlock.position}.`);
-        return false;
+        return fail(bot, 'already-there', `${blockType} already at ${targetBlock.position}.`, target_dest, 'placeBlock');
     }
     const empty_blocks = names112.EMPTY_BLOCKS; // 1.12 names (B1); "grass" is the solid grass block in 1.12
     if (!empty_blocks.includes(targetBlock.name)) {
         log(bot, `${targetBlock.name} in the way at ${targetBlock.position}.`);
         const removed = await breakBlockAt(bot, x, y, z);
-        if (!removed) {
-            log(bot, `Cannot place ${blockType} at ${targetBlock.position}: block in the way.`);
-            return false;
-        }
+        if (!removed) return fail(bot, 'in-the-way', `Cannot place ${blockType} at ${targetBlock.position}: block in the way.`, target_dest, 'placeBlock');
         await new Promise(resolve => setTimeout(resolve, 200)); // wait for block to break
     }
     // get the buildoffblock and facevec based on whichever adjacent block is not empty
@@ -3400,10 +3425,7 @@ export async function placeBlock(bot, blockType, x, y, z, placeOn='bottom', dont
             break;
         }
     }
-    if (!buildOffBlock) {
-        log(bot, `Cannot place ${blockType} at ${targetBlock.position}: nothing to place on.`);
-        return false;
-    }
+    if (!buildOffBlock) return fail(bot, 'no-face', `Cannot place ${blockType} at ${targetBlock.position}: nothing to place on.`, target_dest, 'placeBlock');
 
     const pos = bot.entity.position;
     const pos_above = pos.plus(Vec3(0,1,0));
@@ -3437,9 +3459,30 @@ export async function placeBlock(bot, blockType, x, y, z, placeOn='bottom', dont
             return true;
         }
     } catch (err) {
-        log(bot, `Failed to place ${blockType} at ${target_dest}.`);
-        return false;
+        // Round 17 K (dl17:823, 901; dl16:456): the error is kept, and a mob or player standing in the cell is added
+        // (K1 review 4: never the bot itself: a torch goes in its own cell fine).
+        const inCell = entityInCell(bot, target_dest);
+        const why = [safeError(err), inCell ? `${inCell} is in that cell` : null].filter(Boolean).join('; ');
+        return fail(bot, 'place-error', `Failed to place ${blockType} at ${target_dest}${why ? `: ${why}` : ''}.`, target_dest, 'placeBlock');
     }
+}
+
+/** Round 17 K: the name of a mob or another player whose body is in the cell (it may block a block placed there), or null; never the bot. */
+export function entityInCell(bot, cell) {
+    const c = { x: Math.floor(cell.x), y: Math.floor(cell.y), z: Math.floor(cell.z) };
+    for (const e of Object.values(bot.entities ?? {})) {
+        if (!e?.position || e === bot.entity || e.type === 'object' || e.type === 'orb') continue;
+        const w = (e.width ?? 0.6) / 2, h = e.height ?? 1.8;
+        const p = e.position;
+        if (p.x + w > c.x && p.x - w < c.x + 1 && p.z + w > c.z && p.z - w < c.z + 1 && p.y + h > c.y && p.y < c.y + 1)
+            return `${e.name ?? e.username ?? 'an entity'}`;
+    }
+    return null;
+}
+
+/** Round 17 K: placeBlock's result, {ok, code, why, where}; placeBlock stays boolean for its callers. */
+export function placeBlockResult(bot, ...args) {
+    return resultOf(bot, () => placeBlock(bot, ...args), ['placeBlock']);
 }
 
 export async function equip(bot, itemName) {
