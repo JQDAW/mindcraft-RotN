@@ -102,7 +102,8 @@ export function craftNeeds(bot, name, { offHand = false } = {}) {
             const kinds = members.map(m => ({ name: memberName(m), have: countItem(bot, memberName(m), { offHand }) }))
                 .filter(k => k.have > 0)
                 .sort((a, b) => b.have - a.have);
-            const inOffHand = off && members.some(m => itemMatches(off, memberName(m))) ? off.name : null;
+            // #670 nit 1: the off-hand stack's own count, and whether it fills what the inventory lacks for this input.
+            const inOffHand = off && members.some(m => itemMatches(off, memberName(m))) ? { name: off.name, count: off.count ?? 1 } : null;
             const short = part ? part.missing : input.count;
             const label = input.ore ?? (c0 ? memberName(c0) : '?');
             // What to get: rotn-data's top-ranked choice, not the ore list's first entry (that gave
@@ -132,8 +133,13 @@ export function describeNeeds(name, needs) {
     if (!needs?.inputs?.length) return '';
     const parts = needs.inputs.map(i => {
         const held = i.kinds.length ? `you have ${i.kinds.map(k => `${k.have} ${k.name}`).join(', ')}` : 'you have none';
-        const off = i.inOffHand && i.short > 0 ? ` (1 ${i.inOffHand} in the off hand, which a craft does not take: !craftRecipe moves it into the inventory first)` : '';
-        const verdict = i.short > 0 ? `${off}, so get ${i.short}${i.kinds.length ? ' more' : ''} ${i.more}` : ' (enough)';
+        // #670 nit 1: an off-hand stack that fills the input is named as what will do (!craftRecipe moves it), never
+        // followed by "get" for that input; one that fills part of it, with what is still to get.
+        const offHeld = i.inOffHand && i.short > 0 ? i.inOffHand : null;
+        const offFills = !!offHeld && offHeld.count >= i.short;
+        const offText = offHeld ? ` (${offHeld.count} ${offHeld.name} in the off hand, which a craft does not take: !craftRecipe moves it into the inventory first${offFills ? ', and it will do' : ''})` : '';
+        const still = offHeld && !offFills ? i.short - offHeld.count : i.short;
+        const verdict = i.short <= 0 ? ' (enough)' : offFills ? offText : `${offText}, so get ${still}${i.kinds.length || offHeld ? ' more' : ''} ${i.more}`;
         return `${i.count} ${i.label}: ${held}${verdict}`;
     });
     const where = needs.requiresTable ? ' (at a crafting table)' : '';

@@ -9,7 +9,7 @@ import { __setRegistryForTest } from '../utils/mcdata.js';
 import './agent.js'; // the real import order (commands/index.js first)
 import { describeAgenda, STANDING_GOAL_PREFIX } from './agenda.js';
 import { freshGoalText } from './agenda_driver.js';
-import { inventorySettled, INVENTORY_SETTLE } from './self_prompter.js';
+import { inventorySettled, settleForTurn, INVENTORY_SETTLE } from './self_prompter.js';
 import { emptyFacts, recordFailure, buildMemory, MEMORY_FACTS } from './memory_facts.js';
 import { craftNeeds, describeNeeds } from './library/craft_needs.js';
 import * as skills from './library/skills.js';
@@ -45,17 +45,62 @@ test('soak 17 S6: the standing goal\'s "(you hold H)" is read at the turn (18:38
     assert.equal(freshGoalText(agent, 'RotN agenda, step 1 of 2 (weapon): (you hold 2.3)'), 'RotN agenda, step 1 of 2 (weapon): (you hold 2.3)', 'only the standing goal');
 });
 
-test('soak 17 S6: a turn waits for the inventory to settle after a slot change (the forage\'s pickup), and not at all otherwise', async () => {
+test('soak 17 S6: a turn waits for the inventory to settle after a slot change (the forage\'s pickup), and not at all otherwise (#670 nit 3: fake timers)', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
     const inventory = new EventEmitter();
     const bot = { inventory };
-    let t0 = Date.now();
-    await inventorySettled(bot);
-    assert.ok(Date.now() - t0 < 100, 'nothing changed: no wait');
+    let done = false;
+    await inventorySettled(bot).then(() => { done = true; });
+    assert.equal(done, true, 'nothing changed: no wait');
+    inventory.emit('updateSlot'); // at fake time T
+    done = false;
+    const p = inventorySettled(bot).then(() => { done = true; });
+    const step = 50;
+    let waited = 0;
+    while (!done && waited <= INVENTORY_SETTLE.maxMs + step) {
+        t.mock.timers.tick(step);
+        waited += step;
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+    }
+    await p;
+    assert.ok(waited >= INVENTORY_SETTLE.quietMs && waited <= INVENTORY_SETTLE.quietMs + 2 * step, `settled after ${waited} ms of fake time`);
+    // A slot that keeps changing: at most maxMs.
+    done = false;
     inventory.emit('updateSlot');
-    t0 = Date.now();
-    await inventorySettled(bot);
-    const waited = Date.now() - t0;
-    assert.ok(waited >= INVENTORY_SETTLE.quietMs - 60 && waited <= INVENTORY_SETTLE.maxMs + 200, `${waited} ms`);
+    const q = inventorySettled(bot).then(() => { done = true; });
+    waited = 0;
+    while (!done && waited <= INVENTORY_SETTLE.maxMs + 4 * step) {
+        inventory.emit('updateSlot');
+        t.mock.timers.tick(step);
+        waited += step;
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+    }
+    await q;
+    assert.ok(waited >= INVENTORY_SETTLE.maxMs && waited <= INVENTORY_SETTLE.maxMs + 2 * step, `capped after ${waited} ms`);
+});
+
+test('#671 review 2: the slot watcher is on from the first turn: an agenda-step turn does not wait, and the first standing-goal turn after it sees a change made meanwhile', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    const inventory = new EventEmitter();
+    const bot = { inventory };
+    const agent = { bot };
+    const step = 'RotN agenda, step 2 of 9 (sticks): collect 2 sticks.';
+    let done = false;
+    const a = settleForTurn(agent, step).then((p) => { done = p; });
+    for (let i = 0; i < 3; i++) await Promise.resolve();
+    assert.equal(done, step, 'off the standing goal: the text at once');
+    assert.equal(bot.rotnInvWatch, true, 'the watcher is on already');
+    await a;
+    inventory.emit('updateSlot'); // a pickup right after that turn
+    done = false;
+    const standing = `${STANDING_GOAL_PREFIX}keep food worth at least 12 points (you hold 2.3) and 14 blocks`;
+    const b = settleForTurn(agent, standing).then(() => { done = true; });
+    for (let i = 0; i < 3; i++) await Promise.resolve();
+    assert.equal(done, false, 'the standing goal waits for the change to settle');
+    let waited = 0;
+    while (!done && waited <= INVENTORY_SETTLE.maxMs) { t.mock.timers.tick(50); waited += 50; for (let i = 0; i < 5; i++) await Promise.resolve(); }
+    await b;
+    assert.ok(waited >= INVENTORY_SETTLE.quietMs, `${waited} ms`);
 });
 
 // ---- S7: the failures list (R4, the ewe) ----
@@ -79,9 +124,24 @@ test('soak 17 L4: the stone axe in the off hand is named as such, and what to ge
     const needs = craftNeeds(w.bot, 'contenttweaker:crafting_tools');
     assert.equal(needs.ready, false, 'a craft takes only the inventory');
     const text = describeNeeds('contenttweaker:crafting_tools', needs);
-    assert.match(text, /1 pyrotech:crude_axe: you have none \(1 stone_axe in the off hand, which a craft does not take: !craftRecipe moves it into the inventory first\), so get 1 pyrotech:crude_axe/);
-    assert.doesNotMatch(text, /get 1 more stone_axe/);
+    // #670 nit 1: the off-hand stack that fills the input is what will do, never also "get" for that input.
+    assert.match(text, /1 pyrotech:crude_axe: you have none \(1 stone_axe in the off hand, which a craft does not take: !craftRecipe moves it into the inventory first, and it will do\);/);
+    assert.doesNotMatch(text, /get 1 (more )?(stone_axe|pyrotech:crude_axe)/);
     assert.equal(craftNeeds(w.bot, 'contenttweaker:crafting_tools', { offHand: true }).ready, true);
+    // Another input short (no stick): that one says what to get; the off hand's still will do.
+    const noStick = fakeWorld({ slots: { 45: ['stone_axe', 1], 10: ['pyrotech:rock', 90, 8] } });
+    const t2 = describeNeeds('contenttweaker:crafting_tools', craftNeeds(noStick.bot, 'contenttweaker:crafting_tools'));
+    assert.match(t2, /in the off hand, which a craft does not take: !craftRecipe moves it into the inventory first, and it will do\);/);
+    assert.match(t2, /1 ladderMat: you have none, so get 1 /);
+    // The off-hand stack's own count (not a literal 1): 3 rocks there fill a stone pickaxe's 3.
+    const rocks = fakeWorld({ slots: { 45: ['pyrotech_compat:rock_metamorphic', 3], 10: ['stick', 2] } });
+    const t3 = describeNeeds('stone_pickaxe', craftNeeds(rocks.bot, 'stone_pickaxe'));
+    assert.match(t3, /\(3 pyrotech_compat:rock_metamorphic in the off hand, which a craft does not take: !craftRecipe moves it into the inventory first, and it will do\)/, t3);
+    // #671 review 3: an off-hand stack that fills only part of an input: its count, then what is still to get.
+    const part = fakeWorld({ slots: { 45: ['pyrotech_compat:rock_metamorphic', 1], 9: ['pyrotech_compat:rock_metamorphic', 1], 10: ['stick', 2] } });
+    const t4 = describeNeeds('stone_pickaxe', craftNeeds(part.bot, 'stone_pickaxe'));
+    assert.match(t4, /3 rock: you have 1 pyrotech_compat:rock_metamorphic \(1 pyrotech_compat:rock_metamorphic in the off hand, which a craft does not take: !craftRecipe moves it into the inventory first\), so get 1 more /, t4);
+    assert.doesNotMatch(t4, /it will do/);
 });
 
 test('soak 17 L4: !craftRecipe takes an input only the off hand holds into the inventory first', async (t) => {
@@ -107,19 +167,21 @@ test('soak 17 L5: a rock pile is broken holding nothing that wears (the wooden c
     assert.notEqual(w.calls.dug[0].held, 'spartanweaponry:club_wood', `held ${w.calls.dug[0].held}`);
 });
 
-// ---- L3: !getCraftingPlan (18:07:32, 18:07:18) ----
+// ---- L3: !getCraftingPlan (18:07:32, 18:07:18): the planner answers (#669); #670 nit 4: no workaround in queries.js ----
 test('soak 17 L3: !getCraftingPlan("cobblestone") names the rocks\' craft (was "a base item"); a stone pickaxe with any rock is ready', (t) => {
     quiet(t);
     const plan = queryList.find(c => c.name === '!getCraftingPlan');
     const w = fakeWorld({ slots: { 9: ['pyrotech_compat:rock_metamorphic', 64], 10: ['stick', 3] } });
     useRegistry(t, w.bot);
     const cobble = plan.perform({ bot: w.bot }, 'cobblestone', 5);
-    assert.match(cobble, /Cobblestone comes from 4 rocks of one kind in your inventory grid .*You have enough: 64 pyrotech_compat:rock_metamorphic(:0)? make 16 undergroundbiomes:metamorphic_cobble(:0)?\. Craft it with !craftRecipe\("cobblestone", 5\)\./);
+    assert.match(cobble, /your pyrotech_compat:rock_metamorphic(:0)? rocks make undergroundbiomes:metamorphic_cobble(:0)? \(4 rocks each\)/);
+    assert.match(cobble, /You have all items required to craft this item!/);
     assert.doesNotMatch(cobble, /base item/);
     const none = fakeWorld({ slots: { 10: ['stick', 3] } });
-    assert.match(plan.perform({ bot: none.bot }, 'cobblestone', 2), /You have no 4 rocks of one kind; for 2 more, collect 8 rocks with !collectBlocks\("pyrotech:rock", 8\)/);
+    assert.match(plan.perform({ bot: none.bot }, 'cobblestone', 2), /4 rocks of any one kind make that kind's cobblestone/);
     const pick = plan.perform({ bot: w.bot }, 'stone_pickaxe', 1);
-    assert.doesNotMatch(pick, /missing the following items:\s*- 3 pyrotech:rock:0/);
+    assert.match(pick, /You have all items required to craft this item!/);
+    assert.doesNotMatch(pick, /pyrotech:rock:0/);
 });
 
 test('soak 17 (#669 review): 18:06:37\'s rock counts are each stack once: 420 metamorphic rocks in 7 stacks, 90 rock:8 in 2 (the 18:04:02 lines named crafts, not counts)', (t) => {

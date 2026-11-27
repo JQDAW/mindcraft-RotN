@@ -1573,11 +1573,24 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
     const floorY = collectFloorY(bot);
     const belowFloor = new Set();
     let belowFloorSaid = false;
+    // #670 nit 2, #671 review 1: the way-out checks of surface targets below the floor (a walkableExit search and a walk
+    // back each) have their own cap: COLLECT_LIMITS.wayChecks fresh checks a search (the counter starts again with each
+    // search; a search re-tests every target, so a cap a collect ran out after a few targets). Each position's verdict is
+    // memoized; the memo and the column memo are cleared at each dig of the collect (bot.rotnDigHook, below). Past the
+    // cap a target is left unchecked, said apart (wayCapped), never as below the floor nor as the exposure cap's "capped".
     const wayTop = esc.topMemo(bot);
+    const wayVerdict = new Map();
+    const wayCapped = new Set();
     let wayChecks = 0;
+    const wayMax = limits?.wayChecks ?? COLLECT_LIMITS.wayChecks;
     const belowFloorWayOut = (block) => {
-        if (++wayChecks > CL.exposeChecks) { exposeCapped = true; return false; }
-        return esc.keepsWayOut(bot, block, wayTop) && walksBackToFloor(bot, block.position, { free: new Set([leafKey(block.position)]) });
+        const k = leafKey(block.position);
+        if (wayVerdict.has(k)) return wayVerdict.get(k);
+        if (++wayChecks > wayMax) { wayCapped.add(k); return null; }
+        const ok = esc.keepsWayOut(bot, block, wayTop) && walksBackToFloor(bot, block.position, { free: new Set([k]) });
+        wayVerdict.set(k, ok);
+        wayCapped.delete(k);
+        return ok;
     };
     const buried = new Set(); // soak 17 T: pickaxe targets with no air face (the plain search), said once
     const noWayOut = [];
@@ -1660,6 +1673,11 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             belowFloorSaid = true;
             log(bot, `Left ${belowFloor.size} ${belowFloor.size === 1 ? 'block' : 'blocks'} for ${blockType} below y ${floorY} alone (more than ${WALK_GUARD.floorBelow} under where this collect started): a collect never digs or walks below that. Look for them nearer your level.`);
         }
+        // #671 review 1: targets the way-out cap left unchecked, said apart (not "below the floor").
+        if (wayCapped.size && !wayCapped.said) {
+            wayCapped.said = true;
+            log(bot, `Left ${wayCapped.size} ${wayCapped.size === 1 ? 'block' : 'blocks'} for ${blockType} below y ${floorY} unchecked: more than ${wayMax} way-out checks in one search. Collect again from nearer them.`);
+        }
         if (buried.size && !buried.said) {
             buried.said = true;
             log(bot, `Left ${buried.size} ${buried.size === 1 ? 'block' : 'blocks'} for ${blockType} buried in the rock (no open face): a collect takes cobblestone blocks only where they lie open.`);
@@ -1720,6 +1738,7 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
     // dug soak 17's shaft (it has no floor of its own: the collect's is read at each search).
     if (bot.collectBlock?.movements) guardMovements(bot, bot.collectBlock.movements, { floorY: null });
     for (let i=0; i<num && collected<num; i++) { // collected counts the items really gained (a stone can give 4 rocks)
+        wayChecks = 0; // #671 review 1: the way-out cap is a search's
         // G3 round 9 B: a stop (interrupt_code) ends the collect here too, not only at the loop's end,
         // which a break that threw skipped: the next block was started until the stop's 10 s ran out
         // and the process was killed ("Code execution refused stop after 10 seconds").
@@ -1740,11 +1759,12 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             // collect began (#665 round 1: a log or dirt in a valley under open sky) is taken there.
             // #665 round 2 (blocker): and, whatever its tool, its break keeps a walkable way out (escape.keepsWayOut) and a
             // walk back up to the floor (a pit's bottom under open sky passes neither).
-            // #665 round 3 nit: the way-out check with one column memo for the collect, and within the exposeChecks cap.
-            if (block.position && floorY !== null && block.position.y < floorY
-                && !(surfaceTargetBelowFloor(bot, block.position) && belowFloorWayOut(block))) {
-                belowFloor.add(leafKey(block.position));
-                return false;
+            // #665 round 3 nit, #671 review 1: the way-out check with one column memo, memoized per position, capped a search.
+            if (block.position && floorY !== null && block.position.y < floorY) {
+                const surface = surfaceTargetBelowFloor(bot, block.position);
+                const way = surface ? belowFloorWayOut(block) : false;
+                if (way === null) return false; // past the cap: unchecked (said apart)
+                if (!way) { belowFloor.add(leafKey(block.position)); return false; }
             }
             // Leaves only where the bot can reach them standing on the ground: never climb for them.
             if (isLeafBlock(block) && !leafFromGround(bot, block)) return false;
@@ -1965,7 +1985,7 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             // library/hands.js) or its fell; the walk's window ends there (a fell's cuts and later digs are not the walk).
             let targetStart = null;
             const markTarget = () => { targetStart ??= { held: allHeld(), n: bot.rotnDigs?.count ?? 0 }; };
-            bot.rotnDigHook = (b) => { noteCollectDig(bot, b?.position); if (block.position && b?.position && b.position.x === block.position.x && b.position.y === block.position.y && b.position.z === block.position.z) markTarget(); };
+            bot.rotnDigHook = (b) => { noteCollectDig(bot, b?.position); wayTop.clear(); wayVerdict.clear(); if (block.position && b?.position && b.position.x === block.position.x && b.position.y === block.position.y && b.position.z === block.position.z) markTarget(); };
             const breakIt = async () => {
                 if (isLiquid) return await useToolOnBlock(bot, 'bucket', block);
                 // By hand when the block has no collision box (a rock pile), or when a rule's tool must
@@ -5127,7 +5147,9 @@ const STOP_SETTLE_MS = 5000;
 // mineHandRadius, mineCandidates (soak 16 R): for an item with by-hand and mined blocks (rocks), the loose ones are
 // searched this far before any is mined; at most this many mined candidates are checked for a way out per target.
 export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
-    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000, mineHandRadius: 48, mineCandidates: 8, exposeChecks: 262_144 };
+    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000, mineHandRadius: 48, mineCandidates: 8, exposeChecks: 262_144,
+    // #670 nit 2: the way-out checks (a walkableExit search and a walk back each) for surface targets below the floor.
+    wayChecks: 64 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit
