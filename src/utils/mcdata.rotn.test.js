@@ -297,12 +297,12 @@ test('soak 17 L3: ore inputs count every held rock; cobblestone comes from 4 roc
     assert.match(sword, /^You are missing the following items:\n- 3 pyrotech:tinder\n\n/);
     assert.match(sword, /Craft 2 pyrotech_compat:rock_igneous \+ 1 spartanweaponry:material:0 -> 1 stone_sword$/);
 
-    // 18:07:10 !getCraftingPlan("stone_pickaxe", 1) said "- 3 pyrotech:rock:0". At 18:04:02 the bot had 20
-    // pyrotech_compat:rock_metamorphic:0 left (7 cobbles' worth, 2 crafted), which it crafted into 5 cobbles at
-    // 18:07:38. #669 review 3: its pyrotech:rock:8 count is logged too: 20 at 18:04:02 (5 limestone cobbles of 4,
-    // driver.log:2144); the crude axe (18:06:45) and Crafting Tools (18:06:49) took one rock each, the tools'
-    // plan naming rock:8 (18:06:34), so 18 here (at 20, a tie, metamorphic still wins: see below). 4 planks
-    // (18:06:14), no sticks.
+    // 18:07:10 !getCraftingPlan("stone_pickaxe", 1) said "- 3 pyrotech:rock:0". The bot held about 420
+    // pyrotech_compat:rock_metamorphic and 90 pyrotech:rock:8 (skills' craft_needs line at 18:06:37; the 18:09:50 death
+    // lost 453 and 269, the digging in between makes up the difference), 4 planks (18:06:14) and no sticks. The
+    // 18:04:02 lines (7 metamorphic cobbles, 5 limestone cobbles) are the crafts the shelter-blocks step asked for, not
+    // what the bot held. The rock counts below are chosen, not logged: small, with more metamorphic than rock:8 as
+    // in the log, so the mixes and the shortfalls are easy to read; the real counts are checked after them.
     const at1807 = { 'pyrotech_compat:rock_metamorphic:0': 20, 'pyrotech:rock:8': 18, 'planks:1': 4, 'undergroundbiomes:metamorphic_cobble:0': 4, 'log:1': 34 };
     const pick = mc.getDetailedCraftingPlan('stone_pickaxe', 1, at1807);
     assert.match(pick, /^You have all items required to craft this item!\n/, pick);
@@ -322,8 +322,12 @@ test('soak 17 L3: ore inputs count every held rock; cobblestone comes from 4 roc
     // A named kind: only that kind's rocks, 4 of one kind per cobble.
     assert.match(mc.getDetailedCraftingPlan('contenttweaker:limestone_cobble', 5, at1807), /^You are missing the following items:\n- 2 pyrotech:rock:8\n[^]*Craft 20 pyrotech:rock:8 -> 5 contenttweaker:limestone_cobble:0$/);
     // A tie (20 and 20): the first rock recipe in rockRecipes' order (metamorphic before limestone), the order skills'
-    // cobbleChoices also uses; the bot made metamorphic cobble at 18:07:38.
+    // cobbleChoices also uses.
     assert.match(mc.getDetailedCraftingPlan('cobblestone', 1, { ...at1807, 'pyrotech:rock:8': 20 }), /^Any cobblestone: your pyrotech_compat:rock_metamorphic:0 rocks make undergroundbiomes:metamorphic_cobble:0 /);
+    // The logged counts (about 420 and 90, 18:06:37): the same answers.
+    const real = { ...at1807, 'pyrotech_compat:rock_metamorphic:0': 420, 'pyrotech:rock:8': 90 };
+    assert.match(mc.getDetailedCraftingPlan('stone_pickaxe', 1, real), /^You have all items[^]*Craft 3 pyrotech:rock:8 \+ 2 stick -> 1 stone_pickaxe$/);
+    assert.match(mc.getDetailedCraftingPlan('cobblestone', 5, real), /^Any cobblestone: your pyrotech_compat:rock_metamorphic:0 rocks make undergroundbiomes:metamorphic_cobble:0 [^]*You have all items[^]*Craft 20 pyrotech_compat:rock_metamorphic:0 -> 5 undergroundbiomes:metamorphic_cobble:0$/);
     // #669 review 2: mixed kinds make no cobble. 2 igneous + 2 metamorphic rocks, or two metas of one rock, are not 4 of one kind.
     const mixed = mc.getDetailedCraftingPlan('cobblestone', 1, { 'pyrotech_compat:rock_igneous:0': 2, 'pyrotech_compat:rock_metamorphic:0': 2 });
     assert.match(mixed, /^Any cobblestone: your pyrotech_compat:rock_igneous:0 rocks make undergroundbiomes:igneous_cobble:0 \(4 rocks each\)\.\nYou are missing the following items:\n- 2 pyrotech_compat:rock_igneous:0\n/, mixed);
