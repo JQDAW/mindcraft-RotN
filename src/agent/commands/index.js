@@ -5,6 +5,8 @@ import { actionsList } from './actions.js';
 import settings from '../settings.js';
 import { queryList } from './queries.js';
 import { memoryMode, recordFailure, failureWhy, looksFailed } from '../memory_facts.js';
+import { checkCanRun } from './preconditions.js';
+import { resultLine } from '../library/results.js';
 
 let suppressNoDomainWarning = true;
 
@@ -246,14 +248,32 @@ export async function executeCommand(agent, message, context = {}) {
         if (numArgs !== numParams(command))
             return `Command ${command.name} was given ${numArgs} args, but requires ${numParams(command)} args.`;
         else {
-            const result = await command.perform(agent, ...parsed.args, context);
-            // Round 17 M: a failed action goes into the code-built memory's Recent failures (queries never do).
-            if (isAction(command.name) && looksFailed(result)) {
+            const cmdText = () => {
+                const args = (parsed.args ?? []).map(a => (typeof a === 'string' ? JSON.stringify(a) : String(a))).join(', ');
+                return `${command.name}${args ? `(${args})` : ''}`;
+            };
+            const record = (why, code = null) => {
                 try {
-                    const args = (parsed.args ?? []).map(a => (typeof a === 'string' ? JSON.stringify(a) : String(a))).join(', ');
-                    recordFailure(agent.history?.facts, { cmd: `${command.name}${args ? `(${args})` : ''}`, why: failureWhy(result), pos: agent.bot?.entity?.position ?? null });
+                    recordFailure(agent.history?.facts, { cmd: cmdText(), why, code, pos: agent.bot?.entity?.position ?? null });
                 } catch (err) { console.warn(`[memory] failure not recorded: ${err?.message ?? err}`); }
+            };
+            // Round 17 K: the command's precondition, before perform: a refusal stops nothing that runs, walks nowhere.
+            const refusal = checkCanRun(command, agent, parsed.args, context);
+            if (refusal) {
+                console.log(resultLine(command.name, parsed.args, { ok: false, ...refusal }));
+                if (isAction(command.name)) record(refusal.why, refusal.code);
+                return refusal.why;
             }
+            // Round 17 K: a perform that has a structured result hands it over in its own context (noteResult).
+            const ctx = { ...context, _k: { result: null } };
+            const result = await command.perform(agent, ...parsed.args, ctx);
+            const r = ctx._k.result;
+            if (r && result !== undefined) { // undefined: interrupted (runAsAction), nothing to say
+                console.log(resultLine(command.name, parsed.args, r));
+                if (!r.ok && r.code !== 'interrupted') record(r.why ?? failureWhy(result), r.code);
+            }
+            // Round 17 M: a failed action goes into the code-built memory's Recent failures (queries never do).
+            else if (isAction(command.name) && looksFailed(result)) record(failureWhy(result));
             return result;
         }
     }
