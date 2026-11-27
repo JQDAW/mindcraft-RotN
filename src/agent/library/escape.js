@@ -793,7 +793,8 @@ export function sealPossible(bot, feet) {
     if (!bestPickaxe(bot) && !need.handExit) return { ok: false, why: 'no pickaxe, and no side to dig out by hand' };
     // #667 round 2 (the lead's corrected decision (a)): only when the food covers the night (the night routine's own
     // calculation: food.nightFoodNeed against the held points); else the climb goes on, and the night routine shelters on
-    // the surface with its normal food rules.
+    // the surface with its normal food rules. #667 round 3 nit: nightFoodNeed counts a whole night, also when part of it
+    // has passed (a seal late in the night): a safe upper bound, which may send a bot that would have lasted on climbing.
     const held = heldFoodPoints(bot);
     const needFood = nightFoodNeed({ food: bot.food, saturation: Number.isFinite(bot.foodSaturation) ? bot.foodSaturation : 0 });
     if (Number.isFinite(needFood) && held < needFood) return { ok: false, why: `the food held (${held} points) does not cover the night (about ${needFood} more than your bar)` };
