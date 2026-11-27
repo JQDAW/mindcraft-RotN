@@ -25,7 +25,7 @@ import { nightRelocationPlan, walkAwayAtNight, NIGHT_RELOCATE } from './respawn_
 import { escapedRecently, escapeFellShort, scrollRefusal, useSpawnScroll, isSpawnScroll, SCROLL } from './respawn_escape.js';
 import { stairOut, DIG_OUT, WALK_EXIT } from './library/walk_exit.js';
 import { groundPlan, walkToGround, stepToDry, planText, inWater, GROUND } from './library/shelter_ground.js';
-import { escape, digWhy } from './library/escape.js';
+import { escape, digWhy, surfaceTarget } from './library/escape.js';
 import { mobInShelterCells, hasWeapon, shelterEnemy, shelterTarget, threatFor, isPlayerZombie, canFightHard, maxHitOf, inMeleeReach, meleeReach, fightNumbers, fightOdds, hurtingInReach } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
@@ -1276,9 +1276,44 @@ function line(agent, text) {
  * FOOD_RUN.minHealth only at food 3 or 4; at food 2 or lower it goes at any health. Held while a mob is in the
  * shelter's cells (said once).
  */
+/**
+ * Soak 17 E (#667 round 2): out of the sealed shaft with the escape (the day budget) now: the sealed state ends; then(r)
+ * sets what the routine does next (the night's normal rules).
+ */
+function climbOutOfSeal(agent, n, ops, why, then) {
+    const bot = agent.bot;
+    const site = n.site ?? bot.rotnSealedIn?.pos ?? bot.entity.position.floored();
+    line(agent, `[night] ${why} in the sealed shaft at ${at(site)}: climbing out now with the escape, then the night's food rules`);
+    n.sealedShaft = false;
+    bot.rotnSealedIn = null;
+    bot.rotnSheltered = false;
+    startJob(agent, n, ESCAPE_LABEL, () => ops.escape(bot, { budget: 'day', target: surfaceTarget(bot) }), (r) => {
+        console.log(`[night] ${r?.out ? `out of the shaft at ${at(r.at)}` : `the climb out of the shaft stopped (${r?.why ?? 'no result'})`}: the night goes on with its normal rules`);
+        then(r);
+    });
+}
+
+/** Soak 17 E (#667 review 3): the cell the escape sealed the bot in (bot.rotnSealedIn), when the bot is in it and it is closed. */
+export function sealedShaftHere(bot) {
+    const s = bot?.rotnSealedIn;
+    const feet = bot?.entity?.position?.floored?.();
+    if (!s?.pos || !feet || !feet.equals(s.pos)) return null;
+    let need = null;
+    try { need = siteNeeds(bot, feet, { accept: isWall, occupied: true }); } catch { need = null; }
+    return need && need.todo.length === 0 ? feet : null;
+}
+
 function nightFoodEmergency(agent, n, ops, now) {
     const bot = agent.bot;
     if (typeof ops.foodRun !== 'function') return null;
+    // Soak 17 E (#667 round 2, the lead's corrected decision (b)): the night's food emergency (food FOOD_RUN.emergencyAt or
+    // lower, nothing held) while sealed in a shaft: the escape climbs out at once (the day budget), the sealed state ends,
+    // and the normal emergency food path goes on from where the climb ends.
+    if (n.sealedShaft) {
+        if (!Number.isFinite(bot.food) || bot.food > FOOD_RUN.emergencyAt || heldFoodPoints(bot) > 0 || !ops.escape) return null;
+        climbOutOfSeal(agent, n, ops, `food ${bot.food} with nothing held`, () => { n.state = 'exposed'; n.site = null; });
+        return 'night:food';
+    }
     const e = n.foodEmergency;
     if (e?.done) return null;
     if (!e) {
@@ -1494,6 +1529,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         n.leaveFrom = null;
     }
     n.clock.observe(bot.time?.timeOfDay, now);
+    // #667 review 6: the escape's dusk and cave checks read this freeze-aware clock (as the routine does), not the raw time.
+    if (bot && !bot.rotnTimeOfDay) bot.rotnTimeOfDay = () => n.clock.timeOfDay(Date.now());
     const t = n.clock.timeOfDay(now);
     if (t === null) return null;
     const phase = nightPhase(t);
@@ -1532,6 +1569,33 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             return 'night:waiting';
         }
         n.stopping = false;
+        // Soak 17 E (#667 review 3, the lead): the escape sealed the bot in its shaft for the night (escape.sealForNight,
+        // bot.rotnSealedIn): that cell, closed, is tonight's shelter as it is (no build, no redo, whatever its walls); no
+        // food run leaves it (eat what is held; short, the morning climb comes first, then food); the morning climbs out.
+        const sealed = sealedShaftHere(bot);
+        const sealedHeld = sealed ? heldFoodPoints(bot) : 0;
+        const sealedNeed = sealed ? nightFoodNeed({ food: bot.food, saturation: Number.isFinite(bot.foodSaturation) ? bot.foodSaturation : 0 }) : null;
+        // #667 round 2 (the lead's corrected decision (a)): kept only while the food covers the night; short now, out first
+        // (the escape), then the normal rules: a shelter where the climb ends, and the food run.
+        if (sealed && Number.isFinite(sealedNeed) && sealedHeld < sealedNeed && ops.escape && !n.sealClimbTried) {
+            n.sealClimbTried = true;
+            n.site = sealed;
+            climbOutOfSeal(agent, n, ops, `the food held (${sealedHeld} points) does not cover the night (about ${sealedNeed})`, () => { n.site = null; });
+            return 'night:waiting';
+        }
+        if (sealed) {
+            const held = sealedHeld;
+            const need = sealedNeed;
+            const short = Number.isFinite(need) && held < need ? Math.round((need - held) * 10) / 10 : 0;
+            Object.assign(n, { state: 'inside', site: sealed, pit: false, sealedShaft: true, sealedFoodSaid: false, foodRunTried: true, digAt: null, repairStall: null, checkedAt: null,
+                clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false,
+                scrollTried: true, scrollUsed: false, morningScrollTried: true, digOutTried: true, climbTried: false });
+            bot.rotnSheltered = true;
+            n.closedOn = { at: exactAt(bot), floor: bot.blockAt?.(sealed.offset(0, -1, 0))?.name ?? 'unknown' };
+            line(agent, `[night] ${phase === 'dusk' ? 'sunset is near' : 'it is night'}: sealed in the shaft at ${at(sealed)} (the escape's seal): tonight's shelter as it is`);
+            console.log(`[night] food for the night: held ${held} points, the night needs about ${need ?? 'unknown'}: ${short ? `short by ${short}: no food run out of the shaft; the morning climb comes first, then food` : 'enough'}`);
+            return 'night:inside';
+        }
         line(agent, `[night] ${phase === 'dusk' ? 'sunset is near' : 'it is night'}: building a shelter`);
         // G4 #5: the night's food, in the journal. Soak 14 (F1, the lead): in points (hunger + saturation)
         // against the night's need (food.nightFoodNeed); short at dusk, one bounded food run first (FOOD_RUN.sunset),
@@ -1566,7 +1630,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (spent) n.lastShelter = spent.clone?.() ?? spent;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, badCells: null, gatherTried: false, ...GROUND_CLEAR, groundSkip: [] });
+        Object.assign(n, { sealedShaft: false, sealClimbTried: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, badCells: null, gatherTried: false, ...GROUND_CLEAR, groundSkip: [] });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -1830,7 +1894,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.state = 'day';
                 n.site = null;
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
-                    burrowSteps: 0, burrowNoneAt: null, digOutTried: false, climbTried: false, deeperTried: false, ...MORNING_CLEAR });
+                    burrowSteps: 0, burrowNoneAt: null, digOutTried: false, climbTried: false, deeperTried: false, sealedShaft: false, sealClimbTried: false, ...MORNING_CLEAR });
                 line(agent, text);
             };
             // Soak 13 (S2', the lead): out of the shelter in the morning, its side now open, the Scroll of New Life
@@ -1930,6 +1994,20 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                     });
                 });
             };
+            // Soak 17 E (#667 review 3): the night in the shaft the escape sealed: the climb goes on, with the day budget (the
+            // trapped job's, round 16), not the shelter's exits; still trapped after it, the trapped job goes on.
+            if (n.sealedShaft && !n.climbTried && ops.escape) {
+                n.climbTried = true;
+                const site = n.site;
+                line(agent, `[night] morning: sealed in the shaft at ${at(site)} for the night (the escape's seal); climbing out with the escape (the day budget)`);
+                startJob(agent, n, ESCAPE_LABEL, () => ops.escape(bot, { budget: 'day', target: surfaceTarget(bot) }), (r) => {
+                    n.sealedShaft = false;
+                    bot.rotnSealedIn = null;
+                    handBack(r?.out ? `[night] morning: climbed out of the shaft at ${at(site)} to ${at(r.at)} (the escape: ${r.how}; dug ${r.dug}, placed ${r.placed}); back to work`
+                        : `[night] morning: the climb out of the shaft at ${at(site)} stopped (${r?.why ?? 'no result'}); back to work, still trapped: the trapped job and !goToSurface go on from here`);
+                });
+                return 'night:inside';
+            }
             if (walkedOut) {
                 // #435 review 4: a failed way out that could not walk the bot back is no way out.
                 const stranded = n.exitLeftAt && bot.entity.position.floored().equals(n.exitLeftAt);

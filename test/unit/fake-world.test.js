@@ -268,7 +268,8 @@ const surfaceRun = async (t, w) => {
 };
 
 test('the real !goToSurface on pocketUnderRock: the pickaxe comes back from the off hand and the bot digs out to open ground', async (t) => {
-    const w = pocketUnderRock();
+    // A RotN morning: the default 6000 is RotN dusk, when a day escape this deep seals in (soak 17 E).
+    const w = pocketUnderRock({ timeOfDay: 1000 });
     const r = await surfaceRun(t, w);
     assert.equal(r.out, true, w.bot.output);
     assert.ok(r.at.y >= 63, `${r.at}`);
@@ -289,7 +290,8 @@ test('the real !goToSurface on holeAtSpawn: out of the hole to open ground', asy
 });
 
 test('the real !goToSurface on openShaft: up the 12-deep shaft to the rim\'s ground', async (t) => {
-    const w = openShaft();
+    // A RotN morning: the default 6000 is RotN dusk, when a day escape this deep seals in (soak 17 E).
+    const w = openShaft({ timeOfDay: 1000 });
     const r = await surfaceRun(t, w);
     assert.equal(r.out, true, w.bot.output);
     assert.ok(r.at.y >= 63, `${r.at}`);
