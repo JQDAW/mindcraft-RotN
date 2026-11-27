@@ -27,7 +27,7 @@ const plan = (items, target, n) => queryList.find(c => c.name === '!getCraftingP
 
 test('3 dirt clumps are not the rocks a stone pickaxe needs', () => {
     const out = plan([{ name: 'pyrotech:rock', metadata: 4, count: 3 }, { name: 'stick', metadata: 0, count: 2 }], 'stone_pickaxe', 1);
-    assert.match(out, /You are missing the following items:\s+- 3 pyrotech:rock:0/);
+    assert.match(out, /You are missing the following items:\s+- 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\)/);
     assert.doesNotMatch(out, /You have all items required/);
 });
 

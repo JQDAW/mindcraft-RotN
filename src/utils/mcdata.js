@@ -9,7 +9,7 @@ import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
 import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, requireRotnData, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachDigTime, dumpDigSources, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting, attachAttackCounts, attachRespawnEffectsLog, applyStackSizes, attachClickDiagnostics, attachDigRefusedLog, attachCraftRefusedLog, attachPvpCallers } from '../../packages/forge-bridge/index.js';
 import { loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
-import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
+import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable, planRecipes as rdPlanRecipes, inOre as rdInOre, fillShortfall as rdFillShortfall, cobbleFromRocks as rdCobbleFromRocks } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -815,20 +815,33 @@ export function initializeLoopingItems() {
 export function getDetailedCraftingPlan(targetItem, count = 1, current_inventory = {}) {
     initializeLoopingItems();
     cycleCache.clear(); // the registry's recipes may have changed since the last plan
+    planCache.clear();
     if (!targetItem || count <= 0 || !getItemId(targetItem)) {
         return "Invalid input. Please provide a valid item name and positive count.";
     }
+    const inventory = { ...current_inventory };
+    // Soak 17 L3: a bare "cobblestone" is any cobble in rotn-data's cobblestone ore. 4 rocks of one kind make
+    // that kind's cobble, so the plan is for the one the held rocks make most of (vanilla cobblestone if none).
+    let note = '';
+    if (targetItem === 'cobblestone') {
+        let kind = null;
+        try { kind = rdCobbleFromRocks((k) => available(inventory, k)); } catch { kind = null; }
+        if (kind) {
+            const held = poolKeys(inventory, kind.gives).reduce((n, k) => { const c = inventory[k]; inventory[k] = 0; return n + Math.max(0, c || 0); }, 0);
+            note = `Any cobblestone: your ${kind.rock} rocks make ${kind.gives} (4 rocks each)${held ? `; you already have ${held}` : ''}.\n`;
+            targetItem = kind.gives;
+        } else note = 'Note: 4 rocks of any one kind make that kind\'s cobblestone.\n';
+    }
 
     if (isBaseItem(targetItem)) {
-        const have = available(current_inventory, targetItem);
+        const have = available(inventory, targetItem);
         if (have >= count) return "You have all required items already in your inventory!";
         return `${targetItem} is a base item, you need to find ${count - have} more in the world`;
     }
 
-    const inventory = { ...current_inventory };
     const leftovers = {};
     const plan = craftItem(targetItem, count, inventory, leftovers);
-    return formatPlan(targetItem, plan);
+    return note + formatPlan(targetItem, plan);
 }
 
 // ---- The plan reads ingredient metas (Request 10, #131 nit) -----------------------------------
@@ -907,7 +920,82 @@ function take(pool, key, n) {
 }
 
 function isBaseItem(item) {
-    return loopingItems.has(parseKey(item).name) || getItemCraftingRecipeVariants(item) === null || inFirstRecipeCycle(item);
+    return loopingItems.has(parseKey(item).name) || isRock(item) || planRecipesFor(item).length === 0 || inFirstRecipeCycle(item);
+}
+
+// ---- Soak 17 L3: rotn-data's recipes, ore inputs and rocks ----------------------------------------
+// The plan reads rotn-data's recipes (the dump, as craftByFill does) for every item the dump knows, so
+// it never plans a vanilla recipe RotN removed; the registry's variants only for an item the dump does
+// not know. An ore input ("3 rock", "2 ladderMat") counts every held member of the ore, and a recipe is
+// chosen by the fewest slots the inventory cannot fill (rotn-data's canFill), not by the first variant.
+// Rocks are gathered, never crafted (4 rocks make a cobble, which gives rocks back).
+const planCache = new Map();
+const isRock = (key) => { const { name, meta } = parseKey(key); try { return rdInOre('rock', name, meta); } catch { return false; } };
+
+/** The recipes for a key: [{inputs: [{count, keys, label}], craftedCount, gives, recipe}], likeliest first. */
+function planRecipesFor(key) {
+    if (planCache.has(key)) return planCache.get(key);
+    const { name, meta } = parseKey(key);
+    let list = null;
+    try {
+        if (rdGetItem(name)) list = rdPlanRecipes(name, { meta }).map((w) => ({ craftedCount: w.gives.count, gives: w.gives.key, recipe: w.recipe, inputs: w.inputs }));
+    } catch { list = null; }
+    list ??= (getItemCraftingRecipeVariants(key) ?? []).map(([ing, r]) => ({ craftedCount: r.craftedCount, gives: key, recipe: null,
+        inputs: Object.entries(ing).map(([k, n]) => ({ count: n, keys: [k], label: k })) }));
+    planCache.set(key, list);
+    return list;
+}
+
+/**
+ * How far the pools are from `batches` crafts of a recipe (at most 16 are checked): the slots they cannot fill
+ * now, or Infinity when they fill none (so a recipe the bot has nothing for never beats the likeliest one).
+ */
+function shortfall(r, batches, inventory, leftovers) {
+    const times = Math.max(1, Math.min(batches, 16));
+    const slots = r.inputs.reduce((a, i) => a + i.count, 0) * times;
+    let missing = null;
+    if (r.recipe) try { missing = rdFillShortfall(r.recipe, [inventory, leftovers], { times }); } catch { missing = null; }
+    missing ??= r.inputs.reduce((a, i) => a + Math.max(0, i.count * times - i.keys.reduce((b, k) => b + available(inventory, k) + available(leftovers, k), 0)), 0);
+    return missing < slots ? missing : Infinity;
+}
+
+/** The ore member to craft `n` of: the one whose best recipe misses the fewest slots (the first on a tie), or null if all are gathered. */
+function chooseMember(keys, n, inventory, leftovers) {
+    let best = null;
+    for (const key of keys.slice(0, 48)) {
+        if (isBaseItem(key)) continue;
+        for (const recipe of planRecipesFor(key)) {
+            const s = shortfall(recipe, Math.ceil(n / recipe.craftedCount), inventory, leftovers);
+            if (!best || s < best.s) best = { key, recipe, s };
+        }
+    }
+    return best;
+}
+
+/**
+ * Uses `n` of one input: every held member counts. The rest is crafted from one member, or missing under the
+ * ore's label when the likeliest member is gathered (rocks) and no other member's recipe is partly filled now.
+ */
+function useInput({ keys, label }, n, inventory, leftovers, crafted) {
+    if (keys.length === 1) {
+        craftItem(keys[0], n, inventory, leftovers, crafted);
+        return [`${n} ${keys[0]}`];
+    }
+    const used = new Map();
+    let left = n;
+    for (const pool of [leftovers, inventory]) for (const k of keys) {
+        const got = left > 0 ? take(pool, k, left) : 0;
+        if (got) { used.set(k, (used.get(k) ?? 0) + got); left -= got; }
+    }
+    if (left > 0) {
+        const pick = chooseMember(keys, left, inventory, leftovers);
+        const k = pick && (pick.s !== Infinity || !isBaseItem(keys[0])) ? pick.key : null;
+        if (k) craftItem(k, left, inventory, leftovers, crafted);
+        else crafted.required[label] = (crafted.required[label] || 0) + left;
+        used.set(k ?? label, (used.get(k ?? label) ?? 0) + left);
+    }
+    const at = (k) => (keys.includes(k) ? keys.indexOf(k) : keys.length);
+    return [...used.keys()].sort((a, b) => at(a) - at(b)).map((k) => `${used.get(k)} ${k}`);
 }
 
 // RotN recipes loop (4 rocks -> cobblestone -> 4 rocks; ingots <-> nuggets and blocks), and
@@ -920,14 +1008,14 @@ const cycleCache = new Map();
 function inFirstRecipeCycle(item) {
     if (cycleCache.has(item)) return cycleCache.get(item);
     const target = parseKey(item).name;
-    const first = (key) => Object.keys(getItemCraftingRecipeVariants(key)?.[0]?.[0] ?? {});
+    const first = (key) => (planRecipesFor(key)[0]?.inputs ?? []).map((i) => i.keys[0]);
     let found = false;
     const seen = new Set();
     const todo = [item];
     while (todo.length && !found) {
         for (const next of first(todo.pop())) {
             if (parseKey(next).name === target) { found = true; break; }
-            if (seen.has(next)) continue;
+            if (seen.has(next) || isRock(next)) continue; // a rock ends the walk: it is gathered
             seen.add(next);
             todo.push(next);
         }
@@ -936,54 +1024,55 @@ function inFirstRecipeCycle(item) {
     return found;
 }
 
-/** The first recipe variant whose ingredients the inventory and leftovers can supply now, else the first. */
-function pickRecipe(variants, stillNeeded, inventory, leftovers) {
-    for (const v of variants) {
-        const batches = Math.ceil(stillNeeded / v[1].craftedCount);
-        if (Object.entries(v[0]).every(([k, n]) => available(inventory, k) + available(leftovers, k) >= n * batches)) return v;
+/** The recipe with the fewest slots the inventory and leftovers cannot fill now (the first on a tie: rotn-data's likeliest-first order). */
+function pickRecipe(recipes, stillNeeded, inventory, leftovers) {
+    let best = null;
+    for (const r of recipes) {
+        const s = shortfall(r, Math.ceil(stillNeeded / r.craftedCount), inventory, leftovers);
+        if (!best || s < best.s) best = { r, s };
+        if (s === 0) break;
     }
-    return variants[0];
+    return best?.r ?? null;
 }
 
-function craftItem(item, count, inventory, leftovers, crafted = { required: {}, steps: [], leftovers: {} }) {
+function craftItem(item, count, inventory, leftovers, crafted = { required: {}, steps: [], leftovers: {}, active: new Set() }) {
     // Leftovers first, then the inventory.
     const fromLeft = take(leftovers, item, count);
     const fromInv = take(inventory, item, count - fromLeft);
     const stillNeeded = count - fromLeft - fromInv;
     if (stillNeeded <= 0) return crafted;
 
-    if (isBaseItem(item)) {
+    // An item already being crafted further up (an ore input that leads back to it) is missing, not crafted again.
+    if (isBaseItem(item) || crafted.active.has(item)) {
         crafted.required[item] = (crafted.required[item] || 0) + stillNeeded;
         return crafted;
     }
 
-    const variants = getItemCraftingRecipeVariants(item);
-    const recipe = variants ? pickRecipe(variants, stillNeeded, inventory, leftovers) : null;
+    const recipe = pickRecipe(planRecipesFor(item), stillNeeded, inventory, leftovers);
     if (!recipe) {
         crafted.required[item] = (crafted.required[item] || 0) + stillNeeded;
         return crafted;
     }
 
-    const [ingredients, result] = recipe;
-    const craftedPerRecipe = result.craftedCount;
-    const batchCount = Math.ceil(stillNeeded / craftedPerRecipe);
-    const totalProduced = batchCount * craftedPerRecipe;
+    const batchCount = Math.ceil(stillNeeded / recipe.craftedCount);
+    const totalProduced = batchCount * recipe.craftedCount;
+    // A bare key names what the recipe makes ("planks:1" from a spruce log).
+    const product = parseKey(item).meta == null ? recipe.gives : item;
 
     // Add excess to leftovers
     if (totalProduced > stillNeeded) {
-        leftovers[item] = (leftovers[item] || 0) + (totalProduced - stillNeeded);
+        leftovers[product] = (leftovers[product] || 0) + (totalProduced - stillNeeded);
     }
 
     // Process each ingredient
-    for (const [ingredientName, ingredientCount] of Object.entries(ingredients)) {
-        craftItem(ingredientName, ingredientCount * batchCount, inventory, leftovers, crafted);
-    }
-
-    // Add crafting step
-    const stepIngredients = Object.entries(ingredients)
-        .map(([name, amount]) => `${amount * batchCount} ${name}`)
-        .join(' + ');
-    crafted.steps.push(`Craft ${stepIngredients} -> ${totalProduced} ${item}`);
+    crafted.active.add(item);
+    // #669 review 1: inputs with the fewest members fill first, so an ore input does not take the stack a single-item
+    // input needs (the hamster wheel's iron ingot, the soaking pot's twine); the step lists them in recipe order.
+    const order = recipe.inputs.map((input, i) => ({ input, i })).sort((a, b) => a.input.keys.length - b.input.keys.length || a.i - b.i);
+    const parts = [];
+    for (const { input, i } of order) parts[i] = useInput(input, input.count * batchCount, inventory, leftovers, crafted);
+    crafted.active.delete(item);
+    crafted.steps.push(`Craft ${parts.flat().join(' + ')} -> ${totalProduced} ${product}`);
 
     return crafted;
 }

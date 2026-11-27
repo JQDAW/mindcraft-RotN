@@ -35,6 +35,12 @@ export const rockRecipes = () => pack().rockRecipes();
 // Can these inventory stacks fill this recipe or craft way? One rule for rotn-data and skills-rotn (#152 review).
 export const canFill = (recipe, stacks, opts) => pack().canFill(recipe, stacks, opts);
 export { formatHowToGet } from './src/howto.js';
+// mcdata's crafting planner (soak 17 L3): an item's recipes with every member of each ore input, which items are in an ore.
+export const planRecipes = (item, opts) => pack().planRecipes(item, opts);
+export const inOre = (ore, name, meta) => pack().inOre(ore, name, meta);
+export const fillShortfall = (recipe, pools, opts) => pack().fillShortfall(recipe, pools, opts);
+export const cobbleFromRocks = (have) => pack().cobbleFromRocks(have);
+export { oreLabel } from './src/plan-recipes.js';
 // First-night threats (Phase 3): reaction per mob (3.3.4/threat-reactions.json) and night spawns per biome.
 export const threatOf = (entityName) => pack().threatOf(entityName);
 export const nightThreats = (opts) => pack().nightThreats(opts);
