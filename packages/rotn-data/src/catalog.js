@@ -19,7 +19,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { createTranslator } from './translate.js';
-import { howToGet, rockRecipes } from './howto.js';
+import { howToGet, rockRecipes, worldHint } from './howto.js';
 import { threatOf, nightThreats } from './threats.js';
 import { mobDigging, canMobDig } from './digging.js';
 import { mobMelee, fallingTree, fallingTreeDamage } from './melee.js';
@@ -550,6 +550,11 @@ export class RotnData {
     /** Every way to get an item: world rules, crafting, smelting, plain block drops (src/howto.js). */
     howToGet(input, opts) {
         return howToGet(this, input, opts);
+    }
+
+    /** The planner's hint for a base item: its block-breaking world rules, short (src/howto.js worldHint). */
+    worldHint(input, opts) {
+        return worldHint(this, input, opts);
     }
 
     /** The "4 identical rocks -> block" recipes: which block each rock type makes (src/howto.js). */

@@ -22,14 +22,17 @@ function rawRecipe(catalog, id) {
 /**
  * "rock (any of pyrotech:rock, pyrotech_compat:rock_*)": the ore (or "any of" without one) and its members'
  * item names in rank order; names that share a "mod:word_" prefix are one "mod:word_*". Members that are all one
- * item are listed by meta ("any of coal:0, coal:1").
+ * item are listed by meta ("any of coal:0, coal:1"); an item listed once shows its `key` when given
+ * ("any of pyrotech:material:14, string").
  * @param {string|null} ore
- * @param {Array<{name: string}>} members registry or bot names
+ * @param {Array<{name: string, meta?: number|null, key?: string}>} members registry or bot names; key: the inventory key
  */
 export function oreLabel(ore, members) {
     let names = [...new Set(members.map((m) => botName(m.name)))];
     // #669 review 4: metas of one item ("coal:0", "coal:1") keep their metas, else the label is "any of coal".
     if (names.length === 1 && members.length > 1) names = members.map((m) => (m.meta == null ? botName(m.name) : `${botName(m.name)}:${m.meta}`));
+    // Soak 18: an item listed once keeps its inventory key ("any of pyrotech:material:14, string", not "pyrotech:material").
+    else names = names.map((n) => { const ms = members.filter((m) => botName(m.name) === n); return ms.length === 1 && ms[0].key ? ms[0].key : n; });
     const prefix = (n) => { const m = /^([^:]+:[^_]+_)/.exec(n); return m ? m[1] : null; };
     const shared = new Map();
     for (const n of names) if (prefix(n)) shared.set(prefix(n), (shared.get(prefix(n)) ?? 0) + 1);
@@ -139,7 +142,8 @@ export function planRecipes(catalog, item, { meta = null } = {}) {
                 }
                 const ore = c.ore ?? (c.ores?.length === 1 ? c.ores[0] : null);
                 const keys = [...new Set(members.map((m) => itemKey(catalog, m.name, m.meta)))];
-                groups.set(k, { count: 0, ore, members, keys, label: keys.length === 1 ? keys[0] : oreLabel(ore, members) });
+                const keyed = members.map((m) => ({ ...m, key: itemKey(catalog, m.name, m.meta) }));
+                groups.set(k, { count: 0, ore, members, keys, label: keys.length === 1 ? keys[0] : oreLabel(ore, keyed) });
             }
             groups.get(k).count++;
         }

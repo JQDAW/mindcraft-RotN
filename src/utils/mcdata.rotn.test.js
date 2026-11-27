@@ -187,15 +187,16 @@ test('getItemCraftingRecipes and getDetailedCraftingPlan follow RotN recipes', (
     const pick = mc.getDetailedCraftingPlan('stone_pickaxe', 1, {});
     // Request 10: the plan names variants as inventory keys ("pyrotech:rock:0", "log:0"); a bare
     // key (planks, stick) means any variant. Soak 17 L3: an ore input the bot lacks is named by its ore
-    // ("rock (any of ...)"), and a crafted bare key names what the recipe makes ("planks:0").
-    assert.match(pick, /- 1 log:0\n- 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\)\n/);
+    // ("rock (any of ...)"), and a crafted bare key names what the recipe makes ("planks:0"). Soak 18: a missing
+    // base item says how to get it (rotn-data's world rule); an ore label gets no hint.
+    assert.match(pick, /- 1 log:0: break a Dynamic Trees branch, by hand or with an axe\n- 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\)\n/);
     assert.match(pick, /Craft 1 log:0 -> 3 planks:0\nCraft 2 planks -> 4 stick\nCraft 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\) \+ 2 stick -> 1 stone_pickaxe/);
     const table = mc.getDetailedCraftingPlan('crafting_table', 1, {});
     const axeRock = 'rock \\(any of pyrotech:rock, flint, pyrotech_compat:rock_\\*\\)';
     assert.match(table, new RegExp(`Craft 1 ${axeRock} \\+ 2 stick -> 1 pyrotech:crude_axe\nCraft 1 pyrotech:crude_axe \\+ 1 ${axeRock} \\+ 1 stick -> 1 contenttweaker:crafting_tools\nCraft 1 planks \\+ 1 contenttweaker:crafting_tools -> 1 crafting_table`));
     // Soak 17 L3: cobblestone is made from 4 rocks, not a base item; the rocks are.
-    assert.match(mc.getDetailedCraftingPlan('cobblestone', 1, {}), /^Note: 4 rocks of any one kind make that kind's cobblestone\.\nYou are missing the following items:\n- 4 pyrotech:rock:0\n[^]*Craft 4 pyrotech:rock:0 -> 1 cobblestone$/);
-    assert.equal(mc.getDetailedCraftingPlan('pyrotech:rock', 1, {}), 'pyrotech:rock is a base item, you need to find 1 more in the world');
+    assert.match(mc.getDetailedCraftingPlan('cobblestone', 1, {}), /^Note: 4 rocks of any one kind make that kind's cobblestone\.\nYou are missing the following items:\n- 4 pyrotech:rock:0: break a rock pile on the ground by hand; or mine stone with a pickaxe below Sturdy\n[^]*Craft 4 pyrotech:rock:0 -> 1 cobblestone$/);
+    assert.equal(mc.getDetailedCraftingPlan('pyrotech:rock', 1, {}), 'pyrotech:rock is a base item, you need to find 1 more in the world: break a rock pile on the ground by hand; or mine stone with a pickaxe below Sturdy');
     const furnace = mc.getDetailedCraftingPlan('furnace', 1, { 'pyrotech:rock:0': 2 });
     assert.match(furnace, /- 6 rock \(any of /);
     assert.match(furnace, /Craft 2 pyrotech:rock:0 \+ 6 rock \(any of [^)]*\) -> 1 furnace/);
@@ -294,7 +295,7 @@ test('soak 17 L3: ore inputs count every held rock; cobblestone comes from 4 roc
         'pyrotech_compat:rock_igneous:0': 1, 'pyrotech_compat:rock_metamorphic:6': 4, 'pyrotech_compat:rock_sedimentary:0': 1, 'pyrotech_compat:rock_metamorphic:5': 3 };
     const sword = mc.getDetailedCraftingPlan('stone_sword', 1, at180047);
     assert.doesNotMatch(sword, /pyrotech:rock:0|rock \(any of/, sword);
-    assert.match(sword, /^You are missing the following items:\n- 3 pyrotech:tinder\n\n/);
+    assert.match(sword, /^You are missing the following items:\n- 3 pyrotech:tinder: break grass or ferns by hand or with any tool except shears \(about 1 in 13 drops one\)\n\n/);
     assert.match(sword, /Craft 2 pyrotech_compat:rock_igneous \+ 1 spartanweaponry:material:0 -> 1 stone_sword$/);
 
     // 18:07:10 !getCraftingPlan("stone_pickaxe", 1) said "- 3 pyrotech:rock:0". The bot held about 420
@@ -320,7 +321,7 @@ test('soak 17 L3: ore inputs count every held rock; cobblestone comes from 4 roc
     assert.equal(cobble, 'Any cobblestone: your pyrotech_compat:rock_metamorphic:0 rocks make undergroundbiomes:metamorphic_cobble:0 (4 rocks each); you already have 4.\n'
         + 'You have all items required to craft this item!\nHere\'s your crafting plan:\n\nCraft 20 pyrotech_compat:rock_metamorphic:0 -> 5 undergroundbiomes:metamorphic_cobble:0');
     // A named kind: only that kind's rocks, 4 of one kind per cobble.
-    assert.match(mc.getDetailedCraftingPlan('contenttweaker:limestone_cobble', 5, at1807), /^You are missing the following items:\n- 2 pyrotech:rock:8\n[^]*Craft 20 pyrotech:rock:8 -> 5 contenttweaker:limestone_cobble:0$/);
+    assert.match(mc.getDetailedCraftingPlan('contenttweaker:limestone_cobble', 5, at1807), /^You are missing the following items:\n- 2 pyrotech:rock:8: break a rock pile on the ground by hand; or mine stone with a pickaxe below Sturdy\n[^]*Craft 20 pyrotech:rock:8 -> 5 contenttweaker:limestone_cobble:0$/);
     // A tie (20 and 20): the first rock recipe in rockRecipes' order (metamorphic before limestone), the order skills'
     // cobbleChoices also uses.
     assert.match(mc.getDetailedCraftingPlan('cobblestone', 1, { ...at1807, 'pyrotech:rock:8': 20 }), /^Any cobblestone: your pyrotech_compat:rock_metamorphic:0 rocks make undergroundbiomes:metamorphic_cobble:0 /);
@@ -330,10 +331,10 @@ test('soak 17 L3: ore inputs count every held rock; cobblestone comes from 4 roc
     assert.match(mc.getDetailedCraftingPlan('cobblestone', 5, real), /^Any cobblestone: your pyrotech_compat:rock_metamorphic:0 rocks make undergroundbiomes:metamorphic_cobble:0 [^]*You have all items[^]*Craft 20 pyrotech_compat:rock_metamorphic:0 -> 5 undergroundbiomes:metamorphic_cobble:0$/);
     // #669 review 2: mixed kinds make no cobble. 2 igneous + 2 metamorphic rocks, or two metas of one rock, are not 4 of one kind.
     const mixed = mc.getDetailedCraftingPlan('cobblestone', 1, { 'pyrotech_compat:rock_igneous:0': 2, 'pyrotech_compat:rock_metamorphic:0': 2 });
-    assert.match(mixed, /^Any cobblestone: your pyrotech_compat:rock_igneous:0 rocks make undergroundbiomes:igneous_cobble:0 \(4 rocks each\)\.\nYou are missing the following items:\n- 2 pyrotech_compat:rock_igneous:0\n/, mixed);
+    assert.match(mixed, /^Any cobblestone: your pyrotech_compat:rock_igneous:0 rocks make undergroundbiomes:igneous_cobble:0 \(4 rocks each\)\.\nYou are missing the following items:\n- 2 pyrotech_compat:rock_igneous:0: break a rock pile on the ground by hand; or mine stone with a pickaxe below Sturdy\n/, mixed);
     assert.doesNotMatch(mixed, /You have all items/);
     const metas = mc.getDetailedCraftingPlan('undergroundbiomes:metamorphic_cobble', 1, { 'pyrotech_compat:rock_metamorphic:0': 2, 'pyrotech_compat:rock_metamorphic:1': 2 });
-    assert.match(metas, /^You are missing the following items:\n- 2 pyrotech_compat:rock_metamorphic:0\n[^]*Craft 4 pyrotech_compat:rock_metamorphic:0 -> 1 undergroundbiomes:metamorphic_cobble:0$/, metas);
+    assert.match(metas, /^You are missing the following items:\n- 2 pyrotech_compat:rock_metamorphic:0: break a rock pile on the ground by hand; or mine stone with a pickaxe below Sturdy\n[^]*Craft 4 pyrotech_compat:rock_metamorphic:0 -> 1 undergroundbiomes:metamorphic_cobble:0$/, metas);
 });
 
 // Soak 17 L3 item 3: the plan follows rotn-data's recipes, not the registry's, where they disagree.
@@ -364,4 +365,25 @@ test('#669 review 1: inputs with the fewest members fill first (hamster wheel, s
     const pot = mc.getDetailedCraftingPlan('pyrotech:soaking_pot', 1, { 'pyrotech:material:14': 1, string: 2, 'pyrotech:rock:0': 3, 'planks:0': 2 });
     assert.match(pot, everything, pot);
     assert.match(pot, /Craft 3 pyrotech:rock:0 \+ 2 string \+ 2 planks \+ 1 pyrotech:material:14 -> 1 pyrotech:soaking_pot$/);
+});
+
+// Soak 18 (journal 21:03:40-21:04:00, 21:39:15-18): the stone sword's plan needs 3 tinder, and !getCraftingPlan("pyrotech:tinder", 3)
+// said only "pyrotech:tinder is a base item, you need to find 3 more in the world"; the model then tried
+// !collectBlocks("pyrotech:tinder") ("No pyrotech:tinder nearby"). RotN removes tinder's crafting recipe; grass drops it.
+test('soak 18: a base item says how to get it from rotn-data\'s world rule, in its own plan and on a missing line; none without a rule', () => {
+    mc.installRotnRecipes();
+    assert.equal(mc.getDetailedCraftingPlan('pyrotech:tinder', 3, {}),
+        'pyrotech:tinder is a base item, you need to find 3 more in the world: break grass or ferns by hand or with any tool except shears (about 1 in 13 drops one)');
+    assert.equal(mc.getDetailedCraftingPlan('pyrotech:tinder', 3, { 'pyrotech:tinder': 1 }), 'pyrotech:tinder is a base item, you need to find 2 more in the world: break grass or ferns by hand or with any tool except shears (about 1 in 13 drops one)');
+    assert.equal(mc.getDetailedCraftingPlan('pyrotech:tinder', 3, { 'pyrotech:tinder': 3 }), 'You have all required items already in your inventory!');
+    // The text is the rule's (rotn-data worldHint), not the planner's: the odds come from its countRange.
+    assert.equal(rdData.worldHint('pyrotech:tinder'), 'break grass or ferns by hand or with any tool except shears (about 1 in 13 drops one)');
+    // 21:04:00 !getCraftingPlan("stone_sword", 1): the missing tinder line carries the hint; the steps do not.
+    const sword = mc.getDetailedCraftingPlan('stone_sword', 1, { stick: 4, 'pyrotech_compat:rock_igneous:0': 1, 'pyrotech_compat:rock_metamorphic:0': 1 });
+    assert.match(sword, /^You are missing the following items:\n- 3 pyrotech:tinder: break grass or ferns by hand or with any tool except shears \(about 1 in 13 drops one\)\n\n/);
+    assert.match(sword, /\nCraft 3 pyrotech:tinder -> 3 pyrotech:material:14\nCraft 1 stick \+ 1 pyrotech:material:14 -> 1 spartanweaponry:material:0\n/);
+    // No world rule, no hint: feathers (a mob drop) and an item rotn-data does not know.
+    assert.equal(mc.getDetailedCraftingPlan('feather', 2, {}), 'feather is a base item, you need to find 2 more in the world');
+    assert.equal(rdData.worldHint('feather'), null);
+    assert.equal(rdData.worldHint('nosuch:item'), null);
 });
