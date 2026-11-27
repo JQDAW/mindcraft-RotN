@@ -19,6 +19,7 @@ import pf from 'mineflayer-pathfinder';
 import { isEmpty, isLiquid, isFalling, hurtsOnContact, shelterItems, softItems, countOf, craftMore, buildShelter, siteNeeds } from './shelter.js';
 import { placeableDirt, nightPhase, isWall } from './night.js';
 import { shelterEnemy } from './threats.js';
+import { heldFoodPoints, nightFoodNeed } from './food.js';
 import { burrowDiggable, digEquip, digRule } from './burrow.js';
 import { toolLevels } from './rotn_sources.js';
 import { handDiggable } from './night.js';
@@ -790,6 +791,12 @@ export function sealPossible(bot, feet) {
     const blocks = countOf(shelterItems(bot)) + countOf(softItems(bot));
     if (blocks < need.blocks) return { ok: false, why: `it needs ${need.blocks} blocks and you carry ${blocks}` };
     if (!bestPickaxe(bot) && !need.handExit) return { ok: false, why: 'no pickaxe, and no side to dig out by hand' };
+    // #667 round 2 (the lead's corrected decision (a)): only when the food covers the night (the night routine's own
+    // calculation: food.nightFoodNeed against the held points); else the climb goes on, and the night routine shelters on
+    // the surface with its normal food rules.
+    const held = heldFoodPoints(bot);
+    const needFood = nightFoodNeed({ food: bot.food, saturation: Number.isFinite(bot.foodSaturation) ? bot.foodSaturation : 0 });
+    if (Number.isFinite(needFood) && held < needFood) return { ok: false, why: `the food held (${held} points) does not cover the night (about ${needFood} more than your bar)` };
     return { ok: true, blocks: need.blocks };
 }
 

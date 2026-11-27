@@ -332,17 +332,13 @@ test('#667 review 4: no pickaxe re-made with a hostile near (a real scan); once 
     assert.ok(lines.some(l => /not making another with a zombie within 16 blocks \(later, once it is clear\)/.test(l)), lines.join('\n'));
 });
 
-test('#667 review 3 (the lead): sealed in a 35-deep shaft at dusk: the night routine adopts the cell (no build, no food run), and the morning climbs out of the shaft', async (t) => {
-    const lines = [];
-    quiet(t, lines);
-    const { nightTick, nightState } = await import('./night_routine.js');
+/** A 1x1 shaft in stone from (0, 29, 0) up to the surface (y 64), the seal's roof (dirt) over the head; the night agent. */
+async function sealedShaft(t, { food = 20, slots = {} } = {}) {
     const { NIGHT_START, TICKS_PER_MIN } = await import('./library/night.js');
-    const DUSK = NIGHT_START - 3 * TICKS_PER_MIN;
-    // A 1x1 shaft in stone from the bot's cell (0, 29, 0) up to the surface (y 64); the seal's roof (dirt) over the head.
     const set = {};
     for (let y = 29; y < 64; y++) set[`0,${y},0`] = 'air';
     set['0,31,0'] = 'dirt';
-    const w = fakeWorld({ ground: [{ below: 64, block: 'undergroundbiomes:metamorphic_stone' }], set, at: V(0, 29, 0), slots: { 36: ['stone_pickaxe', 1], 9: ['dirt', 20] }, timeOfDay: DUSK, food: 4 });
+    const w = fakeWorld({ ground: [{ below: 64, block: 'undergroundbiomes:metamorphic_stone' }], set, at: V(0, 29, 0), slots: { 36: ['stone_pickaxe', 1], 9: ['dirt', 20], ...slots }, timeOfDay: NIGHT_START - 3 * TICKS_PER_MIN, food });
     useRegistry(t, w.bot);
     const bot = w.bot;
     bot.rotnSealedIn = { pos: V(0, 29, 0), at: 0 };
@@ -354,31 +350,95 @@ test('#667 review 3 (the lead): sealed in a 35-deep shaft at dusk: the night rou
         actions: { executing: false, currentActionLabel: '', stop() { return Promise.resolve(); }, async runAction(label, fn) { await fn(); return { message: '', interrupted: false }; } },
         control: { blocking: () => null },
     };
-    const builds = [], foodRuns = [], escapes = [];
+    const calls = { builds: [], foodRuns: [], escapes: [] };
+    const lines = [];
     const ops = {
-        buildShelter: (b, opts) => { builds.push(opts); return Promise.resolve({ closed: true, feet: V(0, 29, 0) }); },
-        foodRun: () => { foodRuns.push(1); return Promise.resolve({ points: 0, why: 'none' }); },
+        buildShelter: (b, opts) => { calls.builds.push(opts); return Promise.resolve({ closed: true, feet: b.entity.position.floored() }); },
+        foodRun: () => { calls.foodRuns.push(1); return Promise.resolve({ points: 0, why: 'none found' }); },
         siteNeeds: () => ({ todo: [] }),
-        escape: (b, opts) => { escapes.push(opts); return escape(b, { ...opts, say: (l) => lines.push(l) }); },
+        escape: (b, opts) => { calls.escapes.push(opts); return escape(b, { ...opts, say: (l) => lines.push(l) }); },
     };
+    return { w, bot, agent, chat, calls, ops, lines };
+}
+
+test('#667 review 3, round 2 (the lead): a well-fed bot sealed in a 35-deep shaft at dusk: the night routine adopts the cell (no build, no food run), and the morning climbs out', async (t) => {
+    quiet(t);
+    const { nightTick, nightState } = await import('./night_routine.js');
+    const { bot, agent, chat, calls, ops, lines } = await sealedShaft(t, { food: 20, slots: { 10: ['bread', 6] } });
     const settle = async () => { while (nightState(agent).job) await nightState(agent).job; };
     // The routine's own times (its clock reads them; the escape reads that clock at Date.now(), as in the bot).
     assert.equal(nightTick(agent, { now: Date.now(), ops }), 'night:inside');
     assert.ok(chat.some(l => /^\[night\] sunset is near: sealed in the shaft at 0, 29, 0 \(the escape's seal\): tonight's shelter as it is$/.test(l)), chat.join('\n'));
-    assert.ok(lines.some(l => /no food run out of the shaft; the morning climb comes first, then food/.test(l)), lines.join('\n'));
-    // The night: no build, no food run (food 4, none held).
     bot.time.timeOfDay = 15000;
     for (let i = 1; i <= 4; i++) { nightTick(agent, { now: Date.now(), ops }); await settle(); }
-    assert.deepEqual([builds.length, foodRuns.length], [0, 0], 'the seal is kept as it is; no food run leaves it');
+    assert.deepEqual([calls.builds.length, calls.foodRuns.length, calls.escapes.length], [0, 0, 0], 'kept as it is all night');
     assert.equal(nightState(agent).state, 'inside');
     // The morning: the escape (the day budget) climbs out of the shaft.
     bot.time.timeOfDay = 1000;
     nightTick(agent, { now: Date.now(), ops });
     await settle();
-    assert.equal(escapes.length, 1);
-    assert.equal(escapes[0].budget, 'day');
+    assert.equal(calls.escapes.length, 1);
+    assert.equal(calls.escapes[0].budget, 'day');
     assert.ok(bot.entity.position.y >= 63, `out at ${bot.entity.position}: ${lines.filter(l => /\[escape\]/.test(l)).slice(-3).join(' / ')}`);
     assert.ok(chat.some(l => /^\[night\] morning: climbed out of the shaft at 0, 29, 0 to /.test(l)), chat.join('\n'));
     assert.equal(nightState(agent).state, 'day');
     assert.equal(bot.rotnSealedIn, null);
+});
+
+test('#667 round 2 (the lead): food 4 with nothing held is not sealed (the escape climbs on), and the sealed cell is not adopted (out first)', async (t) => {
+    const lines = [];
+    quiet(t, lines);
+    // The escape: no seal with the food short.
+    const w = pocketUnderRock({ slots: { 36: ['stone_pickaxe', 1], 9: ['dirt', 16] }, food: 4 });
+    useRegistry(t, w.bot);
+    let seals = 0;
+    await escape(w.bot, { budget: 'day', target: surfaceTarget(w.bot), seal: () => { seals++; return Promise.resolve({ closed: true }); }, say: (l) => lines.push(l) });
+    assert.equal(seals, 0);
+    assert.ok(lines.some(l => /no seal is possible here \(the food held \(0 points\) does not cover the night \(about [\d.]+ more than your bar\)\): climbing on$/.test(l)), lines.join('\n'));
+    // The night routine: a sealed cell at dusk with food 4 and nothing held: out first, then the normal rules.
+    const { nightTick, nightState } = await import('./night_routine.js');
+    const s = await sealedShaft(t, { food: 4 });
+    nightTick(s.agent, { now: Date.now(), ops: s.ops });
+    while (nightState(s.agent).job) await nightState(s.agent).job;
+    assert.equal(s.calls.escapes.length, 1, 'the climb out first');
+    assert.ok(s.chat.some(l => /^\[night\] the food held \(0 points\) does not cover the night \(about [\d.]+\) in the sealed shaft at 0, 29, 0: climbing out now with the escape, then the night's food rules$/.test(l)), s.chat.join('\n'));
+    assert.equal(s.bot.rotnSealedIn, null);
+    assert.ok(s.bot.entity.position.y >= 63, `out at ${s.bot.entity.position}`);
+});
+
+test('#667 round 2 (the lead): sealed (well fed at dusk), the night\'s food emergency still comes: the bot climbs out at once and the normal food path goes on', async (t) => {
+    quiet(t);
+    const { nightTick, nightState } = await import('./night_routine.js');
+    const s = await sealedShaft(t, { food: 20, slots: { 10: ['bread', 6] } });
+    const settle = async () => { while (nightState(s.agent).job) await nightState(s.agent).job; };
+    assert.equal(nightTick(s.agent, { now: Date.now(), ops: s.ops }), 'night:inside');
+    // Night: the bread is gone, food 4.
+    s.bot.time.timeOfDay = 15000;
+    s.bot.food = 4;
+    s.bot.inventory.slots[10] = null;
+    nightTick(s.agent, { now: Date.now(), ops: s.ops });
+    await settle();
+    assert.equal(s.calls.escapes.length, 1, 'out at once');
+    assert.ok(s.chat.some(l => /^\[night\] food 4 with nothing held in the sealed shaft at 0, 29, 0: climbing out now with the escape, then the night's food rules$/.test(l)), s.chat.join('\n'));
+    assert.equal(s.bot.rotnSealedIn, null);
+    for (let i = 0; i < 3 && !s.calls.foodRuns.length; i++) { nightTick(s.agent, { now: Date.now(), ops: s.ops }); await settle(); }
+    assert.ok(s.calls.foodRuns.length >= 1, 'the normal emergency food run');
+});
+
+test('#667 round 2 nit: two commands waiting for an escape that ends by itself: the second is not dropped by the first', async (t) => {
+    quiet(t);
+    const { ActionManager } = await import('./action_manager.js');
+    const bot = { interrupt_code: false, output: '', emit() {}, health: 20 };
+    const agent = { bot, clearBotLogs() { bot.interrupt_code = false; }, cleanKill() {}, requestInterrupt() { bot.interrupt_code = true; } };
+    const manager = new ActionManager(agent);
+    const order = [];
+    const escapeRun = manager.runAction('action:escape (trapped)', async () => { bot.rotnClimbing = true; await new Promise(r => setTimeout(r, 120)); order.push('escape done'); bot.rotnClimbing = false; }, { timeout: 0 });
+    await new Promise(r => setTimeout(r, 20));
+    const first = manager.runAction('action:craftRecipe', () => { order.push('craft'); return Promise.resolve(); }, { timeout: 0 });
+    await new Promise(r => setTimeout(r, 20));
+    const second = manager.runAction('action:collectBlocks', () => { order.push('collect'); return Promise.resolve(); }, { timeout: 0 });
+    const [, , r2] = await Promise.all([escapeRun, first, second]);
+    assert.equal(order[0], 'escape done');
+    assert.ok(order.includes('collect'), `the second waiter ran: ${order.join(', ')}`);
+    assert.doesNotMatch(r2.message ?? '', /^Not run/);
 });

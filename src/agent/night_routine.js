@@ -1276,6 +1276,23 @@ function line(agent, text) {
  * FOOD_RUN.minHealth only at food 3 or 4; at food 2 or lower it goes at any health. Held while a mob is in the
  * shelter's cells (said once).
  */
+/**
+ * Soak 17 E (#667 round 2): out of the sealed shaft with the escape (the day budget) now: the sealed state ends; then(r)
+ * sets what the routine does next (the night's normal rules).
+ */
+function climbOutOfSeal(agent, n, ops, why, then) {
+    const bot = agent.bot;
+    const site = n.site ?? bot.rotnSealedIn?.pos ?? bot.entity.position.floored();
+    line(agent, `[night] ${why} in the sealed shaft at ${at(site)}: climbing out now with the escape, then the night's food rules`);
+    n.sealedShaft = false;
+    bot.rotnSealedIn = null;
+    bot.rotnSheltered = false;
+    startJob(agent, n, ESCAPE_LABEL, () => ops.escape(bot, { budget: 'day', target: surfaceTarget(bot) }), (r) => {
+        console.log(`[night] ${r?.out ? `out of the shaft at ${at(r.at)}` : `the climb out of the shaft stopped (${r?.why ?? 'no result'})`}: the night goes on with its normal rules`);
+        then(r);
+    });
+}
+
 /** Soak 17 E (#667 review 3): the cell the escape sealed the bot in (bot.rotnSealedIn), when the bot is in it and it is closed. */
 export function sealedShaftHere(bot) {
     const s = bot?.rotnSealedIn;
@@ -1289,11 +1306,13 @@ export function sealedShaftHere(bot) {
 function nightFoodEmergency(agent, n, ops, now) {
     const bot = agent.bot;
     if (typeof ops.foodRun !== 'function') return null;
-    // Soak 17 E (#667 review 3, the lead): sealed in a shaft for the night: no food run leaves it (the morning climb comes
-    // first, then food); the eating reflex eats what is held.
+    // Soak 17 E (#667 round 2, the lead's corrected decision (b)): the night's food emergency (food FOOD_RUN.emergencyAt or
+    // lower, nothing held) while sealed in a shaft: the escape climbs out at once (the day budget), the sealed state ends,
+    // and the normal emergency food path goes on from where the climb ends.
     if (n.sealedShaft) {
-        if (!n.sealedFoodSaid && Number.isFinite(bot.food) && bot.food <= FOOD_RUN.emergencyAt) { n.sealedFoodSaid = true; console.log(`[night] food ${bot.food} in the sealed shaft: no food run out of it; the morning climb comes first, then food`); }
-        return null;
+        if (!Number.isFinite(bot.food) || bot.food > FOOD_RUN.emergencyAt || heldFoodPoints(bot) > 0 || !ops.escape) return null;
+        climbOutOfSeal(agent, n, ops, `food ${bot.food} with nothing held`, () => { n.state = 'exposed'; n.site = null; });
+        return 'night:food';
     }
     const e = n.foodEmergency;
     if (e?.done) return null;
@@ -1554,9 +1573,19 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // bot.rotnSealedIn): that cell, closed, is tonight's shelter as it is (no build, no redo, whatever its walls); no
         // food run leaves it (eat what is held; short, the morning climb comes first, then food); the morning climbs out.
         const sealed = sealedShaftHere(bot);
+        const sealedHeld = sealed ? heldFoodPoints(bot) : 0;
+        const sealedNeed = sealed ? nightFoodNeed({ food: bot.food, saturation: Number.isFinite(bot.foodSaturation) ? bot.foodSaturation : 0 }) : null;
+        // #667 round 2 (the lead's corrected decision (a)): kept only while the food covers the night; short now, out first
+        // (the escape), then the normal rules: a shelter where the climb ends, and the food run.
+        if (sealed && Number.isFinite(sealedNeed) && sealedHeld < sealedNeed && ops.escape && !n.sealClimbTried) {
+            n.sealClimbTried = true;
+            n.site = sealed;
+            climbOutOfSeal(agent, n, ops, `the food held (${sealedHeld} points) does not cover the night (about ${sealedNeed})`, () => { n.site = null; });
+            return 'night:waiting';
+        }
         if (sealed) {
-            const held = heldFoodPoints(bot);
-            const need = nightFoodNeed({ food: bot.food, saturation: Number.isFinite(bot.foodSaturation) ? bot.foodSaturation : 0 });
+            const held = sealedHeld;
+            const need = sealedNeed;
             const short = Number.isFinite(need) && held < need ? Math.round((need - held) * 10) / 10 : 0;
             Object.assign(n, { state: 'inside', site: sealed, pit: false, sealedShaft: true, sealedFoodSaid: false, foodRunTried: true, digAt: null, repairStall: null, checkedAt: null,
                 clears: [], tolerated: false, clearSaid: false, keepSaid: null, leaveFrom: null, backedAway: false, holdSaid: null, handSaid: null, handFight: false, pocketTried: false,
@@ -1601,7 +1630,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (spent) n.lastShelter = spent.clone?.() ?? spent;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { sealedShaft: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, badCells: null, gatherTried: false, ...GROUND_CLEAR, groundSkip: [] });
+        Object.assign(n, { sealedShaft: false, sealClimbTried: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, descended: false, pitProgress: {}, leaveFrom: null, burrowSteps: 0, burrowNoneAt: null, nightBurrowTried: null, nightBurrowWhy: null, repairFirstFor: null, fightFirstSaid: null, abortSaid: null, badCells: null, gatherTried: false, ...GROUND_CLEAR, groundSkip: [] });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -1865,7 +1894,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.state = 'day';
                 n.site = null;
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, escapeSeen: false, relocTries: 0, relocPending: false, relocWaitUntil: null, pitProgress: {}, exitTries: 0, exitAt: null, exitLeftAt: null, mobSince: null, mobSaid: false,
-                    burrowSteps: 0, burrowNoneAt: null, digOutTried: false, climbTried: false, deeperTried: false, sealedShaft: false, ...MORNING_CLEAR });
+                    burrowSteps: 0, burrowNoneAt: null, digOutTried: false, climbTried: false, deeperTried: false, sealedShaft: false, sealClimbTried: false, ...MORNING_CLEAR });
                 line(agent, text);
             };
             // Soak 13 (S2', the lead): out of the shelter in the morning, its side now open, the Scroll of New Life
