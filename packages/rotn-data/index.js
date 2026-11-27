@@ -32,6 +32,8 @@ export const lookup = (query, opts) => pack().lookup(query, opts);
 // "How do I get X" (Phase 3): world rules (3.3.4/world-sources.json), recipes, smelting, plain drops.
 export const howToGet = (item, opts) => pack().howToGet(item, opts);
 export const rockRecipes = () => pack().rockRecipes();
+// The crafting planner's hint for a base item (soak 18): its block-breaking world rules, short.
+export const worldHint = (item, opts) => pack().worldHint(item, opts);
 // Can these inventory stacks fill this recipe or craft way? One rule for rotn-data and skills-rotn (#152 review).
 export const canFill = (recipe, stacks, opts) => pack().canFill(recipe, stacks, opts);
 export { formatHowToGet } from './src/howto.js';

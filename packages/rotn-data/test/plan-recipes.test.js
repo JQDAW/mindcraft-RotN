@@ -82,6 +82,12 @@ test('oreLabel and parseKey', () => {
     assert.equal(oreLabel(null, [{ name: 'minecraft:coal', meta: 0 }, { name: 'minecraft:coal', meta: 1 }]), 'any of coal:0, coal:1');
     const torch = pack.planRecipes('torch').find((w) => w.inputs.some((i) => i.keys.includes('coal:1')));
     assert.ok(torch.inputs.some((i) => i.label === 'any of coal:0, coal:1'), JSON.stringify(torch.inputs.map((i) => i.label)));
+    // Soak 18: an item listed once keeps its inventory key: the twine handle's slot is twine (pyrotech:material:14) or string,
+    // not "any of pyrotech:material, string"; the rock label (pyrotech:rock at three metas) is unchanged.
+    const handle = pack.planRecipes('spartanweaponry:material', { meta: 0 }).find((w) => w.recipeId === 'crafttweaker:string_twine_handle');
+    assert.equal(handle.inputs[1].label, 'any of pyrotech:material:14, string');
+    assert.equal(oreLabel(null, [{ name: 'pyrotech:material', meta: 14, key: 'pyrotech:material:14' }, { name: 'minecraft:string', meta: 0, key: 'string' }]), 'any of pyrotech:material:14, string');
+    assert.equal(pack.planRecipes('stone_sword')[0].inputs[0].label, 'rock (any of pyrotech:rock, pyrotech_compat:rock_*)');
     assert.deepEqual(parseKey('pyrotech:rock:8'), { name: 'pyrotech:rock', meta: 8 });
     assert.deepEqual(parseKey('pyrotech:rock'), { name: 'pyrotech:rock', meta: null });
     assert.deepEqual(parseKey('stick'), { name: 'stick', meta: null });

@@ -233,6 +233,37 @@
       "note": "Where dead bushes generate is not cited here, except the Biomes O' Plenty biome files that place them (config/biomesoplenty/biomes/defaults/biomesoplenty/lush_desert.json line 166, outback.json line 80, steppe.json line 70, xeric_shrubland.json line 68). Shears are not encoded as unlessTool: no shears in the dump has a 'shears' tool class (minecraft:shears has toolClasses {}), so a tool rule could not match them. The summary says it instead."
     },
     {
+      "id": "grass-tinder",
+      "action": "break",
+      "summary": "Break grass or ferns (minecraft:tallgrass, the short plants on grass blocks, or the lower half of double tall grass or a large fern) by hand or with any tool except shears: it breaks at once and about 1 time in 13 drops 1 tinder (pyrotech:tinder, the pack's 'dried plant fiber'); most grass gives nothing. Plan on about 40 grass for 3 tinder. Tinder has no crafting recipe on RotN. About 2 times in 13 the grass drops plant fiber (pyrotech:material:12) instead, which a crude drying rack dries into tinder in 5 minutes. 3 tinder in a row make 3 twine (pyrotech:material:14), and 1 twine and 1 stick make a handle (spartanweaponry:material:0), which the stone sword needs.",
+      "blocks": [
+        { "name": "minecraft:tallgrass", "meta": 1, "documented": true },
+        { "name": "minecraft:tallgrass", "meta": 2, "documented": true },
+        { "name": "minecraft:double_plant", "meta": 2, "documented": true },
+        { "name": "minecraft:double_plant", "meta": 3, "documented": true }
+      ],
+      "gives": { "name": "pyrotech:tinder", "meta": 0 },
+      "count": null,
+      "countRange": { "min": 0, "max": 1, "mean": 0.077 },
+      "tool": null,
+      "confidence": "documented",
+      "evidence": [
+        "scripts/dropt.zs (SHA-256 62cd3a64d9f97c8a5197f160486a00947dbc3ce553602692aef99cb278e547f9; the whole file is packages/rotn-data/test/fixtures/forage-food-3.3.4/dropt.zs) lines 620-647, list tall_grass_base_drops: one rule matching minecraft:tallgrass:1 and :2 (and Biomes O' Plenty plants) with harvester type PLAYER and replaceStrategy ADD (the plant's own drops stay), whose weighted drops are nothing 4200, pyrotech:material:12 (plant fiber) 840, pyrotech:tinder 420 ('dried plant fiber'), rats:little_black_worm 15, betterwithaddons:food_mulberry 14: tinder 420/5489 = 0.077 per break, plant fiber 840/5489 = 0.153",
+        "scripts/dropt.zs lines 649-669, list double_tall_grass_base_drops: minecraft:double_plant:2 and :3 (double tall grass, large fern; meta 2 and 3 are the lower halves in the dump's states), no harvester condition, ADD, nothing 4200, plant fiber 840, tinder 420, dungeontactics:flower_ailment 8: tinder 420/5468 = 0.077",
+        "Dropt's rule and drop handling (mods/dropt-1.12.2-1.19.4.jar, SHA-256 21837ce855ad3304fa2aa2cc4d29fe5989cd61f09fa8fc1f9f4e53dedbacfd04; bytecode excerpts in packages/rotn-data/test/fixtures/forage-food-3.3.4/forage-food.javap.txt, '## Dropt RuleLocator' and the Rule and DropModifier sections): RuleLocator.matchRules keeps the first matching rule unless it sets fallthrough (Rule default false); Rule defaults dropStrategy REPEAT, dropCount 1; DropModifier.modifyDrops picks dropCount (1) drops from a WeightedPicker of the rule's drops by weight. So one weighted pick per break: the weights above are the odds. No other rule in scripts/dropt.zs or the pack's other Dropt scripts (dropt_loose_materials.zs, dropt_magicite.zs, future-mc.zs, contentweaker/contentTweaker_Dropt.zs) names minecraft:tallgrass or minecraft:double_plant, and Pyrotech's own Dropt rules are off (config/pyrotech/plugin.Dropt.cfg: B:grass_tall=false and every other category false)",
+        "No crafting recipe makes tinder: scripts/pyrotech/pyrotech_recipes_craftingtable.zs (SHA-256 bc86aa197c45e6195306f071d61c35cbc9a3a15b65a592aa307e55511bc647f4) line 41 recipes.remove(<pyrotech:tinder>), and the dump's recipes have no recipe whose result is pyrotech:tinder. The same file, lines 113-114 and 130-131 add dry_to_twine: 3 tinder in a row -> 3 twine (pyrotech:material:14); scripts/spartan.zs (SHA-256 7a5601ac5cf906d27d91c4ec0b4dd2639b7c1c089e2d3cf6e76047e0a4326e07) line 175 adds string_twine_handle: a stickWood and string or twine -> 1 spartanweaponry:material:0 (both are in the dump as crafttweaker:dry_to_twine and crafttweaker:string_twine_handle)",
+        "The cited lines of the three scripts and of scripts/jei_descriptions.zs (SHA-256 c9a76a794b8b915c4bbb9935b71856109db977abfb640ce73eab06c7841f712a): packages/rotn-data/test/fixtures/rotn-3.3.4/tinder-twine.excerpt.zs",
+        "Drying: scripts/pyrotech/pyrotech_recipes_other.zs (SHA-256 84e75e69b2350c4405ee816f3ec66bab1cbe048798baa76670dab7041b42efbc) lines 219-220: CrudeDryingRack dried_fiber_fresh (pyrotech:material:12 -> pyrotech:tinder) and dried_fiber_sapling (any treeSapling -> pyrotech:tinder), 5 * 60 * 20 ticks each; scripts/jei_descriptions.zs lines 221-222 name pyrotech:material:12 plantFiber and pyrotech:tinder driedPlantFiber"
+      ],
+      "unverified": [
+        "no harness run has broken grass for tinder yet (soaks 12-14 held 1-2 pyrotech:material:12, from an unlogged source)",
+        "breaking the upper half of a double plant (the dump's upper-half state, meta 10): Dropt matches the broken state, and only the lower halves (meta 2 and 3) are listed",
+        "HarvestDropsEvent handlers in mods/*.jar other than Dropt's were not read for tall grass",
+        "Biomes O' Plenty plants (biomesoplenty:plant_0, plant_1) also drop tinder, at odds that depend on the biome (scripts/dropt.zs plants_basic_dry, plants_basic_dead and tall_grass_base_drops match some of them first); they are left out"
+      ],
+      "note": "Shears are not encoded as unlessTool (no shears in the dump has a 'shears' tool class; see leaves-sticks): with shears tall grass drops itself. The crude drying rack is pyrotech:drying_rack:0 (crafttweaker:hanging_dryingrack: 2 plant fiber + 1 earthworks:item_timber); drying is a machine step, not a break rule, so it is not encoded here."
+    },
+    {
       "id": "raw-iron",
       "action": "break",
       "summary": "Mine iron ore with a pickaxe of level 0 or better (a stone pickaxe is enough).",
