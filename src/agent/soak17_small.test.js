@@ -121,3 +121,22 @@ test('soak 17 L3: !getCraftingPlan("cobblestone") names the rocks\' craft (was "
     const pick = plan.perform({ bot: w.bot }, 'stone_pickaxe', 1);
     assert.doesNotMatch(pick, /missing the following items:\s*- 3 pyrotech:rock:0/);
 });
+
+test('soak 17 (#669 review): 18:06:37\'s rock counts are each stack once: 420 metamorphic rocks in 7 stacks, 90 rock:8 in 2 (the 18:04:02 lines named crafts, not counts)', (t) => {
+    quiet(t);
+    // The 18:06:37 inventory (driver.log:2274): 6 x 64 + 36 metamorphic rocks, 64 + 26 rock:8, 3 igneous, 3 sedimentary,
+    // 3 sticks; the stone axe in the off hand. Consistent with the death at 18:09:50 (453 and 269 lost, after the 53
+    // cells dug at 18:07:40 and in escape 4, mostly limestone, and 5 cobble crafted at 18:07:35).
+    const slots = {};
+    [64, 64, 64, 64, 64, 64, 36].forEach((n, i) => { slots[9 + i] = ['pyrotech_compat:rock_metamorphic', n]; });
+    slots[16] = ['pyrotech:rock', 64, 8];
+    slots[17] = ['pyrotech:rock', 26, 8];
+    slots[18] = ['pyrotech_compat:rock_igneous', 3];
+    slots[19] = ['pyrotech_compat:rock_sedimentary', 3];
+    slots[20] = ['stick', 3];
+    slots[45] = ['stone_axe', 1];
+    const w = fakeWorld({ slots });
+    useRegistry(t, w.bot);
+    const text = describeNeeds('contenttweaker:crafting_tools', craftNeeds(w.bot, 'contenttweaker:crafting_tools'));
+    assert.match(text, /1 rock: you have 420 pyrotech_compat:rock_metamorphic, 90 pyrotech:rock:8, 3 pyrotech_compat:rock_igneous, 3 pyrotech_compat:rock_sedimentary \(enough\)/, text);
+});
