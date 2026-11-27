@@ -315,3 +315,19 @@ test('#665 round 1 (decision 6): a hazard walk (keep: false) may dig with a pick
     const stoneCost = (m) => m.exclusionAreasBreak.reduce((n, f) => n + f({ name: STONE, metadata: 0, position: V(0, 63, 0) }), 0);
     assert.equal(stoneCost(seen[1]), 0, 'and it may break stone with that pickaxe');
 });
+
+test('#670 nit 2: the way-out checks below the floor have their own cap; past it the target is left with the others below the floor, never "capped"', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const extra = [];
+    const hill = (x) => (x <= 2 ? 69 : Math.max(63, 71 - x));
+    for (let x = -8; x <= 8; x++) for (let z = -8; z <= 8; z++) for (let y = 64; y <= hill(x); y++) extra.push([STONE, V(x, y, z)]);
+    extra.push(['cobblestone', V(9, 64, 0)], ['cobblestone', V(9, 64, 4)]);
+    const world = stoneWorld({ surfaceY: 63, half: 10, extra });
+    const items = [{ ...stack('iron_pickaxe', 0, 1) }];
+    const bot = fakeBot({ world, items, start: V(0.5, 70, 0.5) });
+    await skills.collectBlock(bot, 'cobblestone', 2, null, 64, { ...skills.COLLECT_LIMITS, wayChecks: 1 });
+    assert.equal(bot.calls.dug.length, 1, bot.output);
+    assert.notEqual(bot.rotnCollectEnd.reason, 'capped');
+    assert.match(bot.output, /Left 1 block for cobblestone below y 68 alone/);
+    assert.equal(skills.COLLECT_LIMITS.wayChecks, 64);
+});
