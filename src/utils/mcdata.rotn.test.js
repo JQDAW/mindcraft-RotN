@@ -188,7 +188,7 @@ test('getItemCraftingRecipes and getDetailedCraftingPlan follow RotN recipes', (
     // Request 10: the plan names variants as inventory keys ("pyrotech:rock:0", "log:0"); a bare
     // key (planks, stick) means any variant. Soak 17 L3: an ore input the bot lacks is named by its ore
     // ("rock (any of ...)"), and a crafted bare key names what the recipe makes ("planks:0").
-    assert.match(pick, /- 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\)\n- 1 log:0\n/);
+    assert.match(pick, /- 1 log:0\n- 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\)\n/);
     assert.match(pick, /Craft 1 log:0 -> 3 planks:0\nCraft 2 planks -> 4 stick\nCraft 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\) \+ 2 stick -> 1 stone_pickaxe/);
     const table = mc.getDetailedCraftingPlan('crafting_table', 1, {});
     const axeRock = 'rock \\(any of pyrotech:rock, flint, pyrotech_compat:rock_\\*\\)';
@@ -299,13 +299,16 @@ test('soak 17 L3: ore inputs count every held rock; cobblestone comes from 4 roc
 
     // 18:07:10 !getCraftingPlan("stone_pickaxe", 1) said "- 3 pyrotech:rock:0". At 18:04:02 the bot had 20
     // pyrotech_compat:rock_metamorphic:0 left (7 cobbles' worth, 2 crafted), which it crafted into 5 cobbles at
-    // 18:07:38; it also held pyrotech:rock:8 ("my rock:8", count not logged: 8 here) and 4 planks (18:06:14), no sticks.
-    const at1807 = { 'pyrotech_compat:rock_metamorphic:0': 20, 'pyrotech:rock:8': 8, 'planks:1': 4, 'undergroundbiomes:metamorphic_cobble:0': 4, 'log:1': 34 };
+    // 18:07:38. #669 review 3: its pyrotech:rock:8 count is logged too: 20 at 18:04:02 (5 limestone cobbles of 4,
+    // driver.log:2144); the crude axe (18:06:45) and Crafting Tools (18:06:49) took one rock each, the tools'
+    // plan naming rock:8 (18:06:34), so 18 here (at 20, a tie, metamorphic still wins: see below). 4 planks
+    // (18:06:14), no sticks.
+    const at1807 = { 'pyrotech_compat:rock_metamorphic:0': 20, 'pyrotech:rock:8': 18, 'planks:1': 4, 'undergroundbiomes:metamorphic_cobble:0': 4, 'log:1': 34 };
     const pick = mc.getDetailedCraftingPlan('stone_pickaxe', 1, at1807);
     assert.match(pick, /^You have all items required to craft this item!\n/, pick);
     assert.match(pick, /Craft 2 planks -> 4 stick\nCraft 3 pyrotech:rock:8 \+ 2 stick -> 1 stone_pickaxe$/);
-    // Three pickaxes: 9 rocks of two kinds (every member of the ore counts), no rock missing.
-    assert.match(mc.getDetailedCraftingPlan('stone_pickaxe', 3, at1807), /^You have all items[^]*Craft 8 pyrotech:rock:8 \+ 1 pyrotech_compat:rock_metamorphic \+ 6 stick -> 3 stone_pickaxe$/);
+    // Seven pickaxes: 21 rocks of two kinds (every member of the ore counts), no rock missing.
+    assert.match(mc.getDetailedCraftingPlan('stone_pickaxe', 7, at1807), /^You have all items[^]*Craft 18 pyrotech:rock:8 \+ 3 pyrotech_compat:rock_metamorphic \+ 14 stick -> 7 stone_pickaxe$/);
     // Too few rocks: the missing line names the ore, not one rock.
     const short = mc.getDetailedCraftingPlan('stone_pickaxe', 1, { 'pyrotech_compat:rock_metamorphic:0': 1, stick: 2 });
     assert.match(short, /^You are missing the following items:\n- 2 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\)\n/);
@@ -317,7 +320,16 @@ test('soak 17 L3: ore inputs count every held rock; cobblestone comes from 4 roc
     assert.equal(cobble, 'Any cobblestone: your pyrotech_compat:rock_metamorphic:0 rocks make undergroundbiomes:metamorphic_cobble:0 (4 rocks each); you already have 4.\n'
         + 'You have all items required to craft this item!\nHere\'s your crafting plan:\n\nCraft 20 pyrotech_compat:rock_metamorphic:0 -> 5 undergroundbiomes:metamorphic_cobble:0');
     // A named kind: only that kind's rocks, 4 of one kind per cobble.
-    assert.match(mc.getDetailedCraftingPlan('contenttweaker:limestone_cobble', 3, at1807), /^You are missing the following items:\n- 4 pyrotech:rock:8\n[^]*Craft 12 pyrotech:rock:8 -> 3 contenttweaker:limestone_cobble:0$/);
+    assert.match(mc.getDetailedCraftingPlan('contenttweaker:limestone_cobble', 5, at1807), /^You are missing the following items:\n- 2 pyrotech:rock:8\n[^]*Craft 20 pyrotech:rock:8 -> 5 contenttweaker:limestone_cobble:0$/);
+    // A tie (20 and 20): the first rock recipe in rockRecipes' order (metamorphic before limestone), the order skills'
+    // cobbleChoices also uses; the bot made metamorphic cobble at 18:07:38.
+    assert.match(mc.getDetailedCraftingPlan('cobblestone', 1, { ...at1807, 'pyrotech:rock:8': 20 }), /^Any cobblestone: your pyrotech_compat:rock_metamorphic:0 rocks make undergroundbiomes:metamorphic_cobble:0 /);
+    // #669 review 2: mixed kinds make no cobble. 2 igneous + 2 metamorphic rocks, or two metas of one rock, are not 4 of one kind.
+    const mixed = mc.getDetailedCraftingPlan('cobblestone', 1, { 'pyrotech_compat:rock_igneous:0': 2, 'pyrotech_compat:rock_metamorphic:0': 2 });
+    assert.match(mixed, /^Any cobblestone: your pyrotech_compat:rock_igneous:0 rocks make undergroundbiomes:igneous_cobble:0 \(4 rocks each\)\.\nYou are missing the following items:\n- 2 pyrotech_compat:rock_igneous:0\n/, mixed);
+    assert.doesNotMatch(mixed, /You have all items/);
+    const metas = mc.getDetailedCraftingPlan('undergroundbiomes:metamorphic_cobble', 1, { 'pyrotech_compat:rock_metamorphic:0': 2, 'pyrotech_compat:rock_metamorphic:1': 2 });
+    assert.match(metas, /^You are missing the following items:\n- 2 pyrotech_compat:rock_metamorphic:0\n[^]*Craft 4 pyrotech_compat:rock_metamorphic:0 -> 1 undergroundbiomes:metamorphic_cobble:0$/, metas);
 });
 
 // Soak 17 L3 item 3: the plan follows rotn-data's recipes, not the registry's, where they disagree.
@@ -335,4 +347,17 @@ test('soak 17 L3: the plan reads rotn-data\'s recipes even when the registry sti
         for (const k of Object.keys(registry.recipes)) delete registry.recipes[k];
         Object.assign(registry.recipes, saved);
     }
+});
+
+// #669 review 1: an ore input must not take the stack a later single-item input needs. The hamster wheel's 3 genericMetal
+// also accept the iron ingot its 1 ingotIron needs; the soaking pot's 2 twine also accept the 1 pyrotech:material:14 it needs.
+test('#669 review 1: inputs with the fewest members fill first (hamster wheel, soaking pot)', () => {
+    mc.installRotnRecipes();
+    const everything = /^You have all items required to craft this item!\n/;
+    const wheel = mc.getDetailedCraftingPlan('animania:block_hamster_wheel', 1, { iron_ingot: 1, 'contenttweaker:material_part:0': 3, stone_slab: 2 });
+    assert.match(wheel, everything, wheel);
+    assert.match(wheel, /Craft 3 contenttweaker:material_part:0 \+ 2 stone_slab \+ 1 iron_ingot -> 1 animania:block_hamster_wheel$/);
+    const pot = mc.getDetailedCraftingPlan('pyrotech:soaking_pot', 1, { 'pyrotech:material:14': 1, string: 2, 'pyrotech:rock:0': 3, 'planks:0': 2 });
+    assert.match(pot, everything, pot);
+    assert.match(pot, /Craft 3 pyrotech:rock:0 \+ 2 string \+ 2 planks \+ 1 pyrotech:material:14 -> 1 pyrotech:soaking_pot$/);
 });

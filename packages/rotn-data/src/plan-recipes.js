@@ -21,12 +21,15 @@ function rawRecipe(catalog, id) {
 
 /**
  * "rock (any of pyrotech:rock, pyrotech_compat:rock_*)": the ore (or "any of" without one) and its members'
- * item names in rank order; names that share a "mod:word_" prefix are one "mod:word_*".
+ * item names in rank order; names that share a "mod:word_" prefix are one "mod:word_*". Members that are all one
+ * item are listed by meta ("any of coal:0, coal:1").
  * @param {string|null} ore
  * @param {Array<{name: string}>} members registry or bot names
  */
 export function oreLabel(ore, members) {
-    const names = [...new Set(members.map((m) => botName(m.name)))];
+    let names = [...new Set(members.map((m) => botName(m.name)))];
+    // #669 review 4: metas of one item ("coal:0", "coal:1") keep their metas, else the label is "any of coal".
+    if (names.length === 1 && members.length > 1) names = members.map((m) => (m.meta == null ? botName(m.name) : `${botName(m.name)}:${m.meta}`));
     const prefix = (n) => { const m = /^([^:]+:[^_]+_)/.exec(n); return m ? m[1] : null; };
     const shared = new Map();
     for (const n of names) if (prefix(n)) shared.set(prefix(n), (shared.get(prefix(n)) ?? 0) + 1);

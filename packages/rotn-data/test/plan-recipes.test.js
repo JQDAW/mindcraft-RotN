@@ -78,6 +78,10 @@ test('oreLabel and parseKey', () => {
         'rock (any of pyrotech:rock, pyrotech_compat:rock_*)');
     assert.equal(oreLabel(null, [{ name: 'minecraft:slime_ball' }, { name: 'betterslimes:black_slime' }]), 'any of slime_ball, betterslimes:black_slime');
     assert.equal(oreLabel('x', 'abcdefgh'.split('').map((c) => ({ name: `m${c}:${c}` }))), 'x (any of ma:a, mb:b, mc:c, md:d, me:e, mf:f, ...)');
+    // #669 review 4: metas of one item keep their metas (the torch's coal or charcoal).
+    assert.equal(oreLabel(null, [{ name: 'minecraft:coal', meta: 0 }, { name: 'minecraft:coal', meta: 1 }]), 'any of coal:0, coal:1');
+    const torch = pack.planRecipes('torch').find((w) => w.inputs.some((i) => i.keys.includes('coal:1')));
+    assert.ok(torch.inputs.some((i) => i.label === 'any of coal:0, coal:1'), JSON.stringify(torch.inputs.map((i) => i.label)));
     assert.deepEqual(parseKey('pyrotech:rock:8'), { name: 'pyrotech:rock', meta: 8 });
     assert.deepEqual(parseKey('pyrotech:rock'), { name: 'pyrotech:rock', meta: null });
     assert.deepEqual(parseKey('stick'), { name: 'stick', meta: null });

@@ -1066,9 +1066,13 @@ function craftItem(item, count, inventory, leftovers, crafted = { required: {}, 
 
     // Process each ingredient
     crafted.active.add(item);
-    const parts = recipe.inputs.flatMap((input) => useInput(input, input.count * batchCount, inventory, leftovers, crafted));
+    // #669 review 1: inputs with the fewest members fill first, so an ore input does not take the stack a single-item
+    // input needs (the hamster wheel's iron ingot, the soaking pot's twine); the step lists them in recipe order.
+    const order = recipe.inputs.map((input, i) => ({ input, i })).sort((a, b) => a.input.keys.length - b.input.keys.length || a.i - b.i);
+    const parts = [];
+    for (const { input, i } of order) parts[i] = useInput(input, input.count * batchCount, inventory, leftovers, crafted);
     crafted.active.delete(item);
-    crafted.steps.push(`Craft ${parts.join(' + ')} -> ${totalProduced} ${product}`);
+    crafted.steps.push(`Craft ${parts.flat().join(' + ')} -> ${totalProduced} ${product}`);
 
     return crafted;
 }
