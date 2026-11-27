@@ -9,7 +9,7 @@ import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
 import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, requireRotnData, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes, attachDigTime, dumpDigSources, attachSpawnTimeoutReason, classifyBeforeJoinError, lastProfileFetchFailure, installGracefulQuit, installBetterCombatAttack, bcAttackSetting, attachAttackCounts, attachRespawnEffectsLog, applyStackSizes, attachClickDiagnostics, attachDigRefusedLog, attachCraftRefusedLog, attachPvpCallers } from '../../packages/forge-bridge/index.js';
 import { loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
-import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable, planRecipes as rdPlanRecipes, inOre as rdInOre, fillShortfall as rdFillShortfall, cobbleFromRocks as rdCobbleFromRocks } from '../../packages/rotn-data/index.js';
+import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable, planRecipes as rdPlanRecipes, inOre as rdInOre, fillShortfall as rdFillShortfall, cobbleFromRocks as rdCobbleFromRocks, worldHint as rdWorldHint } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -836,7 +836,7 @@ export function getDetailedCraftingPlan(targetItem, count = 1, current_inventory
     if (isBaseItem(targetItem)) {
         const have = available(inventory, targetItem);
         if (have >= count) return "You have all required items already in your inventory!";
-        return `${targetItem} is a base item, you need to find ${count - have} more in the world`;
+        return `${targetItem} is a base item, you need to find ${count - have} more in the world${worldHintText(targetItem)}`;
     }
 
     const leftovers = {};
@@ -1077,13 +1077,20 @@ function craftItem(item, count, inventory, leftovers, crafted = { required: {}, 
     return crafted;
 }
 
+/** Soak 18: ": break grass or ferns by hand (about 1 in 13 drops one)" for a base item rotn-data has a world rule for, else "". */
+function worldHintText(key) {
+    let hint = null;
+    try { hint = rdWorldHint(key); } catch { hint = null; }
+    return hint ? `: ${hint}` : '';
+}
+
 function formatPlan(targetItem, { required, steps, leftovers }) {
     const lines = [];
 
     if (Object.keys(required).length > 0) {
         lines.push('You are missing the following items:');
         Object.entries(required).forEach(([item, count]) => 
-            lines.push(`- ${count} ${item}`));
+            lines.push(`- ${count} ${item}${worldHintText(item)}`));
         lines.push('\nOnce you have these items, here\'s your crafting plan:');
     } else {
         lines.push('You have all items required to craft this item!');

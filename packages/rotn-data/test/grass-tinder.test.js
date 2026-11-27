@@ -98,3 +98,13 @@ test('grass-tinder: tinder has no crafting recipe; 3 tinder make 3 twine, and tw
     const sword = pack.planRecipes('stone_sword')[0];
     assert.ok(sword.inputs.some((i) => i.keys.includes('spartanweaponry:material:0')), 'the stone sword takes the handle');
 });
+
+test('worldHint: the planner\'s short hint is each break rule\'s lead clause and its odds; null without a rule', () => {
+    assert.equal(pack.worldHint('pyrotech:tinder'), 'break grass or ferns by hand or with any tool except shears (about 1 in 13 drops one)');
+    // Two rules: the first two break ways, the parentheses left out; a countRange mean of 0.5 is 1 in 2.
+    assert.equal(pack.worldHint('stick'), 'break a Dynamic Trees branch, by hand or with an axe; or break leaves by hand (about 1 in 2 drops one)');
+    assert.equal(pack.worldHint('pyrotech:rock:0'), 'break a rock pile on the ground by hand; or mine stone with a pickaxe below Sturdy');
+    assert.equal(pack.worldHint('coal'), 'mine coal ore with a pickaxe of level 0 or better');
+    // Only break rules: bread's start kit, feathers (no rule) and an unknown item give none.
+    for (const item of ['bread', 'feather', 'nosuch:item']) assert.equal(pack.worldHint(item), null, item);
+});
