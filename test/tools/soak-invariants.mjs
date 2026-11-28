@@ -48,12 +48,14 @@
 //                            The limit (#648 review 2): before rotn-v0.1.22 (#624) !goToSurface was upstream's
 //                            goToSurface and logged no `[escape]` line, and the `[trapped]` lines start with #642 (after
 //                            rotn-v0.1.22). So soak 15's trap shows only as the path episode above and I2.
-//   I2  enclosed-morning     `could not leave the shelter … after N tries` lines; nights spent in the same shelter as
-//                            the night before (`in the shelter at X until morning`, X repeated). The exported
-//                            enclosedEpisodes() (g4-soak-2h's no_trap, #662 review 3) times them: from the first
-//                            `could not leave` line until the bot leaves (a `left` / `dug out of the shelter` morning
-//                            line, a cleared escape, a death, a position line over `spanCells` from the shelter). I2's
-//                            own counts are unchanged.
+//   I2  enclosed-morning     still-enclosed morning hand-backs (STILL_ENCLOSED: `could not leave the shelter …` with
+//                            or without `after N tries`, `could not open the wall … either`, `failed part-way … maybe
+//                            still enclosed`; #681 review 1; and `<mob> still near the shelter … may still be closed`,
+//                            the lead on #683, which starts no episode); nights spent in the same shelter as the night before (`in
+//                            the shelter at X until morning`, X repeated). The exported enclosedEpisodes() (g4-soak-2h's
+//                            no_trap, #662 review 3) times them: from the first such line until the bot leaves (a morning
+//                            exit line at the shelter, a cleared escape, a death, a position line over `spanCells` from
+//                            the shelter).
 //   I3  rejected-click       rejected window clicks: one per `[forge-bridge] click rejected:` line (#618) when the
 //                            journal has them, else one per `[inventory] <op>: … Server rejected transaction` line
 //                            (the first try and `the second try failed too`; each click logs further copies through
@@ -143,7 +145,26 @@ const ESCAPE_OUT = /^\[escape\] out at (-?\d+, -?\d+, -?\d+) \(([^;]*); dug (\d+
 const ESCAPE_STUCK = /^\[escape\] still stuck at (-?\d+, -?\d+, -?\d+) after ([\d.]+) s \(dug (\d+), placed (\d+)\): (.*)$/;
 const NIGHT_ESCAPE_OUT = /^\[night\] the escape got out at (-?\d+, -?\d+, -?\d+)$/;
 const NIGHT_ESCAPE_FAILED = /^\[night\] the escape failed \((.*)\)$/;
-const COULD_NOT_LEAVE = /^\[night\] morning: could not leave the shelter at (-?\d+, -?\d+, -?\d+) after \d+ tries/;
+// Every still-enclosed hand-back the night routine prints (night_routine.js; #681 review 1: the hole shelter's failed
+// dig-out had no `after N tries`, so it started no episode and was not in I2): `could not leave the shelter at X after N
+// tries (…)` (the tries used up, also after the escape), `could not leave the shelter at X (…)` (the hole shelter's
+// dig-out and the escape failed), `could not open the wall toward <mob> either` (no dig-out, the fight wall would not
+// open; no cell: the shelter's from the lines before), and `a way out of the shelter at X failed part-way and the bot is
+// at Y; … maybe still enclosed` (the cell Y). Not one: `<mob> still near the shelter … after N min; … may still be
+// closed` (the agenda and the reflexes decide; the bot is armed and may be fighting from an opened shelter): the lead's
+// decision on #683 review 1, it counts in I2 (MOB_STILL_NEAR, shown in the table) but starts no no_trap episode.
+const STILL_ENCLOSED = [
+    { re: /^\[night\] morning: could not leave the shelter at (-?\d+, -?\d+, -?\d+)(?: after \d+ tries)?/, cell: (m) => m[1] },
+    { re: /^\[night\] morning: could not open the wall toward .* either; back to work, still enclosed\b/, cell: () => null },
+    { re: /^\[night\] morning: a way out of the shelter at -?\d+, -?\d+, -?\d+ failed part-way and the bot is at (-?\d+, -?\d+, -?\d+); back to work, maybe still enclosed\b/, cell: (m) => m[1] },
+];
+// night_routine.js:2111, the 2-min cap with a mob still near: in I2's count only (above).
+const MOB_STILL_NEAR = /^\[night\] morning: .* still near the shelter at -?\d+, -?\d+, -?\d+ after \d+ min; back to work \(.*the shelter may still be closed\)/;
+/** A still-enclosed hand-back: {cell} (null when the line names none), or null for any other line. */
+export function stillEnclosed(msg) {
+    for (const x of STILL_ENCLOSED) { const m = x.re.exec(msg); if (m) return { cell: x.cell(m) }; }
+    return null;
+}
 const IN_SHELTER = /^\[night\] in the shelter at (-?\d+, -?\d+, -?\d+) until morning$/;
 const CLICK_REJECTED = /^\[forge-bridge\] click rejected: /;
 const CLICK_LIMIT = /^\[forge-bridge\] click rejected: \d+ lines logged; further rejections/;
@@ -366,29 +387,38 @@ export function trapSpans(lines) {
 const LEFT_SHELTER = /^\[night\] morning: (?:left the shelter at |dug out of the (?:hole )?shelter at |climbed out of the (?:shelter|shaft) at |out of the shelter at )/;
 
 /**
- * The enclosed episodes (I2's `could not leave the shelter` lines, the lead's no_trap decision after #662): from a
- * `could not leave the shelter at X` line until the bot leaves: a morning exit line (LEFT_SHELTER), an
+ * The enclosed episodes (I2's still-enclosed hand-backs, STILL_ENCLOSED; the lead's no_trap decision after #662): from
+ * such a line until the bot leaves: a morning exit line (LEFT_SHELTER) at a cell within `spanCells` of X, an
  * escape that clears, a death, a line (BOT_AT, outside nothing) that puts it more than `spanCells` from X, or the
- * journal's end ('open'). A later `could not leave` line within `spanCells` of X continues the episode (soak 15: the
+ * journal's end ('open'). A later still-enclosed line within `spanCells` of X continues the episode (soak 15: the
  * pocket at -58, 57, -50 on two mornings). [{t, line, at, until, untilLine, minutes, end: 'left'|'cleared'|'died'|
  * 'moved away'|'open', mornings}].
  */
 export function enclosedEpisodes(lines) {
     const cells = INVARIANTS.trapped.spanCells;
     const out = [];
-    let ep = null;
+    let ep = null, lastShelter = null, lastAt = null;
     const close = (l, end) => { out.push({ ...ep, until: l.t, untilLine: l.n, end }); ep = null; };
     for (const l of lines) {
         let m;
-        if ((m = COULD_NOT_LEAVE.exec(l.msg))) {
-            if (ep && (dist(m[1], ep.at) ?? Infinity) <= cells) { ep.mornings++; continue; }
+        const se = stillEnclosed(l.msg);
+        if (se) {
+            // A line with no cell: the night's shelter (its `in the shelter at X` line), else where the bot was last seen.
+            const cell = se.cell ?? lastShelter ?? lastAt;
+            if (ep && (dist(cell, ep.at) ?? Infinity) <= cells) { ep.mornings++; continue; }
             if (ep) close(l, 'moved away');
-            ep = { fromT: l.t, fromN: l.n, at: m[1], mornings: 1 };
+            ep = { fromT: l.t, fromN: l.n, at: cell, mornings: 1 };
             continue;
         }
+        if ((m = IN_SHELTER.exec(l.msg))) lastShelter = m[1];
+        for (const re of BOT_AT) { const p = re.exec(l.msg); if (p) { lastAt = cellOf(p); break; } }
         if (!ep) continue;
         if (DEATH.test(l.msg)) { close(l, 'died'); continue; }
-        if (LEFT_SHELTER.test(l.msg)) { close(l, 'left'); continue; }
+        // #681 review 3: an exit line counts when its cell (the first one it names) is within spanCells of the episode's.
+        if (LEFT_SHELTER.test(l.msg)) {
+            const x = /(-?\d+, -?\d+, -?\d+)/.exec(l.msg)?.[1];
+            if ((dist(x, ep.at) ?? 0) <= cells) { close(l, 'left'); continue; }
+        }
         if (ESCAPE_OUT.test(l.msg) || NIGHT_ESCAPE_OUT.test(l.msg) || TRAPPED_OUT.test(l.msg)) { close(l, 'cleared'); continue; }
         for (const re of BOT_AT) {
             const p = re.exec(l.msg);
@@ -432,11 +462,12 @@ function trapped(lines, rel) {
 }
 
 function enclosedMorning(lines) {
-    const couldNot = lines.filter(l => COULD_NOT_LEAVE.test(l.msg));
+    const mobNear = lines.filter(l => MOB_STILL_NEAR.test(l.msg));
+    const couldNot = lines.filter(l => stillEnclosed(l.msg) || MOB_STILL_NEAR.test(l.msg));
     const shelters = lines.map(l => ({ l, m: IN_SHELTER.exec(l.msg) })).filter(x => x.m);
     const repeated = [];
     for (let i = 1; i < shelters.length; i++) if (shelters[i].m[1] === shelters[i - 1].m[1]) repeated.push({ ...at(shelters[i].l), shelter: shelters[i].m[1] });
-    return { count: couldNot.length, sameShelterNights: repeated.length, first: firsts(couldNot.map(at)), repeated: firsts(repeated) };
+    return { count: couldNot.length, mobStillNear: mobNear.length, sameShelterNights: repeated.length, first: firsts(couldNot.map(at)), repeated: firsts(repeated) };
 }
 
 function rejectedClicks(lines) {
@@ -721,7 +752,7 @@ export function render(r, name = 'soak') {
         const how = e.result === 'cleared' ? (e.to ? ` to ${e.to}${e.how ? ` (${e.how}; dug ${e.dug}, placed ${e.placed})` : ''}` : '') : e.why ? `: ${e.why}` : '';
         o.push(`    escape ${e.t} (driver.log:${e.line})${e.at ? ` at ${e.at}` : ''} by ${e.by}: ${e.result} in ${e.seconds} s${how}${e.endLine ? ` (driver.log:${e.endLine})` : ''}`);
     }
-    row('I2', 'enclosed-morning', r.I2, `${r.I2.count} "could not leave the shelter", ${r.I2.sameShelterNights} nights in the same shelter as the night before`);
+    row('I2', 'enclosed-morning', r.I2, `${r.I2.count} still-enclosed hand-backs ("could not leave the shelter" and the like${r.I2.mobStillNear ? `; ${r.I2.mobStillNear} of them a mob still near after the 2-min cap, no no_trap episode` : ''}), ${r.I2.sameShelterNights} nights in the same shelter as the night before`);
     row('I3', 'rejected-click', r.I3, `${r.I3.count} rejected clicks (from ${r.I3.source}${r.I3.secondTries != null ? `; ${r.I3.secondTries} second tries failed too` : ''})`);
     row('I4', 'dig-refused-with-tool', r.I4, r.I4 && `${r.I4.count} of ${r.I4.refusals} logged tool refusals with a usable tool carried (${r.I4.source}${r.I4.capped ? '; the 100-line cap was reached: refusals after it, if any, are not logged' : ''})`);
     row('I5', 'sunset-food-short', r.I5, r.I5 && `${r.I5.count} of ${r.I5.nightFoodLines} food-for-the-night lines short of the night's need; ${r.I5.foodRuns} sunset food runs (+${r.I5.foodRunPoints} points)`);

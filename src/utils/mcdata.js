@@ -991,7 +991,7 @@ function useInput({ keys, label }, n, inventory, leftovers, crafted) {
         const pick = chooseMember(keys, left, inventory, leftovers);
         const k = pick && (pick.s !== Infinity || !isBaseItem(keys[0])) ? pick.key : null;
         if (k) craftItem(k, left, inventory, leftovers, crafted);
-        else crafted.required[label] = (crafted.required[label] || 0) + left;
+        else { crafted.required[label] = (crafted.required[label] || 0) + left; (crafted.labelKeys ??= {})[label] = keys; }
         used.set(k ?? label, (used.get(k ?? label) ?? 0) + left);
     }
     const at = (k) => (keys.includes(k) ? keys.indexOf(k) : keys.length);
@@ -1077,20 +1077,26 @@ function craftItem(item, count, inventory, leftovers, crafted = { required: {}, 
     return crafted;
 }
 
-/** Soak 18: ": break grass or ferns by hand (about 1 in 13 drops one)" for a base item rotn-data has a world rule for, else "". */
-function worldHintText(key) {
-    let hint = null;
-    try { hint = rdWorldHint(key); } catch { hint = null; }
-    return hint ? `: ${hint}` : '';
+/**
+ * Soak 18: ": break grass or ferns by hand (about 1 in 13 drops one)" for a base item rotn-data has a world rule for, else "".
+ * An ore label ("rock (any of ...)") takes the hint of its first member (of the first 8) that has one.
+ */
+function worldHintText(key, members = []) {
+    for (const k of [key, ...members.slice(0, 8)]) {
+        let hint = null;
+        try { hint = rdWorldHint(k); } catch { hint = null; }
+        if (hint) return `: ${hint}`;
+    }
+    return '';
 }
 
-function formatPlan(targetItem, { required, steps, leftovers }) {
+function formatPlan(targetItem, { required, steps, leftovers, labelKeys = {} }) {
     const lines = [];
 
     if (Object.keys(required).length > 0) {
         lines.push('You are missing the following items:');
         Object.entries(required).forEach(([item, count]) => 
-            lines.push(`- ${count} ${item}${worldHintText(item)}`));
+            lines.push(`- ${count} ${item}${worldHintText(item, labelKeys[item])}`));
         lines.push('\nOnce you have these items, here\'s your crafting plan:');
     } else {
         lines.push('You have all items required to craft this item!');
