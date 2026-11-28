@@ -19,10 +19,11 @@
 //       ended, N - G before it; the standing goal's `you have N` as above; soak 18 (B2): the last job's end count plus
 //       each cobble craft after it, `Cobblestone from your rocks: N <item>` confirmed by `Successfully crafted <item>`, or
 //       a craft's `you now have N` less the last count of that item, until a night, a death, a craft of unknown gain or
-//       a shortened command output, which may hide a craft),
+//       a shortened output of a command that collects or crafts, which may hide a craft),
 //       each failure (a command with those args that ran and failed around `<n> min ago`; #675's merged `!cmd(args) xN:`
-//       needs N such failures, each within failureHoldMin of the next) and each collect (`Collected N <item>` around its time; soak 18
-//       (B3): with none, a scripted job's run or a shortened command output in that time leaves it unverifiable). A
+//       needs exactly N such failures with the full args, each within failureHoldMin of the next) and each collect (`Collected N <item>` around its time; soak 18
+//       (B3): with none, a scripted job's run or a collecting or crafting command's shortened output in that time
+//       leaves it unverifiable; a job with no end line ends at the next job's start or after bracketMin). A
 //       field is a match, a miss, or unverifiable (no state line in the window). n/a with no facts line (the
 //       summary mode, or a release before #637). The check passes at 100% of the verifiable fields.
 //   I14 wrong-state claims (M4 check 2)  model replies (`Generated response:`) that state the bot's y (`y=60`, `at y
@@ -85,6 +86,8 @@ const FROM_ROCKS = /from your rocks: (\d+) (\S+) \(/;
 const CRAFT_FAILED = /^Could not craft (\S+?):/;
 const CRAFTED_COBBLE = /^Successfully crafted (\S*cobble\S*?)(?:,| from )/;
 const SHORTENED = /has been shortened/;
+// #677 review 2: only a command that collects or crafts can hide a `Collected` or craft line in a shortened output.
+const MAKES_ITEMS = /^!(?:collectBlocks|craftRecipe|smeltItem)$/;
 const PARSED_ONE = /^parsed command: \{ commandName: '(![A-Za-z]+)', args: \[(.*)\] \}$/;
 const PARSED_OPEN = /^parsed command: \{$/;
 const EXECUTED = /^Agent executed: (![A-Za-z]+) and got:\s?(.*)$/;
@@ -156,7 +159,7 @@ function stateOf(lines, chat) {
         if ((m0 = EXECUTED.exec(l.msg))) {
             commands.push({ t: l.t, cmd: m0[1] });
             // A shortened output may hide crafts (soak 17 17:29:08: one cobble craft cut out): B2's chain stops there.
-            if (SHORTENED.test(m0[2])) { shortened.push({ t: l.t, n: l.n }); cobbleCrafts.push({ t: l.t, n: l.n, item: null, gain: null }); }
+            if (SHORTENED.test(m0[2]) && MAKES_ITEMS.test(m0[1])) { shortened.push({ t: l.t, n: l.n }); cobbleCrafts.push({ t: l.t, n: l.n, item: null, gain: null }); }
         }
         let m;
         if ((m = GOAL.exec(l.msg)) && /goal/.test(l.msg)) goals.push({ t: l.t, num: m[1] ? Number(m[1]) : null, id: m[2] ?? m[3] });
@@ -232,6 +235,8 @@ function stateOf(lines, chat) {
         // B3: every scripted job's run (its collects log no `Collected` line in the journal).
         if ((m = /^agenda step ([a-z_]+): the scripted job ended\b/.exec(c.msg))) { const j = [...jobs].reverse().find(x => x.id === m[1] && x.end === Infinity); if (j) j.end = c.t; }
         if ((m = /^agenda step ([a-z_]+): the scripted job \(run/.exec(c.msg))) {
+            // #677 review 3: a job with no end line ends at the next job's start.
+            for (const j of jobs) if (j.end === Infinity) j.end = c.t;
             jobs.push({ id: m[1], start: c.t, end: Infinity });
             if (m[1] === 'shelter_blocks') jobStart = c.t;
             if (!doneNow) stepStarted.push({ t: c.t, id: m[1] });
@@ -240,6 +245,8 @@ function stateOf(lines, chat) {
         // S1: the job's end count, its gain and its start (the count before the job is count - gain).
         if ((m = /^agenda step shelter_blocks: the scripted job ended: \+(\d+) shelter blocks \((\d+) of \d+;/.exec(c.msg))) { shelterBlocks.push({ t: c.t, count: Number(m[2]), gain: Number(m[1]), start: jobStart ?? c.t }); jobStart = null; }
     }
+    // ... or after bracketMin (one still open at the journal's end, or killed with no line).
+    for (const j of jobs) if (j.end === Infinity) j.end = j.start + MEMORY_CHECKS.bracketMin * 60_000;
     return { pos, goals, agendaReplies, deaths, shelters, picks, food, inventories, nowHave, collected, stepDone, stepStarted, agendaDone, shelterBlocks, nights, commands, standing, inFlight, pickTimeline, cobbleCrafts, shortened, jobs };
 }
 
@@ -346,9 +353,13 @@ export function memoryFactsCheck(lines, chat = []) {
             const doneList = /; done: (.*)$/.exec(f.agenda.trim())?.[1] ?? null;
             const listed = doneList == null || doneList === 'none' ? [] : doneList.split(', ').map(x => x.trim());
             const truncated = /\.\.\.$/.test(doneList ?? '');
-            // B1 (soak 18, 20:53:22 and 20:55:13): a source in the facts line's own second; the logs cannot order the two.
+            // B1 (soak 18, 20:53:22 and 20:55:13; #677 review 1): the step changed in the facts line's own second, and the
+            // logs cannot order the two. Unverifiable only when the latest source in an earlier second names the facts'
+            // step (the state just before the change); else judged as before.
             const sec = (x) => Math.floor(x / 1000);
-            const sameSecond = all.some(x => sec(x.t) === sec(t) && x.id !== step);
+            const prior = before(all.filter(x => sec(x.t) < sec(t)), t);
+            const priorIsStep = !!prior && prior.id === step && t - prior.t <= MEMORY_CHECKS.bracketMin * 60_000;
+            const changedNow = all.some(x => sec(x.t) === sec(t) && x.id !== step);
             if (!step && /^Agenda: active, all steps done\b/.test(f.agenda)) {
                 const all = doneList === 'none' || (!truncated && STEP_IDS.some(id => !listed.includes(id)));
                 judge('agenda', all ? false : null, l, { said: 'active, all steps done', state: `done: ${doneList ?? '?'}` });
@@ -356,12 +367,14 @@ export function memoryFactsCheck(lines, chat = []) {
                 // #661 (soak 17 17:22:20, 17:22:23): a numbered step named as the current one in the line's own done list,
                 // or after its `step X done` line (below), is stale, whatever the sources before it say.
                 judge('agenda', false, l, { said: step, state: `${step} done` });
-            } else if (step && STEP_IDS.includes(step) && st.stepDone.some(d => d.id === step && d.t <= t && (!last || d.t > last.t))) {
-                const doneAt = st.stepDone.filter(d => d.id === step && d.t <= t && (!last || d.t > last.t));
-                judge('agenda', doneAt.every(d => sec(d.t) === sec(t)) ? null : false, l, { said: step, state: `${step} done` });
+            } else if (step && STEP_IDS.includes(step) && st.stepDone.some(d => d.id === step && d.t <= t && (!prior || d.t > prior.t))) {
+                // Stale after its `step X done` line; B1: a done line in this same second, with the step the latest source
+                // before it, is unverifiable.
+                const doneAt = st.stepDone.filter(d => d.id === step && d.t <= t && (!prior || d.t > prior.t));
+                judge('agenda', priorIsStep && doneAt.every(d => sec(d.t) === sec(t)) ? null : false, l, { said: step, state: `${step} done` });
             } else {
                 const ok = src.length && step ? src.includes(step) : null;
-                judge('agenda', ok === false && sameSecond ? null : ok, l, { said: step, state: [...new Set(src)].join(',') });
+                judge('agenda', ok === false && changedNow && priorIsStep ? null : ok, l, { said: step, state: [...new Set(src)].join(',') });
             }
         }
         // Deaths: the count so far (a death within the window may not be in yet), and the last one's cell. A death with
@@ -454,8 +467,18 @@ export function memoryFactsCheck(lines, chat = []) {
             const ran = cmds.filter(c => c.cmd === fm[1] && c.t >= lo && c.t <= hi);
             const same = (c) => c.failed && (!args || c.args.replace(/\s+/g, ' ').includes(args.split(',')[0].trim()));
             let hit = ran.some(same);
-            // xN: N failed runs, each within the hold of the next, so all within (N - 1) holds before the newest.
-            if (hit && times > 1) hit = cmds.filter(c => c.cmd === fm[1] && c.t >= lo - (times - 1) * MEMORY_CHECKS.failureHoldMin * 60_000 && c.t <= hi && same(c)).length >= times;
+            // xN (#677 review 4): exactly N failed runs with the full args (the memory's key), each within failureHoldMin of
+            // the next, ending at the newest one in the window. A command the memory clipped (`...`) matches by its start.
+            if (hit && times > 1) {
+                const norm2 = (x) => x.replace(/"/g, '\'').replace(/\s+/g, ' ').trim();
+                const want = norm2(fm[2] ?? '');
+                const full = (c) => c.failed && (/\.\.\.$/.test(want) ? norm2(c.args).startsWith(want.slice(0, -3)) : norm2(c.args) === want);
+                const runs = cmds.filter(c => c.cmd === fm[1] && c.t <= hi && full(c));
+                const last = runs.findLastIndex(c => c.t >= lo);
+                let k = last < 0 ? 0 : 1;
+                while (last - k >= 0 && runs[last - k + 1].t - runs[last - k].t <= MEMORY_CHECKS.failureHoldMin * 60_000) k++;
+                hit = k === times;
+            }
             judge('failure', ran.length ? hit : null, l, { said: `${fm[1]}(${fm[2] ?? ''})${times > 1 ? ` x${times}` : ''}`, ago });
         }
         // Each collect: a `Collected N <item>` line around its time.
@@ -657,7 +680,7 @@ export function repeatedFailures(lines) {
 // Soak 18: the model's words for dropping or deferring a target ("I'll drop the sword hunt", "a stone sword can wait",
 // "the stone sword is optional anyway").
 // "drop" only with the bot as its subject: not a block's drop ("broke without a drop", "leaves drop tinder").
-const DEFER = /\b(?:i'll|i will|i'm going to|let's|i)\s+(?:drop|skip|abandon|shelve)\b|\bgiv(?:e|ing) up on\b|\bcan wait\b|\bis optional\b|\bnot (?:needed|worth it)\b|\bfor later\b/i;
+const DEFER = /\b(?:i'll|i will|i'm going to|let's|i)\s+(?:drop|skip|abandon|shelve)\b|\bgiv(?:e|ing) up on\b|\bcan wait\b|\bis optional\b|\bnot (?:needed|worth it)\b/i;
 const targetOf = (args) => (/^\s*['"]([^'"]+)['"]/.exec(args ?? '')?.[1] ?? null);
 /** The word of a target a reply names it by: the last word of its name ("stone_sword" -> "sword", "pyrotech:tinder" -> "tinder"). */
 const keyWord = (target) => { const w = norm(target).split(' ').filter(x => /^[a-z]{4,}$/.test(x)); return w.at(-1) ?? null; };
