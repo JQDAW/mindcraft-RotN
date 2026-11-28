@@ -271,32 +271,43 @@ export function rockRecipes(catalog) {
 }
 
 /**
+ * A world rule summary's lead clause, for worldHint ("Break a rock pile on the ground by hand; ..." -> "break a rock
+ * pile on the ground by hand"): up to the first ":" or ";" followed by a space, or a "." followed by a space and a
+ * capital letter (a new sentence; "e.g. a bush" goes on), outside parentheses. The parentheses are left out and a
+ * leading capital verb is lowercased. An abbreviation before a capital ("e.g. Pyrotech", "the U.S. Army") still ends
+ * the clause, so summaries keep such abbreviations out of their first clause.
+ * @param {string} s
+ * @returns {string}
+ */
+export function leadClause(s) {
+    let out = '';
+    let depth = 0;
+    for (let i = 0; i < s.length; i++) {
+        const c = s[i];
+        const end = i + 1 === s.length || s[i + 1] === ' ';
+        if (c === '(') depth++;
+        else if (c === ')') depth = Math.max(0, depth - 1);
+        else if (depth === 0 && end && (c === ':' || c === ';' || (c === '.' && (i + 2 >= s.length || /[A-Z]/.test(s[i + 2]))))) break;
+        else if (depth === 0) out += c;
+    }
+    out = out.replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim();
+    return /^[A-Z][a-z]/.test(out) ? out[0].toLowerCase() + out.slice(1) : out;
+}
+
+/**
  * Soak 18: a short hint for the crafting planner's base items ("break grass or ferns by hand or with any tool except
  * shears (about 1 in 13 drops one)"): each world rule that breaks a block for the item, as its summary's lead clause
- * (up to the first ":", ";" or "." outside parentheses, the parentheses left out) and its countRange odds.
+ * (leadClause) and its countRange odds.
  * @returns {string|null} null when no such rule names the item (or the item is unknown)
  */
 export function worldHint(catalog, input, { maxWays = 2 } = {}) {
     const ways = (howToGet(catalog, input)?.ways ?? []).filter((w) => w.kind === 'world' && w.action === 'break' && w.summary);
     if (!ways.length) return null;
-    const lead = (s) => {
-        let out = '';
-        let depth = 0;
-        for (let i = 0; i < s.length; i++) {
-            const c = s[i];
-            if (c === '(') depth++;
-            else if (c === ')') depth = Math.max(0, depth - 1);
-            else if (depth === 0 && /[:;.]/.test(c) && (i + 1 === s.length || s[i + 1] === ' ')) break;
-            else if (depth === 0) out += c;
-        }
-        out = out.replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim();
-        return /^[A-Z][a-z]/.test(out) ? out[0].toLowerCase() + out.slice(1) : out;
-    };
     const odds = (r) => {
         if (!r || !(r.mean > 0)) return '';
         return r.mean < 1 ? ` (about 1 in ${Math.round(1 / r.mean)} drops one)` : ` (${r.min}-${r.max} each)`;
     };
-    return ways.slice(0, maxWays).map((w) => lead(w.summary) + odds(w.countRange)).join('; or ');
+    return ways.slice(0, maxWays).map((w) => leadClause(w.summary) + odds(w.countRange)).join('; or ');
 }
 
 /**

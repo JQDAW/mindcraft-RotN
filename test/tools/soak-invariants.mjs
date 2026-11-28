@@ -357,12 +357,17 @@ export function trapSpans(lines) {
     return spans.map(s => ({ t: hms(s.fromT), line: s.fromN, at: s.at, until: hms(s.until), untilLine: s.untilLine, minutes: Math.round((s.until - s.fromT) / 6000) / 10, end: s.end, fails: s.fails, interrupted: s.interrupted, gaveUp: s.gaveUp }));
 }
 
-// The night routine's ways out of a shelter it could not leave (night_routine.js): a dug or walked exit.
-const LEFT_SHELTER = /^\[night\] morning: (?:left|dug out of) the shelter at /;
+// The night routine's ways out of a shelter (night_routine.js, every morning exit line it prints; the #662 nit, after
+// soak 18): `left the shelter at X on the side away from …` (a mob near), `dug out of the shelter at X` (a side or
+// stairs), `dug out of the hole shelter at X to Y` (the hole's dig-out), `climbed out of the shelter at X to Y` (the
+// escape from an enclosed shelter), `climbed out of the shaft at X to Y` (the escape's dusk seal) and `out of the shelter
+// at X` (a way out the routine walked). Not an exit: the intent `leaving the shelter at X by the side away from …`, the
+// side choice `[night] dig out: the west side (…)`, or `failed part-way` / `still enclosed` / `stopped` lines.
+const LEFT_SHELTER = /^\[night\] morning: (?:left the shelter at |dug out of the (?:hole )?shelter at |climbed out of the (?:shelter|shaft) at |out of the shelter at )/;
 
 /**
  * The enclosed episodes (I2's `could not leave the shelter` lines, the lead's no_trap decision after #662): from a
- * `could not leave the shelter at X` line until the bot leaves: a morning `left` / `dug out of the shelter` line, an
+ * `could not leave the shelter at X` line until the bot leaves: a morning exit line (LEFT_SHELTER), an
  * escape that clears, a death, a line (BOT_AT, outside nothing) that puts it more than `spanCells` from X, or the
  * journal's end ('open'). A later `could not leave` line within `spanCells` of X continues the episode (soak 15: the
  * pocket at -58, 57, -50 on two mornings). [{t, line, at, until, untilLine, minutes, end: 'left'|'cleared'|'died'|
@@ -675,7 +680,7 @@ export function baselineRow(r) {
         I11_usdPerHour: c(r.I11, 'usdPerHour'),
         I13_factsLines: c(r.I13, 'factsLines'), I13_misses: c(r.I13, 'misses'), I13_fields: c(r.I13, 'fields'), I13_gate: c(r.I13, 'gate'),
         I14_claims: c(r.I14, 'claims'), I14_wrong: c(r.I14, 'wrong'), I14_unverifiable: c(r.I14, 'unverifiable'),
-        I15_repeats: c(r.I15), I15_perHour: c(r.I15, 'perHour'), I15_inMemory: c(r.I15, 'inMemory'),
+        I15_repeats: c(r.I15), I15_perHour: c(r.I15, 'perHour'), I15_inMemory: c(r.I15, 'inMemory'), I15_planAfterDefer: r.I15 ? r.I15.planAfterDefer.count : null,
     };
 }
 
@@ -736,7 +741,8 @@ export function render(r, name = 'soak') {
     row('I14', 'wrong-state claims', r.I14, `${r.I14.wrong} of ${r.I14.claims} claims wrong (${r.I14.unverifiable} unverifiable) in ${r.I14.claimReplies} of ${r.I14.replies} replies; y ${r.I14.byKind.y.join('/')}, count ${r.I14.byKind.count.join('/')}, step ${r.I14.byKind.step.join('/')} (right/wrong/unverifiable)`);
     for (const w of r.I14.wrongFirst) o.push(`    wrong ${w.t} (driver.log:${w.line}) ${w.kind}: said ${w.said}, state ${w.state ?? '?'}`);
     o.push(`    hand-check sample (${r.I14.handSample.length}): ${r.I14.handSample.map(h => h.line).join(', ') || '–'}`);
-    row('I15', 'repeated failures', r.I15, `${r.I15.count} repeats within ${MEMORY_CHECKS.repeatMin} min of the same failure (${cell(r.I15.perHour)}/h; ${r.I15.inMemory} after a facts line named it) of ${r.I15.failures} failed commands; within 30 min ${r.I15.within30}, within 60 min ${r.I15.within60}`);
+    row('I15', 'repeated failures', r.I15, `${r.I15.count} repeats within ${MEMORY_CHECKS.repeatMin} min of the same failure (${cell(r.I15.perHour)}/h; ${r.I15.inMemory} after a facts line named it) of ${r.I15.failures} failed commands; within 30 min ${r.I15.within30}, within 60 min ${r.I15.within60}; plans asked again after a defer: ${r.I15.planAfterDefer.count} (within ${MEMORY_CHECKS.deferMin} min of ${r.I15.planAfterDefer.defers} replies that drop or defer the target)`);
+    for (const a of r.I15.planAfterDefer.first) o.push(`    plan after a defer ${a.t} (driver.log:${a.line}) ${a.target}, deferred at driver.log:${a.deferLine}`);
     return o.join('\n');
 }
 
