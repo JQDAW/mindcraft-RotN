@@ -249,6 +249,51 @@ export const STUCK_RETRY = { cooldownMs: 20 * 60_000, max: 3 };
  * is unknown). exploreRadius: how far from the last shelter it is told to explore.
  */
 export const STANDING = { exploreRadius: 64, windowMs: 20 * 60_000 };
+
+/**
+ * Soak 18 A (the sword loop: 26 calls, 25% of the spend): the standing goal's tools clause, from what the bot carries.
+ * The old text, "make better ones when you can (a stone sword or axe, a spare pickaxe)", went out in every prompt while
+ * the bot held a stone axe, the club and two pickaxes; the stone sword's handle needs twine from 3 tinder (grass only,
+ * 1 in 13), and the model came back to it after deciding three times that it could wait (dl:2237, 2672, 2954).
+ * - weaponRank: a stone axe or better (threats.weaponRank 4) is the weapon done; the stone sword is never named;
+ * - pickaxes: 2 or more is done, 1 asks for a spare;
+ * - a suggestion whose missing input came up empty in a recent collect (state.craftDeadEnd) or that the model itself
+ *   decided can wait (state.decided, the facts' decisions) is not made; it says why instead.
+ * No ';' in the clause: agenda_driver.freshGoalText swaps it between 'keep a weapon and a pickaxe: ' and the next ';'.
+ */
+export const TOOLS_GOAL = { stoneAxeRank: 4, pickaxesWanted: 2, head: 'keep a weapon and a pickaxe: ' };
+const TOOL_CRAFTS = {
+    stone_axe: { label: 'a stone axe', text: 'make a stone axe when you can (3 rocks and 2 sticks at a crafting table): it is the weapon to have' },
+    spare_pickaxe: { item: 'stone_pickaxe', label: 'a spare stone pickaxe', text: 'make a spare stone pickaxe when you can (3 rocks and 2 sticks at a crafting table)' },
+    stone_pickaxe: { label: 'a stone pickaxe', text: 'make a stone pickaxe when you can (3 rocks and 2 sticks at a crafting table)' },
+};
+const agoText = (ms) => (ms < 90_000 ? 'just now' : `${Math.round(ms / 60_000)} min ago`);
+const noSemi = (t) => String(t).replace(/;/g, ',');
+export function toolsClause(state, now = Date.now()) {
+    const ask = (f, d) => { try { return f?.() ?? d; } catch { return d; } };
+    const rank = ask(state?.weaponRank, null);
+    const picks = ask(state?.pickaxeCount, null);
+    if (rank === null && picks === null) return `${TOOLS_GOAL.head}keep them, and replace one that breaks`;
+    const best = ask(state?.bestWeapon, null);
+    const suggest = (key) => {
+        const c = TOOL_CRAFTS[key];
+        const item = c.item ?? key;
+        let decided = null, dead = null;
+        try { decided = state?.decided?.(item) ?? null; } catch { decided = null; }
+        if (decided) return `${c.label} can wait (you decided: '${noSemi(decided)}')`;
+        try { dead = state?.craftDeadEnd?.(item) ?? null; } catch { dead = null; }
+        if (dead) return `${c.label} not now (no ${dead.item} found${dead.range ? ` within ${dead.range}` : ''}, ${agoText(now - dead.at)}: leave it until you see some)`;
+        return c.text;
+    };
+    const parts = [];
+    if (rank !== null && rank < TOOLS_GOAL.stoneAxeRank) parts.push(suggest('stone_axe'));
+    if (picks !== null && picks < TOOLS_GOAL.pickaxesWanted) parts.push(suggest(picks > 0 ? 'spare_pickaxe' : 'stone_pickaxe'));
+    if (parts.length) return `${TOOLS_GOAL.head}${parts.join(', and ')}`;
+    // #680 review 6: what is not known is never called enough ("null pickaxes", an unknown weapon).
+    if (rank === null || picks === null) return `${TOOLS_GOAL.head}keep them, and replace one that breaks`;
+    const weapon = best ? `your weapon (${best})` : 'your weapon';
+    return `${TOOLS_GOAL.head}${weapon} and ${picks} pickaxes are enough: keep them, and replace one that breaks`;
+}
 /** The standing goal's start: not an autonomy prefix either (the model's own goal). */
 export const STANDING_GOAL_PREFIX = 'Standing goal (the agenda is done): ';
 
@@ -885,7 +930,7 @@ export class Agenda {
         try { armed = state?.hasWeapon?.() !== false; } catch { armed = true; }
         return `${STANDING_GOAL_PREFIX}keep food worth at least ${FOOD_TARGET.day} points (you hold ${held}) and ${SHELTER_HOLD} blocks for the night's shelter and its repairs (you have ${blocks}; ${kind}); `
             + (armed ? '' : `${NO_WEAPON_FOOD}; `)
-            + 'keep a weapon and a pickaxe, and make better ones when you can (a stone sword or axe, a spare pickaxe); '
+            + `${toolsClause(state)}; `
             + `explore by day within ${STANDING.exploreRadius} blocks of ${where}, away from where you died (a zombie rises there and stays); `
             + 'be back near it before dusk: the night routine builds the shelter then.';
     }

@@ -1,7 +1,7 @@
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
 import { NPCData } from './npc/data.js';
 import settings from './settings.js';
-import { buildMemory, emptyFacts, MEMORY_FACTS, MEMORY_MODES, memoryMode } from './memory_facts.js';
+import { buildMemory, emptyFacts, MEMORY_FACTS, MEMORY_MODES, memoryMode, recordDecision } from './memory_facts.js';
 
 
 // A turn from or about a non-giver: flagged by add(), or (for a turn saved without the flag)
@@ -195,6 +195,9 @@ export class History {
             content = `${name}: ${content}`;
         }
         this.turns.push(untrusted ? { role, content, untrusted: true } : { role, content });
+        // Soak 18 B: the bot's own "X can wait" decisions, for the facts (memory_facts.recordDecision).
+        // #680 review 5: never from an untrusted turn.
+        if (role === 'assistant' && !untrusted) { try { recordDecision(this.facts, content); } catch { /* no decision */ } }
 
         if (this.turns.length >= this.max_messages) {
             let chunk = this.turns.splice(0, this.summary_chunk_size);
