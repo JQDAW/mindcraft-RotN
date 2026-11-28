@@ -284,7 +284,7 @@ export function toolsClause(state, now = Date.now()) {
         try { dead = state?.craftDeadEnd?.(item) ?? null; } catch { dead = null; }
         // #680 review residual: rocks have another way, stone mined with a pickaxe (it drops 4 rocks).
         const rocks = /^pyrotech:rock$/.test(String(dead?.item ?? '').replace(/:\d+$/, ''));
-        if (dead && rocks && (picks ?? 0) > 0) return `${c.label}: no loose rocks found${dead.range ? ` within ${dead.range}` : ''}, ${agoText(now - dead.at)}, so mine stone with your pickaxe for rocks (a stone gives 4)`;
+        if (dead && rocks && (picks ?? 0) > 0) return `${c.label}: no loose rocks found${dead.range ? ` within ${dead.range}` : ''}, ${agoText(now - dead.at)}, so mine stone with your stone pickaxe for rocks (a stone gives 4)`;
         if (dead) return `${c.label} not now (no ${dead.item} found${dead.range ? ` within ${dead.range}` : ''}, ${agoText(now - dead.at)}: leave it until you see some)`;
         return c.text;
     };

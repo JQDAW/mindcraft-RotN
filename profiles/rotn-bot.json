@@ -127,7 +127,7 @@
         [
             {
                 "role": "system",
-                "content": "Action output:\nYou do not have the resources to craft crafting_table. To craft crafting_table: 1 plankWood: you have 4 planks (enough); 1 contenttweaker:crafting_tools: you have none, so get 1 contenttweaker:crafting_tools."
+                "content": "Action output:\nGet 1 contenttweaker:crafting_tools first: you do not have the resources to craft crafting_table. To craft crafting_table: 1 plankWood: you have 4 planks (enough); 1 contenttweaker:crafting_tools: you have none, so get 1 contenttweaker:crafting_tools."
             },
             {
                 "role": "assistant",

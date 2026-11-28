@@ -56,7 +56,7 @@ test('S18a A: no invitation to a dead end: a craft whose missing input a collect
     w.bot.rotnCollects = [{ item: 'pyrotech:rock', got: 0, wanted: 3, reason: 'none', range: 64, at: now - 12 * MIN }];
     assert.deepEqual(craftDeadEnd(w.bot, 'stone_axe', now), { item: 'pyrotech:rock', range: 64, at: now - 12 * MIN });
     // S18c (#680 residual): with a pickaxe, rocks have another way, mining stone.
-    assert.match(goalFor(w.bot), /keep a weapon and a pickaxe: a stone axe: no loose rocks found within 64, 12 min ago, so mine stone with your pickaxe for rocks \(a stone gives 4\); /);
+    assert.match(goalFor(w.bot), /keep a weapon and a pickaxe: a stone axe: no loose rocks found within 64, 12 min ago, so mine stone with your stone pickaxe for rocks \(a stone gives 4\); /);
     // 31 min ago: no longer a dead end.
     w.bot.rotnCollects[0].at = now - 31 * MIN;
     assert.equal(craftDeadEnd(w.bot, 'stone_axe', now), null);

@@ -272,28 +272,44 @@ async function craftCobbleFromRocks(bot, num, ops) {
     }
     let made = 0;
     let noRoom = 0; // soak 18 S18c: kinds left out because their cobble would have nowhere to go
-    for (const c of choices) {
-        if (made >= num) break;
-        let n = Math.min(num - made, Math.floor(c.have / ROCKS_PER_COBBLE));
-        // Soak 18 S18c (dl:2147): with the inventory full and no stack of this cobble with room, only a craft that uses
-        // up this kind's rocks frees the slot its cobble goes into (dl:2149's komatiite: 4 of 4); 4 of 5 frees none.
-        if (!resultHasRoom(bot, c.gives)) {
-            if (c.have % ROCKS_PER_COBBLE !== 0 || c.have / ROCKS_PER_COBBLE > num - made) { noRoom++; continue; }
-            n = c.have / ROCKS_PER_COBBLE;
-        }
+    let noRoomCrafts = 0; // #688 review 3: the cobbles not made for want of a slot, for the partial line
+    const craftOf = async (c, n) => {
         log(bot, `Cobblestone from your rocks: ${n} ${c.gives} (${ROCKS_PER_COBBLE} ${c.rock} each).`);
         // By the rock's own recipe (#233 review 1): bot.recipesFor could pick another recipe for the
         // same output (undergroundbiomes:regular_cobblestone turns 4 modded cobbles into vanilla).
         const before = countItem(bot, c.gives);
         const needs = { recipeId: c.recipeId, requiresTable: c.requiresTable, ready: true, inputs: [], how: `from your ${c.rock} rocks` };
         await craftByFill(bot, c.gives, n, needs, null, false, ops);
-        made += Math.max(0, countItem(bot, c.gives) - before);
+        return Math.max(0, countItem(bot, c.gives) - before);
+    };
+    for (const c of choices) {
+        if (made >= num) break;
+        // The rocks a craft can take: the inventory's own stacks (#688 review 2: never the off hand's).
+        const stacks = (bot.inventory?.items?.() ?? []).filter(s => itemMatches(s, c.rock));
+        const held = stacks.reduce((k, s) => k + s.count, 0);
+        let n = Math.min(num - made, Math.floor(held / ROCKS_PER_COBBLE));
+        if (n <= 0) continue;
+        // Soak 18 S18c (dl:2147): with the inventory full and no stack of this cobble with room, a craft frees the slot its
+        // cobble goes into only if it empties one of this kind's stacks. #688 review 1: craftByFill crafts one at a time,
+        // so one craft (n = 1), and only when the 4 rocks it takes must empty a stack: the rocks left are fewer than the
+        // stacks (4 in one stack; 4 + 1; 2 + 2; never 8 in one, nor 5, nor 5 + 4). dl:2149's komatiite: 4 of 4.
+        if (!resultHasRoom(bot, c.gives)) {
+            if (!(held - ROCKS_PER_COBBLE < stacks.length)) { noRoom++; noRoomCrafts += n; continue; }
+            made += await craftOf(c, 1);
+            n -= 1;
+            // Now a stack of this cobble has room: the rest of this kind as usual.
+            if (n <= 0 || made >= num || !resultHasRoom(bot, c.gives)) { noRoomCrafts += Math.max(0, n); continue; }
+        }
+        made += await craftOf(c, n);
     }
     if (made === 0 && noRoom > 0) {
         return fail(bot, 'no-room', `Could not craft cobblestone: your inventory is full (no free slot, no stack of that cobble with room), and a craft from `
             + `${noRoom === 1 ? 'your rock kind' : `any of your ${noRoom} rock kinds`} would leave its rock stack, so the cobble would be thrown on the ground. `
             + 'Free a slot first (!discard something you do not need), then craft again.', null, 'craftRecipe');
     }
+    // #688 review 3: a partial result says why it stopped.
+    if (made > 0 && made < num && noRoomCrafts > 0)
+        log(bot, `Made ${made} of ${num} cobblestone; ${Math.min(noRoomCrafts, num - made)} more need a free slot first (your inventory is full): free a slot (!discard something you do not need), then craft again.`);
     return made > 0;
 }
 

@@ -196,7 +196,7 @@ test('S18c #680 residual: a dead end on rocks names mining stone with the pickax
     const now = Date.now();
     const dead = () => ({ item: 'pyrotech:rock', range: 64, at: now - 12 * MIN });
     assert.equal(toolsClause({ weaponRank: () => 2, pickaxeCount: () => 2, craftDeadEnd: dead }, now),
-        'keep a weapon and a pickaxe: a stone axe: no loose rocks found within 64, 12 min ago, so mine stone with your pickaxe for rocks (a stone gives 4)');
+        'keep a weapon and a pickaxe: a stone axe: no loose rocks found within 64, 12 min ago, so mine stone with your stone pickaxe for rocks (a stone gives 4)');
     assert.match(toolsClause({ weaponRank: () => 4, pickaxeCount: () => 0, craftDeadEnd: dead }, now), /a stone pickaxe not now \(no pyrotech:rock found within 64, 12 min ago: leave it until you see some\)/);
     assert.match(toolsClause({ weaponRank: () => 2, pickaxeCount: () => 2, craftDeadEnd: () => ({ item: 'stick', range: 64, at: now - MIN }) }, now), /a stone axe not now \(no stick found/);
 });
@@ -238,4 +238,70 @@ test('S18c #680 nit 7: a craft\'s "not enough" why starts with what to get, so a
     const tid = bad.bot.registry.itemsByName.crafting_table.id;
     bad.bot.registry.recipes = { ...bad.bot.registry.recipes, [tid]: [{ result: { id: tid, count: 1 } }] };
     assert.match(craftRecipeCanRun({ bot: bad.bot }, 'crafting_table').why, /^Get 1 contenttweaker:crafting_tools first: you do not have the resources to craft crafting_table\. /);
+});
+
+// ---- #688 review round 1 ----
+/** A full inventory with these rock stacks (and an off-hand stack), a fake craft, and the craftResultDropped events. */
+function fullWith(t, stacks, { offHand = null } = {}) {
+    const w = fakeWorld({ slots: { ...fullInventory(stacks), 5: ['undergroundbiomes:igneous_cobble', 1, 2], ...(offHand ? { 45: offHand } : {}) } });
+    useRegistry(t, w.bot);
+    w.bot.inventory.slots[5] = null; // the armour slot only put the cobble in the fake registry
+    const crafted = [], dropped = [];
+    w.bot.craft = cobbleCraft(w, crafted);
+    w.bot.on('craftResultDropped', (ev) => dropped.push(ev));
+    return { w, crafted, dropped };
+}
+
+test('#688 review 1: 8 rocks in one stack, the inventory full, 2 asked: refused before any craft (the first craft would free no slot); no cobble thrown', async (t) => {
+    quiet(t);
+    const { w, crafted, dropped } = fullWith(t, [['pyrotech_compat:rock_igneous', 8, 6]]);
+    const r = await skills.craftRecipeResult(w.bot, 'cobblestone', 2);
+    assert.deepEqual([r.ok, r.code], [false, 'no-room'], w.bot.output);
+    assert.deepEqual(crafted, []);
+    assert.deepEqual(dropped, [], 'no craftResultDropped');
+});
+
+test('#688 review 2: per stack, the off hand left out: 4 in a slot + 1 in the off hand, or 4 + 1 in two slots, is crafted (4 rocks empty a stack); no cobble thrown', async (t) => {
+    quiet(t);
+    for (const [label, stacks, offHand] of [
+        ['4 + 1 in the off hand', [['pyrotech_compat:rock_igneous', 4, 6]], ['pyrotech_compat:rock_igneous', 1, 6]],
+        ['4 + 1 in two slots', [['pyrotech_compat:rock_igneous', 4, 6], ['pyrotech_compat:rock_igneous', 1, 6]], null],
+        ['2 + 2', [['pyrotech_compat:rock_igneous', 2, 6], ['pyrotech_compat:rock_igneous', 2, 6]], null],
+    ]) {
+        const { w, crafted, dropped } = fullWith(t, stacks, { offHand });
+        assert.equal(await skills.craftRecipe(w.bot, 'cobblestone', 1), true, `${label}: ${w.bot.output}`);
+        assert.deepEqual(crafted, ['undergroundbiomes:igneous_cobble:6'], label);
+        assert.deepEqual(dropped, [], `${label}: no craftResultDropped`);
+    }
+    const five = fullWith(t, [['pyrotech_compat:rock_igneous', 5, 6]]);
+    assert.equal((await skills.craftRecipeResult(five.w.bot, 'cobblestone', 1)).code, 'no-room', '5 in one stack: 1 left, no slot freed');
+    assert.deepEqual(five.dropped, []);
+});
+
+test('#688 review 2: after the one craft that frees a slot, the cobble\'s own stack has room: the rest of that kind as usual; 4 + 4 is refused (which stack the craft takes is not known)', async (t) => {
+    quiet(t);
+    const four = fullWith(t, [['pyrotech_compat:rock_igneous', 4, 6], ['pyrotech_compat:rock_igneous', 4, 6]]);
+    assert.equal((await skills.craftRecipeResult(four.w.bot, 'cobblestone', 2)).code, 'no-room', '8 rocks in 2 stacks: 4 left could fill both');
+    assert.deepEqual(four.dropped, []);
+    const ones = [['pyrotech_compat:rock_igneous', 1, 6], ['pyrotech_compat:rock_igneous', 1, 6], ['pyrotech_compat:rock_igneous', 1, 6], ['pyrotech_compat:rock_igneous', 1, 6]];
+    const { w, crafted, dropped } = fullWith(t, [['pyrotech_compat:rock_igneous', 4, 6], ...ones]); // 8 in 5 stacks: the first craft empties one
+    assert.equal(await skills.craftRecipe(w.bot, 'cobblestone', 2), true, w.bot.output);
+    assert.deepEqual(crafted, ['undergroundbiomes:igneous_cobble:6', 'undergroundbiomes:igneous_cobble:6']);
+    assert.deepEqual(dropped, []);
+});
+
+test('#688 review 3: a partial result says how many more need a free slot first', async (t) => {
+    quiet(t);
+    const { w, crafted, dropped } = fullWith(t, [['pyrotech_compat:rock_igneous', 4, 6], ['pyrotech_compat:rock_igneous', 5, 2]]);
+    assert.equal(await skills.craftRecipe(w.bot, 'cobblestone', 3), true, w.bot.output);
+    assert.deepEqual(crafted, ['undergroundbiomes:igneous_cobble:6']);
+    assert.deepEqual(dropped, []);
+    assert.match(w.bot.output, /Made 1 of 3 cobblestone; 1 more need a free slot first \(your inventory is full\): free a slot \(!discard something you do not need\), then craft again\./);
+});
+
+test('#688 review 4: the profile\'s craft example has the new "what to get first" text', async () => {
+    const { readFileSync } = await import('node:fs');
+    const text = readFileSync(new URL('../../profiles/rotn-bot.json', import.meta.url), 'utf8');
+    assert.match(text, /Action output:\\nGet 1 contenttweaker:crafting_tools first: you do not have the resources to craft crafting_table\./);
+    assert.doesNotMatch(text, /Action output:\\nYou do not have the resources to craft/);
 });
