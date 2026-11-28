@@ -357,12 +357,17 @@ export function trapSpans(lines) {
     return spans.map(s => ({ t: hms(s.fromT), line: s.fromN, at: s.at, until: hms(s.until), untilLine: s.untilLine, minutes: Math.round((s.until - s.fromT) / 6000) / 10, end: s.end, fails: s.fails, interrupted: s.interrupted, gaveUp: s.gaveUp }));
 }
 
-// The night routine's ways out of a shelter it could not leave (night_routine.js): a dug or walked exit.
-const LEFT_SHELTER = /^\[night\] morning: (?:left|dug out of) the shelter at /;
+// The night routine's ways out of a shelter (night_routine.js, every morning exit line it prints; the #662 nit, after
+// soak 18): `left the shelter at X on the side away from …` (a mob near), `dug out of the shelter at X` (a side or
+// stairs), `dug out of the hole shelter at X to Y` (the hole's dig-out), `climbed out of the shelter at X to Y` (the
+// escape from an enclosed shelter), `climbed out of the shaft at X to Y` (the escape's dusk seal) and `out of the shelter
+// at X` (a way out the routine walked). Not an exit: the intent `leaving the shelter at X by the side away from …`, the
+// side choice `[night] dig out: the west side (…)`, or `failed part-way` / `still enclosed` / `stopped` lines.
+const LEFT_SHELTER = /^\[night\] morning: (?:left the shelter at |dug out of the (?:hole )?shelter at |climbed out of the (?:shelter|shaft) at |out of the shelter at )/;
 
 /**
  * The enclosed episodes (I2's `could not leave the shelter` lines, the lead's no_trap decision after #662): from a
- * `could not leave the shelter at X` line until the bot leaves: a morning `left` / `dug out of the shelter` line, an
+ * `could not leave the shelter at X` line until the bot leaves: a morning exit line (LEFT_SHELTER), an
  * escape that clears, a death, a line (BOT_AT, outside nothing) that puts it more than `spanCells` from X, or the
  * journal's end ('open'). A later `could not leave` line within `spanCells` of X continues the episode (soak 15: the
  * pocket at -58, 57, -50 on two mornings). [{t, line, at, until, untilLine, minutes, end: 'left'|'cleared'|'died'|
