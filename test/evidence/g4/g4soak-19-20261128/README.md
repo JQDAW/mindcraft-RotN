@@ -10,17 +10,17 @@
 
   The run went from 13:53:14 to 15:53:38 UTC, on one test server.
 - **Why `ate_when_low` failed** (`driver.log:3365`, 15:52:39): it was the last `low` line, 59 s before the unit's stop (15:53:38). No food line followed it. Two things came together:
-  1. **A fight loop with no swing.** From 15:48:38 a zombie dug the night-3 hole shelter's wall cell -82, 65, 91. At 15:53:25 it stood at -83, 65, 91, diagonal to the bot. For 5 min, self_defense started a fight from inside the shelter every 4.8 s: **62 times, every one ending `No swing went out from inside the shelter, stopped: the zombie is in reach but out of sight for 3 s.`** The bridge's sight refusals went from 85 to 900. With that zombie in reach, the eating mode holds a food-8 eat by design: it eats at 8 only with no threat within 4 blocks, and at 6 always.
+  1. **A fight loop with no swing.** At 15:48:36 (`2997`) a zombie was digging the night-3 hole shelter's wall cell -82, 65, 91, and the first fight started at 15:48:38. At 15:53:25 it stood at -83, 65, 91, diagonal to the bot. For 5 min, self_defense started a fight from inside the shelter every 4.8 s: **62 times, every one ending `No swing went out from inside the shelter, stopped: the zombie is in reach but out of sight for 3 s.`** The bridge's sight refusals went from 85 to 900. The shelter was `'open'` for the fight, so the eating mode's 4-block rule applied, and the zombie in reach held the food-8 eat by design: at 8 it eats only with no threat within 4 blocks, at 6 always.
   2. **The run's end.** The check gives each `low` line a window of the next 5 food lines (about 5 min). This one had 59 s and no food line after it.
 
   Under the lead's ruling this stays a FAIL in this README. The check is unchanged here; the follow-up PR is (2) in the owners' notes.
 - **`no_trap` PASS:** no trap span, no enclosed shelter and no escape, in the run or in any of the six live checks.
-- **No death and no hurt line** in 120 min. All three shelters held. Zombies dug at the night-3 shelter twice: one dig was fought and repaired, and the other cell still held at the end.
+- **No death and no hurt line** in 120 min. All three shelters held. Zombies dug at the night-3 shelter twice. The first dig was fought and repaired. After the second (15:48:36) no repair or `the shelter is open` line followed, and the journal does not show that cell's state.
 - **No stone-sword loop (watch item (a)).** No sword, tinder, twine or `spartanweaponry:material` craft, plan or collect in the soak. The standing goal's tools clause asked for a spare stone pickaxe once, before the second pickaxe was made. In its 12 later prompts it said `your weapon (stone_axe) and 2 pickaxes are enough: keep them, and replace one that breaks`.
 - **The night routine's dirt crafts threw 13 dirt on the ground** with a full inventory (watch item (d)), at 15:28:24, 15:28:41 and 15:42:08. The full-inventory guard stopped one of the model's cobble crafts (14:35:13). The repairs still closed the shelter.
 - **The memory checks (watch item (g)):**
   - **I13:** the checker reports 5 misses in 599 fields. **By hand, all 5 are checker artefacts; 0 wrong facts.**
-  - **I14:** the model claimed a wrong shelter-block count **2 times** (soak 18: 4), while the facts line just before had the right count.
+  - **I14:** the model claimed a wrong shelter-block count **3 times** (soak 18: 4), each time while the facts line just before had the right count.
   - **I15:** 0 repeated failures.
   - **Summaries:** 0 calls.
   - **`Your decisions:` lines:** 0.
@@ -60,7 +60,7 @@ Every address is redacted (`<ip>`): the CX23's, the dev server's and the test se
 | `no_trap` | PASS | `no trap span or enclosed shelter` |
 
 ### The `ate_when_low` failure (the lead's point 3)
-The 9 `low` lines are at `2332`, `2344`, `2356`, `2513`, `2887`, `2936`, `2948`, `2989` and `3365`. The eating reflex ate 2 s after each of the first 8. The exception is `2513` (15:16:49): it came during the model's `!collectBlocks("cobblestone", 8)` (`2503`, from 15:16:06), and the eat came when that collect ended, at 15:17:46 (`2548`), 57 s later. The ninth:
+The 9 `low` lines are at `2332`, `2344`, `2356`, `2513`, `2887`, `2936`, `2948`, `2989` and `3365`. The eating reflex ate after 7 of the first 8, each 2 s later. After `2513` (15:16:49) it ate 57 s later (15:17:46, `2548`), when the model's `!collectBlocks("cobblestone", 8)` (`2503`, from 15:16:06) ended. That was still within the check's window. The ninth:
 
 | Time (line) | Line |
 | --- | --- |
@@ -83,8 +83,12 @@ The 9 `low` lines are at `2332`, `2344`, `2356`, `2513`, `2887`, `2936`, `2948`,
   Health stayed 20 throughout.
 - **Why no eat, as far as the code says** (`src/agent/modes.js:462`, `food.js` `EAT_AT` 8 and `EAT_NOW_AT` 6, `threats.js` `EAT_SAFE` 4 blocks):
   - The eating mode eats at food 8 or lower only `when idle or between fights and no threat is close`, and at 6 or lower always.
-  - The zombie at -83, 65, 91 was diagonal to the bot's cell (-82, 65, 92), so within 4 blocks the whole time. That alone holds a food-8 eat.
-  - The journal has no eating-mode line, so it cannot show whether the fight loop also kept the mode from running.
+  - **It depends on the shelter state.** self_defense acts from inside the shelter only when `bot.rotnSheltered` is `'open'` (`modes.js:67`–`72`, `shelterQuiet`); the night routine sets that for the in-shelter fight.
+    - With `'open'`, the eating mode's threat test is `threats.shelterEatBlock` without `closedAt` (`modes.js:505`–`509`), which applies the 4-block rule (`threats.js:821`–`824`).
+    - With `true` (closed), only a mob in the shelter's own cells would block (`mobInShelterCells`).
+  - **The eating update did run.** It comes before self_defense in the mode list, interrupts all, and `EAT_BETWEEN` includes `mode:self_defense` (`modes.js:82`, `:512`). It refused on the threat. The journal does not log that refusal.
+  - **The evidence that the zombie stayed within 4 blocks:** each of the 62 fight ends says the zombie was `in reach`. Its position is logged only once, at 15:53:25 (`3435`): -83, 65, 91, diagonal to the bot's cell (-82, 65, 92).
+  - So the shelter was `'open'` for the fight, the 4-block rule applied, and the zombie in reach held the food-8 eat.
 - **The check's window:** `ate_when_low` judges each `low` line on the next `eatWithinMinutes` (5) food lines. `3365` came 59 s before the stop, and no food line followed it, so its window was cut to the run's end.
 
 For skills-rotn: 62 shelter fights in 5 min with no swing possible. The zombie dug the wall cell -82, 65, 91, and at 15:53:25 it stood at -83, 65, 91, diagonal to the bot and out of sight. For harness-ops: the window follow-up, (2) in the owners' notes.
@@ -104,28 +108,30 @@ For skills-rotn: 62 shelter fights in 5 min with no swing possible. The zombie d
 - **Plant fiber and drying-rack plans: none.** There was no `!getCraftingPlan` call at all.
 - The model's commands, by count:
   - `!forage` 17, `!moveAway` 13;
-  - `!collectBlocks` 9, `!craftRecipe` 8, `!attack` 8;
+  - `!collectBlocks` 13, `!craftRecipe` 9, `!attack` 8;
   - `!agenda` 7, `!inventory` 6, `!entities` 6, `!goToCoordinates` 5;
-  - `!searchForEntity` 3;
-  - `!stats`, `!placeHere`, `!nearbyBlocks`, `!discard` and `!consume` 2 each;
-  - `!useOn`, `!savedPlaces` and `!craftable` 1 each.
+  - `!searchForEntity` 4;
+  - `!stats`, `!placeHere`, `!nearbyBlocks`, `!discard`, `!consume` and `!useOn` 2 each;
+  - `!savedPlaces` and `!craftable` 1 each.
+
+  That is 102 commands. 7 of them are in replies whose parsed command spans several journal lines (`164`, `351`, `413`, `774`, `857`, `1931`, `2076`).
 
 ## (c) `[result]` lines, refusals, table re-placements and merged failures
 **11 `[result]` lines** (#675), all on day 1 (`205`–`743`). Ten are `ok=true`. The one failure:
 > `[result] cmd=!placeHere args=["log"] ok=false code=jump-failed where=-20,88,-141 why="Could not place log at -20, 88, -141: you are in that cell, and the jump-and-place did not take (still at -20, 88, -141): the log did not stay at -20, 88, -141 (it is air)."` (13:57:05, `238`)
 
 The retry 5 s later worked (`276`, `ok=true`).
-- **Refused `!craftRecipe`: none.** The model's 8 all ran with `ok=true`:
-  - for the agenda: the crude axe, table, planks, stick, stone pickaxe, stone axe and `cobblestone` ×4 (`205`–`659`);
+- **Refused `!craftRecipe`: none.** The model's 9 all ran with `ok=true`:
+  - for the agenda's steps: the crude axe, Crafting Tools (the reply at `411`/`413`, result `420`), table, planks, stick, stone pickaxe, stone axe and `cobblestone` ×4 (`205`–`659`);
   - the spare stone pickaxe (`743`).
 
-  The agenda's own Crafting Tools craft (`420`) was `ok=true` too.
+  With the 2 `!placeHere`, these are the 11 `[result]` lines.
 - **Refused `!placeHere`: none.** The one failure above is a failed place, not a refusal.
 - **Table re-placement:** 4 `[craft] picking the crafting table up again` lines (13:57:42, 13:57:57, 14:01:13 and 14:01:55: `490`, `548`, `620`, `741`). Each came after a craft at the table, and each was followed by `Collected 1 crafting_table` (`496`, `554`, `626`, `747`). No re-placement failed.
 - **xN merged failures (#675's `!cmd(args) xN:` form): none in any facts line.** No failure repeated (I15 0).
 
 ## (d) Thrown craft results and the full-inventory guard
-**The bot's inventory was full from 14:37:56** (`2059`): the first of 25 `[inventory] no free slot: the stone_pickaxe swapped from the off hand into the main hand for the dig` lines. The last listing (15:20:23, `2762`) holds 39 stacks, among them 66 dirt piles, 25 logs, 6 tallow and many single foraged foods and seeds.
+**The bot's inventory was full by 14:35:13** (`1686`, `your inventory is full`, below). The first of 23 `[inventory] no free slot: the stone_pickaxe swapped from the off hand into the main hand for the dig` lines came at 14:37:56 (`2059`). The last listing (15:20:23, `2762`) holds 36 stacks plus the off-hand stone pickaxe, among them 66 dirt piles, 25 logs, 6 tallow and many single foraged foods and seeds.
 
 **The model's craft: the guard worked once.** It came inside `!collectBlocks("cobblestone", 7)`, whose rock route crafts cobble first:
 > `… 1 more need a free slot first (your inventory is full): free a slot (!discard something you do not need), then craft again.` and `Crafted 2 of 3 cobble from the rocks you carry: the craft stopped (see above), so no more rocks are collected for it.` (14:35:13, `1686`, `1687`)
@@ -195,7 +201,7 @@ For skills-rotn: the night routine crafts dirt from piles with no free slot and 
 For skills-rotn: the fix comes after this evidence (S18c's note).
 
 ## (f) `no_trap`, escapes, dusk shelters and the mornings
-**No `[escape]` or `[trapped]` line in the soak.** The live checks on the partial journal (14:13, 14:33, 14:53, 15:13, 15:33, 15:53) all showed `no_trap` ok with 0 spans, and I1, I2, I6 and I10 at 0. The scenario's `no_trap` passed with `no trap span or enclosed shelter`.
+**No `[escape]` or `[trapped]` line in the soak.** The live checks on the partial journal (14:13, 14:33, 14:53, 15:13, 15:33, 15:53; their output is in `live-checks.txt`) all showed `no_trap` ok with 0 spans, and I1, I2, I6 and I10 at 0. The scenario's `no_trap` passed with `no trap span or enclosed shelter`.
 
 | Night | Sunset (line) | Shelter | Food for the night | Morning |
 | --- | --- | --- | --- | --- |
@@ -210,7 +216,7 @@ For skills-rotn: the fix comes after this evidence (S18c's note).
 
 **Night 3's zombie digs:**
 - 15:42:01 (`2957`): `zombie is digging the shelter at -82, 66, 93`. The bot fought it from inside: 8 club swings, the zombie's health 20 → 0 (`2963`–`2970`). Then the repair (above).
-- 15:48:36 (`2997`): `zombie is digging the shelter at -82, 65, 91`. The bot could not see this zombie, and the 62-fight loop followed (see the ate_when_low section). No `the shelter is open` line came after it: the cell held until the end.
+- 15:48:36 (`2997`): `zombie is digging the shelter at -82, 65, 91`. The bot could not see this zombie, and the 62-fight loop followed (see the ate_when_low section). No repair or `the shelter is open` line followed it, and no other `[night]` check result came before the 15:53:25 morning line. The journal does not show the cell's state.
 
 **Morning cap and mob-still-near hand-backs (`night_routine.js:2111`): none.** Night 2's morning took the 2-min wait and left by the far side. No morning reached the 5-min cap. I2's `mobStillNear` is 0.
 
@@ -222,7 +228,7 @@ There were 86 facts lines. Of their fields, the checker could check 599 and coul
 
 | Field | Match | Miss (checker) | Unverifiable | Non-trivial samples | Checker verdict | **By hand** |
 | --- | --- | --- | --- | --- | --- | --- |
-| agenda | 82 | 1 | 3 | 83 | fail | **0 wrong**: the step was done 1 s after the facts line |
+| agenda | 82 | 1 | 3 | 83 | fail | **0 wrong**: the checker read the `!agenda` reply and the step done 1 s later; the driver's step matched the facts (miss 1) |
 | collect | 91 | 4 | 82 | 95 | fail | **0 wrong**: all 4 are the rock route's `Crafted N cobble from your rocks` end line |
 | pickaxe | 73 | 0 | 13 | 73 | pass | – |
 | food held | 12 | 0 | 74 | 12 | pass | – |
@@ -231,40 +237,80 @@ There were 86 facts lines. Of their fields, the checker could check 599 and coul
 | shelter | 39 | 0 | 0 | 39 | pass | – |
 | deaths | 86 | 0 | 0 | 0 (86 trivial `0 = 0`) | too few | no death in the soak, so nothing to sample |
 
-**The 5 misses, each classified:**
+**The 5 misses, each with the facts text, the state the checker read, and the verdict** (for the memory-rule judgement):
 
-| # | Facts line | Field | Facts said | Checker's state | Verdict | Why |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | 14:01:28 (`667`) | agenda | step cobblestone | shelter_blocks, done | **artefact (next second)** | `agenda step cobblestone done` and `agenda done` are at 14:01:29 (`server.log:424`, `:425`), 1 s after the facts line. The craft that finished the step was in the same second as the facts line (`659`, `662`). The checker's 3-s after-window (`agendaAfterS`) reads the step change in the next second as the state. #677's B1 makes only a same-second source unverifiable |
-| 2–4 | 14:34:40 (`1550`), 14:34:59 (`1583`), 14:35:05 (`1617`) | collect | `got 3 cobblestone … just now` | none | **artefact (rock-route end line)** | `!collectBlocks("cobblestone", 10)` ended with `Collected 18 pyrotech:rock (…)` and **`Crafted 3 cobble from your rocks, of 10 asked.`** (14:34:25, `1526`, `1527`). The output is shortened, but these lines are its last ones. The checker reads only `Collected N <item>` as a collect's source |
-| 5 | 15:16:01 (`2466`) | collect | `got 3 cobblestone … just now` | none | **artefact (rock-route end line)** | the same: `Crafted 3 cobble from your rocks, of 8 asked.` (15:15:51, `2445`) |
+**Miss 1: `667`, 14:01:28, agenda.**
+- **The facts text:** `Agenda: active, step cobblestone (make cobblestone from rocks); done: rocks, sticks, crude_axe, logs, first_plank, crafting_tools, crafting_table, planks_sticks, stone_pickaxe, stone_axe`.
+- **The checker's state: `shelter_blocks,done`,** from two sources:
+  - **`shelter_blocks`** is the latest source before the facts line (`agendaReplies`). It is the model's `!agenda` reply at 14:01:17 (`640`): `Agent executed: !agenda and got: agenda: active, step shelter_blocks (keep 14 blocks for the night's shelter and its repairs); done: rocks, sticks, crude_axe, logs, first_plank, crafting_tools, crafting_table, planks_sticks, stone_pickaxe, stone_axe`.
+  - **`done`** is within the 3-s after-window (`agendaAfterS`). It is `agenda step cobblestone done` and `agenda done` at 14:01:29 (`server.log:424`, `:425`), 1 s after the facts line.
+- **The game's own record of the step**, the agenda driver's chat:
+  - `agenda step shelter_blocks: the scripted job ended: +6 shelter blocks (6 of 14; the collect's time limit)` (14:01:06, `server.log:415`);
+  - `agenda step stone_axe started` (14:01:07, `:416`) and `stone_axe done` (14:01:14, `:419`);
+  - `agenda step cobblestone started: make cobblestone from rocks` (14:01:14, `:420`);
+  - `agenda step cobblestone done` (14:01:29, `:424`).
+
+  The craft that finished it, `!craftRecipe("cobblestone", 4)`, ran in the facts line's own second (`659`: `[result] … ok=true`, 14:01:28; `662`: `you now have 4 undergroundbiomes:igneous_cobble:0`).
+- **Verdict: checker artefact, 0 wrong facts.** At 14:01:28 the driver's step was cobblestone, from 14:01:14 to 14:01:29, and that is what the facts said.
+  - The `!agenda` reply reports a different thing: the shelter-blocks step, still unmet at 6 of 14 after its job hit the time limit. The driver had moved on past it and came back to it at 14:02:52 (`server.log:446`).
+  - The `done` source is the step finishing in the next second.
+  - #677's B1 makes only a same-second source unverifiable, so the checker judged it.
+- **For skills-rotn:** in these 11 s the model saw two different current steps, `shelter_blocks` from `!agenda` (`640`) and `cobblestone` from the facts (`667`). The model's reply at `673` (`Checking if the step advanced: !agenda`) followed.
+
+**Misses 2–4: `1550` (14:34:40), `1583` (14:34:59) and `1617` (14:35:05), collect.**
+- **The facts text, in each:** `Collects: got 3 cobblestone near -150, 62, 22 (… ), just now; got 18 pyrotech:rock near -150, 62, 22 (…), just now`.
+- **The checker's state: none.** No `Collected 3 cobblestone` line is within its window. The checker's only collect source is a `Collected N <item>` line (`st.collected`). It matched the rock half of the same field, `Collected 18 pyrotech:rock (7 pyrotech_compat:rock_sedimentary:0, 9 pyrotech_compat:rock_metamorphic:6, 2 pyrotech_compat:rock_igneous:7).` (14:34:25, `1526`).
+- **The game's record:** the same `!collectBlocks("cobblestone", 10)` (`1472`, 14:33:32) ends with **`Crafted 3 cobble from your rocks, of 10 asked.`** (14:34:25, `1527`). The 3 cobble are real crafts in the same output:
+  - `Cobblestone from your rocks: 2 undergroundbiomes:igneous_cobble:0` and `you now have 4 undergroundbiomes:igneous_cobble:0` (`1489`, `1490`);
+  - `… 1 undergroundbiomes:metamorphic_cobble:0` and `you now have 3 undergroundbiomes:metamorphic_cobble:0` (`1491`, `1492`).
+
+  The output is shortened, but these are its last lines.
+- **Verdict: checker artefact, 0 wrong facts.** A cobblestone collect's rock route reports its count as `Crafted N cobble from your rocks`, not `Collected N cobblestone`, and the checker does not read that line.
+
+**Miss 5: `2466`, 15:16:01, collect.**
+- **The facts text:** `Collects: got 3 cobblestone near -107, 70, 27 (5 E), just now; got 3 pyrotech:rock near -107, 70, 27 (5 E), just now`.
+- **The checker's state: none**, as above. The rock half matched `Collected 3 pyrotech:rock (1 pyrotech_compat:rock_sedimentary:0, 2 pyrotech_compat:rock_metamorphic:6).` (15:15:51, `2444`).
+- **The game's record:** `!collectBlocks("cobblestone", 8)` (`2407`, 15:15:39) ends with **`Crafted 3 cobble from your rocks, of 8 asked.`** (15:15:51, `2445`). The crafts are in its output:
+  - `Cobblestone from your rocks: 2 undergroundbiomes:igneous_cobble:0` and `you now have 4 undergroundbiomes:igneous_cobble:0` (`2419`, `2420`);
+  - `… 1 undergroundbiomes:metamorphic_cobble:0` and `you now have 2 undergroundbiomes:metamorphic_cobble:0` (`2421`, `2422`).
+- **Verdict: checker artefact, 0 wrong facts**, for the same reason as misses 2–4.
 
 **For the checker (a harness-ops follow-up, not in this PR):**
-- An agenda change within 1–2 s after the facts line, when the facts line's own second has the craft that finishes the step, should be unverifiable too.
-- `Crafted N cobble from your rocks[ (instead of …)], of M asked.` is a cobblestone collect's source.
+- **The agenda field:** an agenda source within the after-window, when the facts line's own second holds the craft that finishes the facts' step, should be unverifiable. So should a latest-earlier source that is an `!agenda` reply naming a different step than the driver's last `started` line; the chat's `started`/`done` lines are the driver's state.
+- **The collect field:** `Crafted N cobble from your rocks[ (instead of …)], of M asked.` is a cobblestone collect's source.
 
 With those, this soak's I13 would read 0 misses, with 5 or more samples in every field but deaths.
 
 ### I14: the model's wrong-state claims
 The checker found 7 claims in 6 of 110 replies: 0 wrong, 6 unverifiable. The checker's hand-check sample: `99`, `614`, `735`, `1077`, `1812`, `2556`.
 
-**By hand, the 15 replies that give a shelter-block or cobble count** (watch item (g), soak 18: 4 wrong): **2 wrong, both upward, both on day 1.** In both, the facts line just before had the right count.
+**By hand, the 10 replies that give a shelter-block count or say the blocks are met** (watch item (g), soak 18: 4 wrong): **3 wrong, all upward, all on day 1 within 30 s.** Each time, the facts line just before had the right count. The other replies that mention shelter blocks or cobble give no count: `650`, `974`, `1370`, `1847`, `2195`, `2844`.
 
 | Reply (line) | The model said | The facts line just before | Right count |
 | --- | --- | --- | --- |
 | 14:01:31 (`673`) | `That's 8 igneous cobble + 6 metamorphic cobble = 14 shelter blocks, goal met.` | 14:01:28 (`667`): `shelter blocks 10 of 14 (stone or cobble; 4 short; counted now, new crafts included)` | 10. The job ended `6 of 14` (14:01:06, `server.log:415`), and the craft made 4 igneous cobble (`662`: `you now have 4 undergroundbiomes:igneous_cobble:0`) |
-| 14:02:01 (`758`) | `standing goal fully met: food 15.2, 14 cobble, club, two pickaxes.` | `shelter blocks 10 of 14` | 10. The standing goal's job then restarted the step (14:02:52, `server.log:446`), and the facts reached `14 of 14` at 14:03:20 (`883`) |
+| 14:01:43 (`690`) | `Shelter blocks now 14 (8 igneous + 6 metamorphic cobble) — that's done.` | 14:01:34 (`684`): `shelter blocks 10 of 14 (stone or cobble; 4 short; counted now, new crafts included)` | 10, as above |
+| 14:02:01 (`758`) | `standing goal fully met: food 15.2, 14 cobble, club, two pickaxes.` | 14:01:57 (`752`): `shelter blocks 10 of 14` | 10. The standing goal's job then restarted the step (14:02:52, `server.log:446`), and the facts reached `14 of 14` at 14:03:20 (`883`) |
 
-The other 13 were right: `14 blocks secured` (`883`), `14 cobble` (`902`), `7 shelter blocks (3 metamorphic + 4 igneous cobble)` (`1674`), `16 shelter blocks now` (`1812`), `17 cobble banked now` (`2556`), and 8 that repeat the facts' 14 or 16. No wrong claim led to a short night: the code-built standing goal kept its own count, and each night's food line and shelter came out right.
+The other 7 were right:
+- `14 blocks secured` (`883`) and `14 cobble` (`902`), with the facts at 14 of 14;
+- `All reserves are set` (`956`; facts `950`: 14 of 14);
+- `the 10 shelter blocks I still need` (`1470`; facts `1464`: 4 of 14);
+- `7 shelter blocks (3 metamorphic + 4 igneous cobble)` (`1674`);
+- `16 shelter blocks now` (`1812`);
+- `17 cobble banked now` (`2556`). No wrong claim led to a short night: the code-built standing goal kept its own count, and each night's food line and shelter came out right.
 
 ### I15, sticky failures and `Your decisions:`
 - **I15:** 0 repeats of the same failure, from 10 failed commands; 0 within 30 or 60 min. Plans asked again after a defer: 0. No reply named a target and dropped it.
-- **The failure lines in the facts** (`Recent failures (newest first)`), counted by the failure each line shows first:
-  - `!collectBlocks("pyrotech:rock", 1): Collected 0 pyrotech:rock.` heads 34 facts lines (the 0-rock collect at 14:01:45, `700`, shown up to 60 min later);
-  - `!placeHere("log"): Could not place log at -20, 88, -141 …` heads 14 (13:57:05);
-  - `!attack("animania:doe_new_zealand"): Could not reach …` heads 6;
-  - the coal collect (`Collected 0 osv:coal_…`) heads 6;
+- **The failure lines in the facts** (`Recent failures (newest first)`): 77 of the 86 facts lines show at least one failure. Counted by the failure each line shows first:
+  - `!collectBlocks("pyrotech:rock", 1): Collected 0 pyrotech:rock.` heads 34. This is the 0-rock collect at 14:01:45 (`700`). **It is a sticky failure:** it is still in the facts at 15:16:01 (`2466`) as `(74 min ago at -5, 85, -99, 166 NE)`.
+  - `!placeHere("log"): Could not place log at -20, 88, -141 …` (13:57:05) heads 15.
+  - `!attack("animania:doe_new_zealand"): Could not reach …` heads 8.
+  - The coal collect (`Collected 0 osv:coal_…`) heads 6.
+  - `!attack("animania:buck_new_zealand")` heads 5.
   - `!collectBlocks("cobblestone", 8): Collected 0 cobblestone.` heads 4.
+  - `!searchForEntity("animania:sow_old_spot", 64)` heads 2.
+  - `!attack("zombie")`, `!attack("animania:sow_hampshire")` and `!attack("animania:hen_rhode_island_red")` head 1 each.
 
   Failures past 5 min carry their age and place, for example `(33 min ago at -5, 85, -99, 185 NE)` (`1550`).
 - **`Your decisions:` lines: 0.** The model wrote one dropping reply: `Coal's deeper than I can safely dig for — skipping it. Let me forage for wild food instead while it's daytime. !forage` (14:37:22, `1952`). It is not stored as a decision: S18a's decisions are `can wait`, `is optional` and `drop the X hunt`. Nothing went back to the coal.
@@ -301,7 +347,7 @@ The gap between stone_pickaxe and stone_axe is the shelter-blocks scripted job: 
 - 15:16:03 (`2486`): `[hands] idle: the pickaxe is not in the off hand: re-arming`, after the morning's defendSelf fight (`2448`).
 - 15:42:01 (`2958`) and 15:48:37 (`2998`): `[hands] idle: the weapon is not in the main hand: re-arming`. Each came at the start of a night-3 shelter fight, after the dig swaps that a full inventory forces (`no free slot: the stone_pickaxe swapped from the off hand into the main hand for the dig`, d).
 
-**`[attack]` lines: 10.**
+**`[attack]` lines: 9.**
 
 | Time (line) | Line |
 | --- | --- |
@@ -339,7 +385,7 @@ The run's totals: `written bettercombat 28, use_entity 0; … reach 12, sight 90
   - Soak 18: days 0.0470/h, nights 0/h.
 - **Reasoning:** 36,078 of 38,878 completion tokens (92.8%), max 3,638 for one call. Every call had a `reasoning_tokens` line.
 - **Self-prompting:** 21.4 min in 7 loop runs, with all 110 calls inside them (0.0705/h of self-prompting).
-- **The standing goal's daily budget** stopped the self-prompter at 14:38:52 (day 1) and 15:21:18 (day 2) (`server.log:735`, `:909`).
+- **The standing goal's daily budget** stopped the self-prompter at 14:38:52 and 15:21:18 (`server.log:735`, `:909`). Those are the agenda's day 1 and day 2, and the spend table's Day 2 and Day 3.
 - **`!getCraftingPlan`: 0 calls**, so there are no replies to quote. The soak 18 sword chain cost 27 calls (USD 0.0086, 25%). Here no chain ran.
 
 ## The soak invariants (`test/tools/soak-invariants.mjs`)
@@ -361,7 +407,7 @@ The run's totals: `written bettercombat 28, use_entity 0; … reach 12, sight 90
 | I11 summary cost | 0 summaries; 0% of the spend (M4 check 5: 21 chunks cut with no summary call) | – |
 | I12 unattributed hurt | 0 | – |
 | I13 memory facts | checker gate **fail**, 5 misses in 599 fields; **by hand all 5 are artefacts, 0 wrong facts** | (g) |
-| I14 wrong-state claims | checker 0 of 7 (6 unverifiable); **by hand 2 wrong shelter-block counts by the model, with the facts right** | `673`, `758` |
+| I14 wrong-state claims | checker 0 of 7 (6 unverifiable); **by hand 3 wrong shelter-block counts by the model, with the facts right** | `673`, `690`, `758` |
 | I15 repeated failures | 0; plans asked again after a defer: 0 | – |
 
 **The two replies whose command never ran (I8):**
@@ -373,10 +419,10 @@ The baseline (`test/evidence/g4/invariants-baseline.json`) gets the soak 19 row,
 ## Owners' notes
 - **skills-rotn:**
   - The night routine's dirt crafts with a full inventory threw 13 dirt in the bot's cell; there is no guard there like the model's craft has (d).
-  - The inventory was full from 14:37 with foraged odds and ends (d).
+  - The inventory was full by 14:35 with foraged odds and ends (d).
   - 62 shelter fights in 5 min with no swing possible, against a zombie digging the wall cell while it stood diagonal to the bot (the ate_when_low section). The eat at food 8 waited behind it.
   - Night 3's first site failed on a block that did not stay (a brown mushroom in the cell) (f).
-  - The model's shelter-block count ran high twice, on day 1, while the facts were right (I14).
+  - The model's shelter-block count ran high 3 times, on day 1, while the facts were right (I14).
   - 60 empty rock-pile breaks, with no item within 8 blocks in 56 of them (e).
   - The model's `skipping it` was not kept as a decision (g).
 - **net-forge:** the one rejected click, a dirt-pile stack count of 70 against 74 during the hole shelter's dirt craft; the resync answered it (h).
@@ -393,3 +439,4 @@ Every file except `README.md` and `step7-starts.txt` went through `test/tools/re
 - `run.log`: the runner's console output. **Redacted** as above.
 - `server-lifecycle.txt`: `up`, `starts`, the since-start header, `starts` again, `save-all flush`, the seed from `level.dat`, `down`, and the Hetzner counts. **Redacted** as above. The `Waiting for …` progress lines of `up` and `down` are left out.
 - `step7-starts.txt`: `test-server.sh starts` right after `up`, written by hand (two lines, no address).
+- `live-checks.txt`: the six live checks on the partial journal during the run (14:13 to 15:53, every 20 min), as the harness-ops session ran them: `no_trap` (the scenario's trap-span and enclosed-episode rule) and the I1, I2, I6 and I10 lines of `soak-invariants.mjs`, on the journal the watch saved. **Redacted** as above.
