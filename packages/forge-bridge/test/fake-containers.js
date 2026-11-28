@@ -165,6 +165,7 @@ export function attachFakeContainers(client, opts) {
         pending: null, // { windowId, action } after a rejected click
         clicks: [], rejected: [], ignored: [], unsupported: [], placed: [], uses: [], closed: [],
         swaps: [], dropped: [], returned: [], // mode-2 clicks; stacks dropped and grid stacks put back by a close of window 0
+        thrown: [], // stacks a slot -999 click threw out of the cursor ({ windowId, id, count, meta }; soak 18)
         sent: inv.map(copy), // tickModel: window 0 as the client was last sent it (inventoryItemStacks)
         unsent: [], // tickModel: { slot, item } recorded as sent by an accepted click's detectAndSendChanges, not sent
     };
@@ -251,7 +252,10 @@ export function attachFakeContainers(client, opts) {
     function slotClick(windowId, slot, button) {
         const gridEnd = windowId === 0 ? 4 : 9;
         if (slot === -999) {
-            if (state.cursor) { if (button === 0) state.cursor = null; else { state.cursor.count--; if (!state.cursor.count) state.cursor = null; } }
+            if (state.cursor) {
+                state.thrown.push({ windowId, ...copy(state.cursor), count: button === 0 ? state.cursor.count : 1 });
+                if (button === 0) state.cursor = null; else { state.cursor.count--; if (!state.cursor.count) state.cursor = null; }
+            }
             return null;
         }
         const before = copy(get(windowId, slot));

@@ -376,3 +376,186 @@ test('I14 (#661, soak 17 18:06:20): "up from y=25 to y=44" claims y 44, not 25; 
     const r = wrongClaims(J(lines), []);
     assert.deepEqual([r.claims, r.wrong, r.byKind.y], [2, 0, [2, 0, 0]]);
 });
+
+// Soak 18 (2026-11-27): the I13 checker artefacts B1-B3, #675's merged failures, and I15's plans asked again after a
+// defer. The lines are soak 18's (driver.log line numbers in the comments), with fewer fields.
+const D18 = '2026-11-27';
+const L18 = (time, msg) => L(time, msg, D18);
+const F18 = (time, ...parts) => L18(time, `[memory] facts 999 chars: Facts from the game (computed now, not remembered): / ${parts.join(' / ')}`);
+const REL18 = L18('20:51:31', '[release] rotn-v0.1.24-5baf67322c53');
+
+test('soak 18 (B1): an agenda source in the facts line\'s own second is unverifiable; one a second later still a miss', () => {
+    const lines = [
+        REL18,
+        F18('20:53:22', 'Agenda: active, step weapon (hold a weapon for the night); done: sticks, logs'), // 112
+        F18('20:55:13', 'Agenda: active, step crude_axe (craft a crude axe); done: rocks, sticks, logs'), // 244
+        F18('20:57:00', 'Agenda: active, step crude_axe (craft a crude axe); done: rocks, sticks, logs'), // control: crafting_tools started 1 s after it (within agendaAfterS), not in its second
+    ];
+    const chat = chatOf(lines, [
+        SV('20:51:47', 'agenda step weapon started: hold a weapon for the night'),
+        SV('20:53:22', 'agenda step food: the scripted job (run 1 of 4 today)'), // server.log:69, the same second as 112
+        SV('20:55:07', 'agenda step crude_axe started: craft a crude axe'),
+        SV('20:55:13', 'agenda step crude_axe done'), SV('20:55:13', 'agenda step first_plank started: make the first plank'),
+        SV('20:57:01', 'agenda step crafting_tools started: craft Crafting Tools'), // control: 1 s after, within agendaAfterS
+    ]);
+    const r = memoryFactsCheck(J(lines), chat);
+    assert.deepEqual(r.byField.agenda, { match: 0, miss: 1, unverifiable: 2, trivial: 0 });
+    assert.deepEqual(r.missesFirst.map(m => [m.t, m.said]), [['20:57:00', 'crude_axe']]);
+});
+
+test('soak 18 (B2): the job\'s end count plus the cobble crafts after it; a shortened output or an unknown gain stops the chain', () => {
+    const res = (time, n) => F18(time, `Reserves: shelter blocks ${n} of 14 (stone or cobble), dirt 15; food held 18.1 points, a night needs 0 more than your bar; tools: stone_pickaxe (off hand)`);
+    const craft = (time, n, item, now) => [
+        L18(time, 'Agent executed: !craftRecipe and got: Action output:'),
+        L18(time, `Cobblestone from your rocks: ${n} ${item} (4 pyrotech_compat:rock_igneous:0 each).`),
+        L18(time, `Successfully crafted ${item} from your pyrotech_compat:rock_igneous:0 rocks, you now have ${now} ${item}.`),
+    ];
+    const lines = [
+        REL18,
+        ...craft('20:59:38', 6, 'undergroundbiomes:igneous_cobble:0', 6), // 642, 643
+        res('20:59:41', 13), // 653: 7 (the job) + 6
+        res('20:59:45', 7), // the job's count is stale after the craft: a miss
+        L18('20:59:50', 'Agent executed: !craftRecipe and got: Action output:'),
+        L18('20:59:50', 'Cobblestone from your rocks: 1 undergroundbiomes:igneous_cobble:2 (4 pyrotech_compat:rock_igneous:2 each).'),
+        L18('20:59:50', 'Could not craft undergroundbiomes:igneous_cobble:2: the craft gave no undergroundbiomes:igneous_cobble:2.'), // 2147: no gain
+        res('20:59:52', 13),
+        L18('21:00:20', 'Agent executed: !craftRecipe and got: Action output is very long (517 chars) and has been shortened.'), // 1624
+        L18('21:00:20', 'Successfully crafted contenttweaker:chalk_cobble:0 from your pyrotech_compat:rock_sedimentary:0 rocks, you now have 1 contenttweaker:chalk_cobble:0.'),
+        res('21:00:25', 14), // after a shortened output: unverifiable
+    ];
+    const chat = chatOf(lines, [SV('20:56:40', 'agenda step shelter_blocks: the scripted job (run 1 of 2 today)'), SV('20:59:18', 'agenda step shelter_blocks: the scripted job ended: +7 shelter blocks (7 of 14; short)')]);
+    const r = memoryFactsCheck(J(lines), chat);
+    assert.deepEqual(r.byField['shelter blocks'], { match: 2, miss: 1, unverifiable: 1, trivial: 0 });
+    assert.deepEqual(r.missesFirst.filter(m => m.field === 'shelter blocks').map(m => [m.t, m.said]), [['20:59:45', 7]]);
+});
+
+test('soak 18 (B3): a collect with no `Collected` line is unverifiable while a scripted job ran or an output was shortened; else a miss', () => {
+    const col = (time, n) => F18(time, `Collects: got ${n} pyrotech:rock near -46, 80, -164 (here), just now`);
+    const lines = [
+        REL18,
+        col('20:59:20', 54), // 590: the shelter-blocks job (20:56:40-20:59:18) collected them
+        L18('21:35:46', 'Agent executed: !collectBlocks and got: Action output is very long (4929 chars) and has been shortened.'), // 1452
+        col('21:35:46', 21), // 1465
+        col('22:30:00', 9), // control: no job, no shortened output, no `Collected 9`
+    ];
+    const chat = chatOf(lines, [SV('20:56:40', 'agenda step shelter_blocks: the scripted job (run 1 of 2 today)'), SV('20:59:18', 'agenda step shelter_blocks: the scripted job ended: +7 shelter blocks (7 of 14; short)')]);
+    const r = memoryFactsCheck(J(lines), chat);
+    assert.deepEqual(r.byField.collect, { match: 0, miss: 1, unverifiable: 2, trivial: 0 });
+    assert.deepEqual(r.missesFirst.map(m => [m.t, m.field]), [['22:30:00', 'collect']]);
+});
+
+test('#675 (round 17 K): a merged failure `!cmd(args) xN: why` is checked, and needs N failed runs within the hold', () => {
+    const sword = (time) => [
+        L18(time, "parsed command: { commandName: '!craftRecipe', args: [ 'stone_sword', 1 ] }"),
+        L18(time, 'Agent executed: !craftRecipe and got: Action output:'),
+        L18(time, 'You do not have the resources to craft stone_sword. To craft stone_sword (at a crafting table): 2 rock: you have none, so get 2 pyrotech:rock (any rock); 1 spartanweaponry:material:0: you have none, so get 1 spartanweaponry:material:0.'),
+        L18(time, 'Saved memory to: ./bots/x/memory.json'),
+    ];
+    const fl = (time, x) => F18(time, 'Recent failures (newest first):', `!craftRecipe("stone_sword", 1)${x}: You do not have the resources to craft stone_sword... (just now at -27, 85, -129, here)`);
+    const lines = [REL18, ...sword('21:03:18'), fl('21:03:20', ''), ...sword('21:06:00'), fl('21:06:02', ' x2'), fl('21:06:03', ' x3')];
+    const r = memoryFactsCheck(J(lines), []);
+    assert.deepEqual(r.byField.failure, { match: 2, miss: 1, unverifiable: 0, trivial: 0 });
+    assert.deepEqual(r.missesFirst.map(m => [m.t, m.said]), [['21:06:03', '!craftRecipe("stone_sword", 1) x3']]);
+});
+
+test('soak 18 (I15): a plan asked again within 60 min after the model dropped or deferred that target (or its chain)', () => {
+    const cmd = (time, name, args) => [L18(time, `parsed command: { commandName: '${name}', args: [ ${args} ] }`), L18(time, `Agent executed: ${name} and got:`), L18(time, 'Saved memory to: ./bots/x/memory.json')];
+    const say = (time, text) => L18(time, `Generated response: ${text}`);
+    const lines = [
+        REL18,
+        ...cmd('21:39:13', '!craftRecipe', "'stone_sword', 1"), // 2162
+        ...cmd('21:39:15', '!getCraftingPlan', "'spartanweaponry:material:0', 1"), // 2181
+        ...cmd('21:39:18', '!getCraftingPlan', "'pyrotech:tinder', 3"), // 2204
+        say('21:39:31', 'Already hold a stone axe and club — that covers the weapon goal, so I\'ll drop the sword hunt. Heading back: !goToCoordinates(-71, 63, -146, 30)'), // 2237
+        ...cmd('22:13:50', '!getCraftingPlan', "'stone_sword', 1"), // 2638: counted
+        ...cmd('22:13:54', '!getCraftingPlan', "'pyrotech:tinder', 3"), // 2658: counted (the chain)
+        say('22:16:51', 'No luck with grass. Leaves sometimes drop tinder — breaking some: !collectBlocks("dynamictrees:leaves0", 8)'), // 3100: no defer
+        ...cmd('22:45:00', '!getCraftingPlan', "'spartanweaponry:material:0', 1"), // 66 min after the defer: not counted
+        ...cmd('22:46:00', '!getCraftingPlan', "'stone_pickaxe', 1"), // not in the chain
+    ];
+    const r = repeatedFailures(J(lines)).planAfterDefer;
+    assert.deepEqual([r.count, r.defers], [2, 1]);
+    assert.deepEqual(r.first.map(x => [x.t, x.target]), [['22:13:50', 'stone_sword'], ['22:13:54', 'pyrotech:tinder']]);
+});
+
+test('soak 18 (the committed journal): I13 0 misses (B1-B3), and 6 plans asked again after 4 defers (the sword chain)', () => {
+    const E18 = path.join(ROOT, 'test/evidence/g4/g4soak-18-20261127');
+    const r = soakInvariants(fs.readFileSync(path.join(E18, 'driver.log'), 'utf8'), { serverText: fs.readFileSync(path.join(E18, 'server.log'), 'utf8') });
+    assert.equal(r.I13.misses, 0);
+    assert.deepEqual([r.I13.byField.agenda.unverifiable, r.I13.byField.collect.unverifiable], [4, 4]);
+    assert.deepEqual([r.I15.planAfterDefer.count, r.I15.planAfterDefer.defers], [6, 4]);
+    assert.deepEqual(r.I15.planAfterDefer.first.map(x => x.target), ['stone_sword', 'pyrotech:tinder', 'stone_sword', 'pyrotech:tinder', 'stone_sword', 'pyrotech:tinder']);
+    assert.match(render(r, 'g4soak-18-20261127'), /plans asked again after a defer: 6 \(within 60 min of 4 replies that drop or defer the target\)/);
+});
+
+test('#677 review 1 (B1): a same-second source unrelated to a stale step does not hide it (the reviewer\'s probe); 244 still unverifiable', () => {
+    const lines = [
+        REL18,
+        F18('20:55:13', 'Agenda: active, step crude_axe (craft a crude axe); done: rocks, sticks, logs'), // 244
+        F18('20:58:00', 'Agenda: active, step crude_axe (craft a crude axe); done: rocks, sticks, logs'), // the probe: stale
+    ];
+    const chat = chatOf(lines, [
+        SV('20:55:07', 'agenda step crude_axe started: craft a crude axe'),
+        SV('20:55:13', 'agenda step crude_axe done'), SV('20:55:13', 'agenda step first_plank started: make the first plank'),
+        SV('20:58:00', 'agenda step food: the scripted job (run 1 of 4 today)'), // unrelated, in the probe's second
+    ]);
+    const r = memoryFactsCheck(J(lines), chat);
+    assert.deepEqual(r.byField.agenda, { match: 0, miss: 1, unverifiable: 1, trivial: 0 });
+    assert.deepEqual(r.missesFirst.map(m => [m.t, m.said]), [['20:58:00', 'crude_axe']]);
+});
+
+test('#677 review 2-5: a shortened output of a non-collecting command hides nothing; a job with no end line ends; xN exact; "for later" no defer', () => {
+    const col = (time, n) => F18(time, `Collects: got ${n} pyrotech:rock near -46, 80, -164 (here), just now`);
+    const lines = [
+        REL18,
+        L18('21:00:00', 'Agent executed: !nearbyBlocks and got: Action output is very long (2000 chars) and has been shortened.'),
+        col('21:00:10', 5), // review 2: a miss, not hidden by !nearbyBlocks
+        col('21:20:00', 6), // review 3: the job at 21:05 had no end line: closed by 21:15, so a miss
+        col('21:05:30', 7), // ... while it ran: unverifiable
+    ];
+    const chat = chatOf(lines, [SV('21:05:00', 'agenda step shelter_blocks: the scripted job (run 1 of 2 today)')]);
+    const r = memoryFactsCheck(J(lines), chat);
+    assert.deepEqual(r.byField.collect, { match: 0, miss: 2, unverifiable: 1, trivial: 0 });
+    // review 4: xN = exactly N runs with the full args, each within 5 min of the next.
+    const run = (time, args) => [
+        L18(time, `parsed command: { commandName: '!collectBlocks', args: [ ${args} ] }`),
+        L18(time, 'Agent executed: !collectBlocks and got: Action output:'), L18(time, 'Collected 0 pyrotech:rock.'), L18(time, 'Saved memory to: ./bots/x/memory.json'),
+    ];
+    const fl = (time, args, x) => F18(time, 'Recent failures (newest first):', `!collectBlocks(${args})${x}: Collected 0 pyrotech:rock. (just now at 0, 64, 0, here)`);
+    const k = [
+        REL18, ...run('22:00:00', "'pyrotech:rock', 6"), ...run('22:07:00', "'pyrotech:rock', 6"), ...run('22:09:00', "'pyrotech:rock', 6"),
+        fl('22:09:01', '"pyrotech:rock", 6', ' x2'), // 22:07 and 22:09; 22:00 is 7 min before 22:07: exactly 2
+        fl('22:09:02', '"pyrotech:rock", 6', ' x3'), // a miss: the gap 22:00-22:07 is over the hold
+        ...run('22:10:00', "'pyrotech:rock', 2"),
+        fl('22:10:01', '"pyrotech:rock", 2', ' x2'), // a miss: one run with these full args (the first arg alone is not the key)
+    ];
+    const rk = memoryFactsCheck(J(k), []);
+    assert.deepEqual(rk.byField.failure, { match: 1, miss: 2, unverifiable: 0, trivial: 0 });
+    // review 5: soak 8's "I'll keep it for later" is no defer.
+    const d = [
+        REL18, L18('10:00:00', "parsed command: { commandName: '!getCraftingPlan', args: [ 'stone_sword', 1 ] }"), L18('10:00:00', 'Agent executed: !getCraftingPlan and got:'),
+        L18('10:01:00', 'Generated response: A sword plan is long. I\'ll keep the sword idea for later: !forage'),
+        L18('10:02:00', "parsed command: { commandName: '!getCraftingPlan', args: [ 'stone_sword', 1 ] }"), L18('10:02:00', 'Agent executed: !getCraftingPlan and got:'),
+    ];
+    assert.deepEqual([repeatedFailures(J(d)).planAfterDefer.count, repeatedFailures(J(d)).planAfterDefer.defers], [0, 0]);
+});
+
+test('S18a (#680): "Your decisions: …" after the failures ends the failure lines; I13 does not judge it', () => {
+    const parts = [
+        'Recent failures (newest first):',
+        '!collectBlocks("pyrotech:tinder", 3): Collected 0 pyrotech:tinder. (just now at -21, 89, -140, here)',
+        "Your decisions: 'a stone sword can wait until tinder shows up' (just now); 'I'll drop the sword hunt' (34 min ago)",
+        'Deaths: 0 since this memory began',
+    ];
+    const f = factsFields(`Facts from the game (computed now, not remembered): / ${parts.join(' / ')}`);
+    assert.deepEqual(f.failures, [parts[1]]);
+    assert.equal(f.decisions, parts[2]);
+    assert.equal(f.deaths, parts[3]);
+    const lines = [
+        REL, L('10:00:00', "parsed command: { commandName: '!collectBlocks', args: [ 'pyrotech:tinder', 3 ] }"),
+        L('10:00:00', 'Agent executed: !collectBlocks and got: Action output:'), L('10:00:00', 'Collected 0 pyrotech:tinder.'), L('10:00:00', 'Saved memory to: ./bots/x/memory.json'),
+        facts('10:00:05', ...parts),
+    ];
+    const r = memoryFactsCheck(J(lines), []);
+    assert.deepEqual(r.byField.failure, { match: 1, miss: 0, unverifiable: 0, trivial: 0 });
+});
