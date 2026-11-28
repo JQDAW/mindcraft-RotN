@@ -1,0 +1,405 @@
+# javap -c -p excerpts and config lines for the crude drying rack's speed (world-sources.json rule grass-plant-fiber:
+# "keep it out of the rain: rain on the rack undoes the drying"), from the pinned RotN 3.3.4 server pack zip
+# (SHA-256 90642fd5...f5205). Extracted to a scratch folder outside the repo; nothing was run.
+# Read by packages/rotn-data/test/grass-tinder.test.js.
+#
+# Jar and config (SHA-256):
+#   mods/pyrotech-1.12.2-1.5.25.jar             2b28dd9274ca66e4d981547c4cce36bc081b2bc925d694dda4249f412cdbf36a
+#   config/pyrotech/module.tech.Basic.cfg       98acfc46cba31164461b4c98cc71c8dff486178223d348eed9212c5b777aafb2
+#
+# What it shows: TileDryingRackBase.updateSpeed (refreshed by workerDoWork when its speed-check counter fires) starts
+# from the rack's biome modifier if BIOME_MODIFIERS names the biome (the crude rack's map is an empty static HashMap,
+# no config entry); else DIRECT_RAIN when the biome can rain and it rains on the block above the rack, else
+# INDIRECT_RAIN when the biome can rain and it is raining (a roof does not help) or the biome has high humidity, else NETHER in the nether, else BASE_DERIVED
+# plus the HOT, DRY, COLD and WET biome terms. Then it adds the fire-source bonus, and DAYTIME when it is not raining,
+# the sky is visible above the rack and the day time is between 3000 and 9000; and multiplies by
+# getMultiplicativeSpeedModifier (the crude rack: CRUDE_DRYING_RACK.SPEED_MODIFIER). workerDoWork adds the speed to
+# each slot's partialTicks and subtracts floor(partialTicks) from dryTimeRemaining, clamped to [0, dryTimeTotal]: a
+# negative speed adds the time back. With this pack's config, rain on the rack is -3.0 x 1.1 = -3.3 per work step (plus
+# any fire-source bonus, also x 1.1), so a rack in the rain loses its progress, back to the full dry time.
+
+## config/pyrotech/module.tech.Basic.cfg lines 558-620 (crude_drying_rack), "<line>: <text>"
+558:     crude_drying_rack {
+559:         # Multiplicative modifier applied to every recipe in this device.
+560:         # recipeDurationTicks = recipeDurationTicks * BASE_RECIPE_DURATION_MODIFIER
+561:         # Default: 1
+562:         # Min: 0.0
+563:         # Max: 1.7976931348623157E308
+564:         D:BASE_RECIPE_DURATION_MODIFIER=0.25
+565: 
+566:         # speed = speed * SPEED_MODIFIER
+567:         # Default: 1.0
+568:         # Min: 4.9E-324
+569:         # Max: 1.7976931348623157E308
+570:         D:SPEED_MODIFIER=1.1
+571: 
+572:         conditional_modifiers {
+573:             # The base derived speed.
+574:             # Default: 1
+575:             D:BASE_DERIVED=1.0
+576: 
+577:             # Added to the base derived speed if it isn't raining, the device has a
+578:             # direct line of sight to the sky, and it's daytime.
+579:             # Default: 0.2
+580:             D:DAYTIME=0.20000000298023224
+581: 
+582:             # Added to the base derived speed if the biome is cold.
+583:             # Default: -0.2
+584:             D:DERIVED_COLD=-0.20000000298023224
+585: 
+586:             # Added to the base derived speed if the biome is dry.
+587:             # Default: 0.2
+588:             D:DERIVED_DRY=0.5
+589: 
+590:             # Added to the base derived speed if the biome is hot.
+591:             # Default: 0.2
+592:             D:DERIVED_HOT=0.3
+593: 
+594:             # Added to the base derived speed if the biome is wet.
+595:             # Default: -0.2
+596:             D:DERIVED_WET=-0.3
+597: 
+598:             # The base speed if the device is being directly rained on.
+599:             # Default: -1
+600:             D:DIRECT_RAIN=-3.0
+601: 
+602:             # Added to the base derived speed for each fire source block in range.
+603:             # Default: 0.2
+604:             D:FIRE_SOURCE_BONUS=0.25
+605: 
+606:             # The device will gain a bonus for each fire source within this range.
+607:             # Default: 2
+608:             I:FIRE_SOURCE_BONUS_RANGE=3
+609: 
+610:             # The base speed if the it is raining, but not directly on the device, or
+611:             # the biome has high humidity.
+612:             # Default: 0.25
+613:             D:INDIRECT_RAIN=-0.50
+614: 
+615:             # The base speed if the device is in the Nether.
+616:             # Default: 2
+617:             D:NETHER=2.0
+618:         }
+619: 
+620:     }
+
+## com.codetaylor.mc.pyrotech.modules.tech.basic.tile.spi.TileDryingRackBase: updateSpeed, whole method
+  private float updateSpeed();
+    Code:
+       0: aload_0
+       1: getfield      #173                // Field field_145850_b:Lnet/minecraft/world/World;
+       4: aload_0
+       5: getfield      #177                // Field field_174879_c:Lnet/minecraft/util/math/BlockPos;
+       8: invokevirtual #268                // Method net/minecraft/world/World.func_180494_b:(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/world/biome/Biome;
+      11: astore_1
+      12: aload_1
+      13: invokevirtual #273                // Method net/minecraft/world/biome/Biome.func_76738_d:()Z
+      16: istore_2
+      17: aload_0
+      18: invokevirtual #277                // Method getConditionalModifiers:()Lcom/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers;
+      21: astore_3
+      22: dconst_0
+      23: dstore        4
+      25: aload_0
+      26: invokevirtual #281                // Method getBiomeSpeeds:()Ljava/util/Map;
+      29: astore        6
+      31: aload_1
+      32: invokevirtual #285                // Method net/minecraft/world/biome/Biome.getRegistryName:()Lnet/minecraft/util/ResourceLocation;
+      35: astore        7
+      37: iconst_0
+      38: istore        8
+      40: aload         7
+      42: ifnull        82
+      45: aload         7
+      47: invokevirtual #291                // Method net/minecraft/util/ResourceLocation.toString:()Ljava/lang/String;
+      50: astore        9
+      52: aload         6
+      54: aload         9
+      56: invokeinterface #296,  2          // InterfaceMethod java/util/Map.get:(Ljava/lang/Object;)Ljava/lang/Object;
+      61: checkcast     #298                // class java/lang/Float
+      64: astore        10
+      66: aload         10
+      68: ifnull        82
+      71: aload         10
+      73: invokevirtual #301                // Method java/lang/Float.floatValue:()F
+      76: f2d
+      77: dstore        4
+      79: iconst_1
+      80: istore        8
+      82: iload         8
+      84: ifne          271
+      87: iload_2
+      88: ifeq          117
+      91: aload_0
+      92: getfield      #173                // Field field_145850_b:Lnet/minecraft/world/World;
+      95: aload_0
+      96: getfield      #177                // Field field_174879_c:Lnet/minecraft/util/math/BlockPos;
+      99: invokevirtual #307                // Method net/minecraft/util/math/BlockPos.func_177984_a:()Lnet/minecraft/util/math/BlockPos;
+     102: invokevirtual #311                // Method net/minecraft/world/World.func_175727_C:(Lnet/minecraft/util/math/BlockPos;)Z
+     105: ifeq          117
+     108: aload_3
+     109: getfield      #314                // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers.DIRECT_RAIN:D
+     112: dstore        4
+     114: goto          271
+     117: iload_2
+     118: ifeq          131
+     121: aload_0
+     122: getfield      #173                // Field field_145850_b:Lnet/minecraft/world/World;
+     125: invokevirtual #317                // Method net/minecraft/world/World.func_72896_J:()Z
+     128: ifne          138
+     131: aload_1
+     132: invokevirtual #320                // Method net/minecraft/world/biome/Biome.func_76736_e:()Z
+     135: ifeq          147
+     138: aload_3
+     139: getfield      #323                // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers.INDIRECT_RAIN:D
+     142: dstore        4
+     144: goto          271
+     147: aload_0
+     148: getfield      #173                // Field field_145850_b:Lnet/minecraft/world/World;
+     151: getfield      #327                // Field net/minecraft/world/World.field_73011_w:Lnet/minecraft/world/WorldProvider;
+     154: invokevirtual #332                // Method net/minecraft/world/WorldProvider.func_177495_o:()Z
+     157: ifeq          169
+     160: aload_3
+     161: getfield      #335                // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers.NETHER:D
+     164: dstore        4
+     166: goto          271
+     169: aload_3
+     170: getfield      #338                // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers.BASE_DERIVED:D
+     173: dstore        4
+     175: getstatic     #342                // Field net/minecraftforge/common/BiomeDictionary$Type.HOT:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     178: invokestatic  #346                // Method net/minecraftforge/common/BiomeDictionary.getBiomes:(Lnet/minecraftforge/common/BiomeDictionary$Type;)Ljava/util/Set;
+     181: aload_1
+     182: invokeinterface #352,  2          // InterfaceMethod java/util/Set.contains:(Ljava/lang/Object;)Z
+     187: ifeq          199
+     190: dload         4
+     192: aload_3
+     193: getfield      #355                // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers.DERIVED_HOT:D
+     196: dadd
+     197: dstore        4
+     199: getstatic     #358                // Field net/minecraftforge/common/BiomeDictionary$Type.DRY:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     202: invokestatic  #346                // Method net/minecraftforge/common/BiomeDictionary.getBiomes:(Lnet/minecraftforge/common/BiomeDictionary$Type;)Ljava/util/Set;
+     205: aload_1
+     206: invokeinterface #352,  2          // InterfaceMethod java/util/Set.contains:(Ljava/lang/Object;)Z
+     211: ifeq          223
+     214: dload         4
+     216: aload_3
+     217: getfield      #361                // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers.DERIVED_DRY:D
+     220: dadd
+     221: dstore        4
+     223: getstatic     #364                // Field net/minecraftforge/common/BiomeDictionary$Type.COLD:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     226: invokestatic  #346                // Method net/minecraftforge/common/BiomeDictionary.getBiomes:(Lnet/minecraftforge/common/BiomeDictionary$Type;)Ljava/util/Set;
+     229: aload_1
+     230: invokeinterface #352,  2          // InterfaceMethod java/util/Set.contains:(Ljava/lang/Object;)Z
+     235: ifeq          247
+     238: dload         4
+     240: aload_3
+     241: getfield      #367                // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers.DERIVED_COLD:D
+     244: dadd
+     245: dstore        4
+     247: getstatic     #370                // Field net/minecraftforge/common/BiomeDictionary$Type.WET:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     250: invokestatic  #346                // Method net/minecraftforge/common/BiomeDictionary.getBiomes:(Lnet/minecraftforge/common/BiomeDictionary$Type;)Ljava/util/Set;
+     253: aload_1
+     254: invokeinterface #352,  2          // InterfaceMethod java/util/Set.contains:(Ljava/lang/Object;)Z
+     259: ifeq          271
+     262: dload         4
+     264: aload_3
+     265: getfield      #373                // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers.DERIVED_WET:D
+     268: dadd
+     269: dstore        4
+     271: iconst_1
+     272: newarray       float
+     274: astore        9
+     276: aload_3
+     277: getfield      #376                // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers.FIRE_SOURCE_BONUS_RANGE:I
+     280: istore        10
+     282: aload_0
+     283: getfield      #173                // Field field_145850_b:Lnet/minecraft/world/World;
+     286: aload_0
+     287: getfield      #177                // Field field_174879_c:Lnet/minecraft/util/math/BlockPos;
+     290: iload         10
+     292: iload         10
+     294: iload         10
+     296: aload_0
+     297: aload         9
+     299: aload_3
+     300: invokedynamic #387,  0            // InvokeDynamic #2:execute:(Lcom/codetaylor/mc/pyrotech/modules/tech/basic/tile/spi/TileDryingRackBase;[FLcom/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers;)Lcom/codetaylor/mc/athenaeum/util/BlockHelper$IBlockAction;
+     305: invokestatic  #391                // Method com/codetaylor/mc/athenaeum/util/BlockHelper.forBlocksInCube:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;IIILcom/codetaylor/mc/athenaeum/util/BlockHelper$IBlockAction;)V
+     308: dload         4
+     310: aload         9
+     312: iconst_0
+     313: faload
+     314: f2d
+     315: dadd
+     316: dstore        4
+     318: aload_0
+     319: getfield      #173                // Field field_145850_b:Lnet/minecraft/world/World;
+     322: invokevirtual #317                // Method net/minecraft/world/World.func_72896_J:()Z
+     325: ifne          390
+     328: aload_0
+     329: getfield      #173                // Field field_145850_b:Lnet/minecraft/world/World;
+     332: aload_0
+     333: getfield      #177                // Field field_174879_c:Lnet/minecraft/util/math/BlockPos;
+     336: invokevirtual #307                // Method net/minecraft/util/math/BlockPos.func_177984_a:()Lnet/minecraft/util/math/BlockPos;
+     339: invokevirtual #394                // Method net/minecraft/world/World.func_175678_i:(Lnet/minecraft/util/math/BlockPos;)Z
+     342: ifeq          390
+     345: aload_0
+     346: getfield      #173                // Field field_145850_b:Lnet/minecraft/world/World;
+     349: invokevirtual #398                // Method net/minecraft/world/World.func_72820_D:()J
+     352: ldc2_w        #399                // long 24000l
+     355: lrem
+     356: ldc2_w        #401                // long 3000l
+     359: lcmp
+     360: ifle          390
+     363: aload_0
+     364: getfield      #173                // Field field_145850_b:Lnet/minecraft/world/World;
+     367: invokevirtual #398                // Method net/minecraft/world/World.func_72820_D:()J
+     370: ldc2_w        #399                // long 24000l
+     373: lrem
+     374: ldc2_w        #403                // long 9000l
+     377: lcmp
+     378: ifge          390
+     381: dload         4
+     383: aload_3
+     384: getfield      #407                // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$DryingRackConditionalModifiers.DAYTIME:D
+     387: dadd
+     388: dstore        4
+     390: dload         4
+     392: aload_0
+     393: invokevirtual #410                // Method getMultiplicativeSpeedModifier:()F
+     396: f2d
+     397: dmul
+     398: d2f
+     399: freturn
+
+## com.codetaylor.mc.pyrotech.modules.tech.basic.tile.spi.TileDryingRackBase: workerDoWork, offsets 0-173
+  public boolean workerDoWork();
+    Code:
+       0: iconst_0
+       1: istore_1
+       2: aload_0
+       3: getfield      #123                // Field speedCheckTickCounter:Lcom/codetaylor/mc/athenaeum/util/TickCounter;
+       6: invokevirtual #206                // Method com/codetaylor/mc/athenaeum/util/TickCounter.increment:()Z
+       9: ifeq          23
+      12: aload_0
+      13: getfield      #130                // Field speed:Lcom/codetaylor/mc/athenaeum/network/tile/data/TileDataFloat;
+      16: aload_0
+      17: invokespecial #209                // Method updateSpeed:()F
+      20: invokevirtual #213                // Method com/codetaylor/mc/athenaeum/network/tile/data/TileDataFloat.set:(F)V
+      23: iconst_0
+      24: istore_2
+      25: iload_2
+      26: aload_0
+      27: getfield      #74                 // Field inputStackHandler:Lcom/codetaylor/mc/pyrotech/modules/tech/basic/tile/spi/TileDryingRackBase$InputStackHandler;
+      30: invokevirtual #157                // Method com/codetaylor/mc/pyrotech/modules/tech/basic/tile/spi/TileDryingRackBase$InputStackHandler.getSlots:()I
+      33: if_icmpge     227
+      36: aload_0
+      37: getfield      #74                 // Field inputStackHandler:Lcom/codetaylor/mc/pyrotech/modules/tech/basic/tile/spi/TileDryingRackBase$InputStackHandler;
+      40: iload_2
+      41: invokevirtual #161                // Method com/codetaylor/mc/pyrotech/modules/tech/basic/tile/spi/TileDryingRackBase$InputStackHandler.getStackInSlot:(I)Lnet/minecraft/item/ItemStack;
+      44: astore_3
+      45: aload_3
+      46: invokevirtual #166                // Method net/minecraft/item/ItemStack.func_190926_b:()Z
+      49: ifeq          55
+      52: goto          221
+      55: aload_0
+      56: getfield      #108                // Field dryTimeRemaining:[I
+      59: iload_2
+      60: iaload
+      61: ifle          167
+      64: aload_0
+      65: getfield      #110                // Field partialTicks:[F
+      68: iload_2
+      69: dup2
+      70: faload
+      71: aload_0
+      72: getfield      #130                // Field speed:Lcom/codetaylor/mc/athenaeum/network/tile/data/TileDataFloat;
+      75: invokevirtual #152                // Method com/codetaylor/mc/athenaeum/network/tile/data/TileDataFloat.get:()F
+      78: fadd
+      79: fastore
+      80: aload_0
+      81: getfield      #110                // Field partialTicks:[F
+      84: iload_2
+      85: faload
+      86: f2d
+      87: invokestatic  #219                // Method java/lang/Math.floor:(D)D
+      90: dstore        4
+      92: dload         4
+      94: invokestatic  #222                // Method java/lang/Math.abs:(D)D
+      97: dconst_0
+      98: dcmpl
+      99: ifle          167
+     102: aload_0
+     103: getfield      #110                // Field partialTicks:[F
+     106: iload_2
+     107: dup2
+     108: faload
+     109: f2d
+     110: dload         4
+     112: dsub
+     113: d2f
+     114: fastore
+     115: aload_0
+     116: getfield      #108                // Field dryTimeRemaining:[I
+     119: iload_2
+     120: dup2
+     121: iaload
+     122: i2d
+     123: dload         4
+     125: dsub
+     126: d2i
+     127: iastore
+     128: aload_0
+     129: getfield      #108                // Field dryTimeRemaining:[I
+     132: iload_2
+     133: iconst_0
+     134: aload_0
+     135: getfield      #108                // Field dryTimeRemaining:[I
+     138: iload_2
+     139: iaload
+     140: invokestatic  #226                // Method java/lang/Math.max:(II)I
+     143: iastore
+     144: aload_0
+     145: getfield      #108                // Field dryTimeRemaining:[I
+     148: iload_2
+     149: aload_0
+     150: getfield      #106                // Field dryTimeTotal:[I
+     153: iload_2
+     154: iaload
+     155: aload_0
+     156: getfield      #108                // Field dryTimeRemaining:[I
+     159: iload_2
+     160: iaload
+     161: invokestatic  #229                // Method java/lang/Math.min:(II)I
+     164: iastore
+     165: iconst_1
+     166: istore_1
+     167: aload_0
+     168: getfield      #108                // Field dryTimeRemaining:[I
+     171: iload_2
+     172: iaload
+     173: ifne          221
+
+## com.codetaylor.mc.pyrotech.modules.tech.basic.tile.TileDryingRackCrude: getMultiplicativeSpeedModifier and getBiomeSpeeds
+public class com.codetaylor.mc.pyrotech.modules.tech.basic.tile.TileDryingRackCrude extends com.codetaylor.mc.pyrotech.modules.tech.basic.tile.spi.TileDryingRackBase implements com.codetaylor.mc.athenaeum.interaction.spi.ITileInteractable {
+  protected float getMultiplicativeSpeedModifier();
+    Code:
+       0: getstatic     #79                 // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig.CRUDE_DRYING_RACK:Lcom/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$CrudeDryingRack;
+       3: getfield      #91                 // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$CrudeDryingRack.SPEED_MODIFIER:D
+       6: d2f
+       7: freturn
+
+  protected java.util.Map<java.lang.String, java.lang.Float> getBiomeSpeeds();
+    Code:
+       0: getstatic     #97                 // Field com/codetaylor/mc/pyrotech/modules/tech/basic/ModuleTechBasicConfig$CrudeDryingRack.BIOME_MODIFIERS:Ljava/util/Map;
+       3: areturn
+
+## com.codetaylor.mc.pyrotech.modules.tech.basic.ModuleTechBasicConfig$CrudeDryingRack: static initializer (BIOME_MODIFIERS)
+  public static final java.util.Map<java.lang.String, java.lang.Float> BIOME_MODIFIERS;
+  static {};
+    Code:
+       0: new           #58                 // class java/util/HashMap
+       3: dup
+       4: invokespecial #59                 // Method java/util/HashMap."<init>":()V
+       7: putstatic     #61                 // Field BIOME_MODIFIERS:Ljava/util/Map;
+      10: return
+}

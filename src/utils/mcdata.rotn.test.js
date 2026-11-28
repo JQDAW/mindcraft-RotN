@@ -188,8 +188,8 @@ test('getItemCraftingRecipes and getDetailedCraftingPlan follow RotN recipes', (
     // Request 10: the plan names variants as inventory keys ("pyrotech:rock:0", "log:0"); a bare
     // key (planks, stick) means any variant. Soak 17 L3: an ore input the bot lacks is named by its ore
     // ("rock (any of ...)"), and a crafted bare key names what the recipe makes ("planks:0"). Soak 18: a missing
-    // base item says how to get it (rotn-data's world rule); an ore label gets no hint.
-    assert.match(pick, /- 1 log:0: break a Dynamic Trees branch, by hand or with an axe\n- 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\)\n/);
+    // base item says how to get it (rotn-data's world rule); after #679, a missing ore label takes its first member's hint.
+    assert.match(pick, /- 1 log:0: break a Dynamic Trees branch, by hand or with an axe\n- 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\): break a rock pile on the ground by hand; or mine stone with a pickaxe below Sturdy\n/);
     assert.match(pick, /Craft 1 log:0 -> 3 planks:0\nCraft 2 planks -> 4 stick\nCraft 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\) \+ 2 stick -> 1 stone_pickaxe/);
     const table = mc.getDetailedCraftingPlan('crafting_table', 1, {});
     const axeRock = 'rock \\(any of pyrotech:rock, flint, pyrotech_compat:rock_\\*\\)';
@@ -312,7 +312,7 @@ test('soak 17 L3: ore inputs count every held rock; cobblestone comes from 4 roc
     assert.match(mc.getDetailedCraftingPlan('stone_pickaxe', 7, at1807), /^You have all items[^]*Craft 18 pyrotech:rock:8 \+ 3 pyrotech_compat:rock_metamorphic \+ 14 stick -> 7 stone_pickaxe$/);
     // Too few rocks: the missing line names the ore, not one rock.
     const short = mc.getDetailedCraftingPlan('stone_pickaxe', 1, { 'pyrotech_compat:rock_metamorphic:0': 1, stick: 2 });
-    assert.match(short, /^You are missing the following items:\n- 2 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\)\n/);
+    assert.match(short, /^You are missing the following items:\n- 2 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\): break a rock pile on the ground by hand; or mine stone with a pickaxe below Sturdy\n/);
     assert.match(short, /Craft 1 pyrotech_compat:rock_metamorphic \+ 2 rock \(any of [^)]*\) \+ 2 stick -> 1 stone_pickaxe$/);
 
     // 18:07:32 !getCraftingPlan("cobblestone", 1) said "cobblestone is a base item". The rocks held most make
@@ -386,4 +386,20 @@ test('soak 18: a base item says how to get it from rotn-data\'s world rule, in i
     assert.equal(mc.getDetailedCraftingPlan('feather', 2, {}), 'feather is a base item, you need to find 2 more in the world');
     assert.equal(rdData.worldHint('feather'), null);
     assert.equal(rdData.worldHint('nosuch:item'), null);
+});
+
+// Soak 18 follow-up (lead, after #679): a missing ore label gets the world hint of its first member that has a rule.
+test('soak 18: a missing ore label ("rock (any of ...)") says how to get its first member that has a world rule; none without one', () => {
+    mc.installRotnRecipes();
+    const rockHint = 'break a rock pile on the ground by hand; or mine stone with a pickaxe below Sturdy';
+    assert.equal(rdData.worldHint('pyrotech:rock:0'), rockHint, 'the label\'s first member, pyrotech:rock:0');
+    assert.match(mc.getDetailedCraftingPlan('furnace', 1, {}), new RegExp(`^You are missing the following items:\\n- 8 rock \\(any of pyrotech:rock, pyrotech_compat:rock_\\*\\): ${rockHint}\\n`));
+    // The crude axe's slot also takes flint: the rock hint still comes from its first member.
+    assert.match(mc.getDetailedCraftingPlan('pyrotech:crude_axe', 1, { stick: 2 }), new RegExp(`\\n- 1 rock \\(any of pyrotech:rock, flint, pyrotech_compat:rock_\\*\\): ${rockHint}\\n`));
+    // One item's metas: coal ore gives coal.
+    assert.match(mc.getDetailedCraftingPlan('torch', 1, { stick: 1 }), /\n- 1 any of coal:0, coal:1: mine coal ore with a pickaxe of level 0 or better\n/);
+    // No member with a rule, no hint: iron ingots are smelted, glue is made.
+    const bucket = mc.getDetailedCraftingPlan('bucket', 1, {});
+    assert.match(bucket, /\n- 3 ingotIron \(any of iron_ingot, contenttweaker:material_part:49\)\n/);
+    assert.match(bucket, /\n- 3 glue \(any of [^)]*\)\n/);
 });

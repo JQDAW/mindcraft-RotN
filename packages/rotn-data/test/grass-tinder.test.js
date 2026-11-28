@@ -171,8 +171,8 @@ test('grass-plant-fiber: the same grass gives plant fiber (pyrotech:material:12)
     // #679 review 1: no drying time in the text the model reads (the pack's config scales the script's 6000 ticks by 0.25,
     // and weather changes it); the config line is cited, the real time is unverified.
     for (const id of ['grass-tinder', 'grass-plant-fiber']) assert.doesNotMatch(pack.worldSources.find((r) => r.id === id).summary, /minute|second|\d+ s\b|ticks/, id);
-    assert.ok(fiber.evidence.some((e) => /module\.tech\.Basic\.cfg[^"]*line 564, crude_drying_rack D:BASE_RECIPE_DURATION_MODIFIER=0\.25/.test(e)));
-    assert.ok(fiber.unverified.some((u) => u.startsWith('the real drying time')));
+    assert.ok(fiber.evidence.some((e) => /module\.tech\.Basic\.cfg[^"]*line 564 BASE_RECIPE_DURATION_MODIFIER=0\.25/.test(e)));
+    assert.ok(fiber.unverified.some((u) => u.startsWith('how often the rack\'s workerDoWork runs')));
 });
 
 // #674 review nit 3: every break rule's hint is a clean clause, and a "." ends it only before a new sentence.
@@ -199,4 +199,41 @@ test('worldHint over every break rule: a non-empty lowercase clause with no pare
     assert.equal(leadClause('Break approx. 3 leaves by hand; then more.'), 'break approx. 3 leaves by hand');
     // #679 review 3: an abbreviation before a capital still ends the clause (as documented): authors avoid it.
     assert.equal(leadClause('Break a bush, e.g. Pyrotech ones, by hand.'), 'break a bush, e.g');
+});
+
+// #679 round 2: rain on the crude drying rack undoes the drying (Pyrotech's speed rule, the pack's config).
+test('grass-plant-fiber: rain on the crude drying rack gives a negative speed, which adds the dry time back', () => {
+    const fiber = pack.worldSources.find((r) => r.id === 'grass-plant-fiber');
+    // #684 review 1: a roof does not help (INDIRECT_RAIN whenever it rains in a rain biome), nor does a humid biome.
+    assert.match(fiber.summary, /on a crude drying rack, but it dries only while it is not raining \(any rain, even with the rack under a roof, undoes the drying\), and never in a very humid biome such as jungle or swamp\. 2 plant fiber and 1 timber/);
+    assert.doesNotMatch(fiber.summary, /slows|keep it out of the rain/);
+    const ev = fiber.evidence.find((e) => e.startsWith('Drying time and rain:'));
+    assert.ok(ev?.includes('fixtures/drying-rack-3.3.4/drying-rack.javap.txt'));
+    const fx = read('drying-rack-3.3.4/drying-rack.javap.txt');
+    assert.match(fx, /pyrotech-1\.12\.2-1\.5\.25\.jar +2b28dd9274ca66e4d981547c4cce36bc081b2bc925d694dda4249f412cdbf36a/);
+    assert.match(fx, /module\.tech\.Basic\.cfg +98acfc46cba31164461b4c98cc71c8dff486178223d348eed9212c5b777aafb2/);
+    // The config lines the evidence cites.
+    for (const [line, text] of [[558, 'crude_drying_rack {'], [564, 'D:BASE_RECIPE_DURATION_MODIFIER=0.25'], [570, 'D:SPEED_MODIFIER=1.1'], [600, 'D:DIRECT_RAIN=-3.0'], [613, 'D:INDIRECT_RAIN=-0.50']]) {
+        assert.ok(fx.split('\n').some((l) => l.startsWith(`${line}: `) && l.trim().endsWith(text)), `${line}: ${text}`);
+        assert.ok(ev.includes(`line ${line}`) || line === 558, `evidence cites line ${line}`);
+    }
+    const section = (title) => { const i = fx.indexOf(`## ${title}`); assert.ok(i >= 0, title); const j = fx.indexOf('\n## ', i + 1); return fx.slice(i, j < 0 ? undefined : j); };
+    // updateSpeed: rain on the block above (biome can rain) -> DIRECT_RAIN as the base, then x the rack's speed modifier.
+    const speed = section('com.codetaylor.mc.pyrotech.modules.tech.basic.tile.spi.TileDryingRackBase: updateSpeed');
+    assert.match(speed, /Biome\.func_76738_d:\(\)Z\n\s+16: istore_2[^]*87: iload_2\n\s+88: ifeq +117[^]*BlockPos\.func_177984_a[^\n]*\n[^\n]*World\.func_175727_C:[^\n]*\n\s+105: ifeq +117\n[^\n]*\n[^\n]*DIRECT_RAIN:D\n\s+112: dstore +4\n\s+114: goto +271/);
+    // Otherwise INDIRECT_RAIN: the biome can rain and it is raining (no position test), or the biome is humid.
+    assert.match(speed, /117: iload_2\n\s+118: ifeq +131\n(?:[^\n]*\n){2}[^\n]*World\.func_72896_J:\(\)Z\n\s+128: ifne +138\n[^\n]*\n[^\n]*Biome\.func_76736_e:\(\)Z\n\s+135: ifeq +147\n[^\n]*\n[^\n]*INDIRECT_RAIN:D/);
+    // DAYTIME only when it is not raining.
+    assert.match(speed, /World\.func_72896_J:\(\)Z\n\s+325: ifne +390[^]*DAYTIME:D\n\s+387: dadd/);
+    assert.match(ev, /INDIRECT_RAIN \(-0\.50\) when the biome can rain and it is raining, even with the rack under a roof, or whenever the biome has high humidity/);
+    assert.match(speed, /390: dload +4\n[^\n]*\n[^\n]*getMultiplicativeSpeedModifier:\(\)F\n[^\n]*f2d\n[^\n]*dmul\n[^\n]*d2f\n[^\n]*freturn/);
+    // workerDoWork: partialTicks += speed; dryTimeRemaining -= floor(partialTicks), clamped to [0, dryTimeTotal].
+    const work = section('com.codetaylor.mc.pyrotech.modules.tech.basic.tile.spi.TileDryingRackBase: workerDoWork');
+    assert.match(work, /TileDataFloat\.get:\(\)F\n\s+78: fadd\n\s+79: fastore[^]*Math\.floor:\(D\)D[^]*dryTimeRemaining:\[I\n[^\n]*\n[^\n]*dup2\n[^\n]*iaload\n[^\n]*i2d\n[^\n]*dload +4\n[^\n]*dsub\n[^\n]*d2i\n[^\n]*iastore/);
+    assert.match(work, /Math\.max:\(II\)I[^]*dryTimeTotal:\[I[^]*Math\.min:\(II\)I/);
+    // The crude rack: SPEED_MODIFIER; its biome map is an empty static HashMap.
+    const crude = section('com.codetaylor.mc.pyrotech.modules.tech.basic.tile.TileDryingRackCrude');
+    assert.match(crude, /CRUDE_DRYING_RACK:[^\n]*\n[^\n]*CrudeDryingRack\.SPEED_MODIFIER:D/);
+    assert.match(crude, /CrudeDryingRack\.BIOME_MODIFIERS:Ljava\/util\/Map;\n[^\n]*areturn/);
+    assert.match(section('com.codetaylor.mc.pyrotech.modules.tech.basic.ModuleTechBasicConfig$CrudeDryingRack'), /new +#\d+ +\/\/ class java\/util\/HashMap\n[^\n]*dup\n[^\n]*HashMap\."<init>":\(\)V\n[^\n]*putstatic[^\n]*BIOME_MODIFIERS/);
 });
