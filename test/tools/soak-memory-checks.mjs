@@ -287,13 +287,15 @@ export function executedCommands(lines) {
 /** The facts text split into its lines. */
 export function factsFields(text) {
     const parts = String(text).split(' / ');
-    const f = { agenda: null, reserves: null, failures: [], deaths: null, places: null, collects: null };
+    const f = { agenda: null, reserves: null, failures: [], decisions: null, deaths: null, places: null, collects: null };
     let inFailures = false;
     for (const p of parts) {
         if (/^Your notes /.test(p)) break; // the notes are the model's words: not checked
         if (/^Agenda: /.test(p)) { f.agenda = p; inFailures = false; continue; }
         if (/^Reserves: /.test(p)) { f.reserves = p; inFailures = false; continue; }
         if (/^Recent failures/.test(p)) { inFailures = true; continue; }
+        // S18a (#680): the model's own decisions, after the failures: not a failure line, and not checked (its words).
+        if (/^Your decisions: /.test(p)) { f.decisions = p; inFailures = false; continue; }
         if (/^Deaths: /.test(p)) { f.deaths = p; inFailures = false; continue; }
         if (/^Places: /.test(p)) { f.places = p; inFailures = false; continue; }
         if (/^Collects: /.test(p)) { f.collects = p; inFailures = false; continue; }
