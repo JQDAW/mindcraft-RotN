@@ -263,6 +263,11 @@ test('#660 nits: teleport does not move a bot already in a GoalNear\'s range; a 
     // Already on an end cell: no move.
     await b.bot.pathfinder.goto(new goals.GoalGetToBlock(0, 64, 5));
     assert.equal(b.bot.entity.position.toString(), '(1.5, 64, 5.5)');
+    // #681 review 2: a block overhead (0, 66, 0): the end cell two below it (feet at 64, the head right under it), nearer
+    // the bot than the one on top of it.
+    const o = fakeWorld({ pathfinder: 'teleport', at: V(10, 64, 0), set: { '0,66,0': 'log' } });
+    await o.bot.pathfinder.goto(new goals.GoalGetToBlock(0, 66, 0));
+    assert.equal(o.bot.entity.position.toString(), '(0.5, 64, 0.5)');
 });
 
 test('pocketUnderRock (soak 15): 8 below the ground under dirt over metamorphic stone; the pickaxe in the off hand is out of reach', async (t) => {
