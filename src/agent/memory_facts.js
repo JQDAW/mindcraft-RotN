@@ -31,6 +31,12 @@ export const MEMORY_FACTS = {
     // failuresChars in all (not a count: three newer search misses pushed the ewe out of a 3-entry list).
     failuresStored: 12, failuresChars: 600, failureHoldMs: 5 * 60_000,
     failureWhyMax: 100, failureCmdMax: 60, failureLineMax: 120, // #637 review 2: a line each
+    // Soak 18 B (dl:2154: five failures 1-3 min old filled the 600 chars; the sword craft and the tinder collect, 36 min
+    // old, were stored but not shown): a failure past failureHoldMs gets a why of shortWhyMax; at most stickyMax sticky
+    // failures (their target named in the goal, returned to, or decided on) are placed first. touches: the targets of
+    // the commands sent (queries too), touchesKept for touchMs. decisions: the model's own "X can wait" words.
+    shortWhyMax: 40, stickyMax: 2, touchesKept: 12, touchMs: 15 * 60_000,
+    decisionsKept: 2, decisionMs: 60 * 60_000, decisionWordsMax: 60,
     deathsShown: 2,
     collectsKept: 4, collectsMs: 30 * 60_000,
     placesMax: 4,
@@ -58,7 +64,7 @@ export function bearing(from, to) {
 
 /** The fact records the memory keeps (saved with the history): failures, deaths, collects. */
 export function emptyFacts() {
-    return { failures: [], deaths: [], collects: [], deathCount: 0 };
+    return { failures: [], deaths: [], collects: [], deathCount: 0, touches: [], decisions: [] };
 }
 
 /**
@@ -69,6 +75,8 @@ export function recordFailure(facts, { cmd, why, code = null, pos = null, at: wh
     if (!facts || !cmd) return;
     const entry = { cmd: clip(String(cmd).trim(), MEMORY_FACTS.failureCmdMax), why: clip(String(why ?? 'no reason given').trim(), MEMORY_FACTS.failureWhyMax), at: when };
     if (code) entry.code = String(code);
+    const target = commandTarget(entry.cmd);
+    if (target) entry.target = target;
     if (isPos(pos)) entry.pos = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
     // Round 17 K (the lead): the same command with the same code within failureHoldMs updates its entry (the time, the
     // why, the place, a count) instead of adding one, so a repeated miss does not push the others out. A failure with no
@@ -79,6 +87,61 @@ export function recordFailure(facts, { cmd, why, code = null, pos = null, at: wh
     if (i >= 0) entry.count = (list[i].count ?? 1) + 1;
     const rest = i >= 0 ? [...list.slice(0, i), ...list.slice(i + 1)] : list;
     facts.failures = [...rest, entry].slice(-MEMORY_FACTS.failuresStored);
+}
+
+/** Soak 18 B: a name as the facts compare it: no minecraft:, no :meta, lower case. */
+const plainTarget = (n) => String(n ?? '').trim().toLowerCase().replace(/^minecraft:/, '').replace(/:\d+$/, '');
+/** Soak 18 B: a command's target, its first quoted argument ('!craftRecipe("stone_sword", 1)' -> 'stone_sword'), or null. */
+export function commandTarget(cmd) {
+    const m = /^![A-Za-z]+\(\s*"([^"]+)"/.exec(String(cmd ?? ''));
+    return m ? plainTarget(m[1]) : null;
+}
+
+/** Soak 18 B: a command the model sent (an action or a query), by its target: the model came back to it. */
+export function recordTouch(facts, cmd, at = Date.now()) {
+    if (!facts) return;
+    const target = commandTarget(cmd);
+    if (!target) return;
+    facts.touches = [...(facts.touches ?? []), { target, at }].slice(-MEMORY_FACTS.touchesKept);
+}
+
+/** The words of a subject for matching ('a stone sword' -> stone, sword; 'stone_sword' -> stone, sword). */
+const STOP = new Set(['a', 'an', 'the', 'my', 'so', 'but', 'and', 'then', 'i', 'it', 'that', 'this', 'now', 'for', 'more', 'any']);
+const words = (t) => String(t ?? '').toLowerCase().replace(/^minecraft:/, '').replace(/^[a-z0-9_]+:/, '').split(/[^a-z0-9]+/).filter(w => w && !STOP.has(w));
+/** Whether every word of the decision's subject is a word of the item ('sword' and 'stone sword' both match stone_sword). */
+const subjectMatches = (subject, item) => { const s = words(subject), i = new Set(words(item)); return s.length > 0 && s.every(w => i.has(w)); };
+
+/**
+ * Soak 18 B: the model's own decision to leave something, from its reply (dl:2237 "drop the sword hunt", dl:2672 "a stone
+ * sword can wait", dl:2954 "sword can wait until tinder shows up"; round 5 came 27 s after the last). Only these
+ * phrases: "<X> can wait", "<X> is optional", "drop the <X> hunt|chase|plan". The last decisionsKept, for decisionMs.
+ */
+export function recordDecision(facts, text, at = Date.now()) {
+    if (!facts || typeof text !== 'string') return;
+    const said = text.split(/!\w+\(/)[0]; // the words before a command
+    const found = [];
+    for (const m of said.matchAll(/([\w:]+(?:[ \t]+[\w:]+){0,3})[ \t]+(can wait|is optional)\b/gi)) found.push({ subject: m[1], words: `${m[1]} ${m[2]}` });
+    for (const m of said.matchAll(/\bdrop (?:the |my )?([\w:]+(?:[ \t]+[\w:]+){0,2}?)[ \t]+(hunt|chase|plan)\b/gi)) found.push({ subject: m[1], words: m[0] });
+    for (const f of found) {
+        const subject = words(f.subject).join(' ');
+        if (!subject || subject.length > 30) continue;
+        // The model's own words, from the subject on ("so a stone sword can wait" -> "a stone sword can wait").
+        const said = f.words.trim().replace(/^(?:(?:so|but|and|then|now)\s+)+/i, '');
+        const entry = { subject, words: clip(said, MEMORY_FACTS.decisionWordsMax), at };
+        facts.decisions = [...(facts.decisions ?? []).filter(d => d.subject !== subject), entry].slice(-MEMORY_FACTS.decisionsKept);
+    }
+}
+
+/** Soak 18 A/B: the model's own words for a decision about `item` in the last decisionMs, else null. */
+export function decidedOn(facts, item, now = Date.now()) {
+    const d = (facts?.decisions ?? []).slice().reverse().find(e => now - e.at < MEMORY_FACTS.decisionMs && subjectMatches(e.subject, item));
+    return d ? d.words : null;
+}
+
+function decisionsLine(facts, now) {
+    const d = (facts?.decisions ?? []).filter(e => now - e.at < MEMORY_FACTS.decisionMs);
+    if (!d.length) return null;
+    return `Your decisions: ${d.slice().reverse().map(e => `'${e.words}' (${ago(now - e.at)})`).join('; ')}`;
 }
 
 /** The action manager's marker for a skill that threw (action_manager.js), followed by "Error: <message>" and frames. */
@@ -206,27 +269,39 @@ function reservesLine(bot) {
 }
 
 /** #637 review 2: a heading and one line per failure (newest first), each at most failureLineMax chars, the why first. */
-function failureLines(facts, here, now) {
+function failureLines(facts, here, now, goal = null) {
     const f = facts?.failures ?? [];
     if (!f.length) return [];
     // #650 review (the lead): the why is clipped, never the "(N min ago at ...)" suffix: the model keeps the time.
+    // Soak 18 B: a failure past failureHoldMs gets a short why (shortWhyMax), so more of them fit.
     const line = (e) => {
         const suffix = ` (${ago(now - e.at)}${e.pos ? ` at ${at(e.pos)}${here ? `, ${bearing(here, e.pos)}` : ''}` : ''})`;
         const head = `${e.cmd}${e.count > 1 ? ` x${e.count}` : ''}: `; // round 17 K: a repeat within 5 min
         // #652 nit: at least 10 chars of why, so with a long command and place the line may pass failureLineMax a little.
         const room = Math.max(10, MEMORY_FACTS.failureLineMax - head.length - suffix.length);
-        return `${head}${clip(e.why, room)}${suffix}`;
+        const max = now - e.at >= MEMORY_FACTS.failureHoldMs ? Math.min(room, MEMORY_FACTS.shortWhyMax) : room;
+        return `${head}${clip(e.why, max)}${suffix}`;
     };
-    // Soak 17 S7: the failures still in their leave-alone window first (newest first), then older ones, within
-    // failuresChars; shown newest first.
+    // Soak 18 B: sticky: its target is named in the goal text, the model came back to it (another stored failure on
+    // it, or a command naming it after the failure, within touchMs), or the model decided on it.
+    const goalWords = new Set(words(goal));
+    const targetOf = (e) => e.target ?? commandTarget(e.cmd);
+    const inGoal = (t) => { const w = words(t); return w.length > 0 && w.every(x => goalWords.has(x)); };
+    const returned = (e, t) => f.some(o => o !== e && targetOf(o) === t)
+        || (facts?.touches ?? []).some(x => x.target === t && x.at > e.at && now - x.at < MEMORY_FACTS.touchMs);
+    const sticky = (e) => { const t = targetOf(e); return !!t && (inGoal(t) || returned(e, t) || !!decidedOn(facts, t, now)); };
     const newest = f.slice().reverse();
-    const held = newest.filter(e => now - e.at < MEMORY_FACTS.failureHoldMs);
-    const older = newest.filter(e => now - e.at >= MEMORY_FACTS.failureHoldMs);
+    // Only an older one takes a sticky place: the ones under failureHoldMs come first anyway.
+    const pinned = newest.filter(e => now - e.at >= MEMORY_FACTS.failureHoldMs && sticky(e)).slice(0, MEMORY_FACTS.stickyMax);
+    // Soak 17 S7: the failures still in their leave-alone window first (newest first), then older ones, within
+    // failuresChars; shown newest first. Soak 18 B: the sticky ones before them.
+    const held = newest.filter(e => !pinned.includes(e) && now - e.at < MEMORY_FACTS.failureHoldMs);
+    const older = newest.filter(e => !pinned.includes(e) && now - e.at >= MEMORY_FACTS.failureHoldMs);
     const chosen = new Set();
     let chars = 0;
-    for (const e of [...held, ...older]) {
+    for (const e of [...pinned, ...held, ...older]) {
         const n = line(e).length + 1;
-        if (chosen.size && chars + n > MEMORY_FACTS.failuresChars) continue;
+        if (chosen.size && chars + n > MEMORY_FACTS.failuresChars && !pinned.includes(e)) continue;
         chosen.add(e);
         chars += n;
     }
@@ -282,7 +357,10 @@ export function buildMemory(agent, { facts = null, notes = '', now = Date.now() 
     const add = (l) => { if (l) lines.push(clip(l, MEMORY_FACTS.lineMax)); };
     try { add(agendaLine(agent)); } catch { /* no agenda line */ }
     try { if (bot?.inventory) add(reservesLine(bot)); } catch { /* no reserves line */ }
-    for (const l of failureLines(facts, here, now)) add(l);
+    let goal = null;
+    try { goal = agent?.self_prompter?.prompt ?? null; } catch { goal = null; }
+    for (const l of failureLines(facts, here, now, goal)) add(l);
+    add(decisionsLine(facts, now));
     add(deathsLine(facts, here, now));
     try { add(placesLine(agent, here)); } catch { /* no places line */ }
     add(collectsLine(facts, here, now));
