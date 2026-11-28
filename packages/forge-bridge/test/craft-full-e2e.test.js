@@ -1,4 +1,4 @@
-// Soak 18 (/home/rv/s18-craft-result-netforge.md): a 2x2 craft of 4 rhyolite rocks into a cobblestone with the
+// Soak 18 (test/evidence/g4/g4soak-18-20261127/driver.log, lines 2143-2147 and 2311-2352): a 2x2 craft of 4 rhyolite rocks into a cobblestone with the
 // inventory full. The rock stack (5) was not used up, so no slot was free for the result: mineflayer's putAway
 // threw it on the ground (a slot -999 click; the server drops the cursor at the bot's feet, and a full inventory
 // cannot pick it up), and bot.craft resolved as if it had worked. patches/mineflayer now emits cursorTossed
@@ -28,7 +28,7 @@ after(() => { restoreLog?.(); return stopCraftWorld(world ?? {}); });
 // pack's (StackUp, rotn-data's dump): dirt, cobblestone, logs and planks 128.
 const full = (stacks) => Object.fromEntries(Array.from({ length: 36 }, (_, i) => 9 + i).map(s => [s, stacks[s] ?? { name: DIRT, count: 128 }]));
 
-test('soak 18: a craft result with no room in the inventory is thrown on the ground, and a line says so; with room, no line', { timeout: 90000 }, async () => {
+test('soak 18: a craft result with no room in the inventory is thrown on the ground, and a line says so; with room, no line', { timeout: 90000 }, async (t) => {
     const lines = [];
     world = await startRotnWorld({
         itemNames: [ROCK, COBBLE, DIRT, LOG, PLANKS],
@@ -39,6 +39,7 @@ test('soak 18: a craft result with no room in the inventory is thrown on the gro
     const realLog = console.log;
     console.log = (...a) => { if (typeof a[0] === 'string' && a[0].startsWith('[forge-bridge] craft result')) lines.push(a[0]); realLog(...a); };
     restoreLog = () => { console.log = realLog; };
+    t.after(() => restoreLog()); // #682 review 4: restored when this test ends, pass or fail (the file's after() too)
     const { bot, ids } = world;
     const c = world.containers();
     const st = c.state;
