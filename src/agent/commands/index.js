@@ -4,7 +4,7 @@ import { canonicalName } from "../library/rotn_names.js";
 import { actionsList } from './actions.js';
 import settings from '../settings.js';
 import { queryList } from './queries.js';
-import { memoryMode, recordFailure, failureWhy, looksFailed } from '../memory_facts.js';
+import { memoryMode, recordFailure, failureWhy, looksFailed, recordTouch } from '../memory_facts.js';
 import { checkCanRun } from './preconditions.js';
 import { resultLine } from '../library/results.js';
 
@@ -252,6 +252,8 @@ export async function executeCommand(agent, message, context = {}) {
                 const args = (parsed.args ?? []).map(a => (typeof a === 'string' ? JSON.stringify(a) : String(a))).join(', ');
                 return `${command.name}${args ? `(${args})` : ''}`;
             };
+            // Soak 18 B: every command's target (queries too): the facts see what the model keeps coming back to.
+            try { recordTouch(agent.history?.facts, cmdText()); } catch { /* no touch */ }
             const record = (why, code = null) => {
                 try {
                     recordFailure(agent.history?.facts, { cmd: cmdText(), why, code, pos: agent.bot?.entity?.position ?? null });
