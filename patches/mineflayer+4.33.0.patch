@@ -38,10 +38,10 @@ index f128f71..0f3af20 100644
      // explosion
      const p = new Vec3(packet.x, packet.y, packet.z)
 diff --git a/node_modules/mineflayer/lib/plugins/craft.js b/node_modules/mineflayer/lib/plugins/craft.js
-index a5fe563..a09ceed 100644
+index a5fe563..6cc11d4 100644
 --- a/node_modules/mineflayer/lib/plugins/craft.js
 +++ b/node_modules/mineflayer/lib/plugins/craft.js
-@@ -131,14 +131,54 @@
+@@ -131,14 +131,56 @@
  
        async function grabResult () {
          assert.strictEqual(window.selectedItem, null)
@@ -80,6 +80,8 @@ index a5fe563..a09ceed 100644
 +        } finally {
 +          bot.removeListener('cursorTossed', onToss)
 +        }
++        // Emitted synchronously, before craft() resolves: a listener that throws makes bot.craft reject after the
++        // result was already thrown. Listeners catch their own errors.
 +        if (thrown > 0) bot.emit('craftResultDropped', { windowId: window.id, windowType: window.type, ...made, thrown, position: bot.entity.position.floored() })
          await updateOutShape()
        }
@@ -163,7 +165,7 @@ index 666b0b3..71b7baa 100644
      const entity = fetchEntity(packet.entityId)
      if (!entity.attributes) entity.attributes = {}
 diff --git a/node_modules/mineflayer/lib/plugins/inventory.js b/node_modules/mineflayer/lib/plugins/inventory.js
-index 70db312..5f3c59d 100644
+index 70db312..1458b21 100644
 --- a/node_modules/mineflayer/lib/plugins/inventory.js
 +++ b/node_modules/mineflayer/lib/plugins/inventory.js
 @@ -1,12 +1,13 @@
@@ -215,16 +217,18 @@ index 70db312..5f3c59d 100644
        })
      }
    }
-@@ -178,6 +189,8 @@
+@@ -178,6 +189,10 @@
  
      async function tossLeftover () {
        if (window.selectedItem) {
-+        // mindcraft-rotn (soak 18): what finds no room is thrown on the ground (craft.js names a thrown craft result)
-+        bot.emit('cursorTossed', { windowId: window.id, item: window.selectedItem })
++        // mindcraft-rotn (soak 18): what finds no room is thrown on the ground (craft.js names a thrown craft result).
++        // item is a copy of the cursor's stack (the part thrown): the -999 click below clears the live one.
++        const tossed = window.selectedItem
++        bot.emit('cursorTossed', { windowId: window.id, item: new Item(tossed.type, tossed.count, tossed.metadata, tossed.nbt) })
          await clickWindow(-999, 0, 0)
        }
      }
-@@ -536,15 +549,67 @@
+@@ -536,15 +551,67 @@
      return changedSlots
    }
  
