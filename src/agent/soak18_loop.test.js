@@ -235,3 +235,71 @@ test('S18a B: history.add records the bot\'s own decisions, not a system or play
     await executeCommand(agent, '!getCraftingPlan("stone_sword", 1)');
     assert.deepEqual(agent.history.facts.touches.map(x => x.target), ['stone_sword']);
 });
+
+// ---- #680 review round 1 ----
+test('#680 review 1: an empty cobblestone collect is no dead end for the stone axe (rocks come from piles and stone: dl:2154 "no cobblestone within 64")', (t) => {
+    quiet(t);
+    const w = fakeWorld({ slots: { 36: ['spartanweaponry:club_wood', 1], 10: ['stick', 4], 38: ['stone_pickaxe', 1], 39: ['stone_pickaxe', 1] } });
+    useRegistry(t, w.bot);
+    const now = Date.now();
+    w.bot.rotnCollects = [{ item: 'cobblestone', got: 0, wanted: 8, reason: 'none', range: 64, from: new Vec3(0, 64, 0), at: now - 3 * MIN }];
+    assert.equal(craftDeadEnd(w.bot, 'stone_axe', now), null);
+    assert.match(goalFor(w.bot), /make a stone axe when you can/);
+});
+
+test('#680 review 1: the newest collect of an item decides (a later one that got some clears the dead end); beyond its range from its start it is no dead end', (t) => {
+    quiet(t);
+    const w = fakeWorld({ at: new Vec3(0, 64, 0), slots: { 36: ['spartanweaponry:club_wood', 1], 10: ['stick', 4], 38: ['stone_pickaxe', 1], 39: ['stone_pickaxe', 1] } });
+    useRegistry(t, w.bot);
+    const now = Date.now();
+    const miss = { item: 'pyrotech:rock', got: 0, wanted: 3, reason: 'none', range: 64, from: new Vec3(10, 64, 0), at: now - 12 * MIN };
+    w.bot.rotnCollects = [miss];
+    assert.equal(craftDeadEnd(w.bot, 'stone_axe', now)?.item, 'pyrotech:rock', 'within 64 of where that collect started');
+    w.bot.rotnCollects = [miss, { item: 'pyrotech:rock', got: 2, wanted: 3, reason: 'attempts', range: 64, from: new Vec3(10, 64, 0), at: now - 2 * MIN }];
+    assert.equal(craftDeadEnd(w.bot, 'stone_axe', now), null, 'a later collect got some');
+    w.bot.rotnCollects = [{ ...miss, from: new Vec3(100, 64, 0) }];
+    assert.equal(craftDeadEnd(w.bot, 'stone_axe', now), null, 'the bot is 100 blocks from where it searched 64');
+});
+
+test('#680 review 2: a failure over 60 min old is never sticky; the "another failure on it" rule holds only within 15 min', () => {
+    const t0 = Date.now();
+    const here = { entity: { position: new Vec3(-142, 66, -136) } };
+    const shownWith = (age) => {
+        const facts = emptyFacts();
+        dl2154Distinct(facts, t0);
+        facts.failures.find(e => /stone_sword/.test(e.cmd)).at = t0 - age * MIN;
+        facts.failures.find(e => /tinder/.test(e.cmd)).at = t0 - (age - 1) * MIN;
+        facts.failures.sort((x, y) => x.at - y.at);
+        return failuresOf(buildMemory({ bot: here, self_prompter: { prompt: OLD_GOAL } }, { facts, now: t0 }));
+    };
+    assert.ok(shownWith(59).some(l => /stone_sword/.test(l)), 'sticky by the goal at 59 min');
+    assert.ok(!shownWith(61).some(l => /stone_sword/.test(l)), 'not at 61 min');
+    // Two failures on one target: sticky only while the newer one is under 15 min old.
+    const repeat = (newerMin) => {
+        const facts = emptyFacts();
+        dl2154Distinct(facts, t0);
+        facts.failures = facts.failures.filter(e => !/stone_sword|tinder/.test(e.cmd));
+        recordFailure(facts, { cmd: '!collectBlocks("deadbush", 4)', why: 'Collected 0 deadbush.', at: t0 - 40 * MIN });
+        recordFailure(facts, { cmd: '!collectBlocks("deadbush", 2)', why: 'Collected 0 deadbush, still none here.', at: t0 - newerMin * MIN });
+        facts.failures.sort((x, y) => x.at - y.at);
+        return failuresOf(buildMemory({ bot: here }, { facts, now: t0 })).filter(l => /deadbush", 4/.test(l)).length;
+    };
+    assert.equal(repeat(10), 1, 'came back 10 min ago: sticky');
+    assert.equal(repeat(20), 0, 'came back 20 min ago: not');
+});
+
+test('#680 review 5: a decision is never taken from an untrusted turn', async (t) => {
+    quiet(t);
+    const { History } = await import('./history.js');
+    const h = Object.create(History.prototype);
+    Object.assign(h, { name: 'FRCFLD', turns: [], max_messages: 999, summary_chunk_size: 5, facts: emptyFacts() });
+    await h.add('FRCFLD', 'the stone axe can wait', { untrusted: true });
+    assert.deepEqual(h.facts.decisions, []);
+});
+
+test('#680 review 6: an unknown pickaxe count or weapon is never called enough ("null pickaxes")', () => {
+    assert.equal(toolsClause({ weaponRank: () => 4, pickaxeCount: () => null }), 'keep a weapon and a pickaxe: keep them, and replace one that breaks');
+    assert.equal(toolsClause({ weaponRank: () => null, pickaxeCount: () => 2 }), 'keep a weapon and a pickaxe: keep them, and replace one that breaks');
+    assert.match(toolsClause({ weaponRank: () => null, pickaxeCount: () => 1 }), /a spare stone pickaxe/, 'a known deficit is still said');
+    assert.doesNotMatch(toolsClause({ weaponRank: () => 4, pickaxeCount: () => null, bestWeapon: () => 'stone_axe' }), /null/);
+});

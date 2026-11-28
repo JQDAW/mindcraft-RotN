@@ -196,7 +196,8 @@ export class History {
         }
         this.turns.push(untrusted ? { role, content, untrusted: true } : { role, content });
         // Soak 18 B: the bot's own "X can wait" decisions, for the facts (memory_facts.recordDecision).
-        if (role === 'assistant') { try { recordDecision(this.facts, content); } catch { /* no decision */ } }
+        // #680 review 5: never from an untrusted turn.
+        if (role === 'assistant' && !untrusted) { try { recordDecision(this.facts, content); } catch { /* no decision */ } }
 
         if (this.turns.length >= this.max_messages) {
             let chunk = this.turns.splice(0, this.summary_chunk_size);

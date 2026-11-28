@@ -36,6 +36,7 @@ export const MEMORY_FACTS = {
     // failures (their target named in the goal, returned to, or decided on) are placed first. touches: the targets of
     // the commands sent (queries too), touchesKept for touchMs. decisions: the model's own "X can wait" words.
     shortWhyMax: 40, stickyMax: 2, touchesKept: 12, touchMs: 15 * 60_000,
+    stickyAgeMs: 60 * 60_000, // #680 review 2: a failure older than this is never sticky
     decisionsKept: 2, decisionMs: 60 * 60_000, decisionWordsMax: 60,
     deathsShown: 2,
     collectsKept: 4, collectsMs: 30 * 60_000,
@@ -287,12 +288,13 @@ function failureLines(facts, here, now, goal = null) {
     const goalWords = new Set(words(goal));
     const targetOf = (e) => e.target ?? commandTarget(e.cmd);
     const inGoal = (t) => { const w = words(t); return w.length > 0 && w.every(x => goalWords.has(x)); };
-    const returned = (e, t) => f.some(o => o !== e && targetOf(o) === t)
+    // #680 review 2: the "another failure on it" rule within touchMs too (the model came back to it recently).
+    const returned = (e, t) => f.some(o => o !== e && targetOf(o) === t && o.at > e.at && now - o.at < MEMORY_FACTS.touchMs)
         || (facts?.touches ?? []).some(x => x.target === t && x.at > e.at && now - x.at < MEMORY_FACTS.touchMs);
     const sticky = (e) => { const t = targetOf(e); return !!t && (inGoal(t) || returned(e, t) || !!decidedOn(facts, t, now)); };
     const newest = f.slice().reverse();
     // Only an older one takes a sticky place: the ones under failureHoldMs come first anyway.
-    const pinned = newest.filter(e => now - e.at >= MEMORY_FACTS.failureHoldMs && sticky(e)).slice(0, MEMORY_FACTS.stickyMax);
+    const pinned = newest.filter(e => now - e.at >= MEMORY_FACTS.failureHoldMs && now - e.at < MEMORY_FACTS.stickyAgeMs && sticky(e)).slice(0, MEMORY_FACTS.stickyMax);
     // Soak 17 S7: the failures still in their leave-alone window first (newest first), then older ones, within
     // failuresChars; shown newest first. Soak 18 B: the sticky ones before them.
     const held = newest.filter(e => !pinned.includes(e) && now - e.at < MEMORY_FACTS.failureHoldMs);

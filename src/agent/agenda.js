@@ -289,6 +289,8 @@ export function toolsClause(state, now = Date.now()) {
     if (rank !== null && rank < TOOLS_GOAL.stoneAxeRank) parts.push(suggest('stone_axe'));
     if (picks !== null && picks < TOOLS_GOAL.pickaxesWanted) parts.push(suggest(picks > 0 ? 'spare_pickaxe' : 'stone_pickaxe'));
     if (parts.length) return `${TOOLS_GOAL.head}${parts.join(', and ')}`;
+    // #680 review 6: what is not known is never called enough ("null pickaxes", an unknown weapon).
+    if (rank === null || picks === null) return `${TOOLS_GOAL.head}keep them, and replace one that breaks`;
     const weapon = best ? `your weapon (${best})` : 'your weapon';
     return `${TOOLS_GOAL.head}${weapon} and ${picks} pickaxes are enough: keep them, and replace one that breaks`;
 }

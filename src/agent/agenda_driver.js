@@ -88,31 +88,30 @@ export const DEAD_END = { ms: 30 * 60_000 };
 const plainName = (n) => String(n ?? '').replace(/^minecraft:/, '').replace(/ \(any [^)]*\)$/, '').replace(/:\d+$/, '');
 
 /**
- * Soak 18 A: an input of `item`'s craft (two levels down) that the bot lacks and a collect found none of in the last
- * DEAD_END.ms (bot.rotnCollects: got 0, reason 'none'): {item, range, at}, else null. The sword's handle needed twine
- * from tinder, and the bot's tinder collect found none within 64 (dl:1294).
+ * Soak 18 A: the input `item`'s craft lacks (its own missing input, the one level only: #680 review 1, a cobblestone
+ * miss is no dead end for the rocks that both stone tools need) that a collect found none of: {item, range, at}, else
+ * null. Per item the newest collect decides (a later one that got some clears it), within DEAD_END.ms, and only while
+ * the bot is within that collect's range of where it started (c.from): beyond it, the search there said nothing. The
+ * sword's handle needed twine from tinder, and the bot's tinder collect found none within 64 (dl:1294).
  */
 export function craftDeadEnd(bot, item, now = Date.now()) {
-    const empty = (bot?.rotnCollects ?? []).filter(c => c && c.got === 0 && c.reason === 'none' && now - c.at < DEAD_END.ms);
-    if (!empty.length) return null;
-    const hit = (names) => {
-        const want = new Set(names.filter(Boolean).map(plainName));
-        const c = empty.slice().reverse().find(e => want.has(plainName(e.item)));
-        return c ? { item: c.item, range: c.range ?? null, at: c.at } : null;
+    const collects = (bot?.rotnCollects ?? []).filter(c => c && c.item && Number.isFinite(c.at));
+    if (!collects.some(c => c.got === 0 && c.reason === 'none')) return null;
+    const here = bot?.entity?.position ?? null;
+    const deadFor = (name) => {
+        const want = plainName(name);
+        const c = collects.filter(e => plainName(e.item) === want).sort((a, b) => a.at - b.at).at(-1);
+        if (!c || c.got !== 0 || c.reason !== 'none' || now - c.at >= DEAD_END.ms) return null;
+        const range = Number.isFinite(c.range) ? c.range : 64;
+        if (c.from && here && typeof here.distanceTo === 'function' && here.distanceTo(c.from) > range) return null;
+        return { item: c.item, range: c.range ?? null, at: c.at };
     };
-    const missing = (name) => {
-        let needs = null;
-        try { needs = craftNeeds(bot, name); } catch { needs = null; }
-        return needs && !needs.ready ? needs.inputs.filter(i => i.short > 0) : [];
-    };
-    for (const i of missing(item)) {
-        const names = [i.more, i.label, ...(i.kinds ?? []).map(k => k.name)];
-        const h = hit(names);
-        if (h) return h;
-        for (const j of missing(plainName(i.more ?? i.label))) {
-            const h2 = hit([j.more, j.label, ...(j.kinds ?? []).map(k => k.name)]);
-            if (h2) return h2;
-        }
+    let needs = null;
+    try { needs = craftNeeds(bot, item); } catch { needs = null; }
+    if (!needs || needs.ready) return null;
+    for (const i of needs.inputs.filter(i => i.short > 0)) {
+        const d = i.more ? deadFor(i.more) : null; // what to get for it ("pyrotech:rock (any rock)" -> pyrotech:rock)
+        if (d) return d;
     }
     return null;
 }
@@ -206,10 +205,9 @@ export function agendaGoal(agenda, step, state = null) {
  */
 export function freshGoalText(agent, prompt) {
     if (typeof prompt !== 'string' || !prompt.startsWith(STANDING_GOAL_PREFIX) || !agent?.bot) return prompt;
-    let held;
-    try { held = heldFoodPoints(agent.bot); } catch { return prompt; }
-    if (!Number.isFinite(held)) return prompt;
-    let next = prompt.replace(/\(you hold [0-9.]+\)/, `(you hold ${held})`);
+    let held = null;
+    try { held = heldFoodPoints(agent.bot); } catch { held = null; }
+    let next = Number.isFinite(held) ? prompt.replace(/\(you hold [0-9.]+\)/, `(you hold ${held})`) : prompt;
     // Soak 18 A: the tools clause from what the bot carries now (a stone axe made or a pickaxe lost between turns).
     try {
         const i = next.indexOf(TOOLS_GOAL.head);
