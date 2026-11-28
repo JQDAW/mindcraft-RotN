@@ -188,7 +188,7 @@ test('getItemCraftingRecipes and getDetailedCraftingPlan follow RotN recipes', (
     // Request 10: the plan names variants as inventory keys ("pyrotech:rock:0", "log:0"); a bare
     // key (planks, stick) means any variant. Soak 17 L3: an ore input the bot lacks is named by its ore
     // ("rock (any of ...)"), and a crafted bare key names what the recipe makes ("planks:0"). Soak 18: a missing
-    // base item says how to get it (rotn-data's world rule); an ore label gets no hint.
+    // base item says how to get it (rotn-data's world rule); after #679, a missing ore label takes its first member's hint.
     assert.match(pick, /- 1 log:0: break a Dynamic Trees branch, by hand or with an axe\n- 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\): break a rock pile on the ground by hand; or mine stone with a pickaxe below Sturdy\n/);
     assert.match(pick, /Craft 1 log:0 -> 3 planks:0\nCraft 2 planks -> 4 stick\nCraft 3 rock \(any of pyrotech:rock, pyrotech_compat:rock_\*\) \+ 2 stick -> 1 stone_pickaxe/);
     const table = mc.getDetailedCraftingPlan('crafting_table', 1, {});

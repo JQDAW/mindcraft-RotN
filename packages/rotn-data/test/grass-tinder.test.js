@@ -204,8 +204,9 @@ test('worldHint over every break rule: a non-empty lowercase clause with no pare
 // #679 round 2: rain on the crude drying rack undoes the drying (Pyrotech's speed rule, the pack's config).
 test('grass-plant-fiber: rain on the crude drying rack gives a negative speed, which adds the dry time back', () => {
     const fiber = pack.worldSources.find((r) => r.id === 'grass-plant-fiber');
-    assert.match(fiber.summary, /on a crude drying rack \(keep it out of the rain: rain on the rack undoes the drying\)/);
-    assert.doesNotMatch(fiber.summary, /slows/);
+    // #684 review 1: a roof does not help (INDIRECT_RAIN whenever it rains in a rain biome), nor does a humid biome.
+    assert.match(fiber.summary, /on a crude drying rack, but it dries only while it is not raining \(any rain, even with the rack under a roof, undoes the drying\), and never in a very humid biome such as jungle or swamp\. 2 plant fiber and 1 timber/);
+    assert.doesNotMatch(fiber.summary, /slows|keep it out of the rain/);
     const ev = fiber.evidence.find((e) => e.startsWith('Drying time and rain:'));
     assert.ok(ev?.includes('fixtures/drying-rack-3.3.4/drying-rack.javap.txt'));
     const fx = read('drying-rack-3.3.4/drying-rack.javap.txt');
@@ -220,6 +221,11 @@ test('grass-plant-fiber: rain on the crude drying rack gives a negative speed, w
     // updateSpeed: rain on the block above (biome can rain) -> DIRECT_RAIN as the base, then x the rack's speed modifier.
     const speed = section('com.codetaylor.mc.pyrotech.modules.tech.basic.tile.spi.TileDryingRackBase: updateSpeed');
     assert.match(speed, /Biome\.func_76738_d:\(\)Z\n\s+16: istore_2[^]*87: iload_2\n\s+88: ifeq +117[^]*BlockPos\.func_177984_a[^\n]*\n[^\n]*World\.func_175727_C:[^\n]*\n\s+105: ifeq +117\n[^\n]*\n[^\n]*DIRECT_RAIN:D\n\s+112: dstore +4\n\s+114: goto +271/);
+    // Otherwise INDIRECT_RAIN: the biome can rain and it is raining (no position test), or the biome is humid.
+    assert.match(speed, /117: iload_2\n\s+118: ifeq +131\n(?:[^\n]*\n){2}[^\n]*World\.func_72896_J:\(\)Z\n\s+128: ifne +138\n[^\n]*\n[^\n]*Biome\.func_76736_e:\(\)Z\n\s+135: ifeq +147\n[^\n]*\n[^\n]*INDIRECT_RAIN:D/);
+    // DAYTIME only when it is not raining.
+    assert.match(speed, /World\.func_72896_J:\(\)Z\n\s+325: ifne +390[^]*DAYTIME:D\n\s+387: dadd/);
+    assert.match(ev, /INDIRECT_RAIN \(-0\.50\) when the biome can rain and it is raining, even with the rack under a roof, or whenever the biome has high humidity/);
     assert.match(speed, /390: dload +4\n[^\n]*\n[^\n]*getMultiplicativeSpeedModifier:\(\)F\n[^\n]*f2d\n[^\n]*dmul\n[^\n]*d2f\n[^\n]*freturn/);
     // workerDoWork: partialTicks += speed; dryTimeRemaining -= floor(partialTicks), clamped to [0, dryTimeTotal].
     const work = section('com.codetaylor.mc.pyrotech.modules.tech.basic.tile.spi.TileDryingRackBase: workerDoWork');

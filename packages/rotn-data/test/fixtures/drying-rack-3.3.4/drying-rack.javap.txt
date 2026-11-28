@@ -10,7 +10,7 @@
 # What it shows: TileDryingRackBase.updateSpeed (refreshed by workerDoWork when its speed-check counter fires) starts
 # from the rack's biome modifier if BIOME_MODIFIERS names the biome (the crude rack's map is an empty static HashMap,
 # no config entry); else DIRECT_RAIN when the biome can rain and it rains on the block above the rack, else
-# INDIRECT_RAIN when it rains anywhere or the biome has high humidity, else NETHER in the nether, else BASE_DERIVED
+# INDIRECT_RAIN when the biome can rain and it is raining (a roof does not help) or the biome has high humidity, else NETHER in the nether, else BASE_DERIVED
 # plus the HOT, DRY, COLD and WET biome terms. Then it adds the fire-source bonus, and DAYTIME when it is not raining,
 # the sky is visible above the rack and the day time is between 3000 and 9000; and multiplies by
 # getMultiplicativeSpeedModifier (the crude rack: CRUDE_DRYING_RACK.SPEED_MODIFIER). workerDoWork adds the speed to
