@@ -84,7 +84,8 @@ test('grass-tinder: tinder has no crafting recipe; 3 tinder make 3 twine, and tw
     assert.match(ex, /^130: recipes\.addShaped\("dry_to_twine", twine\*3,$/m);
     assert.match(ex, /^175: recipes\.addShapeless\("string_twine_handle",<spartanweaponry:material:0>,\[<ore:stickWood>,<minecraft:string>\|<pyrotech:material:14>\]\);$/m);
     assert.match(ex, /^219: CrudeDryingRack\.addRecipe\("dried_fiber_fresh", <pyrotech:tinder>, <pyrotech:material:12>, 5 \* 60 \* 20, true\);$/m);
-    for (const sha of rule.evidence.join(' ').match(/[0-9a-f]{64}/g).filter((s) => !['62cd3a64', '21837ce8'].includes(s.slice(0, 8)))) {
+    // The scripts' SHA-256s (the shears line's jar hashes are the mod jars', which have no excerpt here).
+    for (const sha of rule.evidence.filter((e) => !e.startsWith('Shears:')).join(' ').match(/[0-9a-f]{64}/g).filter((s) => !['62cd3a64', '21837ce8'].includes(s.slice(0, 8)))) {
         assert.ok(ex.includes(sha), `the excerpt names ${sha.slice(0, 12)}`);
     }
     // The dump agrees: no recipe makes tinder; the twine and handle recipes are there.
@@ -136,6 +137,16 @@ test('grass-tinder: shears skip the harvest, so Dropt never sees a sheared grass
     for (const id of ['grass-tinder', 'grass-plant-fiber']) {
         assert.ok(pack.worldSources.find((r) => r.id === id).evidence.some((e) => e.includes('fixtures/grass-shears-3.3.4/grass-shears.javap.txt')), id);
     }
+    // #679 review 4: every shears item in the dump is an ItemShears subclass the evidence names (none overrides
+    // onBlockStartBreak); the unfired clay shears are a plain Item.
+    const ev = rule.evidence.find((e) => e.startsWith('Shears:'));
+    const shearsItems = Object.entries(pack.dump.items.items).filter(([, i]) => /Shears/.test(i.class ?? ''));
+    assert.ok(shearsItems.length >= 15, String(shearsItems.length));
+    for (const [name, i] of shearsItems) {
+        const cls = i.class.split('.').pop();
+        assert.ok(cls === 'ItemShears' || ev.includes(cls), `${name}: ${i.class}`);
+    }
+    assert.match(ev, /pyrotech:unfired_clay_shears \(ItemUnfiredClayShears\) is a plain Item/);
 });
 
 test('grass-plant-fiber: the same grass gives plant fiber (pyrotech:material:12) about 2 times in 13; it dries into tinder', () => {
@@ -157,6 +168,11 @@ test('grass-plant-fiber: the same grass gives plant fiber (pyrotech:material:12)
     const rack = pack.planRecipes('pyrotech:drying_rack', { meta: 0 }).find((x) => x.recipeId === 'crafttweaker:hanging_dryingrack');
     assert.deepEqual(rack.inputs.map((i) => [i.count, i.label]), [[2, 'pyrotech:material:12'], [1, 'earthworks:item_timber']]);
     assert.match(read('rotn-3.3.4/tinder-twine.excerpt.zs'), /^219: CrudeDryingRack\.addRecipe\("dried_fiber_fresh", <pyrotech:tinder>, <pyrotech:material:12>/m);
+    // #679 review 1: no drying time in the text the model reads (the pack's config scales the script's 6000 ticks by 0.25,
+    // and weather changes it); the config line is cited, the real time is unverified.
+    for (const id of ['grass-tinder', 'grass-plant-fiber']) assert.doesNotMatch(pack.worldSources.find((r) => r.id === id).summary, /minute|second|\d+ s\b|ticks/, id);
+    assert.ok(fiber.evidence.some((e) => /module\.tech\.Basic\.cfg[^"]*line 564, crude_drying_rack D:BASE_RECIPE_DURATION_MODIFIER=0\.25/.test(e)));
+    assert.ok(fiber.unverified.some((u) => u.startsWith('the real drying time')));
 });
 
 // #674 review nit 3: every break rule's hint is a clean clause, and a "." ends it only before a new sentence.
@@ -167,6 +183,8 @@ test('worldHint over every break rule: a non-empty lowercase clause with no pare
         const c = leadClause(r.summary);
         assert.match(c, /^[a-z]/, `${r.id}: ${c}`);
         assert.doesNotMatch(c, /[()]|[,:;.]$/, `${r.id}: ${c}`);
+        // #679 review 2: a clause cut at an abbreviation ends in its stem ("break a bush, e.g"); none may.
+        assert.doesNotMatch(c, /\b(?:e\.g|i\.e|approx|etc|vs|cf|incl|esp|ca|no|e|i)$/i, `${r.id}: ${c}`);
         assert.ok(c.length >= 15 && c.length <= 200, `${r.id}: ${c.length}`);
         assert.ok(r.summary.toLowerCase().startsWith(c.slice(0, 10).toLowerCase()), r.id);
         if (r.gives?.name) {
@@ -179,4 +197,6 @@ test('worldHint over every break rule: a non-empty lowercase clause with no pare
     assert.equal(leadClause('Mine ore (level 0; any pickaxe: see below) with a pickaxe: it drops raw ore.'), 'mine ore with a pickaxe');
     assert.equal(leadClause('Given at the first spawn.'), 'given at the first spawn');
     assert.equal(leadClause('Break approx. 3 leaves by hand; then more.'), 'break approx. 3 leaves by hand');
+    // #679 review 3: an abbreviation before a capital still ends the clause (as documented): authors avoid it.
+    assert.equal(leadClause('Break a bush, e.g. Pyrotech ones, by hand.'), 'break a bush, e.g');
 });

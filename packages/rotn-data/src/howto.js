@@ -271,10 +271,11 @@ export function rockRecipes(catalog) {
 }
 
 /**
- * A world rule summary's lead clause, for worldHint: up to the first ":" or ";" followed by a space, or a "." followed
- * by a space and a capital letter (a new sentence; "e.g. a bush" goes on), outside parentheses; the parentheses are
- * left out and a leading capital verb is lowercased ("Break a rock pile on the ground by hand; ..." -> "break a rock
- * pile on the ground by hand").
+ * A world rule summary's lead clause, for worldHint ("Break a rock pile on the ground by hand; ..." -> "break a rock
+ * pile on the ground by hand"): up to the first ":" or ";" followed by a space, or a "." followed by a space and a
+ * capital letter (a new sentence; "e.g. a bush" goes on), outside parentheses. The parentheses are left out and a
+ * leading capital verb is lowercased. An abbreviation before a capital ("e.g. Pyrotech", "the U.S. Army") still ends
+ * the clause, so summaries keep such abbreviations out of their first clause.
  * @param {string} s
  * @returns {string}
  */
