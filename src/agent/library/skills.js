@@ -1565,7 +1565,7 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
         if (source.unlessTool) avoidTools.push([blockMatcher(source.blocks), source.unlessTool]);
         if (source.id === 'fell-tree') fellMatchers.push(blockMatcher(source.blocks));
         else if (!source.tool) handMatchers.push(blockMatcher(source.blocks));
-        if (source.countRange?.min === 0) mayGiveNone.push(blockMatcher(source.blocks));
+        if (source.countRange?.min === 0) mayGiveNone.push({ matches: blockMatcher(source.blocks), mean: source.countRange.mean, blocks: source.blocks });
     }
     // The item's own blocks give it only with a tool the bot lacks (rotn-data #288: dirt drops
     // itself only to a shovel of level 1+; by hand it drops 4 dirt piles, and "Broke dirt but got no
@@ -1591,7 +1591,9 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
     // plain search.
     const emptySpecies = emptyFelled(bot, baseType);
     const isHand = (block) => !fellsTree(block) && handMatchers.some(matches => matches(block));
-    const canGiveNone = (block) => mayGiveNone.some(matches => matches(block));
+    const canGiveNone = (block) => mayGiveNone.some(r => r.matches(block));
+    // Soak 18 S18b: a rule whose mean yield is low (rotn-data's grass-tinder: 0.077, about 1 in 13).
+    const lowYieldRule = (block) => mayGiveNone.find(r => r.matches(block) && Number.isFinite(r.mean) && r.mean < COLLECT_LIMITS.lowYieldMean) ?? null;
     const tierOf = (block) => (isHand(block) ? (isLeafBlock(block) ? 3 : 0) : fellsTree(block) && emptySpecies.has(block.name) ? 2 : 1);
     const tiered = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0;
     // Soak 16 (R): by-hand blocks and blocks mined with a tool (rocks: loose piles, and stone with a pickaxe).
@@ -1628,7 +1630,10 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
     const noWayOut = [];
     let noWayOutSaid = 0;
     let exposeCapped = false;
-    let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at CL.freeMisses)
+    let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at freeMissCap, set with CL below)
+    let freeMissStart = null; // soak 18 S18b: when the first free miss came (the free misses' time cap, CL.freeMissMs)
+    let lowYieldBreaks = 0; // soak 18 S18b: breaks of a low-mean rule's blocks, for the final line's odds
+    const lowYieldNames = new Set();
     let leafMisses = 0; // leaves out of reach after the walk (capped at CL.unreachableLeaves, then no leaves)
     let walkMisses = 0; // other targets the walk did not reach (capped at CL.unreachableTargets)
     const outOfReach = unreachableLeaves(bot); // and other targets out of reach (round 10 B)
@@ -1752,6 +1757,16 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
     // COLLECT_LIMITS.blockMs (then it is given up and skipped), the whole run totalMs. `limits`: the
     // craft's table pickup passes its own (soak 9), so the collect ends by itself too.
     const CL = limits;
+    // Soak 18 S18b (#674's grass-tinder, mean 0.077): with 6 free misses !collectBlocks("pyrotech:tinder", 3) stopped
+    // after about 9 grass (0.7 tinder expected). The cap is about the breaks num items take at the lowest mean among the
+    // usable rules that can give none (1.5 x num / mean, less the num attempts), at least CL.freeMisses (a dead bush,
+    // mean 1, stays at 6), at most CL.freeMissMax; and free misses stop counting after CL.freeMissMs.
+    const lowMean = Math.min(Infinity, ...mayGiveNone.map(r => r.mean).filter(m => Number.isFinite(m) && m > 0));
+    const freeMissMax = CL.freeMissMax ?? COLLECT_LIMITS.freeMissMax;
+    const freeMissMs = CL.freeMissMs ?? COLLECT_LIMITS.freeMissMs;
+    const freeMissCap = Number.isFinite(lowMean)
+        ? Math.min(Math.max(CL.freeMisses, freeMissMax), Math.max(CL.freeMisses, Math.ceil(1.5 * num / lowMean) - num))
+        : CL.freeMisses;
     const run = currentRun(bot);
     const runStart = Date.now();
     const givenUp = [];
@@ -2142,7 +2157,9 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
                 // missed pickup, counts as an attempt as before).
                 if (canGiveNone(block) && isHand(block)) {
                     givenUp.push(block.position.clone ? block.position.clone() : block.position);
-                    if (gained === 0 && freeMisses < CL.freeMisses) { freeMisses++; i--; }
+                    if (lowYieldRule(block)) { lowYieldBreaks++; lowYieldNames.add(block.name); }
+                    const inTime = freeMissStart === null || Date.now() - freeMissStart < freeMissMs;
+                    if (gained === 0 && freeMisses < freeMissCap && inTime) { freeMissStart ??= Date.now(); freeMisses++; i--; }
                 }
                 if (gained === 0) {
                     // Say what it did give (round 5 A rerun: a felled spruce gave logs, and the line
@@ -2240,7 +2257,10 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             .filter(Boolean);
         if (hints.length) craftNote = ` What came in crafts into it: ${hints.join('; ')}.`;
     }
-    log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.${craftNote}`);
+    // Soak 18 S18b: a low-yield item says its odds, so a short collect reads as chance, not as none there.
+    const oddsNote = lowYieldBreaks > 0 && Number.isFinite(lowMean)
+        ? ` It drops about 1 in ${Math.max(2, Math.round(1 / lowMean))} breaks of ${[...lowYieldNames].join(', ')}: ${lowYieldBreaks} broken.` : '';
+    log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.${craftNote}${oddsNote}`);
     bot.rotnCollectEnd = { at: Date.now(), short: collected < num, lastWalkFailed, reason: endReason };
     // Round 17 M: the memory's Collects line (memory_facts.pullCollects): what, how many, from where, why it ended.
     const collectTo = bot.entity?.position?.floored?.() ?? null;
@@ -5189,7 +5209,11 @@ const STOP_SETTLE_MS = 5000;
 // death spot this recent (a player zombie rose there).
 // mineHandRadius, mineCandidates (soak 16 R): for an item with by-hand and mined blocks (rocks), the loose ones are
 // searched this far before any is mined; at most this many mined candidates are checked for a way out per target.
+// freeMissMax, freeMissMs, lowYieldMean (soak 18 S18b): the free misses scaled for a rule of low mean yield (grass
+// for tinder, mean 0.077) are at most freeMissMax and count for freeMissMs from the first; a rule below lowYieldMean
+// gets its odds on the collect's last line.
 export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
+    freeMissMax: 60, freeMissMs: 3 * 60_000, lowYieldMean: 0.5,
     unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000, mineHandRadius: 48, mineCandidates: 8, exposeChecks: 262_144,
     // #670 nit 2: the way-out checks (a walkableExit search and a walk back each) for surface targets below the floor.
     wayChecks: 64 };
