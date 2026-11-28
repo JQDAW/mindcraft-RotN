@@ -539,3 +539,23 @@ test('#677 review 2-5: a shortened output of a non-collecting command hides noth
     ];
     assert.deepEqual([repeatedFailures(J(d)).planAfterDefer.count, repeatedFailures(J(d)).planAfterDefer.defers], [0, 0]);
 });
+
+test('S18a (#680): "Your decisions: …" after the failures ends the failure lines; I13 does not judge it', () => {
+    const parts = [
+        'Recent failures (newest first):',
+        '!collectBlocks("pyrotech:tinder", 3): Collected 0 pyrotech:tinder. (just now at -21, 89, -140, here)',
+        "Your decisions: 'a stone sword can wait until tinder shows up' (just now); 'I'll drop the sword hunt' (34 min ago)",
+        'Deaths: 0 since this memory began',
+    ];
+    const f = factsFields(`Facts from the game (computed now, not remembered): / ${parts.join(' / ')}`);
+    assert.deepEqual(f.failures, [parts[1]]);
+    assert.equal(f.decisions, parts[2]);
+    assert.equal(f.deaths, parts[3]);
+    const lines = [
+        REL, L('10:00:00', "parsed command: { commandName: '!collectBlocks', args: [ 'pyrotech:tinder', 3 ] }"),
+        L('10:00:00', 'Agent executed: !collectBlocks and got: Action output:'), L('10:00:00', 'Collected 0 pyrotech:tinder.'), L('10:00:00', 'Saved memory to: ./bots/x/memory.json'),
+        facts('10:00:05', ...parts),
+    ];
+    const r = memoryFactsCheck(J(lines), []);
+    assert.deepEqual(r.byField.failure, { match: 1, miss: 0, unverifiable: 0, trivial: 0 });
+});
