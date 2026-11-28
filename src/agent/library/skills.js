@@ -4,7 +4,7 @@ import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey, carriedItems } from "./rotn_names.js";
 import { worldSources, itemVariants, toolAllows, allowedTool, allowedTools, toolUsesLeft, describeTool, stowCarried, isToolFor, handRoute } from "./rotn_sources.js";
-import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
+import { craftNeeds, describeNeeds, fillNow, filledRecipe, missingText } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, cobbleRecipes, ROCKS_PER_COBBLE } from "./cobble.js";
 import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTrunkShell, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
 import { oreMemberNames } from "../agenda_driver.js";
@@ -37,6 +37,7 @@ import Vec3 from 'vec3';
 import settings from "../../../settings.js";
 import * as inv from './inventory_view.js';
 import { fail, resultOf, cellText } from './results.js';
+import { resultHasRoom, watchCraftDrops, noRoomWhy } from './craft_room.js';
 
 const blockPlaceDelay = settings.block_place_delay == null ? 0 : settings.block_place_delay;
 const useDelay = blockPlaceDelay > 0;
@@ -270,9 +271,16 @@ async function craftCobbleFromRocks(bot, num, ops) {
             + `you have ${held.length ? held.join(', ') : 'no such rocks'}. Collect more with !collectBlocks("pyrotech:rock", 8).`, null, 'craftRecipe');
     }
     let made = 0;
+    let noRoom = 0; // soak 18 S18c: kinds left out because their cobble would have nowhere to go
     for (const c of choices) {
         if (made >= num) break;
-        const n = Math.min(num - made, Math.floor(c.have / ROCKS_PER_COBBLE));
+        let n = Math.min(num - made, Math.floor(c.have / ROCKS_PER_COBBLE));
+        // Soak 18 S18c (dl:2147): with the inventory full and no stack of this cobble with room, only a craft that uses
+        // up this kind's rocks frees the slot its cobble goes into (dl:2149's komatiite: 4 of 4); 4 of 5 frees none.
+        if (!resultHasRoom(bot, c.gives)) {
+            if (c.have % ROCKS_PER_COBBLE !== 0 || c.have / ROCKS_PER_COBBLE > num - made) { noRoom++; continue; }
+            n = c.have / ROCKS_PER_COBBLE;
+        }
         log(bot, `Cobblestone from your rocks: ${n} ${c.gives} (${ROCKS_PER_COBBLE} ${c.rock} each).`);
         // By the rock's own recipe (#233 review 1): bot.recipesFor could pick another recipe for the
         // same output (undergroundbiomes:regular_cobblestone turns 4 modded cobbles into vanilla).
@@ -280,6 +288,11 @@ async function craftCobbleFromRocks(bot, num, ops) {
         const needs = { recipeId: c.recipeId, requiresTable: c.requiresTable, ready: true, inputs: [], how: `from your ${c.rock} rocks` };
         await craftByFill(bot, c.gives, n, needs, null, false, ops);
         made += Math.max(0, countItem(bot, c.gives) - before);
+    }
+    if (made === 0 && noRoom > 0) {
+        return fail(bot, 'no-room', `Could not craft cobblestone: your inventory is full (no free slot, no stack of that cobble with room), and a craft from `
+            + `${noRoom === 1 ? 'your rock kind' : `any of your ${noRoom} rock kinds`} would leave its rock stack, so the cobble would be thrown on the ground. `
+            + 'Free a slot first (!discard something you do not need), then craft again.', null, 'craftRecipe');
     }
     return made > 0;
 }
@@ -361,7 +374,7 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
         // independent, so mixed rocks are fine; cobblestone has one recipe per rock type.
         const needs = craftNeeds(bot, itemName);
         if (needs && !needs.ready)
-            fail(bot, 'missing', `You do not have the resources to craft ${itemName}. ${describeNeeds(itemName, needs)}`, null, 'craftRecipe');
+            fail(bot, 'missing', missingText(itemName, needs), null, 'craftRecipe'); // #680 review 7: what to get first
         else if (needs) {
             // canFill says the items fit a RotN recipe, but bot.registry has no variant for this mix
             // (its variants are capped): craft from the bot's own stacks (C1).
@@ -397,9 +410,17 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
     const inventory = Object.fromEntries(Object.keys(requiredIngredients).map(name => [name, countItem(bot, name, { offHand: false })]));
     const craftLimit = mc.calculateLimitingResource(inventory, requiredIngredients);
     
-    const crafted = await craftPausingAutoEat(bot, recipe, Math.min(craftLimit.num, num), craftingTable);
+    // Soak 18 S18c: a result the full inventory had no room for is thrown on the ground (#682 craftResultDropped).
+    const beforeCount = countItem(bot, itemName);
+    const watch = watchCraftDrops(bot);
+    let crafted;
+    try { crafted = await craftPausingAutoEat(bot, recipe, Math.min(craftLimit.num, num), craftingTable); } finally { watch.stop(); }
     // Soak 9: timed out or stopped; what happened is said (craftPausingAutoEat). The finally picks a placed table up.
     if (crafted.ended !== 'crafted') return (crafted.made ?? 0) > 0;
+    if (countItem(bot, itemName) <= beforeCount) {
+        const room = noRoomWhy(bot, itemName, watch.drops);
+        if (room) return fail(bot, 'no-room', `Could not craft ${itemName}: ${room}.`, null, 'craftRecipe');
+    }
     if(craftLimit.num<num) log(bot, `Not enough ${craftLimit.limitingResource} to craft ${num}, crafted ${craftLimit.num}. You now have ${countItem(bot, itemName)} ${itemName}.`);
     else log(bot, `Successfully crafted ${itemName}, you now have ${countItem(bot, itemName)} ${itemName}.`);
     } finally {
@@ -695,6 +716,7 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
     }
     let made = 0;
     let why = null;
+    let whyCode = 'failed';
     try {
         if (!needs.requiresTable) {
             if (placed) await ops.pickUp(bot);
@@ -731,6 +753,7 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
             }
             const before = countItem(bot, itemName);
             let crafted;
+            const watch = watchCraftDrops(bot); // soak 18 S18c: a result thrown for want of room (#682)
             try {
                 crafted = await craftPausingAutoEat(bot, recipe, 1, table);
             } catch (err) {
@@ -740,6 +763,8 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
                 if (back && Date.now() - back.at < 5000 && back.moved?.length) why += `; ${back.moved.map(g => `${g.count} ${g.name}`).join(', ')} left in the crafting grid are back in your inventory: try again`;
                 if (back && Date.now() - back.at < 5000 && back.dropped?.length) why += `; ${back.dropped.map(g => `${g.count} ${g.name}`).join(', ')} left in the crafting grid were dropped on the ground (no room): pick them up`;
                 break;
+            } finally {
+                watch.stop();
             }
             if (crafted.ended !== 'crafted') { // soak 9: timed out or stopped (said)
                 if (countItem(bot, itemName) > before) made++;
@@ -747,7 +772,10 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
                 break;
             }
             if (countItem(bot, itemName) <= before) {
-                why = `the craft gave no ${itemName}`;
+                // Soak 18 S18c (dl:2147): the full inventory, said; else as before.
+                const room = noRoomWhy(bot, itemName, watch.drops);
+                if (room) whyCode = 'no-room';
+                why = room ?? `the craft gave no ${itemName}`;
                 break;
             }
             made++;
@@ -755,10 +783,7 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
     } finally {
         if (placed) await ops.pickUp(bot);
     }
-    if (made === 0) {
-        log(bot, `Could not craft ${itemName}: ${why ?? 'nothing was crafted'}. ${describeNeeds(itemName, needs)}`.trimEnd());
-        return false;
-    }
+    if (made === 0) return fail(bot, whyCode, `Could not craft ${itemName}: ${why ?? 'nothing was crafted'}. ${describeNeeds(itemName, needs)}`.trimEnd(), null, 'craftRecipe');
     // needs.how: where the items came from ("from your pyrotech:rock:0 rocks"); C1's default (#234 nit).
     const how = needs.how ?? 'from mixed items';
     if (made < num) log(bot, `Crafted ${made} of ${num} ${itemName} ${how}; ${why ?? 'not enough for more'}. You now have ${countItem(bot, itemName)} ${itemName}.`);
@@ -2018,6 +2043,8 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
             let targetStart = null;
             const markTarget = () => { targetStart ??= { held: allHeld(), n: bot.rotnDigs?.count ?? 0 }; };
             bot.rotnDigHook = (b) => { noteCollectDig(bot, b?.position); wayTop.clear(); wayVerdict.clear(); if (block.position && b?.position && b.position.x === block.position.x && b.position.y === block.position.y && b.position.z === block.position.z) markTarget(); };
+            // Soak 18 S18c (E): this attempt's own pickup wait end (the collectblock patch's lastPickup), for the no-yet line.
+            try { if (bot.collectBlock) bot.collectBlock.lastPickup = null; } catch { /* read-only: no diagnostics */ }
             const breakIt = async () => {
                 if (isLiquid) return await useToolOnBlock(bot, 'bucket', block);
                 // By hand when the block has no collision box (a rock pile), or when a rule's tool must
@@ -2161,6 +2188,8 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
                     const pos = block.position ? ` at ${block.position.x}, ${block.position.y}, ${block.position.z}` : '';
                     const rare = baseType === 'stick' && fellsTree(block) ? ' A felled tree drops few sticks, often none.' : '';
                     log(bot, `Broke ${block.name}${pos}: no ${blockType} yet${gave}.${walked}${rare}`);
+                    // Soak 18 S18c (E): for the journal only (soak 19's evidence), not the model's text.
+                    console.log(`[collect] no ${blockType} yet from ${block.name}${pos}:${noYetDiagnostics(bot, block.position)}`);
                 }
             }
             if (run.aborted) break;
@@ -2246,6 +2275,28 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
     const collectTo = bot.entity?.position?.floored?.() ?? null;
     bot.rotnCollects = [...(bot.rotnCollects ?? []), { item: blockType, got: collected, wanted: num, reason: endReason, range, from: collectFrom, to: collectTo, at: bot.rotnCollectEnd.at }].slice(-8);
     return collected > 0;
+}
+
+/**
+ * Soak 18 S18c (E; dl:150, 669, 713, 1108, 1133, 1489, 1855, 2118): 14 rock-pile breaks gave "no pyrotech:rock yet",
+ * and the journal could not say why. This says how the pickup wait ended (net-forge's collectblock patch:
+ * collectBlock.lastPickup {reason, ms}; none when the plugin did not wait), the item entities within 8 blocks, and
+ * the block now in the cell. Diagnostics only, a console line for the journal (the fix comes after soak 19's evidence).
+ */
+export function noYetDiagnostics(bot, cell) {
+    const parts = [];
+    try {
+        const p = bot.collectBlock?.lastPickup ?? null;
+        parts.push(p ? `the pickup wait: ${p.reason ?? '?'}${Number.isFinite(p.ms) ? ` after ${secsText(p.ms)}` : ''}` : 'no pickup wait');
+    } catch { /* no plugin */ }
+    try {
+        const here = bot.entity?.position;
+        const near = Object.values(bot.entities ?? {}).filter(e => e?.name === 'item' && e.position && here && here.distanceTo(e.position) < 8)
+            .map(e => here.distanceTo(e.position)).sort((a, b) => a - b);
+        parts.push(near.length ? `items near: ${near.length}, the nearest ${near[0].toFixed(1)} blocks away` : 'items near: none');
+    } catch { /* no entities */ }
+    try { if (cell) parts.push(`the cell is now ${bot.blockAt(cell)?.name ?? 'unloaded'}`); } catch { /* no world */ }
+    return parts.length ? ` (${parts.join('; ')})` : '';
 }
 
 // Per bot and item: the Dynamic Trees branch names (one per species) whose felled tree gave none of

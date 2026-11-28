@@ -1,5 +1,6 @@
 import { getBlockId, getItemId, getAllBlocks, getAllItems } from "../../utils/mcdata.js";
 import { suggestText } from "../library/name_suggest.js";
+import { cobbleKindHint } from "../library/cobble.js";
 import { canonicalName } from "../library/rotn_names.js";
 import { actionsList } from './actions.js';
 import settings from '../settings.js';
@@ -184,10 +185,10 @@ export function parseCommandMessage(message) {
             if(getBlockId(arg) == null) return  `Invalid block type: ${arg}.${suggestText(arg, registryNames('blocks'))}`
             arg = canonicalName(arg, 'blocks') ?? arg; // the skills' name space (rotn_names.js, B1b)
         } else if(param.type === 'ItemName') { //Check that there is an item with this name
-            if(getItemId(arg) == null) return `Invalid item type: ${arg}.${suggestText(arg, registryNames('items'))}`
+            if(getItemId(arg) == null) return `Invalid item type: ${arg}.${cobbleKindHint(arg) ?? suggestText(arg, registryNames('items'))}`
             arg = canonicalName(arg, 'items') ?? arg;
         } else if(param.type === 'BlockOrItemName') {
-            if(getBlockId(arg) == null && getItemId(arg) == null) return  `Invalid block or item type: ${arg}.${suggestText(arg, [...registryNames('blocks'), ...registryNames('items')])}`
+            if(getBlockId(arg) == null && getItemId(arg) == null) return  `Invalid block or item type: ${arg}.${cobbleKindHint(arg) ?? suggestText(arg, [...registryNames('blocks'), ...registryNames('items')])}`
             arg = canonicalName(arg, 'items') ?? canonicalName(arg, 'blocks') ?? arg;
         }
         args[i] = arg;

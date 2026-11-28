@@ -146,6 +146,27 @@ export function describeNeeds(name, needs) {
     return `To craft ${name}${where}: ${parts.join('; ')}.`;
 }
 
+/**
+ * #680 review 7 (soak 18 S18c): what to get, first, so a clipped why still names it (Recent failures clip an old why to
+ * 40 chars: "You do not have the resources to craf..." hid the missing handle). "get 1 spartanweaponry:material:0 and
+ * 2 pyrotech:rock (any rock)"; an off-hand stack that fills its input needs nothing. '' when nothing is short.
+ */
+export function missingSummary(needs) {
+    const parts = (needs?.inputs ?? []).filter(i => i.short > 0).map(i => {
+        const off = i.inOffHand ?? null;
+        if (off && off.count >= i.short) return null; // !craftRecipe moves it: it will do
+        return `${off ? i.short - off.count : i.short} ${i.more ?? i.label}`;
+    }).filter(Boolean);
+    return parts.length ? `get ${parts.join(' and ')}` : '';
+}
+
+/** The "not enough" line with what to get first: "Get 1 X first: you do not have the resources to craft Y. To craft Y: ...". */
+export function missingText(name, needs) {
+    const get = missingSummary(needs);
+    const head = get ? `${get[0].toUpperCase()}${get.slice(1)} first: you` : 'You';
+    return `${head} do not have the resources to craft ${name}. ${describeNeeds(name, needs)}`;
+}
+
 // ---- Crafting from canFill (skills-rotn C1) ----
 // bot.registry holds rotn-data's recipes as explicit variants, capped per recipe, so a mix of rock
 // kinds the cap left out has no variant: bot.recipesFor finds nothing although canFill says the

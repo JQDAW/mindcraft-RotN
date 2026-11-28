@@ -7,7 +7,7 @@
 import * as mc from '../../utils/mcdata.js';
 import * as world from '../library/world.js';
 import { countItem } from '../library/rotn_names.js';
-import { craftNeeds, describeNeeds } from '../library/craft_needs.js';
+import { craftNeeds, describeNeeds, missingText } from '../library/craft_needs.js';
 import { isGenericCobble, cobbleChoices, ROCKS_PER_COBBLE } from '../library/cobble.js';
 import { TABLE_CHAIN } from '../library/pickaxe.js';
 import { safeError } from '../safe_error.js';
@@ -73,7 +73,7 @@ export function craftRecipeCanRun(agent, name) {
     if (!bot.recipesFor(id, meta, 1, true)?.length) {
         if (!needs || needs.ready) return null; // craftByFill or upstream's text: the craft says
         const table = needs.requiresTable && noTable ? ` It is made at a crafting table, and there is none within ${CRAFT_TABLE_RANGE} blocks and none in your inventory: ${tableWay(bot)}` : '';
-        return { code: 'missing', why: `You do not have the resources to craft ${name}. ${describeNeeds(name, needs)}${table}` };
+        return { code: 'missing', why: `${missingText(name, needs)}${table}` }; // #680 review 7: what to get first
     }
     if (!noTable) return null;
     return { code: 'no-table', why: `Crafting ${name} requires a crafting table: there is none within ${CRAFT_TABLE_RANGE} blocks and none in your inventory. ${tableWay(bot)}` };

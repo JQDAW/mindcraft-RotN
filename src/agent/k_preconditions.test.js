@@ -233,7 +233,8 @@ test('K1 dl16:819, dl17:2217: missing inputs are refused before anything runs, i
     withRecipes(w.bot, ['crafting_table']);
     const r = craftRecipeCanRun({ bot: w.bot }, 'crafting_table');
     assert.equal(r.code, 'missing');
-    assert.match(r.why, /^You do not have the resources to craft crafting_table\. To craft crafting_table: .*1 contenttweaker:crafting_tools: you have none, so get 1 contenttweaker:crafting_tools/, r.why);
+    // S18c (#680 review 7): what to get comes first.
+    assert.match(r.why, /^Get 1 contenttweaker:crafting_tools first: you do not have the resources to craft crafting_table\. To craft crafting_table: .*1 contenttweaker:crafting_tools: you have none, so get 1 contenttweaker:crafting_tools/, r.why);
 });
 
 test('K1 dl17:2273 (pin of #670 L4): the stone axe only the off hand holds is not refused (craftRecipe moves it)', (t) => {

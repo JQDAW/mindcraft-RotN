@@ -103,7 +103,7 @@ test('!craftRecipe("stone_pickaxe", 1) without enough rocks says what to get, no
     const agent = { bot, actions: { runAction: async (label, fn) => { await fn(); return { message: bot.output, interrupted: false }; } } };
     const { commandName, args } = parseCommandMessage('!craftRecipe("stone_pickaxe", 1)');
     await getCommand(commandName).perform(agent, ...args);
-    assert.match(bot.output, /You do not have the resources to craft stone_pickaxe\. To craft stone_pickaxe \(at a crafting table\): 3 rock: you have 2 pyrotech_compat:rock_metamorphic, so get 1 more pyrotech:rock \(any rock\)/);
+    assert.match(bot.output, /Get 1 pyrotech:rock \(any rock\) first: you do not have the resources to craft stone_pickaxe\. To craft stone_pickaxe \(at a crafting table\): 3 rock: you have 2 pyrotech_compat:rock_metamorphic, so get 1 more pyrotech:rock \(any rock\)/);
 });
 
 // #151 re-review: the advice is rotn-data's top-ranked choice, not the ore list's first entry,

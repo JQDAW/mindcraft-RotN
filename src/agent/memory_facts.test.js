@@ -61,7 +61,7 @@ test('round 17 M: the memory is built from the game state: agenda, reserves, fai
     assert.equal(lines[0], FACTS_HEAD);
     assert.equal(lines[1], 'Agenda: active, step rocks (collect 6 rocks); done: none');
     const need = nightFoodNeed({ food: 10, saturation: 0 });
-    assert.equal(lines[2], `Reserves: shelter blocks 9 of 14 (stone or cobble), dirt 4; food held ${heldFoodPoints(bot)} points, a night needs ${need} more than your bar; tools: spartanweaponry:club_wood, stone_pickaxe (off hand)`);
+    assert.equal(lines[2], `Reserves: shelter blocks 9 of 14 (stone or cobble; 5 short; counted now, new crafts included), dirt 4; food held ${heldFoodPoints(bot)} points, a night needs ${need} more than your bar; tools: spartanweaponry:club_wood, stone_pickaxe (off hand)`);
     assert.equal(lines[3], 'Recent failures (newest first):');
     assert.equal(lines[4], '!collectBlocks("pyrotech:rock", 6): No pyrotech:rock within 48 blocks. (4 min ago at -59, 57, -50, 13 NW)');
     assert.equal(lines[5], 'Deaths: 1 since this memory began; last 2 min ago at -41, 64, -20 (23 SE), a mob');
@@ -75,7 +75,7 @@ test('round 17 M: an empty state gives only the lines it has; no notes, no notes
     const agent = fakeAgent(t);
     agent.agenda.stop();
     const text = buildMemory(agent, { facts: emptyFacts(), notes: '', now: 0 });
-    assert.equal(text, `${FACTS_HEAD}\nAgenda: stopped, no step chosen yet; done: none\nReserves: shelter blocks 0 of 14 (stone or cobble); food held 0 points, a night needs ${nightFoodNeed({ food: 10 })} more than your bar; no pickaxe, axe or weapon`);
+    assert.equal(text, `${FACTS_HEAD}\nAgenda: stopped, no step chosen yet; done: none\nReserves: shelter blocks 0 of 14 (stone or cobble; 14 short; counted now, new crafts included); food held 0 points, a night needs ${nightFoodNeed({ food: 10 })} more than your bar; no pickaxe, axe or weapon`);
     assert.equal(buildMemory({}, { notes: 'x' }), `${NOTES_HEAD} x`);
 });
 
