@@ -1,0 +1,36 @@
+[inv 14:13]
+no_trap: ok; 0 span(s)
+- I1 trapped: 0 (0 path-failure episodes, 0 failed path attempts; 0 trap spans; 0 escape episodes: 0 not cleared, 0 interrupted, 0 cleared, the longest cleared in 0 s; longest 0 min)
+- I2 enclosed-morning: 0 still-enclosed hand-backs ("could not leave the shelter" and the like), 0 nights in the same shelter as the night before
+- I6 starving: 0 food lines at 4 or less (lowest 18), 0 "no safe food" runs over 5 min (longest 0 min), 0 starving hurt lines
+- I10 death-loop: 0 loops (0 of 0 deaths)
+[inv 14:33]
+no_trap: ok; 0 span(s)
+- I1 trapped: 0 (0 path-failure episodes, 0 failed path attempts; 0 trap spans; 0 escape episodes: 0 not cleared, 0 interrupted, 0 cleared, the longest cleared in 0 s; longest 0 min)
+- I2 enclosed-morning: 0 still-enclosed hand-backs ("could not leave the shelter" and the like), 0 nights in the same shelter as the night before
+- I6 starving: 0 food lines at 4 or less (lowest 13), 0 "no safe food" runs over 5 min (longest 0 min), 0 starving hurt lines
+- I10 death-loop: 0 loops (0 of 0 deaths)
+[inv 14:53]
+no_trap: ok; 0 span(s)
+- I1 trapped: 0 (0 path-failure episodes, 0 failed path attempts; 0 trap spans; 0 escape episodes: 0 not cleared, 0 interrupted, 0 cleared, the longest cleared in 0 s; longest 0 min)
+- I2 enclosed-morning: 0 still-enclosed hand-backs ("could not leave the shelter" and the like), 0 nights in the same shelter as the night before
+- I6 starving: 0 food lines at 4 or less (lowest 9), 0 "no safe food" runs over 5 min (longest 0 min), 0 starving hurt lines
+- I10 death-loop: 0 loops (0 of 0 deaths)
+[inv 15:13]
+no_trap: ok; 0 span(s)
+- I1 trapped: 0 (0 path-failure episodes, 0 failed path attempts; 0 trap spans; 0 escape episodes: 0 not cleared, 0 interrupted, 0 cleared, the longest cleared in 0 s; longest 0 min)
+- I2 enclosed-morning: 0 still-enclosed hand-backs ("could not leave the shelter" and the like), 0 nights in the same shelter as the night before
+- I6 starving: 0 food lines at 4 or less (lowest 8), 0 "no safe food" runs over 5 min (longest 0 min), 0 starving hurt lines
+- I10 death-loop: 0 loops (0 of 0 deaths)
+[inv 15:33]
+no_trap: ok; 0 span(s)
+- I1 trapped: 0 (0 path-failure episodes, 0 failed path attempts; 0 trap spans; 0 escape episodes: 0 not cleared, 0 interrupted, 0 cleared, the longest cleared in 0 s; longest 0 min)
+- I2 enclosed-morning: 0 still-enclosed hand-backs ("could not leave the shelter" and the like), 0 nights in the same shelter as the night before
+- I6 starving: 0 food lines at 4 or less (lowest 8), 0 "no safe food" runs over 5 min (longest 0 min), 0 starving hurt lines
+- I10 death-loop: 0 loops (0 of 0 deaths)
+[inv 15:53]
+no_trap: ok; 0 span(s)
+- I1 trapped: 0 (0 path-failure episodes, 0 failed path attempts; 0 trap spans; 0 escape episodes: 0 not cleared, 0 interrupted, 0 cleared, the longest cleared in 0 s; longest 0 min)
+- I2 enclosed-morning: 0 still-enclosed hand-backs ("could not leave the shelter" and the like), 0 nights in the same shelter as the night before
+- I6 starving: 0 food lines at 4 or less (lowest 8), 0 "no safe food" runs over 5 min (longest 0 min), 0 starving hurt lines
+- I10 death-loop: 0 loops (0 of 0 deaths)
