@@ -1,0 +1,2 @@
+test-server.sh starts, right after up (2026-11-28 13:43 UTC):
+starts=1 files=1
