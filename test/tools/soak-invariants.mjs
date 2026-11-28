@@ -50,7 +50,8 @@
 //                            rotn-v0.1.22). So soak 15's trap shows only as the path episode above and I2.
 //   I2  enclosed-morning     still-enclosed morning hand-backs (STILL_ENCLOSED: `could not leave the shelter …` with
 //                            or without `after N tries`, `could not open the wall … either`, `failed part-way … maybe
-//                            still enclosed`; #681 review 1); nights spent in the same shelter as the night before (`in
+//                            still enclosed`; #681 review 1; and `<mob> still near the shelter … may still be closed`,
+//                            the lead on #683, which starts no episode); nights spent in the same shelter as the night before (`in
 //                            the shelter at X until morning`, X repeated). The exported enclosedEpisodes() (g4-soak-2h's
 //                            no_trap, #662 review 3) times them: from the first such line until the bot leaves (a morning
 //                            exit line at the shelter, a cleared escape, a death, a position line over `spanCells` from
@@ -150,12 +151,15 @@ const NIGHT_ESCAPE_FAILED = /^\[night\] the escape failed \((.*)\)$/;
 // dig-out and the escape failed), `could not open the wall toward <mob> either` (no dig-out, the fight wall would not
 // open; no cell: the shelter's from the lines before), and `a way out of the shelter at X failed part-way and the bot is
 // at Y; … maybe still enclosed` (the cell Y). Not one: `<mob> still near the shelter … after N min; … may still be
-// closed` (the agenda and the reflexes decide; the bot is armed and may be fighting from an opened shelter).
+// closed` (the agenda and the reflexes decide; the bot is armed and may be fighting from an opened shelter): the lead's
+// decision on #683 review 1, it counts in I2 (MOB_STILL_NEAR, shown in the table) but starts no no_trap episode.
 const STILL_ENCLOSED = [
-    { re: /^\[night\] morning: could not leave the shelter at (-?\d+, -?\d+, -?\d+)(?: after \d+ tries)? \(/, cell: (m) => m[1] },
+    { re: /^\[night\] morning: could not leave the shelter at (-?\d+, -?\d+, -?\d+)(?: after \d+ tries)?/, cell: (m) => m[1] },
     { re: /^\[night\] morning: could not open the wall toward .* either; back to work, still enclosed\b/, cell: () => null },
     { re: /^\[night\] morning: a way out of the shelter at -?\d+, -?\d+, -?\d+ failed part-way and the bot is at (-?\d+, -?\d+, -?\d+); back to work, maybe still enclosed\b/, cell: (m) => m[1] },
 ];
+// night_routine.js:2111, the 2-min cap with a mob still near: in I2's count only (above).
+const MOB_STILL_NEAR = /^\[night\] morning: .* still near the shelter at -?\d+, -?\d+, -?\d+ after \d+ min; back to work \(.*the shelter may still be closed\)/;
 /** A still-enclosed hand-back: {cell} (null when the line names none), or null for any other line. */
 export function stillEnclosed(msg) {
     for (const x of STILL_ENCLOSED) { const m = x.re.exec(msg); if (m) return { cell: x.cell(m) }; }
@@ -458,11 +462,12 @@ function trapped(lines, rel) {
 }
 
 function enclosedMorning(lines) {
-    const couldNot = lines.filter(l => stillEnclosed(l.msg));
+    const mobNear = lines.filter(l => MOB_STILL_NEAR.test(l.msg));
+    const couldNot = lines.filter(l => stillEnclosed(l.msg) || MOB_STILL_NEAR.test(l.msg));
     const shelters = lines.map(l => ({ l, m: IN_SHELTER.exec(l.msg) })).filter(x => x.m);
     const repeated = [];
     for (let i = 1; i < shelters.length; i++) if (shelters[i].m[1] === shelters[i - 1].m[1]) repeated.push({ ...at(shelters[i].l), shelter: shelters[i].m[1] });
-    return { count: couldNot.length, sameShelterNights: repeated.length, first: firsts(couldNot.map(at)), repeated: firsts(repeated) };
+    return { count: couldNot.length, mobStillNear: mobNear.length, sameShelterNights: repeated.length, first: firsts(couldNot.map(at)), repeated: firsts(repeated) };
 }
 
 function rejectedClicks(lines) {
@@ -747,7 +752,7 @@ export function render(r, name = 'soak') {
         const how = e.result === 'cleared' ? (e.to ? ` to ${e.to}${e.how ? ` (${e.how}; dug ${e.dug}, placed ${e.placed})` : ''}` : '') : e.why ? `: ${e.why}` : '';
         o.push(`    escape ${e.t} (driver.log:${e.line})${e.at ? ` at ${e.at}` : ''} by ${e.by}: ${e.result} in ${e.seconds} s${how}${e.endLine ? ` (driver.log:${e.endLine})` : ''}`);
     }
-    row('I2', 'enclosed-morning', r.I2, `${r.I2.count} still-enclosed hand-backs ("could not leave the shelter" and the like), ${r.I2.sameShelterNights} nights in the same shelter as the night before`);
+    row('I2', 'enclosed-morning', r.I2, `${r.I2.count} still-enclosed hand-backs ("could not leave the shelter" and the like${r.I2.mobStillNear ? `; ${r.I2.mobStillNear} of them a mob still near after the 2-min cap, no no_trap episode` : ''}), ${r.I2.sameShelterNights} nights in the same shelter as the night before`);
     row('I3', 'rejected-click', r.I3, `${r.I3.count} rejected clicks (from ${r.I3.source}${r.I3.secondTries != null ? `; ${r.I3.secondTries} second tries failed too` : ''})`);
     row('I4', 'dig-refused-with-tool', r.I4, r.I4 && `${r.I4.count} of ${r.I4.refusals} logged tool refusals with a usable tool carried (${r.I4.source}${r.I4.capped ? '; the 100-line cap was reached: refusals after it, if any, are not logged' : ''})`);
     row('I5', 'sunset-food-short', r.I5, r.I5 && `${r.I5.count} of ${r.I5.nightFoodLines} food-for-the-night lines short of the night's need; ${r.I5.foodRuns} sunset food runs (+${r.I5.foodRunPoints} points)`);
