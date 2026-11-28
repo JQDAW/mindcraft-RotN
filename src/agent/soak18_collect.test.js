@@ -65,8 +65,8 @@ test('S18b: free misses stop counting after freeMissMs from the first; then a ze
     useRegistry(t, w.bot);
     t.mock.method(Date, 'now', () => now);
     await skills.collectBlock(w.bot, 'pyrotech:tinder', 3, null, 64, { ...skills.COLLECT_LIMITS, totalMs: 1e12, blockMs: 1e12 });
-    // 3 min of free misses at 10 s each (about 18), then the zero breaks use the attempts: more than the old 6, fewer than the cap's 56.
-    assert.ok(w.digs() > 3 + skills.COLLECT_LIMITS.freeMisses && w.digs() < 3 + 56, `${w.digs()} breaks`);
+    // 3 min of free misses at 10 s each (about 18), then the zero breaks use the attempts: 3 + 18 = 21 (#686 review 3: a tight bound).
+    assert.ok(w.digs() >= 20 && w.digs() <= 23, `${w.digs()} breaks`);
 });
 
 test('S18b: a dead bush (sticks, mean 1) keeps its 6 free misses; no odds line', async (t) => {
@@ -79,4 +79,41 @@ test('S18b: a dead bush (sticks, mean 1) keeps its 6 free misses; no odds line',
     await skills.collectBlock(w.bot, 'stick', 1);
     assert.equal(w.calls.dug.length, 1 + skills.COLLECT_LIMITS.freeMisses, w.bot.output.slice(-400));
     assert.doesNotMatch(w.bot.output, /It drops about 1 in/);
+});
+
+test('#686 review 1 (accepted): 8 sticks: the leaves rule (mean 0.5) sets the cap for the collect, dead bushes too: 8 + 16 = 24 breaks at most (develop: 14)', async (t) => {
+    quiet(t);
+    const w = fakeWorld({ at: new Vec3(0, 64, 0), pathfinder: 'teleport', timeOfDay: 1000, onDig: () => [] });
+    for (let x = 2; x <= 70; x += 2) w.world.set(new Vec3(x, 64, 0), 'deadbush');
+    useRegistry(t, w.bot);
+    const leaves = worldSources('stick').filter(s => s.countRange?.min === 0).map(s => s.countRange.mean);
+    assert.equal(Math.min(...leaves), 0.5, 'the lowest mean among the stick rules');
+    await skills.collectBlock(w.bot, 'stick', 8);
+    assert.equal(w.calls.dug.length, 8 + (Math.ceil(1.5 * 8 / 0.5) - 8), w.bot.output.slice(-300));
+    assert.doesNotMatch(w.bot.output, /It drops about 1 in/, 'a dead bush (mean 1) is no low-yield rule: no odds line');
+});
+
+test('#686 review 2: the odds line uses the matched rule\'s own mean (grass for tinder: 1 in 13)', async (t) => {
+    quiet(t);
+    const w = grassField({ every: 13 });
+    useRegistry(t, w.bot);
+    await skills.collectBlock(w.bot, 'pyrotech:tinder', 1);
+    assert.match(w.bot.output, /It drops about 1 in 13 breaks of tallgrass: 13 broken\./);
+});
+
+test('#688 review 6: two low-yield rules: the odds line names the rule that matched (dead bush 1 in 3), not the lowest mean of the collect (leaves 1 in 10)', async (t) => {
+    quiet(t);
+    // rotn-data's loaded rules (worldSources returns copies of them).
+    const { loadRotnData, PACK_VERSION } = await import('../../packages/rotn-data/index.js');
+    const raw = loadRotnData(PACK_VERSION).worldSources;
+    const bush = raw.find(s => s.id === 'deadbush-sticks'), leaves = raw.find(s => s.id === 'leaves-sticks');
+    const was = [bush.countRange.mean, leaves.countRange.mean];
+    t.after(() => { bush.countRange.mean = was[0]; leaves.countRange.mean = was[1]; });
+    bush.countRange.mean = 0.4; leaves.countRange.mean = 0.1; // both below lowYieldMean (0.5)
+    assert.equal(worldSources('stick').find(s => /deadbush/.test(s.id)).countRange.mean, 0.4, 'the rules are the shared data (else this test would prove nothing)');
+    const w = fakeWorld({ at: new Vec3(0, 64, 0), pathfinder: 'teleport', timeOfDay: 1000, onDig: () => [] });
+    for (let x = 2; x <= 30; x += 2) w.world.set(new Vec3(x, 64, 0), 'deadbush');
+    useRegistry(t, w.bot);
+    await skills.collectBlock(w.bot, 'stick', 1);
+    assert.match(w.bot.output, /It drops about 1 in 3 breaks of deadbush: \d+ broken\./, w.bot.output.slice(-300));
 });

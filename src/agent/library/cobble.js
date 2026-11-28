@@ -41,6 +41,24 @@ export function cobbleRecipes(load = loadRotn, { tableLookup = recipesFor } = {}
     return list;
 }
 
+/**
+ * Soak 18 S18c (D, dl:1512, dl:1981): "Invalid item type: undergroundbiomes:sedimentary_cobble. Did you mean
+ * ...igneous_cobble, ...sedimentary_clay or ...sedimentary_sand?" Sedimentary rocks make contenttweaker:chalk_cobble
+ * (dl:1631). For a name that looks like a rock kind's cobble ("<kind>_cobble" or "<kind>_cobblestone", any namespace),
+ * the line naming what that kind's rocks make and the craft; null for any other name or an unknown kind.
+ */
+export function cobbleKindHint(name) {
+    const m = /(?:^|:)(igneous|metamorphic|sedimentary)_cobble(?:stone)?(?::\d+)?$/i.exec(String(name ?? '').trim());
+    if (!m) return null;
+    const kind = m[1].toLowerCase();
+    const gives = [...new Set(cobbleRecipes().filter(r => new RegExp(`rock_${kind}(:|$)`).test(r.rock)).map(r => r.gives.replace(/:\d+$/, '')))];
+    if (!gives.length) return null;
+    const Kind = kind[0].toUpperCase() + kind.slice(1);
+    // Each rock of a kind makes its own cobble (sedimentary: chalk, shale, siltstone, ...): the first ones named.
+    const named = gives.length === 1 ? gives[0] : `their own cobble, one per rock (${gives.slice(0, 3).join(', ')}${gives.length > 3 ? `, and ${gives.length - 3} more` : ''})`;
+    return ` ${Kind} rocks make ${named}: !craftRecipe("cobblestone", 1) crafts the cobble your rocks make (${ROCKS_PER_COBBLE} rocks of one kind).`;
+}
+
 /** Tests only: forget the cache. */
 export function __resetCobbleCache() {
     recipes = null;

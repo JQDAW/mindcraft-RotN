@@ -43,6 +43,7 @@ export const MEMORY_FACTS = {
     placesMax: 4,
     notesMax: 300,
     lineMax: 220,
+    reservesLineMax: 280, // soak 18 S18c (F): the reserves line says the count is now's, and how many short
 };
 export const FACTS_HEAD = 'Facts from the game (computed now, not remembered):';
 export const NOTES_HEAD = 'Your notes (your own words; they may be outdated):';
@@ -251,7 +252,10 @@ function reservesLine(bot) {
     const sturdy = items.filter(i => isSturdy({ name: i.name, metadata: i.metadata ?? 0 })).reduce((n, i) => n + i.count, 0);
     let dirt = 0;
     try { dirt = placeableDirt(items); } catch { dirt = 0; }
-    parts.push(`shelter blocks ${sturdy} of ${SHELTER_HOLD} (stone or cobble)${dirt ? `, dirt ${dirt}` : ''}`);
+    // Soak 18 S18c (F; dl:751, 2160, 2636, 2692): four times the model added a block it had just made to this count,
+    // which already held it, or called 13 of 14 topped up. The prefix "shelter blocks N of 14" stays (the checker's).
+    const short = SHELTER_HOLD - sturdy;
+    parts.push(`shelter blocks ${sturdy} of ${SHELTER_HOLD} (stone or cobble${short > 0 ? `; ${short} short` : ''}; counted now, new crafts included)${dirt ? `, dirt ${dirt}` : ''}`);
     if (Number.isFinite(bot?.food)) {
         const held = heldFoodPoints(bot);
         const need = nightFoodNeed({ food: bot.food, saturation: bot.foodSaturation ?? 0 });
@@ -358,7 +362,7 @@ export function buildMemory(agent, { facts = null, notes = '', now = Date.now() 
     const lines = [];
     const add = (l) => { if (l) lines.push(clip(l, MEMORY_FACTS.lineMax)); };
     try { add(agendaLine(agent)); } catch { /* no agenda line */ }
-    try { if (bot?.inventory) add(reservesLine(bot)); } catch { /* no reserves line */ }
+    try { if (bot?.inventory) { const r = reservesLine(bot); if (r) lines.push(clip(r, MEMORY_FACTS.reservesLineMax)); } } catch { /* no reserves line */ }
     let goal = null;
     try { goal = agent?.self_prompter?.prompt ?? null; } catch { goal = null; }
     for (const l of failureLines(facts, here, now, goal)) add(l);
