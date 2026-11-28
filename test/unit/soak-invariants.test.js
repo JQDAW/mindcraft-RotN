@@ -541,8 +541,8 @@ test('enclosedEpisodes (the #662 nit, after soak 18): every morning exit line ni
     for (const x of [
         '[night] morning: armed, health 20, but the fight cannot be judged yet (unknown: its health, its hit, its attack interval, our weapon damage): leaving the shelter at -71, 63, -146 by the side away from a betteranimalsplus:eel_freshwater at -73, 60, -148', // 1412
         '[night] dig out: the west side (stairs up, 1 steps, 2 blocks)', // 1422
-        // #681 review 4: the 2-min cap's far-side leave (:910), an opening a mob holds (:942), a stopped shaft climb (:2007).
-        '[night] morning: 2 min are up and a zombie 3.2 blocks away has not hurt the bot for 20 s: leaving by the side away from it',
+        // #681 review 4: the morning cap's far-side leave (:910), an opening a mob holds (:942), a stopped shaft climb (:2007).
+        '[night] morning: 5 min are up and a zombie 3.2 blocks away has not hurt the bot for 30 s: leaving by the side away from it',
         '[night] morning: the opening at -70, 63, -146 stays open (a zombie holds it); leaving anyway',
         '[night] morning: the climb out of the shaft at -71, 50, -146 stopped (no way up); back to work, still trapped: the trapped job and !goToSurface go on from here',
     ]) {
@@ -569,9 +569,19 @@ test('enclosedEpisodes and I2 (#681 review 1, 3): every still-enclosed hand-back
         assert.deepEqual(enclosedEpisodes(readJournal(journal)).map(e => [e.t, e.at, e.minutes, e.end]), [['21:33:45', cell, 11.3, 'open']], x);
         assert.equal(soakInvariants(journal).I2.count, 1, x);
     }
-    // :2111 (a mob near after the 2-min cap; the shelter may still be closed, the reflexes decide): no episode, not I2.
-    const near = [REL(24), night, L('21:33:45', '[night] morning: a zombie still near the shelter at -71, 63, -146 after 2 min; back to work (the agenda and the reflexes decide; the shelter may still be closed)'), L('21:45:00', 'x')].join('\n');
-    assert.deepEqual([enclosedEpisodes(readJournal(near)).length, soakInvariants(near).I2.count], [0, 0]);
+    // :2111 (a mob near after the morning cap, MORNING.capMs 5 min; the shelter may still be closed, the reflexes decide): the lead's decision on
+    // #683 review 1, in I2's count (and named in its line), but no no_trap episode.
+    const near = [REL(24), night, L('21:33:45', '[night] morning: a zombie at -73, 63, -146 still near the shelter at -71, 63, -146 after 5 min; back to work (the agenda and the reflexes decide; the shelter may still be closed)'), L('21:45:00', 'x')].join('\n');
+    const rn = soakInvariants(near);
+    assert.deepEqual([enclosedEpisodes(readJournal(near)).length, rn.I2.count, rn.I2.mobStillNear], [0, 1, 1]);
+    assert.match(render(rn, 's'), /- I2 enclosed-morning: 1 still-enclosed hand-backs \("could not leave the shelter" and the like; 1 of them a mob still near after the morning cap, no no_trap episode\)/);
+    // #683 review 3: :1993 with no `in the shelter at` line that night: the bot's last seen cell (a position line).
+    const noShelter = [REL(24), L('21:30:00', '- Position: x: 12.5, y: 58.0, z: -3.5'),
+        L('21:33:45', '[night] morning: could not open the wall toward a zombie at 14, 58, -3 either; back to work, still enclosed: dig a way out'), L('21:45:00', 'x')].join('\n');
+    assert.deepEqual(enclosedEpisodes(readJournal(noShelter)).map(e => [e.at, e.end]), [['12, 58, -4', 'open']]);
+    // #683 review 2: no `(` needed after the cell or the tries.
+    const bare = [REL(24), L('21:33:45', '[night] morning: could not leave the shelter at 3, 60, 3 after 3 tries; back to work, still enclosed: dig a way out'), L('21:45:00', 'x')].join('\n');
+    assert.deepEqual(enclosedEpisodes(readJournal(bare)).map(e => e.at), ['3, 60, 3']);
     // Review 3: an exit line at another cell (farther than spanCells) does not end the episode; one at the shelter does.
     const e = enclosedEpisodes(readJournal([REL(24), night, L('21:33:45', starts[1][0]),
         L('21:35:00', '[night] morning: dug out of the shelter at 20, 70, 20; back to work'),
