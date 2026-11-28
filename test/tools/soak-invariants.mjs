@@ -675,7 +675,7 @@ export function baselineRow(r) {
         I11_usdPerHour: c(r.I11, 'usdPerHour'),
         I13_factsLines: c(r.I13, 'factsLines'), I13_misses: c(r.I13, 'misses'), I13_fields: c(r.I13, 'fields'), I13_gate: c(r.I13, 'gate'),
         I14_claims: c(r.I14, 'claims'), I14_wrong: c(r.I14, 'wrong'), I14_unverifiable: c(r.I14, 'unverifiable'),
-        I15_repeats: c(r.I15), I15_perHour: c(r.I15, 'perHour'), I15_inMemory: c(r.I15, 'inMemory'),
+        I15_repeats: c(r.I15), I15_perHour: c(r.I15, 'perHour'), I15_inMemory: c(r.I15, 'inMemory'), I15_planAfterDefer: r.I15 ? r.I15.planAfterDefer.count : null,
     };
 }
 
@@ -736,7 +736,8 @@ export function render(r, name = 'soak') {
     row('I14', 'wrong-state claims', r.I14, `${r.I14.wrong} of ${r.I14.claims} claims wrong (${r.I14.unverifiable} unverifiable) in ${r.I14.claimReplies} of ${r.I14.replies} replies; y ${r.I14.byKind.y.join('/')}, count ${r.I14.byKind.count.join('/')}, step ${r.I14.byKind.step.join('/')} (right/wrong/unverifiable)`);
     for (const w of r.I14.wrongFirst) o.push(`    wrong ${w.t} (driver.log:${w.line}) ${w.kind}: said ${w.said}, state ${w.state ?? '?'}`);
     o.push(`    hand-check sample (${r.I14.handSample.length}): ${r.I14.handSample.map(h => h.line).join(', ') || '–'}`);
-    row('I15', 'repeated failures', r.I15, `${r.I15.count} repeats within ${MEMORY_CHECKS.repeatMin} min of the same failure (${cell(r.I15.perHour)}/h; ${r.I15.inMemory} after a facts line named it) of ${r.I15.failures} failed commands; within 30 min ${r.I15.within30}, within 60 min ${r.I15.within60}`);
+    row('I15', 'repeated failures', r.I15, `${r.I15.count} repeats within ${MEMORY_CHECKS.repeatMin} min of the same failure (${cell(r.I15.perHour)}/h; ${r.I15.inMemory} after a facts line named it) of ${r.I15.failures} failed commands; within 30 min ${r.I15.within30}, within 60 min ${r.I15.within60}; plans asked again after a defer: ${r.I15.planAfterDefer.count} (within ${MEMORY_CHECKS.deferMin} min of ${r.I15.planAfterDefer.defers} replies that drop or defer the target)`);
+    for (const a of r.I15.planAfterDefer.first) o.push(`    plan after a defer ${a.t} (driver.log:${a.line}) ${a.target}, deferred at driver.log:${a.deferLine}`);
     return o.join('\n');
 }
 

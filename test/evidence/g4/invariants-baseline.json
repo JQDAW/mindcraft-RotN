@@ -41,7 +41,8 @@
     "I14_unverifiable": 3,
     "I15_repeats": 5,
     "I15_perHour": 2.49,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-2-20261108": {
     "release": null,
@@ -85,7 +86,8 @@
     "I14_unverifiable": 1,
     "I15_repeats": 1,
     "I15_perHour": 0.5,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-3-20261118": {
     "release": "rotn-v0.1.5",
@@ -129,7 +131,8 @@
     "I14_unverifiable": 2,
     "I15_repeats": 1,
     "I15_perHour": 0.5,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-4-20261119": {
     "release": "rotn-v0.1.7",
@@ -173,7 +176,8 @@
     "I14_unverifiable": 4,
     "I15_repeats": 2,
     "I15_perHour": 1,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-5-20261120": {
     "release": "rotn-v0.1.11",
@@ -217,7 +221,8 @@
     "I14_unverifiable": 1,
     "I15_repeats": 6,
     "I15_perHour": 2.99,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-6-20261120": {
     "release": "rotn-v0.1.12",
@@ -261,7 +266,8 @@
     "I14_unverifiable": 4,
     "I15_repeats": 28,
     "I15_perHour": 13.95,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-7-20261120": {
     "release": "rotn-v0.1.13",
@@ -305,7 +311,8 @@
     "I14_unverifiable": 8,
     "I15_repeats": 14,
     "I15_perHour": 6.98,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-8-20261121": {
     "release": "rotn-v0.1.14",
@@ -349,7 +356,8 @@
     "I14_unverifiable": 4,
     "I15_repeats": 4,
     "I15_perHour": 1.99,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-9-20261122": {
     "release": "rotn-v0.1.15",
@@ -393,7 +401,8 @@
     "I14_unverifiable": 9,
     "I15_repeats": 0,
     "I15_perHour": 0,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-10-20261122": {
     "release": "rotn-v0.1.16",
@@ -437,7 +446,8 @@
     "I14_unverifiable": 4,
     "I15_repeats": 0,
     "I15_perHour": 0,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-11-20261122": {
     "release": "rotn-v0.1.17",
@@ -481,7 +491,8 @@
     "I14_unverifiable": 3,
     "I15_repeats": 5,
     "I15_perHour": 2.49,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-12-20261123": {
     "release": "rotn-v0.1.18",
@@ -525,7 +536,8 @@
     "I14_unverifiable": 8,
     "I15_repeats": 8,
     "I15_perHour": 3.98,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-13-20261124": {
     "release": "rotn-v0.1.19",
@@ -569,7 +581,8 @@
     "I14_unverifiable": 4,
     "I15_repeats": 17,
     "I15_perHour": 8.47,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-14-20261124": {
     "release": "rotn-v0.1.20",
@@ -613,7 +626,8 @@
     "I14_unverifiable": 2,
     "I15_repeats": 4,
     "I15_perHour": 1.99,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-15-20261124": {
     "release": "rotn-v0.1.21",
@@ -657,7 +671,8 @@
     "I14_unverifiable": 11,
     "I15_repeats": 8,
     "I15_perHour": 3.99,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-16-20261125": {
     "release": "rotn-v0.1.22",
@@ -701,7 +716,8 @@
     "I14_unverifiable": 2,
     "I15_repeats": 0,
     "I15_perHour": 0,
-    "I15_inMemory": 0
+    "I15_inMemory": 0,
+    "I15_planAfterDefer": 0
   },
   "g4soak-17-20261126": {
     "release": "rotn-v0.1.23",
@@ -738,14 +754,15 @@
     "I11_usdPerHour": 0.01453,
     "I13_factsLines": 102,
     "I13_misses": 3,
-    "I13_fields": 860,
+    "I13_fields": 862,
     "I13_gate": "fail",
     "I14_claims": 14,
     "I14_wrong": 0,
     "I14_unverifiable": 9,
     "I15_repeats": 4,
     "I15_perHour": 1.99,
-    "I15_inMemory": 4
+    "I15_inMemory": 4,
+    "I15_planAfterDefer": 0
   },
   "g4soak-18-20261127": {
     "release": "rotn-v0.1.24",
@@ -781,14 +798,15 @@
     "I12_deathsUnnamed": 0,
     "I11_usdPerHour": 0.01694,
     "I13_factsLines": 97,
-    "I13_misses": 10,
-    "I13_fields": 832,
-    "I13_gate": "fail",
+    "I13_misses": 0,
+    "I13_fields": 843,
+    "I13_gate": "too few",
     "I14_claims": 24,
     "I14_wrong": 0,
     "I14_unverifiable": 21,
     "I15_repeats": 3,
     "I15_perHour": 1.5,
-    "I15_inMemory": 3
+    "I15_inMemory": 3,
+    "I15_planAfterDefer": 6
   }
 }

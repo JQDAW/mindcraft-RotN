@@ -8,15 +8,22 @@
 //       after it: the self-prompt goal `RotN agenda, step N of M (<id>)`, `!agenda` replies (also `done (…), step X`),
 //       the server's `agenda step <id> started`, `agenda done` / `agenda standing goal started`, and a scripted-job line
 //       while the agenda is active; a numbered step named after its `step X done` line or in the line's own done list,
-//       and `active, all steps done` with steps not done, are misses), the
+//       and `active, all steps done` with steps not done, are misses; soak 18 (B1): a source in the facts line's own
+//       second that disagrees makes the field unverifiable, as the logs cannot order the two), the
 //       deaths (`[death] died at X; waiting for the respawn` lines so far, the last one's cell), the last shelter
 //       (`[night] in the shelter at X until morning`), the pickaxe (`[shelter] pickaxe check: … inventory: …`,
 //       `dig refused: … pickaxe tools: …`; soak 17, by day: the pickaxe count from a craft's `you now have`, a listing that
 //       shows the hands, `[pickaxe] made`, `[tool] … broke`, unknown after a death), the food held (`[night] food for the
 //       night: … held H points`, and the standing goal's `you hold H` within `goalS` unless an inventory change lands
 //       between), the shelter blocks (the server's `shelter_blocks: the scripted job ended: +G … (N of 14`: N once it
-//       ended, N - G before it; the standing goal's `you have N` as above), each failure (a command with those
-//       args that ran and failed around `<n> min ago`) and each collect (`Collected N <item>` around its time). A
+//       ended, N - G before it; the standing goal's `you have N` as above; soak 18 (B2): the last job's end count plus
+//       each cobble craft after it, `Cobblestone from your rocks: N <item>` confirmed by `Successfully crafted <item>`, or
+//       a craft's `you now have N` less the last count of that item, until a night, a death, a craft of unknown gain or
+//       a shortened output of a command that collects or crafts, which may hide a craft),
+//       each failure (a command with those args that ran and failed around `<n> min ago`; #675's merged `!cmd(args) xN:`
+//       needs exactly N such failures with the full args, each within failureHoldMin of the next) and each collect (`Collected N <item>` around its time; soak 18
+//       (B3): with none, a scripted job's run or a collecting or crafting command's shortened output in that time
+//       leaves it unverifiable; a job with no end line ends at the next job's start or after bracketMin). A
 //       field is a match, a miss, or unverifiable (no state line in the window). n/a with no facts line (the
 //       summary mode, or a release before #637). The check passes at 100% of the verifiable fields.
 //   I14 wrong-state claims (M4 check 2)  model replies (`Generated response:`) that state the bot's y (`y=60`, `at y
@@ -28,7 +35,10 @@
 //       `handSample` claim replies for the plan's hand check (every k-th, so the same journal gives the same sample).
 //   I15 repeated failures (M4 check 3)  a command (name and args) whose output failed (memory_facts.js looksFailed,
 //       the same test the memory uses) that fails again within `repeatMin`; with a `[memory] facts` line naming the
-//       command between the two (`inMemory`: the first failure was in the memory). Per hour of journal.
+//       command between the two (`inMemory`: the first failure was in the memory). Per hour of journal. Soak 18, a
+//       separate count (`planAfterDefer`): a `!getCraftingPlan` of a target (or its chain) asked again within `deferMin`
+//       after the model said it would drop or defer that target. The chain: the plans asked from the reply's first try
+//       at the named target (a `!craftRecipe` or `!getCraftingPlan`, within `repeatMin` before it) to the reply.
 import { looksFailed } from '../../src/agent/memory_facts.js';
 import { ROTN_EARLY_GAME } from '../../src/agent/agenda.js';
 
@@ -37,7 +47,7 @@ import { ROTN_EARLY_GAME } from '../../src/agent/agenda.js';
 const STEP_IDS = ROTN_EARLY_GAME.map(s => s.id);
 const KNOWN_IDS = new Set([...STEP_IDS, 'shelter_blocks', 'weapon', 'food']);
 
-export const MEMORY_CHECKS = { windowS: 30, yTolerance: 2, repeatMin: 10, handSample: 20, minSamples: 5, bracketMin: 10, agendaAfterS: 3, goalS: 5, inFlightS: 2 };
+export const MEMORY_CHECKS = { windowS: 30, yTolerance: 2, repeatMin: 10, handSample: 20, minSamples: 5, bracketMin: 10, agendaAfterS: 3, goalS: 5, inFlightS: 2, deferMin: 60, failureHoldMin: 5 };
 
 const hms = (ms) => new Date(ms).toISOString().slice(11, 19);
 const C3 = '(-?\\d+), (-?\\d+), (-?\\d+)';
@@ -70,6 +80,14 @@ const PICK_BROKE = /^\[tool\] (\S*pickaxe) broke\b/;
 // An inventory change that may land between two code-built numbers a second apart (soak 17: a forage's pickup).
 const IN_FLIGHT = /^(Picked up [1-9]|Foraged |Collected [1-9]|.*\byou now have \d|\[survival\] ate |Successfully crafted )/;
 const REPLY = /^Generated response: (.*)$/;
+// Soak 18 (B2): a cobble craft's gain (`Cobblestone from your rocks: 6 undergroundbiomes:igneous_cobble:0 (4 …`; a
+// shortened output may cut the line's start), its confirmation or failure, and a cobble count from a craft.
+const FROM_ROCKS = /from your rocks: (\d+) (\S+) \(/;
+const CRAFT_FAILED = /^Could not craft (\S+?):/;
+const CRAFTED_COBBLE = /^Successfully crafted (\S*cobble\S*?)(?:,| from )/;
+const SHORTENED = /has been shortened/;
+// #677 review 2: only a command that collects or crafts can hide a `Collected` or craft line in a shortened output.
+const MAKES_ITEMS = /^!(?:collectBlocks|craftRecipe|smeltItem)$/;
 const PARSED_ONE = /^parsed command: \{ commandName: '(![A-Za-z]+)', args: \[(.*)\] \}$/;
 const PARSED_OPEN = /^parsed command: \{$/;
 const EXECUTED = /^Agent executed: (![A-Za-z]+) and got:\s?(.*)$/;
@@ -127,7 +145,8 @@ export function sameItem(phrase, id) {
 /** The bot's state lines from the journal (and the server's chat), in time order. */
 function stateOf(lines, chat) {
     const pos = [], goals = [], agendaReplies = [], deaths = [], shelters = [], picks = [], food = [], inventories = [], nowHave = [], collected = [], nights = [], commands = [];
-    const standing = [], inFlight = [], pickTimeline = [];
+    const standing = [], inFlight = [], pickTimeline = [], cobbleCrafts = [], shortened = [];
+    const gainPending = new Map(), itemCount = new Map(); // B2: `from your rocks` gains not yet confirmed; last counts
     let nightNo = 0;
     // The pickaxes carried, per kind (#662 review 5: a second kind must not be lost to one kind's count or break).
     // `known`: a listing that shows the hands said what is carried; a death makes it unknown again.
@@ -137,7 +156,11 @@ function stateOf(lines, chat) {
         const l = lines[i];
         let m0;
         for (const re of POSITIONS) { const m = re.exec(l.msg); if (m) { pos.push({ t: l.t, y: Math.floor(Number(m[2])), n: l.n, at: `${Math.floor(Number(m[1]))}, ${Math.floor(Number(m[2]))}, ${Math.floor(Number(m[3]))}` }); break; } }
-        if ((m0 = EXECUTED.exec(l.msg))) commands.push({ t: l.t, cmd: m0[1] });
+        if ((m0 = EXECUTED.exec(l.msg))) {
+            commands.push({ t: l.t, cmd: m0[1] });
+            // A shortened output may hide crafts (soak 17 17:29:08: one cobble craft cut out): B2's chain stops there.
+            if (SHORTENED.test(m0[2]) && MAKES_ITEMS.test(m0[1])) { shortened.push({ t: l.t, n: l.n }); cobbleCrafts.push({ t: l.t, n: l.n, item: null, gain: null }); }
+        }
         let m;
         if ((m = GOAL.exec(l.msg)) && /goal/.test(l.msg)) goals.push({ t: l.t, num: m[1] ? Number(m[1]) : null, id: m[2] ?? m[3] });
         else if (STANDING.test(l.msg) && /goal/.test(l.msg)) goals.push({ t: l.t, done: true });
@@ -164,12 +187,26 @@ function stateOf(lines, chat) {
         if ((m = PICK_CHECK.exec(l.msg))) picks.push({ t: l.t, has: !/^none$/.test(m[1].trim()) });
         else if ((m = DIG_PICKS.exec(l.msg))) picks.push({ t: l.t, has: !/^none carried$/.test(m[1].trim()) });
         if ((m = NIGHT_FOOD.exec(l.msg))) food.push({ t: l.t, held: Number(m[1]) });
-        if ((m = NOW_HAVE.exec(l.msg))) nowHave.push({ t: l.t, n: l.n, count: Number(m[1]), item: m[2] });
+        // B2: a cobble craft and its gain: the `from your rocks` count it confirms (within 2 s), else the change of that
+        // item's `you now have` count; null when neither is known (the chain of sources stops there).
+        if ((m = FROM_ROCKS.exec(l.msg))) gainPending.set(m[2], { t: l.t, gain: Number(m[1]) });
+        else if ((m = CRAFT_FAILED.exec(l.msg))) gainPending.delete(m[1]);
+        else if ((m = CRAFTED_COBBLE.exec(l.msg))) {
+            const p = gainPending.get(m[1]);
+            const have = NOW_HAVE.exec(l.msg);
+            const now = have && have[2] === m[1] ? Number(have[1]) : null;
+            const gain = p && l.t - p.t <= 2000 ? p.gain : now != null && itemCount.has(m[1]) ? now - itemCount.get(m[1]) : null;
+            cobbleCrafts.push({ t: l.t, n: l.n, item: m[1], gain });
+            gainPending.delete(m[1]);
+        }
+        if ((m = NOW_HAVE.exec(l.msg))) { nowHave.push({ t: l.t, n: l.n, count: Number(m[1]), item: m[2] }); itemCount.set(m[2], Number(m[1])); }
         if ((m = COLLECTED.exec(l.msg))) collected.push({ t: l.t, n: l.n, count: Number(m[1]), item: m[2] });
         if (INVENTORY.test(l.msg)) {
             const items = [];
             for (let j = i + 1; j < lines.length && lines[j].t - l.t <= 2000; j++) { const it = INV_ITEM.exec(lines[j].msg); if (it) items.push({ item: it[1], count: Number(it[2]) }); else if (!/^- /.test(lines[j].msg)) break; }
             inventories.push({ t: l.t, n: l.n, items });
+            itemCount.clear();
+            for (const x of items) itemCount.set(x.item, (itemCount.get(x.item) ?? 0) + x.count);
             // The pickaxe count from a listing only when it also shows the hands (`IN THE OFF HAND: …`, `WEARING: …`, the
             // lines after the items): soak 17's pickaxe sat in the off hand, which the item lines leave out.
             let hands = false;
@@ -189,13 +226,18 @@ function stateOf(lines, chat) {
     // #650 review 5: "agenda step shelter_blocks: the scripted job (run 1 of 2 today)" (the id ends at the colon). Soak 17
     // (A2): after `agenda done` (or `agenda standing goal started`) that job runs under the standing goal, so its line is a
     // step only while the agenda is active; a `step X started` line re-opens it. `agendaDone`: the done marks, a source.
-    const stepStarted = [], agendaDone = [], shelterBlocks = [];
+    const stepStarted = [], agendaDone = [], shelterBlocks = [], jobs = [];
     let doneNow = false, jobStart = null;
     for (const c of chat) {
         let m;
         if (/^agenda (?:done|standing goal started\b)/.test(c.msg)) { doneNow = true; agendaDone.push({ t: c.t }); continue; }
         if ((m = /^agenda step ([a-z_]+) started\b/.exec(c.msg))) { doneNow = false; stepStarted.push({ t: c.t, id: m[1] }); continue; }
+        // B3: every scripted job's run (its collects log no `Collected` line in the journal).
+        if ((m = /^agenda step ([a-z_]+): the scripted job ended\b/.exec(c.msg))) { const j = [...jobs].reverse().find(x => x.id === m[1] && x.end === Infinity); if (j) j.end = c.t; }
         if ((m = /^agenda step ([a-z_]+): the scripted job \(run/.exec(c.msg))) {
+            // #677 review 3: a job with no end line ends at the next job's start.
+            for (const j of jobs) if (j.end === Infinity) j.end = c.t;
+            jobs.push({ id: m[1], start: c.t, end: Infinity });
             if (m[1] === 'shelter_blocks') jobStart = c.t;
             if (!doneNow) stepStarted.push({ t: c.t, id: m[1] });
             continue;
@@ -203,7 +245,9 @@ function stateOf(lines, chat) {
         // S1: the job's end count, its gain and its start (the count before the job is count - gain).
         if ((m = /^agenda step shelter_blocks: the scripted job ended: \+(\d+) shelter blocks \((\d+) of \d+;/.exec(c.msg))) { shelterBlocks.push({ t: c.t, count: Number(m[2]), gain: Number(m[1]), start: jobStart ?? c.t }); jobStart = null; }
     }
-    return { pos, goals, agendaReplies, deaths, shelters, picks, food, inventories, nowHave, collected, stepDone, stepStarted, agendaDone, shelterBlocks, nights, commands, standing, inFlight, pickTimeline };
+    // ... or after bracketMin (one still open at the journal's end, or killed with no line).
+    for (const j of jobs) if (j.end === Infinity) j.end = j.start + MEMORY_CHECKS.bracketMin * 60_000;
+    return { pos, goals, agendaReplies, deaths, shelters, picks, food, inventories, nowHave, collected, stepDone, stepStarted, agendaDone, shelterBlocks, nights, commands, standing, inFlight, pickTimeline, cobbleCrafts, shortened, jobs };
 }
 
 /** Executed commands: [{t, n, cmd: '!name', args: 'normalized', key, output, failed}]. */
@@ -309,15 +353,29 @@ export function memoryFactsCheck(lines, chat = []) {
             const doneList = /; done: (.*)$/.exec(f.agenda.trim())?.[1] ?? null;
             const listed = doneList == null || doneList === 'none' ? [] : doneList.split(', ').map(x => x.trim());
             const truncated = /\.\.\.$/.test(doneList ?? '');
+            // B1 (soak 18, 20:53:22 and 20:55:13; #677 review 1): the step changed in the facts line's own second, and the
+            // logs cannot order the two. Unverifiable only when the latest source in an earlier second names the facts'
+            // step (the state just before the change); else judged as before.
+            const sec = (x) => Math.floor(x / 1000);
+            const prior = before(all.filter(x => sec(x.t) < sec(t)), t);
+            const priorIsStep = !!prior && prior.id === step && t - prior.t <= MEMORY_CHECKS.bracketMin * 60_000;
+            const changedNow = all.some(x => sec(x.t) === sec(t) && x.id !== step);
             if (!step && /^Agenda: active, all steps done\b/.test(f.agenda)) {
                 const all = doneList === 'none' || (!truncated && STEP_IDS.some(id => !listed.includes(id)));
                 judge('agenda', all ? false : null, l, { said: 'active, all steps done', state: `done: ${doneList ?? '?'}` });
-            } else if (step && STEP_IDS.includes(step) && (listed.slice(0, truncated ? -1 : undefined).includes(step)
-                || st.stepDone.some(d => d.id === step && d.t <= t && (!last || d.t > last.t)))) {
-                // #661 (soak 17 17:22:20, 17:22:23): a numbered step named as the current one after its `step X done` line,
-                // or listed in the line's own done list, is stale, whatever the sources before it say.
+            } else if (step && STEP_IDS.includes(step) && listed.slice(0, truncated ? -1 : undefined).includes(step)) {
+                // #661 (soak 17 17:22:20, 17:22:23): a numbered step named as the current one in the line's own done list,
+                // or after its `step X done` line (below), is stale, whatever the sources before it say.
                 judge('agenda', false, l, { said: step, state: `${step} done` });
-            } else judge('agenda', src.length && step ? src.includes(step) : null, l, { said: step, state: [...new Set(src)].join(',') });
+            } else if (step && STEP_IDS.includes(step) && st.stepDone.some(d => d.id === step && d.t <= t && (!prior || d.t > prior.t))) {
+                // Stale after its `step X done` line; B1: a done line in this same second, with the step the latest source
+                // before it, is unverifiable.
+                const doneAt = st.stepDone.filter(d => d.id === step && d.t <= t && (!prior || d.t > prior.t));
+                judge('agenda', priorIsStep && doneAt.every(d => sec(d.t) === sec(t)) ? null : false, l, { said: step, state: `${step} done` });
+            } else {
+                const ok = src.length && step ? src.includes(step) : null;
+                judge('agenda', ok === false && changedNow && priorIsStep ? null : ok, l, { said: step, state: [...new Set(src)].join(',') });
+            }
         }
         // Deaths: the count so far (a death within the window may not be in yet), and the last one's cell. A death with
         // no cell (or an 'unknown' cause) still counts.
@@ -366,11 +424,32 @@ export function memoryFactsCheck(lines, chat = []) {
                 // (count - gain), and both while it ran.
                 const src3 = [];
                 for (const x of near(st.shelterBlocks, t, W)) {
-                    if (x.t <= t) src3.push(x.count);
+                    // B2: a cobble craft after the job's end and before this line makes its count stale (soak 18 21:36:09).
+                    if (x.t <= t) { if (!st.cobbleCrafts.some(c => c.t > x.t && c.n < l.n)) src3.push(x.count); }
                     else if (x.start >= t) src3.push(x.count - x.gain);
                     else src3.push(x.count, x.count - x.gain);
                 }
                 src3.push(...goals.map(g => g.blocks));
+                // B2 (soak 18): the last job's end count plus each cobble craft after it (by this line, or logged within
+                // inFlightS after it), within bracketMin, until a night, a death or a craft of unknown gain.
+                const end = before(st.shelterBlocks, t);
+                if (end && t - end.t <= MEMORY_CHECKS.bracketMin * 60_000 && !st.nights.some(x => x.t > end.t && x.t <= t) && !st.deaths.some(x => x.t > end.t && x.t <= t)) {
+                    const crafts = [];
+                    for (const c of st.cobbleCrafts) {
+                        if (c.t <= end.t) continue;
+                        if (c.n > l.n && c.t - t > MEMORY_CHECKS.inFlightS * 1000) break;
+                        crafts.push(c);
+                    }
+                    const unknown = crafts.findIndex(c => c.gain == null);
+                    if (unknown < 0 || crafts[unknown].n > l.n) {
+                        const usable = unknown < 0 ? crafts : crafts.slice(0, unknown);
+                        const gains = (xs) => xs.reduce((a, c) => a + c.gain, 0);
+                        const by = usable.filter(c => c.n < l.n), late = usable.filter(c => c.n > l.n);
+                        const atLine = end.count + gains(by);
+                        if (by.length || late.length) src3.push(atLine); // by this line (the count before the late ones)
+                        if (late.length) src3.push(atLine + gains(late));
+                    }
+                }
                 judge('shelter blocks', src3.length ? src3.some(x => x === blocks) : null, l, { said: blocks, state: src3.join(',') });
             }
         }
@@ -378,14 +457,29 @@ export function memoryFactsCheck(lines, chat = []) {
         // "(N min ago …)" (memory_facts.js clips at 120 chars), or a command with no `Agent executed` line in the window
         // (#650 review 8: typed by a player, run outside the agent's command log), is unverifiable.
         for (const line of f.failures) {
-            const fm = /^(![A-Za-z]+)(?:\((.*?)\))?: .*\((just now|\d+ min ago)\b/.exec(line);
+            // Round 17 K (#675): a repeat within the memory's 5-min hold is merged into one entry, `!cmd(args) x2: why`.
+            const fm = /^(![A-Za-z]+)(?:\((.*?)\))?(?: x(\d+))?: .*\((just now|\d+ min ago)\b/.exec(line);
             if (!fm) { judge('failure', null, l, {}); continue; }
-            const ago = agoMin(fm[3]);
+            const ago = agoMin(fm[4]);
+            const times = fm[3] ? Number(fm[3]) : 1;
             const args = (fm[2] ?? '').replace(/"/g, '\'').replace(/\s+/g, ' ').trim();
             const lo = t - (ago + 1.5) * 60_000, hi = t - Math.max(0, ago - 1.5) * 60_000;
             const ran = cmds.filter(c => c.cmd === fm[1] && c.t >= lo && c.t <= hi);
-            const hit = ran.some(c => c.failed && (!args || c.args.replace(/\s+/g, ' ').includes(args.split(',')[0].trim())));
-            judge('failure', ran.length ? hit : null, l, { said: `${fm[1]}(${fm[2] ?? ''})`, ago });
+            const same = (c) => c.failed && (!args || c.args.replace(/\s+/g, ' ').includes(args.split(',')[0].trim()));
+            let hit = ran.some(same);
+            // xN (#677 review 4): exactly N failed runs with the full args (the memory's key), each within failureHoldMin of
+            // the next, ending at the newest one in the window. A command the memory clipped (`...`) matches by its start.
+            if (hit && times > 1) {
+                const norm2 = (x) => x.replace(/"/g, '\'').replace(/\s+/g, ' ').trim();
+                const want = norm2(fm[2] ?? '');
+                const full = (c) => c.failed && (/\.\.\.$/.test(want) ? norm2(c.args).startsWith(want.slice(0, -3)) : norm2(c.args) === want);
+                const runs = cmds.filter(c => c.cmd === fm[1] && c.t <= hi && full(c));
+                const last = runs.findLastIndex(c => c.t >= lo);
+                let k = last < 0 ? 0 : 1;
+                while (last - k >= 0 && runs[last - k + 1].t - runs[last - k].t <= MEMORY_CHECKS.failureHoldMin * 60_000) k++;
+                hit = k === times;
+            }
+            judge('failure', ran.length ? hit : null, l, { said: `${fm[1]}(${fm[2] ?? ''})${times > 1 ? ` x${times}` : ''}`, ago });
         }
         // Each collect: a `Collected N <item>` line around its time.
         if (f.collects) {
@@ -395,7 +489,10 @@ export function memoryFactsCheck(lines, chat = []) {
                 const ago = agoMin(cm[3]);
                 const lo = t - (ago + 1.5) * 60_000, hi = t - Math.max(0, ago - 1.5) * 60_000;
                 const hit = st.collected.some(x => x.t >= lo && x.t <= hi && x.count === Number(cm[1]) && x.item === cm[2]);
-                judge('collect', hit, l, { said: `${cm[1]} ${cm[2]}`, ago });
+                // B3 (soak 18): no `Collected` line, but a scripted job ran or a command's output was shortened then: the
+                // line that would name it is not in the journal.
+                const hidden = st.jobs.some(j => j.start <= hi && j.end >= lo) || st.shortened.some(x => x.t >= lo && x.t <= hi);
+                judge('collect', hit ? true : hidden ? null : false, l, { said: `${cm[1]} ${cm[2]}`, ago });
             }
         }
     }
@@ -577,5 +674,42 @@ export function repeatedFailures(lines) {
     const span = lines.length > 1 ? (lines.at(-1).t - lines[0].t) / 3_600_000 : 0;
     // For the lead's choice of window: the repeats within 30 and 60 min as well (the check itself uses repeatMin).
     const within = (min) => fails.filter((f, i) => fails.slice(0, i).some(p => p.key === f.key && f.t - p.t <= min * 60_000)).length;
-    return { count: repeats.length, failures: fails.length, inMemory: repeats.filter(r => r.inMemory).length, perHour: span ? Math.round(100 * repeats.length / span) / 100 : null, within30: within(30), within60: within(60), first: repeats.slice(0, 5) };
+    return { count: repeats.length, failures: fails.length, inMemory: repeats.filter(r => r.inMemory).length, perHour: span ? Math.round(100 * repeats.length / span) / 100 : null, within30: within(30), within60: within(60), first: repeats.slice(0, 5), planAfterDefer: planAfterDefer(lines) };
+}
+
+// Soak 18: the model's words for dropping or deferring a target ("I'll drop the sword hunt", "a stone sword can wait",
+// "the stone sword is optional anyway").
+// "drop" only with the bot as its subject: not a block's drop ("broke without a drop", "leaves drop tinder").
+const DEFER = /\b(?:i'll|i will|i'm going to|let's|i)\s+(?:drop|skip|abandon|shelve)\b|\bgiv(?:e|ing) up on\b|\bcan wait\b|\bis optional\b|\bnot (?:needed|worth it)\b/i;
+const targetOf = (args) => (/^\s*['"]([^'"]+)['"]/.exec(args ?? '')?.[1] ?? null);
+/** The word of a target a reply names it by: the last word of its name ("stone_sword" -> "sword", "pyrotech:tinder" -> "tinder"). */
+const keyWord = (target) => { const w = norm(target).split(' ').filter(x => /^[a-z]{4,}$/.test(x)); return w.at(-1) ?? null; };
+
+/**
+ * Soak 18 (I15, a separate count): a `!getCraftingPlan` of a target asked again within deferMin after a reply that
+ * drops or defers it. A deferring reply names a target (its key word) of a `!craftRecipe` or `!getCraftingPlan` within
+ * repeatMin before it; the chain is that target and every target planned from its first try to the reply.
+ */
+export function planAfterDefer(lines) {
+    const cmds = executedCommands(lines).filter(c => c.cmd === '!getCraftingPlan' || c.cmd === '!craftRecipe').map(c => ({ ...c, target: targetOf(c.args) })).filter(c => c.target);
+    const plans = cmds.filter(c => c.cmd === '!getCraftingPlan');
+    const defers = [];
+    for (const l of lines) {
+        const r = REPLY.exec(l.msg);
+        if (!r) continue;
+        const text = r[1].replace(/![a-zA-Z]+\(.*$/s, ' ');
+        if (!DEFER.test(text)) continue;
+        const recent = cmds.filter(c => c.n < l.n && l.t - c.t <= MEMORY_CHECKS.repeatMin * 60_000);
+        const named = recent.filter(c => { const k = keyWord(c.target); return k && new RegExp(`\\b${k}s?\\b`, 'i').test(text); });
+        if (!named.length) continue;
+        const from = Math.min(...named.map(c => c.n));
+        const chain = new Set([...named.map(c => c.target), ...recent.filter(c => c.cmd === '!getCraftingPlan' && c.n >= from).map(c => c.target)]);
+        defers.push({ t: l.t, n: l.n, chain });
+    }
+    const asks = [];
+    for (const p of plans) {
+        const d = [...defers].reverse().find(x => x.n < p.n && p.t - x.t <= MEMORY_CHECKS.deferMin * 60_000 && x.chain.has(p.target));
+        if (d) asks.push({ t: hms(p.t), line: p.n, target: p.target, deferLine: d.n });
+    }
+    return { count: asks.length, defers: defers.length, first: asks.slice(0, 10) };
 }
