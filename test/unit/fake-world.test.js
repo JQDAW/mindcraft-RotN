@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
+import pathfinderPkg from 'mineflayer-pathfinder';
 import { fakeWorld, pocketUnderRock, holeAtSpawn, openShaft, noPath, teleport, makeRegistry, fixtureStats, SLOT, DEFAULT_GROUND, liveName } from '../fixtures/fake-world.mjs';
 import { __setRegistryForTest } from '../../src/utils/mcdata.js';
 import { isTrapped, isOut, surfaceTarget } from '../../src/agent/library/escape.js';
@@ -237,6 +238,36 @@ test('#631 re-review: teleport meets a ranged goal (GoalNear rangeSq) at the goa
     // A goal with no range (GoalBlock) is still the cell itself.
     await w.bot.pathfinder.goto({ x: 5, y: 64, z: 5 });
     assert.equal(w.bot.entity.position.toString(), '(5.5, 64, 5.5)');
+});
+
+test('#660 nits: teleport does not move a bot already in a GoalNear\'s range; a GoalGetToBlock ends beside or on top of the block, never in it', async () => {
+    const { goals } = pathfinderPkg;
+    // Nit 1: in range already (the real GoalNear's isEnd on the bot's cell): no move, as a plain goal and the real class.
+    const w = fakeWorld({ pathfinder: 'teleport', at: V(3, 64, 3) });
+    await w.bot.pathfinder.goto({ x: 4, y: 64, z: 4, rangeSq: 4 });
+    assert.equal(w.bot.entity.position.toString(), '(3.5, 64, 3.5)');
+    await w.bot.pathfinder.goto(new goals.GoalNear(5, 64, 3, 2));
+    assert.equal(w.bot.entity.position.toString(), '(3.5, 64, 3.5)');
+    await w.bot.pathfinder.goto(new goals.GoalNear(9, 64, 3, 2)); // out of range: moves to the goal's cell
+    assert.equal(w.bot.entity.position.toString(), '(9.5, 64, 3.5)');
+    // Nit 2: GoalGetToBlock at a block in the ground (the surface is y 63): beside it one lower is stone, so the end cell
+    // is on top of it (y 64), not the block's own cell; the nearest end cell to the bot.
+    const g = fakeWorld({ pathfinder: 'teleport', at: V(10, 64, 0) });
+    await g.bot.pathfinder.goto(new goals.GoalGetToBlock(0, 63, 0));
+    assert.equal(g.bot.entity.position.toString(), '(0.5, 64, 0.5)');
+    // A block standing on the surface (a placed log at 0, 64, 5): beside it at its level, nearest the bot, as a plain goal.
+    const b = fakeWorld({ pathfinder: 'teleport', at: V(10, 64, 5), set: { '0,64,5': 'log' } });
+    await b.bot.pathfinder.goto({ x: 0, y: 64, z: 5, getToBlock: true });
+    assert.equal(b.bot.entity.position.toString(), '(1.5, 64, 5.5)');
+    assert.notEqual(b.bot.blockAt(b.bot.entity.position).name, 'log');
+    // Already on an end cell: no move.
+    await b.bot.pathfinder.goto(new goals.GoalGetToBlock(0, 64, 5));
+    assert.equal(b.bot.entity.position.toString(), '(1.5, 64, 5.5)');
+    // #681 review 2: a block overhead (0, 66, 0): the end cell two below it (feet at 64, the head right under it), nearer
+    // the bot than the one on top of it.
+    const o = fakeWorld({ pathfinder: 'teleport', at: V(10, 64, 0), set: { '0,66,0': 'log' } });
+    await o.bot.pathfinder.goto(new goals.GoalGetToBlock(0, 66, 0));
+    assert.equal(o.bot.entity.position.toString(), '(0.5, 64, 0.5)');
 });
 
 test('pocketUnderRock (soak 15): 8 below the ground under dirt over metamorphic stone; the pickaxe in the off hand is out of reach', async (t) => {

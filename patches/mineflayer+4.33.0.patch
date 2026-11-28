@@ -38,10 +38,10 @@ index f128f71..0f3af20 100644
      // explosion
      const p = new Vec3(packet.x, packet.y, packet.z)
 diff --git a/node_modules/mineflayer/lib/plugins/craft.js b/node_modules/mineflayer/lib/plugins/craft.js
-index a5fe563..d6fecce 100644
+index a5fe563..a09ceed 100644
 --- a/node_modules/mineflayer/lib/plugins/craft.js
 +++ b/node_modules/mineflayer/lib/plugins/craft.js
-@@ -131,14 +131,42 @@
+@@ -131,14 +131,54 @@
  
        async function grabResult () {
          assert.strictEqual(window.selectedItem, null)
@@ -49,6 +49,7 @@ index a5fe563..d6fecce 100644
 -        // put the recipe result in the output
 -        const item = new Item(recipe.result.id, recipe.result.count, recipe.result.metadata)
 -        window.updateSlot(0, item)
+-        await bot.putAway(0)
 +        // mindcraft-rotn (soak 16): take the result the server shows, never the recipe's own. The server
 +        // sends slot 0 (set_slot) from the grid click, before that click's confirm, which every click
 +        // here waits for; so window.slots[0] is the server's result. Two recipes can take the same grid
@@ -67,7 +68,19 @@ index a5fe563..d6fecce 100644
 +            ? `crafting: the server makes ${made} from this grid, not ${expected}`
 +            : `crafting: the server has no result for this grid (expected ${expected})`)
 +        }
-         await bot.putAway(0)
++        // mindcraft-rotn (soak 18): what finds no room in the inventory (no stack of it with room, no empty slot)
++        // putAway throws on the ground (slot -999: the server drops it at the bot's feet, and a full inventory
++        // cannot pick it up), and craft() still resolves. Nothing changes here: craftResultDropped says so.
++        const made = { result: label(server.type, server.metadata, server.count), name: (bot.registry.items[server.type] && bot.registry.items[server.type].name) || String(server.type), metadata: server.metadata, count: server.count }
++        let thrown = 0
++        const onToss = (ev) => { if (ev.windowId === window.id && ev.item) thrown += ev.item.count }
++        bot.on('cursorTossed', onToss)
++        try {
++          await bot.putAway(0)
++        } finally {
++          bot.removeListener('cursorTossed', onToss)
++        }
++        if (thrown > 0) bot.emit('craftResultDropped', { windowId: window.id, windowType: window.type, ...made, thrown, position: bot.entity.position.floored() })
          await updateOutShape()
        }
  
@@ -150,7 +163,7 @@ index 666b0b3..71b7baa 100644
      const entity = fetchEntity(packet.entityId)
      if (!entity.attributes) entity.attributes = {}
 diff --git a/node_modules/mineflayer/lib/plugins/inventory.js b/node_modules/mineflayer/lib/plugins/inventory.js
-index 70db312..50e0cb7 100644
+index 70db312..5f3c59d 100644
 --- a/node_modules/mineflayer/lib/plugins/inventory.js
 +++ b/node_modules/mineflayer/lib/plugins/inventory.js
 @@ -1,12 +1,13 @@
@@ -202,7 +215,16 @@ index 70db312..50e0cb7 100644
        })
      }
    }
-@@ -536,15 +547,67 @@
+@@ -178,6 +189,8 @@
+ 
+     async function tossLeftover () {
+       if (window.selectedItem) {
++        // mindcraft-rotn (soak 18): what finds no room is thrown on the ground (craft.js names a thrown craft result)
++        bot.emit('cursorTossed', { windowId: window.id, item: window.selectedItem })
+         await clickWindow(-999, 0, 0)
+       }
+     }
+@@ -536,15 +549,67 @@
      return changedSlots
    }
  

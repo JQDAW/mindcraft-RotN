@@ -35,7 +35,11 @@
 //   and its events (collectBlock_finished, the errors it emits). Like the real plugin, it calls the pathfinder's goto only
 //   when the block is out of reach (more than 4.5 blocks from the eyes); a block in reach is dug from where the bot is.
 // - The 'teleport' pathfinder stub meets a ranged goal (GoalNear's rangeSq) at the goal's cell or the nearest cell
-//   within the range the bot can stand in, never inside a block (#631 re-review); it does not path.
+//   within the range the bot can stand in, never inside a block (#631 re-review); a bot already in range does not move,
+//   as GoalNear's isEnd (#660 nit 1). A GoalGetToBlock (by class name, or `getToBlock: true` on a plain goal) ends
+//   beside the block at its level or one lower, on top of it, or two below it (the head under it), never in the block's
+//   own cell, as its isEnd (#660 nit 2; #681 review 2);
+//   a bot already on such a cell does not move. It does not path.
 // Not here (yet): the real mineflayer-pathfinder (stubs: 'noPath', 'teleport', or a test's own), crafting and other
 // windows (net-forge's fake-containers.js models the server side), moving mobs.
 //
@@ -516,6 +520,21 @@ function standNextTo(bot, b) {
     return cands.filter(q => standable(bot, q)).sort((a, c) => a.distanceTo(from) - c.distanceTo(from))[0] ?? null;
 }
 
+/**
+ * GoalGetToBlock's end cells (mineflayer-pathfinder goals.js isEnd: |dx| + |dy < 0 ? dy + 1 : dy| + |dz| === 1): beside
+ * block `b` at its level or one lower, on top of it (dy 1), or two below it (dy -2: the head right under it); never its
+ * own cell. The nearest standable one to the bot.
+ */
+function standAtBlock(bot, b) {
+    const from = bot.entity.position.floored();
+    const cands = [b.offset(0, 1, 0), b.offset(0, -2, 0)];
+    for (const d of [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)]) for (const dy of [0, -1]) cands.push(b.plus(d).offset(0, dy, 0));
+    return cands.filter(q => standable(bot, q)).sort((a, c) => a.distanceTo(from) - c.distanceTo(from))[0] ?? null;
+}
+
+/** Whether cell q ends a GoalGetToBlock at b (its isEnd). */
+const getToBlockEnd = (q, b) => { const dy = q.y - b.y; return Math.abs(q.x - b.x) + Math.abs(dy < 0 ? dy + 1 : dy) + Math.abs(q.z - b.z) === 1; };
+
 /** A cell the bot can stand in: feet and head passable (not a liquid), a solid floor. */
 function standable(bot, q) {
     const free = (c) => { const x = bot.blockAt(c); return x.boundingBox === 'empty' && !x.liquid; };
@@ -541,8 +560,9 @@ function standWithin(bot, g, range) {
 
 /**
  * A pathfinder whose goto puts the bot on the goal's cell (goals with x, y, z), within a ranged goal's range (GoalNear's
- * rangeSq: the cell itself or the nearest standable one, never inside a block), or next to the block for a look-at-block
- * goal; recorded. It does not path: walls between do not matter.
+ * rangeSq: the cell itself or the nearest standable one, never inside a block; no move when already in range), next to
+ * the block for a look-at-block goal, or on a GoalGetToBlock end cell (beside it, on top or two below, never in it; no move when
+ * already on one); recorded. It does not path: walls between do not matter.
  */
 export function teleport(bot, calls = { gotos: [] }) {
     return {
@@ -553,7 +573,12 @@ export function teleport(bot, calls = { gotos: [] }) {
             if (goal?.x === undefined) return Promise.resolve();
             const g = new Vec3(Math.floor(goal.x), Math.floor(goal.y), Math.floor(goal.z));
             const range = goal.rangeSq != null ? Math.sqrt(goal.rangeSq) : goal.range;
-            const at = goal.lookAtBlock ? standNextTo(bot, g) : range != null ? standWithin(bot, g, range) : g;
+            const getTo = goal.getToBlock === true || goal.constructor?.name === 'GoalGetToBlock';
+            const here = bot.entity.position.floored();
+            // #660 nit 1: already in range (GoalNear's isEnd on the bot's cell), or on a GoalGetToBlock end cell: no move.
+            if (!goal.lookAtBlock && !getTo && range != null && here.distanceSquared(g) <= (goal.rangeSq ?? range * range)) return Promise.resolve();
+            if (getTo && getToBlockEnd(here, g)) return Promise.resolve();
+            const at = goal.lookAtBlock ? standNextTo(bot, g) : getTo ? standAtBlock(bot, g) : range != null ? standWithin(bot, g, range) : g;
             if (!at) return Promise.reject(new Error('No path to the goal!'));
             bot.entity.position = at.offset(0.5, 0, 0.5);
             return Promise.resolve();

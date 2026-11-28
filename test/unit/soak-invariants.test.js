@@ -520,6 +520,65 @@ test('enclosedEpisodes (#662 review 3): soak 15\'s pocket at -58, 57, -50, two m
     assert.deepEqual(s16.map(e => [e.t, e.until, e.minutes, e.end]), [['21:52:32', '21:54:59', 2.5, 'died']]);
 });
 
+test('enclosedEpisodes (the #662 nit, after soak 18): every morning exit line night_routine.js prints ends an episode; the intent and side lines do not', () => {
+    // Each episode at its exit line's own shelter (the first cell it names; #681 review 3 checks the exit's position).
+    const could = (t, c = '-71, 63, -146') => L(t, `[night] morning: could not leave the shelter at ${c} after 3 tries (no side to open yet); back to work, still enclosed: dig a way out`);
+    // Soak 18's own exit lines (driver.log 1425, 2428, 3180), then the night routine's other exits (no soak has printed them yet).
+    const exits = [
+        '[night] morning: left the shelter at -73, 64, -146 on the side away from a betteranimalsplus:eel_freshwater at -73, 60, -148; back to work', // 1425
+        '[night] morning: dug out of the shelter at -104, 69, -161; back to work', // 2428
+        '[night] morning: dug out of the shelter at -96, 69, -163; back to work', // 3180
+        '[night] morning: dug out of the hole shelter at -71, 63, -146 to -70, 64, -146 (2 blocks); back to work',
+        '[night] morning: climbed out of the shelter at -71, 63, -146 to -70, 70, -146 (the escape: by hand; dug 7, placed 0); back to work',
+        '[night] morning: climbed out of the shaft at -71, 50, -146 to -71, 70, -146 (the escape: pathfinder; dug 0, placed 0); back to work',
+        '[night] morning: out of the shelter at -71, 63, -146; back to work',
+    ];
+    for (const x of exits) {
+        const e = enclosedEpisodes(readJournal([REL(24), could('21:30:00', /(-?\d+, -?\d+, -?\d+)/.exec(x)[1]), L('21:33:55', x), L('21:45:00', 'x')].join('\n')));
+        assert.deepEqual(e.map(y => [y.until, y.end]), [['21:33:55', 'left']], x);
+    }
+    // Not exits: soak 18's intent line (1412) and the dig-out's side choice (1422); the episode stays open.
+    for (const x of [
+        '[night] morning: armed, health 20, but the fight cannot be judged yet (unknown: its health, its hit, its attack interval, our weapon damage): leaving the shelter at -71, 63, -146 by the side away from a betteranimalsplus:eel_freshwater at -73, 60, -148', // 1412
+        '[night] dig out: the west side (stairs up, 1 steps, 2 blocks)', // 1422
+        // #681 review 4: the 2-min cap's far-side leave (:910), an opening a mob holds (:942), a stopped shaft climb (:2007).
+        '[night] morning: 2 min are up and a zombie 3.2 blocks away has not hurt the bot for 20 s: leaving by the side away from it',
+        '[night] morning: the opening at -70, 63, -146 stays open (a zombie holds it); leaving anyway',
+        '[night] morning: the climb out of the shaft at -71, 50, -146 stopped (no way up); back to work, still trapped: the trapped job and !goToSurface go on from here',
+    ]) {
+        const e = enclosedEpisodes(readJournal([REL(24), could('21:30:00'), L('21:33:45', x), L('21:45:00', 'x')].join('\n')));
+        assert.deepEqual(e.map(y => [y.until, y.end]), [['21:45:00', 'open']], x);
+    }
+});
+
+test('enclosedEpisodes and I2 (#681 review 1, 3): every still-enclosed hand-back night_routine.js prints starts an episode; an exit elsewhere does not end it', () => {
+    const night = L('21:06:58', '[night] in the shelter at -71, 63, -146 until morning');
+    const starts = [
+        // :1963, :1965: the tries used up (after the escape too).
+        ['[night] morning: could not leave the shelter at -71, 63, -146 after 3 tries (no safe side; the escape: no way up); back to work, still enclosed: dig a way out', '-71, 63, -146'],
+        ['[night] morning: could not leave the shelter at -71, 63, -146 after 3 tries (no safe side); back to work, still enclosed: dig a way out', '-71, 63, -146'],
+        // :1983: the hole shelter's dig-out and the escape failed (no `after N tries`).
+        ['[night] morning: could not leave the shelter at -71, 63, -146 (no quick way out; the escape: no way up); back to work, still enclosed: dig a way out', '-71, 63, -146'],
+        // :1993: no dig-out and the fight wall would not open: the night's shelter cell.
+        ['[night] morning: could not open the wall toward a zombie at -73, 63, -146 either; back to work, still enclosed: dig a way out', '-71, 63, -146'],
+        // :2014: a way out failed part-way: where the bot was left.
+        ['[night] morning: a way out of the shelter at -71, 63, -146 failed part-way and the bot is at -70, 64, -146; back to work, maybe still enclosed: dig a way out', '-70, 64, -146'],
+    ];
+    for (const [x, cell] of starts) {
+        const journal = [REL(24), night, L('21:33:45', x), L('21:45:00', 'x')].join('\n');
+        assert.deepEqual(enclosedEpisodes(readJournal(journal)).map(e => [e.t, e.at, e.minutes, e.end]), [['21:33:45', cell, 11.3, 'open']], x);
+        assert.equal(soakInvariants(journal).I2.count, 1, x);
+    }
+    // :2111 (a mob near after the 2-min cap; the shelter may still be closed, the reflexes decide): no episode, not I2.
+    const near = [REL(24), night, L('21:33:45', '[night] morning: a zombie still near the shelter at -71, 63, -146 after 2 min; back to work (the agenda and the reflexes decide; the shelter may still be closed)'), L('21:45:00', 'x')].join('\n');
+    assert.deepEqual([enclosedEpisodes(readJournal(near)).length, soakInvariants(near).I2.count], [0, 0]);
+    // Review 3: an exit line at another cell (farther than spanCells) does not end the episode; one at the shelter does.
+    const e = enclosedEpisodes(readJournal([REL(24), night, L('21:33:45', starts[1][0]),
+        L('21:35:00', '[night] morning: dug out of the shelter at 20, 70, 20; back to work'),
+        L('21:36:00', '[night] morning: dug out of the shelter at -72, 63, -146; back to work'), L('21:45:00', 'x')].join('\n')));
+    assert.deepEqual(e.map(x => [x.until, x.end]), [['21:36:00', 'left']]);
+});
+
 test('enclosedEpisodes: left by a morning line, by a cleared escape, by a move; open at the end; a far could-not-leave starts another', () => {
     const could = (t, c) => L(t, `[night] morning: could not leave the shelter at ${c} after 3 tries (no side to open yet); back to work, still enclosed: dig a way out`);
     const e = enclosedEpisodes(readJournal([REL(23), could('06:00:00', '1, 60, 1'), L('06:01:00', 'You have reached at 2, 60, 1.'), L('06:04:00', '[night] morning: dug out of the shelter at 2, 60, 1; back to work'),

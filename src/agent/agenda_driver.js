@@ -23,8 +23,11 @@ import { heldFoodPoints } from './library/food.js';
 import { nearbyHuntable } from './library/hunting.js';
 import { nearbyForage } from './library/foraging.js';
 import { stillTrapped } from './library/escape.js';
-import { hasWeapon, WEAPON } from './library/threats.js';
-import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT, foodTargetNow, SHELTER_HOLD, STANDING_GOAL_PREFIX } from './agenda.js';
+import { hasWeapon, WEAPON, isWeaponItem, weaponRank } from './library/threats.js';
+import { FOOD_RETRY_MS, STUCK_RETRY, RESERVE_LEAD_MIN, FOOD_BEFORE_NIGHT, foodTargetNow, SHELTER_HOLD, STANDING_GOAL_PREFIX, TOOLS_GOAL, toolsClause } from './agenda.js';
+import { carriedItems } from './library/rotn_names.js';
+import { craftNeeds } from './library/craft_needs.js';
+import { decidedOn } from './memory_facts.js';
 import { SHELTER_LEAD_MIN } from './library/night.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
@@ -80,9 +83,55 @@ export function oreMemberNames(ore) {
     return oreNames.get(ore);
 }
 
-/** What a step's done check may ask about the bot. `clock`: the night routine's NightClock, when there is one. */
-export function agendaState(bot, clock = null) {
+/** Soak 18 A: how long an empty collect ("no X within 64") makes a craft that needs X a dead end for the goal's tools clause. */
+export const DEAD_END = { ms: 30 * 60_000 };
+const plainName = (n) => String(n ?? '').replace(/^minecraft:/, '').replace(/ \(any [^)]*\)$/, '').replace(/:\d+$/, '');
+
+/**
+ * Soak 18 A: the input `item`'s craft lacks (its own missing input, the one level only: #680 review 1, a cobblestone
+ * miss is no dead end for the rocks that both stone tools need) that a collect found none of: {item, range, at}, else
+ * null. Per item the newest collect decides (a later one that got some clears it), within DEAD_END.ms, and only while
+ * the bot is within that collect's range of where it started (c.from): beyond it, the search there said nothing. The
+ * sword's handle needed twine from tinder, and the bot's tinder collect found none within 64 (dl:1294).
+ */
+export function craftDeadEnd(bot, item, now = Date.now()) {
+    const collects = (bot?.rotnCollects ?? []).filter(c => c && c.item && Number.isFinite(c.at));
+    if (!collects.some(c => c.got === 0 && c.reason === 'none')) return null;
+    const here = bot?.entity?.position ?? null;
+    const deadFor = (name) => {
+        const want = plainName(name);
+        const c = collects.filter(e => plainName(e.item) === want).sort((a, b) => a.at - b.at).at(-1);
+        if (!c || c.got !== 0 || c.reason !== 'none' || now - c.at >= DEAD_END.ms) return null;
+        const range = Number.isFinite(c.range) ? c.range : 64;
+        if (c.from && here && typeof here.distanceTo === 'function' && here.distanceTo(c.from) > range) return null;
+        return { item: c.item, range: c.range ?? null, at: c.at };
+    };
+    let needs = null;
+    try { needs = craftNeeds(bot, item); } catch { needs = null; }
+    if (!needs || needs.ready) return null;
+    for (const i of needs.inputs.filter(i => i.short > 0)) {
+        const d = i.more ? deadFor(i.more) : null; // what to get for it ("pyrotech:rock (any rock)" -> pyrotech:rock)
+        if (d) return d;
+    }
+    return null;
+}
+
+/** Soak 18 A: the best carried weapon (threats.weaponRank), or null. */
+function bestWeaponOf(bot) {
+    let best = null;
+    for (const i of carriedItems(bot)) if (isWeaponItem(i) && (!best || weaponRank(i) > weaponRank(best))) best = i;
+    return best;
+}
+
+/** What a step's done check may ask about the bot. `clock`: the night routine's NightClock, when there is one. `facts`: the memory's (decisions). */
+export function agendaState(bot, clock = null, facts = null) {
     return {
+        // Soak 18 A: the standing goal's tools clause (agenda.toolsClause).
+        weaponRank: () => { const b = bestWeaponOf(bot); return b ? weaponRank(b) : 0; },
+        bestWeapon: () => bestWeaponOf(bot)?.name ?? null,
+        pickaxeCount: () => carriedItems(bot).filter(i => /pickaxe/.test(i?.name ?? '')).reduce((n, i) => n + (i.count ?? 1), 0),
+        craftDeadEnd: (item) => craftDeadEnd(bot, item),
+        decided: (item) => decidedOn(facts, item),
         // A bare name counts every variant; "pyrotech:rock" counts every rock (rotn-data's ore).
         count: (name) => itemVariants(name).reduce((n, v) => n + countItem(bot, v), 0),
         countOre: (ore) => oreMemberNames(ore).reduce((n, v) => n + countItem(bot, v), 0),
@@ -156,10 +205,15 @@ export function agendaGoal(agenda, step, state = null) {
  */
 export function freshGoalText(agent, prompt) {
     if (typeof prompt !== 'string' || !prompt.startsWith(STANDING_GOAL_PREFIX) || !agent?.bot) return prompt;
-    let held;
-    try { held = heldFoodPoints(agent.bot); } catch { return prompt; }
-    if (!Number.isFinite(held)) return prompt;
-    const next = prompt.replace(/\(you hold [0-9.]+\)/, `(you hold ${held})`);
+    let held = null;
+    try { held = heldFoodPoints(agent.bot); } catch { held = null; }
+    let next = Number.isFinite(held) ? prompt.replace(/\(you hold [0-9.]+\)/, `(you hold ${held})`) : prompt;
+    // Soak 18 A: the tools clause from what the bot carries now (a stone axe made or a pickaxe lost between turns).
+    try {
+        const i = next.indexOf(TOOLS_GOAL.head);
+        const j = i >= 0 ? next.indexOf(';', i) : -1;
+        if (j > i) next = next.slice(0, i) + toolsClause(agendaState(agent.bot, agent._night?.clock, agent.history?.facts ?? null)) + next.slice(j);
+    } catch { /* the food figure alone */ }
     if (next === prompt) return prompt;
     if (agent._autonomy_prompt === prompt) agent._autonomy_prompt = next;
     if (agent._agenda_open_goal === prompt) agent._agenda_open_goal = next;
@@ -212,7 +266,7 @@ export const minutes = (ms) => `${Math.round(ms / 6_000) / 10} min`;
  * (the per-day cap stops a new run, never the one running: #422 nit).
  */
 function tickState(agent) {
-    const state = agendaState(agent.bot, agent._night?.clock);
+    const state = agendaState(agent.bot, agent._night?.clock, agent.history?.facts ?? null);
     state.foodRunning = () => agent._agenda_step != null && agent._agenda_step === agent.agenda?.food?.id && !!agent.self_prompter?.isActive?.();
     state.foodStartMs = () => foodStartMs(); // #588 nit 1: H3's wait for its run, from this budget
     // Soak 16 (F2): a step's scripted job between its runs (the step is not due meanwhile), and where its last run
