@@ -1,0 +1,260 @@
+# javap -c -p excerpts for world-sources.json rule grass-tinder's shears claim ("by hand or with any tool except
+# shears"), from the pinned RotN 3.3.4 server pack zip (SHA-256 90642fd5...f5205). Extracted to a scratch folder
+# outside the repo; nothing was run. Read by packages/rotn-data/test/grass-tinder.test.js.
+#
+# Jars (SHA-256):
+#   minecraft_server.1.12.2.jar                 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e
+#   libraries/.../forge-1.12.2-14.23.5.2860.jar cd3fbf85d7ca744507fd6a37a41b90122d43e616a4f8962332b1b658655e8a64
+#
+# The vanilla classes below are AFTER applying Forge's server binpatch (binpatches.pack.lzma in the Forge jar;
+# see fixtures/stick-sources-3.3.4/stick-sources.javap.txt for the steps); each patch's input Adler-32 matched the
+# shipped class. Names come from the Forge jar's deobfuscation_data-1.12.2.lzma (notch -> SRG), in "## SRG".
+#
+# What it shows: breaking a block, the server's tryHarvestBlock (or.b) asks the held item's onBlockStartBreak first
+# and returns without harvesting when it says true. ItemShears.onBlockStartBreak (ajl) says true for an IShearable
+# block whose isShearable is true: it spawns onSheared's drops, damages the shears and sets the block to air. So
+# harvestBlock, dropBlockAsItem and Forge's HarvestDropsEvent (where Dropt adds its drops) never run. Tall grass
+# (aun) is always shearable; a double plant (aqb) is shearable on its LOWER half when its variant is GRASS or FERN.
+
+## SRG
+CL: ain net/minecraft/item/Item
+CL: ajl net/minecraft/item/ItemShears
+CL: aqb net/minecraft/block/BlockDoublePlant
+CL: aun net/minecraft/block/BlockTallGrass
+CL: or net/minecraft/server/management/PlayerInteractionManager
+MD: or/b (Let;)Z net/minecraft/server/management/PlayerInteractionManager/func_180237_b (Lnet/minecraft/util/math/BlockPos;)Z
+
+## or (net.minecraft.server.management.PlayerInteractionManager, Forge-patched): tryHarvestBlock (func_180237_b), offsets 90-127
+  public boolean b(et);
+    Code:
+      90: aload_0
+      91: getfield      #68                 // Field b:Loq;
+      94: invokevirtual #218                // Method oq.co:()Laip;
+      97: astore        6
+      99: aload         6
+     101: invokevirtual #222                // Method aip.b:()Z
+     104: ifne          127
+     107: aload         6
+     109: invokevirtual #289                // Method aip.c:()Lain;
+     112: aload         6
+     114: aload_1
+     115: aload_0
+     116: getfield      #68                 // Field b:Loq;
+     119: invokevirtual #295                // Method ain.onBlockStartBreak:(Laip;Let;Laed;)Z
+     122: ifeq          127
+     125: iconst_0
+     126: ireturn
+     127: aload_0
+
+## ajl (net.minecraft.item.ItemShears, Forge-patched): onBlockStartBreak, whole method
+  public boolean onBlockStartBreak(aip, et, aed);
+    Code:
+       0: aload_3
+       1: getfield      #197                // Field aed.l:Lamu;
+       4: getfield      #36                 // Field amu.G:Z
+       7: ifne          20
+      10: aload_3
+      11: getfield      #201                // Field aed.bO:Laeb;
+      14: getfield      #205                // Field aeb.d:Z
+      17: ifeq          22
+      20: iconst_0
+      21: ireturn
+      22: aload_3
+      23: getfield      #197                // Field aed.l:Lamu;
+      26: aload_2
+      27: invokevirtual #209                // Method amu.o:(Let;)Lawt;
+      30: invokeinterface #47,  1           // InterfaceMethod awt.u:()Laow;
+      35: astore        4
+      37: aload         4
+      39: instanceof    #49                 // class net/minecraftforge/common/IShearable
+      42: ifeq          288
+      45: aload         4
+      47: checkcast     #49                 // class net/minecraftforge/common/IShearable
+      50: astore        5
+      52: aload         5
+      54: aload_1
+      55: aload_3
+      56: getfield      #197                // Field aed.l:Lamu;
+      59: aload_2
+      60: invokeinterface #122,  4          // InterfaceMethod net/minecraftforge/common/IShearable.isShearable:(Laip;Lamy;Let;)Z
+      65: ifeq          288
+      68: aload         5
+      70: aload_1
+      71: aload_3
+      72: getfield      #197                // Field aed.l:Lamu;
+      75: aload_2
+      76: getstatic     #128                // Field alo.v:Lalk;
+      79: aload_1
+      80: invokestatic  #133                // Method alm.a:(Lalk;Laip;)I
+      83: invokeinterface #137,  5          // InterfaceMethod net/minecraftforge/common/IShearable.onSheared:(Laip;Lamy;Let;I)Ljava/util/List;
+      88: astore        6
+      90: new           #139                // class java/util/Random
+      93: dup
+      94: invokespecial #140                // Method java/util/Random."<init>":()V
+      97: astore        7
+      99: aload         6
+     101: invokeinterface #146,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+     106: astore        8
+     108: aload         8
+     110: invokeinterface #156,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+     115: ifeq          254
+     118: aload         8
+     120: invokeinterface #160,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+     125: checkcast     #38                 // class aip
+     128: astore        9
+     130: ldc           #210                // float 0.7f
+     132: fstore        10
+     134: aload         7
+     136: invokevirtual #172                // Method java/util/Random.nextFloat:()F
+     139: fload         10
+     141: fmul
+     142: f2d
+     143: fconst_1
+     144: fload         10
+     146: fsub
+     147: f2d
+     148: ldc2_w        #211                // double 0.5d
+     151: dmul
+     152: dadd
+     153: dstore        11
+     155: aload         7
+     157: invokevirtual #172                // Method java/util/Random.nextFloat:()F
+     160: fload         10
+     162: fmul
+     163: f2d
+     164: fconst_1
+     165: fload         10
+     167: fsub
+     168: f2d
+     169: ldc2_w        #211                // double 0.5d
+     172: dmul
+     173: dadd
+     174: dstore        13
+     176: aload         7
+     178: invokevirtual #172                // Method java/util/Random.nextFloat:()F
+     181: fload         10
+     183: fmul
+     184: f2d
+     185: fconst_1
+     186: fload         10
+     188: fsub
+     189: f2d
+     190: ldc2_w        #211                // double 0.5d
+     193: dmul
+     194: dadd
+     195: dstore        15
+     197: new           #165                // class acl
+     200: dup
+     201: aload_3
+     202: getfield      #197                // Field aed.l:Lamu;
+     205: aload_2
+     206: invokevirtual #215                // Method et.p:()I
+     209: i2d
+     210: dload         11
+     212: dadd
+     213: aload_2
+     214: invokevirtual #217                // Method et.q:()I
+     217: i2d
+     218: dload         13
+     220: dadd
+     221: aload_2
+     222: invokevirtual #219                // Method et.r:()I
+     225: i2d
+     226: dload         15
+     228: dadd
+     229: aload         9
+     231: invokespecial #222                // Method acl."<init>":(Lamu;DDDLaip;)V
+     234: astore        17
+     236: aload         17
+     238: invokevirtual #224                // Method acl.q:()V
+     241: aload_3
+     242: getfield      #197                // Field aed.l:Lamu;
+     245: aload         17
+     247: invokevirtual #227                // Method amu.a:(Lvg;)Z
+     250: pop
+     251: goto          108
+     254: aload_1
+     255: iconst_1
+     256: aload_3
+     257: invokevirtual #41                 // Method aip.a:(ILvp;)V
+     260: aload_3
+     261: aload         4
+     263: invokestatic  #232                // Method qs.a:(Laow;)Lqo;
+     266: invokevirtual #235                // Method aed.b:(Lqo;)V
+     269: aload_3
+     270: getfield      #197                // Field aed.l:Lamu;
+     273: aload_2
+     274: getstatic     #237                // Field aox.a:Laow;
+     277: invokevirtual #240                // Method aow.t:()Lawt;
+     280: bipush        11
+     282: invokevirtual #243                // Method amu.a:(Let;Lawt;I)Z
+     285: pop
+     286: iconst_1
+     287: ireturn
+     288: iconst_0
+     289: ireturn
+
+## aun (net.minecraft.block.BlockTallGrass, Forge-patched)
+public class aun extends apc implements aoz,net.minecraftforge.common.IShearable {
+  public boolean isShearable(aip, amy, et);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+## aqb (net.minecraft.block.BlockDoublePlant, Forge-patched)
+public class aqb extends apc implements aoz,net.minecraftforge.common.IShearable {
+  public boolean isShearable(aip, amy, et);
+    Code:
+       0: aload_2
+       1: aload_3
+       2: invokeinterface #140,  2          // InterfaceMethod amy.o:(Let;)Lawt;
+       7: astore        4
+       9: aload         4
+      11: getstatic     #51                 // Field a:Laxh;
+      14: invokeinterface #115,  2          // InterfaceMethod awt.c:(Laxj;)Ljava/lang/Comparable;
+      19: checkcast     #11                 // class aqb$b
+      22: astore        5
+      24: aload         4
+      26: getstatic     #61                 // Field c:Laxh;
+      29: invokeinterface #115,  2          // InterfaceMethod awt.c:(Laxj;)Ljava/lang/Comparable;
+      34: getstatic     #64                 // Field aqb$a.b:Laqb$a;
+      37: if_acmpne     60
+      40: aload         5
+      42: getstatic     #117                // Field aqb$b.d:Laqb$b;
+      45: if_acmpeq     56
+      48: aload         5
+      50: getstatic     #142                // Field aqb$b.c:Laqb$b;
+      53: if_acmpne     60
+      56: iconst_1
+      57: goto          61
+      60: iconst_0
+      61: ireturn
+
+## aqb$a (BlockDoublePlant$EnumBlockHalf): static initializer, the constant names
+       4: ldc           #53                 // String UPPER
+      10: putstatic     #43                 // Field a:Laqb$a;
+      17: ldc           #56                 // String LOWER
+      23: putstatic     #58                 // Field b:Laqb$a;
+      42: putstatic     #19                 // Field c:[Laqb$a;
+
+## aqb$b (BlockDoublePlant$EnumPlantType): static initializer, the constant names
+       4: ldc           #66                 // String SUNFLOWER
+      13: putstatic     #72                 // Field a:Laqb$b;
+      20: ldc           #74                 // String SYRINGA
+      29: putstatic     #78                 // Field b:Laqb$b;
+      36: ldc           #80                 // String GRASS
+      47: putstatic     #86                 // Field c:Laqb$b;
+      54: ldc           #88                 // String FERN
+      65: putstatic     #94                 // Field d:Laqb$b;
+      72: ldc           #96                 // String ROSE
+      83: putstatic     #102                // Field e:Laqb$b;
+      90: ldc           #104                // String PAEONIA
+      99: putstatic     #108                // Field f:Laqb$b;
+     143: putstatic     #29                 // Field k:[Laqb$b;
+     153: putstatic     #61                 // Field g:[Laqb$b;
+
+## aqb static initializer (excerpt): the variant (a) and half (c) properties
+       0: ldc_w         #350                // String variant
+       8: putstatic     #51                 // Field a:Laxh;
+      11: ldc_w         #357                // String half
+      19: putstatic     #61                 // Field c:Laxh;
