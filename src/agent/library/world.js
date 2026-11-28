@@ -28,12 +28,13 @@ export function isUnderground(bot, pos, up = 48) {
 }
 
 
-export function getNearestFreeSpace(bot, size=1, distance=8) {
+export function getNearestFreeSpace(bot, size=1, distance=8, skip=null) {
     /**
      * Get the nearest empty space with solid blocks beneath it of the given size.
      * @param {Bot} bot - The bot to get the nearest free space for.
      * @param {number} size - The (size x size) of the space to find, default 1.
      * @param {number} distance - The maximum distance to search, default 8.
+     * @param {function} skip - Round 17 K: a corner position to leave out (skip(pos) true), e.g. a cell where a placement just failed.
      * @returns {Vec3} - The south west corner position of the nearest free space.
      * @example
      * let position = world.getNearestFreeSpace(bot, 1, 8);
@@ -46,6 +47,7 @@ export function getNearestFreeSpace(bot, size=1, distance=8) {
         count: 1000
     });
     for (let i = 0; i < empty_pos.length; i++) {
+        if (skip && skip(empty_pos[i])) continue;
         let empty = true;
         for (let x = 0; x < size; x++) {
             for (let z = 0; z < size; z++) {

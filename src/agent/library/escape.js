@@ -31,6 +31,8 @@ import { walkableExit, WALK_EXIT } from './walk_exit.js';
 import { planPath, placeBlock, log, craftRecipe } from './skills.js';
 import { findItem, inventoryKey } from './rotn_names.js';
 import { dumpState } from './night.js';
+import { fail, resultOf } from './results.js';
+import { getBlock as rotnBlock, registryName as rotnRegistryName } from '../../../packages/rotn-data/index.js';
 
 /**
  * planMs: the pathfinder's search; walkMs: its walk; totalMs: the whole escape; maxPlaced: blocks
@@ -579,22 +581,69 @@ export async function placeHere(bot, type, { pillar = pillarUp, place = placeBlo
     const p = feetOf(bot);
     const item = findItem(bot, type);
     if (!item || !fullBlockItem(bot, item)) return place(bot, type, p.x, p.y, p.z);
-    const floor = bot.blockAt(p.offset(0, -1, 0));
-    const head2 = bot.blockAt(p.offset(0, 2, 0));
-    if (!solid(floor)) {
-        log(bot, `Cannot place ${type} where you stand at ${at(p)}: you are in that cell, and there is nothing solid under your feet to jump off and put it on.`);
-        return false;
-    }
-    if (!isEmpty(head2) && !isLiquid(head2)) {
-        log(bot, `Cannot place ${type} where you stand at ${at(p)}: you are in that cell, and the ${head2?.name ?? 'block'} above your head leaves no room to jump and put it under you.`);
-        return false;
-    }
-    if (await pillar(bot, item)) {
+    const refused = jumpPlaceRefusal(bot, type, p);
+    if (refused) return fail(bot, refused.code, refused.why, p, 'placeHere');
+    // Round 17 K (dl16:1635, dl17:344): pillarUp's own reason (#667) is said, not dropped.
+    const info = {};
+    if (await pillar(bot, item, Infinity, info)) {
         log(bot, `Placed ${type} at ${at(p)} by jumping and putting it under you: you now stand on it at ${at(feetOf(bot))}.`);
         return true;
     }
-    log(bot, `Could not place ${type} at ${at(p)}: you are in that cell, and the jump-and-place did not take (still at ${at(feetOf(bot))}).`);
-    return false;
+    return fail(bot, 'jump-failed', `Could not place ${type} at ${at(p)}: you are in that cell, and the jump-and-place did not take (still at ${at(feetOf(bot))})`
+        + `${info.why ? `: ${info.why}` : ''}.`, p, 'placeHere');
+}
+
+/** Round 17 K: placeHere's result, {ok, code, why, where}, for the command layer; placeHere stays boolean. */
+export function placeHereResult(bot, type, opts = {}) {
+    // Its own failures, and placeBlock's for the items placeHere hands to it (torches and the like, no full block).
+    return resultOf(bot, () => placeHere(bot, type, opts), ['placeHere', 'placeBlock']);
+}
+
+/**
+ * The two checks before the jump that puts a full block under the bot: something solid under the feet, and room above
+ * the head. {code, why} or null. Pure reads: placeHere and !placeHere's canRun (commands/preconditions.js) both use it.
+ */
+export function jumpPlaceRefusal(bot, type, p = feetOf(bot)) {
+    const floor = bot.blockAt(p.offset(0, -1, 0));
+    const head2 = bot.blockAt(p.offset(0, 2, 0));
+    if (!solid(floor))
+        return { code: 'no-floor', why: `Cannot place ${type} where you stand at ${at(p)}: you are in that cell, and there is nothing solid under your feet to jump off and put it on.` };
+    if (!isEmpty(head2) && !isLiquid(head2))
+        return { code: 'no-headroom', why: `Cannot place ${type} where you stand at ${at(p)}: you are in that cell, and the ${head2?.name ?? 'block'} above your head leaves no room to jump and put it under you.` };
+    return null;
+}
+
+/**
+ * Round 17 K: !placeHere's precondition (canRun), before anything running is stopped: {code, why} or null.
+ * - none held (dl16:798);
+ * - a modded item with no block form in rotn-data or the registry (dl16:456: hitwithaxe:bark). Vanilla items are left
+ *   to placeBlock: some place a block of another name (a sign, seeds, a repeater);
+ * - a full block: jumpPlaceRefusal (dl17:308), with what to do.
+ */
+export function placeHereRefusal(bot, type) {
+    const item = findItem(bot, type);
+    if (!item) {
+        const blocks = [...new Set(bot.inventory.items().filter(i => fullBlockItem(bot, i)).map(i => i.name))].slice(0, 4);
+        return { code: 'not-held', why: `Cannot place ${type}: you hold none${blocks.length ? ` (blocks you hold: ${blocks.join(', ')})` : ''}.` };
+    }
+    if (!hasBlockForm(bot, item.name))
+        return { code: 'not-a-block', why: `Cannot place ${type}: ${item.name} is an item, not a block.` };
+    if (!fullBlockItem(bot, item)) return null;
+    const refused = jumpPlaceRefusal(bot, type);
+    if (refused?.code === 'no-headroom') {
+        const head = bot.blockAt(feetOf(bot).offset(0, 2, 0));
+        const leaves = /leaves/.test(head?.name ?? '');
+        return { ...refused, why: `${refused.why} ${leaves ? `Break the ${head.name} above you first, or step` : 'Step'} to a cell with open air above you (!moveAway(2)).` };
+    }
+    return refused;
+}
+
+/** Whether a modded item places a block: rotn-data or the registry knows a block of its name. Vanilla: always true. */
+function hasBlockForm(bot, name) {
+    if (!name.includes(':') || name.startsWith('minecraft:')) return true;
+    try { if (rotnBlock(rotnRegistryName(name))) return true; } catch { return true; } // no data: never refused
+    const base = name.split(':').pop();
+    return !!(bot.registry?.blocksByName?.[name] || bot.registry?.blocksByName?.[base]);
 }
 
 /** Stage 1: the pathfinder (escapeMovements), a search of planMs, a walk of walkMs, within the block budget. */

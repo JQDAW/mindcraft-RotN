@@ -14,7 +14,8 @@ import { threatFor, hurtBy, hasWeapon } from '../library/threats.js';
 import { mayBelongToPlayer, retaliationRisk, knownBases, isHuntableAnimal, tooWeakToHunt, HUNT_MIN_FOOD } from '../library/hunting.js';
 import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
-import { placeHere } from '../library/escape.js';
+import { placeHereResult, placeHereRefusal } from '../library/escape.js';
+import { craftRecipeCanRun, noteResult } from './preconditions.js';
 import { sightRange, rangeText, nearestOfKind, noteSearchFind, noteSearchMiss, missText, isAnimalKind } from '../library/entity_search.js';
 
 /** Soak 14 (F2): the least a model's collect gets before dusk (it ends by the night routine otherwise). */
@@ -626,8 +627,10 @@ export const actionsList = [
             'recipe_name': { type: 'ItemName', description: 'The name of the output item to craft.' },
             'num': { type: 'int', description: 'The number of times to craft the recipe. This is NOT the number of output items, as it may craft many more items depending on the recipe.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
-        perform: runAsAction(async (agent, recipe_name, num) => {
-            await skills.craftRecipe(agent.bot, recipe_name, num);
+        // Round 17 K: no recipe, missing inputs, no table and none held: said before anything running is stopped.
+        canRun: (agent, recipe_name) => craftRecipeCanRun(agent, recipe_name),
+        perform: runAsAction(async (agent, recipe_name, num, context) => {
+            noteResult(context, await skills.craftRecipeResult(agent.bot, recipe_name, num));
         })
     },
     {
@@ -656,9 +659,12 @@ export const actionsList = [
         name: '!placeHere',
         description: 'Place one block where you stand. A full block (dirt, cobblestone) goes under you by a jump, so you stand one higher on it (a way up out of a pit or water); a torch or the like goes where you stand. Only single blocks or torches, never structures.',
         params: {'type': { type: 'BlockOrItemName', description: 'The block type to place.' }},
-        perform: runAsAction(async (agent, type) => {
+        // Round 17 K: none held, an item that is no block, no floor or no headroom for the jump: said before anything
+        // running is stopped (dl16:798, dl16:456, dl17:308).
+        canRun: (agent, type) => placeHereRefusal(agent.bot, type),
+        perform: runAsAction(async (agent, type, context) => {
             // Soak 8 (the escape plan PR 2): the bot's own cell; a full block by a jump (escape.placeHere).
-            await placeHere(agent.bot, type);
+            noteResult(context, await placeHereResult(agent.bot, type));
         })
     },
     {
