@@ -39,7 +39,7 @@
 //   no_trap            (the lead's decision after soak 17) no trap span (test/tools/soak-invariants.mjs trapSpans, with
 //                      the soak 17 span fix: the failed escapes and still-trapped lines of one trap, until an escape
 //                      clears, a death, or the bot is elsewhere) and no enclosed episode (#662 review 3: enclosedEpisodes,
-//                      from a `could not leave the shelter` line until the bot leaves; soak 15) over trapMaxMinutes (5),
+//                      from a still-enclosed morning hand-back until the bot leaves; soak 15) over trapMaxMinutes (5),
 //                      and no death while trapped or enclosed (one that ends 'died'). S only: it needs the journal's
 //                      times (lib/service.mjs timedLines); on T it is not reached. One still open at the end counts with
 //                      its minutes so far.
