@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRotnData } from '../src/catalog.js';
-import { formatHowToGet } from '../src/howto.js';
+import { formatHowToGet, leadClause } from '../src/howto.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const pack = loadRotnData('3.3.4');
@@ -84,7 +84,8 @@ test('grass-tinder: tinder has no crafting recipe; 3 tinder make 3 twine, and tw
     assert.match(ex, /^130: recipes\.addShaped\("dry_to_twine", twine\*3,$/m);
     assert.match(ex, /^175: recipes\.addShapeless\("string_twine_handle",<spartanweaponry:material:0>,\[<ore:stickWood>,<minecraft:string>\|<pyrotech:material:14>\]\);$/m);
     assert.match(ex, /^219: CrudeDryingRack\.addRecipe\("dried_fiber_fresh", <pyrotech:tinder>, <pyrotech:material:12>, 5 \* 60 \* 20, true\);$/m);
-    for (const sha of rule.evidence.join(' ').match(/[0-9a-f]{64}/g).filter((s) => !['62cd3a64', '21837ce8'].includes(s.slice(0, 8)))) {
+    // The scripts' SHA-256s (the shears line's jar hashes are the mod jars', which have no excerpt here).
+    for (const sha of rule.evidence.filter((e) => !e.startsWith('Shears:')).join(' ').match(/[0-9a-f]{64}/g).filter((s) => !['62cd3a64', '21837ce8'].includes(s.slice(0, 8)))) {
         assert.ok(ex.includes(sha), `the excerpt names ${sha.slice(0, 12)}`);
     }
     // The dump agrees: no recipe makes tinder; the twine and handle recipes are there.
@@ -107,4 +108,95 @@ test('worldHint: the planner\'s short hint is each break rule\'s lead clause and
     assert.equal(pack.worldHint('coal'), 'mine coal ore with a pickaxe of level 0 or better');
     // Only break rules: bread's start kit, feathers (no rule) and an unknown item give none.
     for (const item of ['bread', 'feather', 'nosuch:item']) assert.equal(pack.worldHint(item), null, item);
+});
+
+// #674 review nit 2: the "any tool except shears" claim, from the Forge-patched bytecode.
+test('grass-tinder: shears skip the harvest, so Dropt never sees a sheared grass or fern (Forge-patched bytecode)', () => {
+    const javap = read('grass-shears-3.3.4/grass-shears.javap.txt');
+    const section = (title) => { const i = javap.indexOf(`## ${title}`); assert.ok(i >= 0, title); const j = javap.indexOf('\n## ', i + 1); return javap.slice(i, j < 0 ? undefined : j); };
+    assert.match(javap, /forge-1\.12\.2-14\.23\.5\.2860\.jar cd3fbf85d7ca744507fd6a37a41b90122d43e616a4f8962332b1b658655e8a64/);
+    assert.match(javap, /^MD: or\/b \(Let;\)Z net\/minecraft\/server\/management\/PlayerInteractionManager\/func_180237_b /m);
+    // tryHarvestBlock: the held item's onBlockStartBreak true -> return false, before any harvest.
+    assert.match(section('or '), /ain\.onBlockStartBreak:\(Laip;Let;Laed;\)Z\n\s+122: ifeq +127\n\s+125: iconst_0\n\s+126: ireturn/);
+    // ItemShears: an IShearable whose isShearable is true is sheared (onSheared), set to air (Blocks.AIR, flags 11), true.
+    const shears = section('ajl ');
+    assert.match(shears, /instanceof +#\d+ +\/\/ class net\/minecraftforge\/common\/IShearable/);
+    assert.match(shears, /IShearable\.isShearable:\(Laip;Lamy;Let;\)Z\n\s+65: ifeq +288/);
+    assert.match(shears, /IShearable\.onSheared:/);
+    assert.match(shears, /Field aox\.a:Laow;\n[^\n]*aow\.t:\(\)Lawt;\n[^\n]*bipush +11\n[^\n]*amu\.a:\(Let;Lawt;I\)Z\n[^\n]*pop\n[^\n]*286: iconst_1\n[^\n]*287: ireturn/);
+    // Tall grass is always shearable; a double plant on its lower half (aqb$a.b = LOWER) when GRASS (c) or FERN (d).
+    assert.match(section('aun '), /implements aoz,net\.minecraftforge\.common\.IShearable[^]*isShearable\(aip, amy, et\);\n\s+Code:\n\s+0: iconst_1\n\s+1: ireturn/);
+    const dp = section('aqb (');
+    assert.match(dp, /Field c:Laxh;[^]*Field aqb\$a\.b:Laqb\$a;\n\s+37: if_acmpne[^]*Field aqb\$b\.d:Laqb\$b;\n\s+45: if_acmpeq[^]*Field aqb\$b\.c:Laqb\$b;/);
+    assert.match(section('aqb$a '), /String UPPER\n[^\n]*Field a:Laqb\$a;\n[^\n]*String LOWER\n[^\n]*Field b:Laqb\$a;/);
+    assert.match(section('aqb$b '), /String GRASS\n[^\n]*Field c:Laqb\$b;\n[^\n]*String FERN\n[^\n]*Field d:Laqb\$b;/);
+    assert.match(section('aqb static'), /String variant\n[^\n]*Field a:Laxh;\n[^\n]*String half\n[^\n]*Field c:Laxh;/);
+    // Neither Dropt list has a held-item matcher; the rule cites the fixture.
+    const src = read('forage-food-3.3.4/dropt.zs');
+    for (const list of ['tall_grass_base_drops', 'double_tall_grass_base_drops']) assert.doesNotMatch(droptList(src, list), /heldItem|HeldItem|mainHand/, list);
+    for (const id of ['grass-tinder', 'grass-plant-fiber']) {
+        assert.ok(pack.worldSources.find((r) => r.id === id).evidence.some((e) => e.includes('fixtures/grass-shears-3.3.4/grass-shears.javap.txt')), id);
+    }
+    // #679 review 4: every shears item in the dump is an ItemShears subclass the evidence names (none overrides
+    // onBlockStartBreak); the unfired clay shears are a plain Item.
+    const ev = rule.evidence.find((e) => e.startsWith('Shears:'));
+    const shearsItems = Object.entries(pack.dump.items.items).filter(([, i]) => /Shears/.test(i.class ?? ''));
+    assert.ok(shearsItems.length >= 15, String(shearsItems.length));
+    for (const [name, i] of shearsItems) {
+        const cls = i.class.split('.').pop();
+        assert.ok(cls === 'ItemShears' || ev.includes(cls), `${name}: ${i.class}`);
+    }
+    assert.match(ev, /pyrotech:unfired_clay_shears \(ItemUnfiredClayShears\) is a plain Item/);
+});
+
+test('grass-plant-fiber: the same grass gives plant fiber (pyrotech:material:12) about 2 times in 13; it dries into tinder', () => {
+    const fiber = pack.worldSources.find((r) => r.id === 'grass-plant-fiber');
+    assert.deepEqual(fiber.blocks, rule.blocks, 'the same blocks as grass-tinder');
+    const w = pack.howToGet('pyrotech:material:12').ways.find((x) => x.id === 'grass-plant-fiber');
+    assert.deepEqual([w.kind, w.action, w.tool, w.confidence], ['world', 'break', null, 'documented']);
+    assert.deepEqual(w.countRange, { min: 0, max: 1, mean: 0.153 });
+    const src = read('forage-food-3.3.4/dropt.zs');
+    for (const list of ['tall_grass_base_drops', 'double_tall_grass_base_drops']) {
+        const ws = weights(droptList(src, list));
+        const total = ws.reduce((a, [n]) => a + n, 0);
+        const n = ws.filter(([, item]) => item === 'pyrotech:material:12').reduce((a, [x]) => a + x, 0);
+        assert.ok(Math.abs(n / total - fiber.countRange.mean) < 0.001, `${list}: ${n}/${total}`);
+    }
+    assert.equal(pack.worldHint('pyrotech:material:12'), 'break grass or ferns by hand or with any tool except shears (about 1 in 7 drops one)');
+    // The tinder rule is still the only way for tinder; the rack is 2 plant fiber + 1 timber (the dump).
+    assert.deepEqual(pack.howToGet('pyrotech:tinder').ways.map((x) => x.id), ['grass-tinder']);
+    const rack = pack.planRecipes('pyrotech:drying_rack', { meta: 0 }).find((x) => x.recipeId === 'crafttweaker:hanging_dryingrack');
+    assert.deepEqual(rack.inputs.map((i) => [i.count, i.label]), [[2, 'pyrotech:material:12'], [1, 'earthworks:item_timber']]);
+    assert.match(read('rotn-3.3.4/tinder-twine.excerpt.zs'), /^219: CrudeDryingRack\.addRecipe\("dried_fiber_fresh", <pyrotech:tinder>, <pyrotech:material:12>/m);
+    // #679 review 1: no drying time in the text the model reads (the pack's config scales the script's 6000 ticks by 0.25,
+    // and weather changes it); the config line is cited, the real time is unverified.
+    for (const id of ['grass-tinder', 'grass-plant-fiber']) assert.doesNotMatch(pack.worldSources.find((r) => r.id === id).summary, /minute|second|\d+ s\b|ticks/, id);
+    assert.ok(fiber.evidence.some((e) => /module\.tech\.Basic\.cfg[^"]*line 564, crude_drying_rack D:BASE_RECIPE_DURATION_MODIFIER=0\.25/.test(e)));
+    assert.ok(fiber.unverified.some((u) => u.startsWith('the real drying time')));
+});
+
+// #674 review nit 3: every break rule's hint is a clean clause, and a "." ends it only before a new sentence.
+test('worldHint over every break rule: a non-empty lowercase clause with no parentheses; leadClause keeps "e.g. "', () => {
+    const breaks = pack.worldSources.filter((r) => r.action === 'break');
+    assert.ok(breaks.length >= 9);
+    for (const r of breaks) {
+        const c = leadClause(r.summary);
+        assert.match(c, /^[a-z]/, `${r.id}: ${c}`);
+        assert.doesNotMatch(c, /[()]|[,:;.]$/, `${r.id}: ${c}`);
+        // #679 review 2: a clause cut at an abbreviation ends in its stem ("break a bush, e.g"); none may.
+        assert.doesNotMatch(c, /\b(?:e\.g|i\.e|approx|etc|vs|cf|incl|esp|ca|no|e|i)$/i, `${r.id}: ${c}`);
+        assert.ok(c.length >= 15 && c.length <= 200, `${r.id}: ${c.length}`);
+        assert.ok(r.summary.toLowerCase().startsWith(c.slice(0, 10).toLowerCase()), r.id);
+        if (r.gives?.name) {
+            const item = Number.isInteger(r.gives.meta) ? `${r.gives.name}:${r.gives.meta}` : r.gives.name;
+            const hint = pack.worldHint(item, { maxWays: 99 });
+            assert.ok(hint?.includes(c), `${r.id}: ${item}: ${hint}`);
+        }
+    }
+    assert.equal(leadClause('Break a bush, e.g. a dead bush, by hand. Shears give the bush.'), 'break a bush, e.g. a dead bush, by hand');
+    assert.equal(leadClause('Mine ore (level 0; any pickaxe: see below) with a pickaxe: it drops raw ore.'), 'mine ore with a pickaxe');
+    assert.equal(leadClause('Given at the first spawn.'), 'given at the first spawn');
+    assert.equal(leadClause('Break approx. 3 leaves by hand; then more.'), 'break approx. 3 leaves by hand');
+    // #679 review 3: an abbreviation before a capital still ends the clause (as documented): authors avoid it.
+    assert.equal(leadClause('Break a bush, e.g. Pyrotech ones, by hand.'), 'break a bush, e.g');
 });
