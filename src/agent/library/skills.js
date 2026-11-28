@@ -1590,7 +1590,7 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
         if (source.unlessTool) avoidTools.push([blockMatcher(source.blocks), source.unlessTool]);
         if (source.id === 'fell-tree') fellMatchers.push(blockMatcher(source.blocks));
         else if (!source.tool) handMatchers.push(blockMatcher(source.blocks));
-        if (source.countRange?.min === 0) mayGiveNone.push({ matches: blockMatcher(source.blocks), mean: source.countRange.mean, blocks: source.blocks });
+        if (source.countRange?.min === 0) mayGiveNone.push({ matches: blockMatcher(source.blocks), mean: source.countRange.mean });
     }
     // The item's own blocks give it only with a tool the bot lacks (rotn-data #288: dirt drops
     // itself only to a shovel of level 1+; by hand it drops 4 dirt piles, and "Broke dirt but got no
@@ -1659,6 +1659,7 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
     let freeMissStart = null; // soak 18 S18b: when the first free miss came (the free misses' time cap, CL.freeMissMs)
     let lowYieldBreaks = 0; // soak 18 S18b: breaks of a low-mean rule's blocks, for the final line's odds
     const lowYieldNames = new Set();
+    let lowYieldOdds = Infinity; // #686 review 2: the matched rules' own mean (the lowest of them), not the collect-wide one
     let leafMisses = 0; // leaves out of reach after the walk (capped at CL.unreachableLeaves, then no leaves)
     let walkMisses = 0; // other targets the walk did not reach (capped at CL.unreachableTargets)
     const outOfReach = unreachableLeaves(bot); // and other targets out of reach (round 10 B)
@@ -2184,7 +2185,8 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
                 // missed pickup, counts as an attempt as before).
                 if (canGiveNone(block) && isHand(block)) {
                     givenUp.push(block.position.clone ? block.position.clone() : block.position);
-                    if (lowYieldRule(block)) { lowYieldBreaks++; lowYieldNames.add(block.name); }
+                    const low = lowYieldRule(block);
+                    if (low) { lowYieldBreaks++; lowYieldNames.add(block.name); lowYieldOdds = Math.min(lowYieldOdds, low.mean); }
                     const inTime = freeMissStart === null || Date.now() - freeMissStart < freeMissMs;
                     if (gained === 0 && freeMisses < freeMissCap && inTime) { freeMissStart ??= Date.now(); freeMisses++; i--; }
                 }
@@ -2287,8 +2289,8 @@ async function collectBlockRun(bot, blockType, num=1, exclude=null, range=64, li
         if (hints.length) craftNote = ` What came in crafts into it: ${hints.join('; ')}.`;
     }
     // Soak 18 S18b: a low-yield item says its odds, so a short collect reads as chance, not as none there.
-    const oddsNote = lowYieldBreaks > 0 && Number.isFinite(lowMean)
-        ? ` It drops about 1 in ${Math.max(2, Math.round(1 / lowMean))} breaks of ${[...lowYieldNames].join(', ')}: ${lowYieldBreaks} broken.` : '';
+    const oddsNote = lowYieldBreaks > 0 && Number.isFinite(lowYieldOdds)
+        ? ` It drops about 1 in ${Math.max(2, Math.round(1 / lowYieldOdds))} breaks of ${[...lowYieldNames].join(', ')}: ${lowYieldBreaks} broken.` : '';
     log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.${craftNote}${oddsNote}`);
     bot.rotnCollectEnd = { at: Date.now(), short: collected < num, lastWalkFailed, reason: endReason };
     // Round 17 M: the memory's Collects line (memory_facts.pullCollects): what, how many, from where, why it ended.
